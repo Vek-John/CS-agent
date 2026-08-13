@@ -28,6 +28,7 @@ import {
 } from "@cs-coach/session";
 import { ReplayViewer, type ReplayPerspective } from "./replay-viewer";
 import { createFixtureReplayView, type ReplayViewModel } from "../lib/replay-bundle";
+import { enrichReviewPlanWithNarration } from "../lib/coach-narration";
 import { canShowGroundTruthForPhase } from "../lib/review-perspective";
 import { sampleStateAtTick } from "../lib/replay-sampling";
 
@@ -413,7 +414,21 @@ export function ReviewExperience({
   if (!plan) {
     throw new Error("A real coaching session requires a generated ReviewPlan.");
   }
-  const activePlan: ReviewPlan = plan;
+  const [narratedPlan, setNarratedPlan] = useState<ReviewPlan>();
+  const activePlan: ReviewPlan = narratedPlan?.id === plan.id ? narratedPlan : plan;
+  useEffect(() => {
+    let active = true;
+    setNarratedPlan(undefined);
+    void enrichReviewPlanWithNarration(plan, {
+      redaction: {
+        playerNames: view.timeline.players.map((player) => player.display_name),
+        additionalForbiddenValues: view.timeline.players.map((player) => player.player_id)
+      }
+    }).then((nextPlan) => {
+      if (active) setNarratedPlan(nextPlan);
+    });
+    return () => { active = false; };
+  }, [plan]);
   const [state, dispatch] = useReducer(
     (current: ReturnType<typeof createCoachingSession>, action: SessionAction) =>
       reduceCoachingSession(activePlan, current, action),

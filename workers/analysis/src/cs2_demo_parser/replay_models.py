@@ -461,6 +461,11 @@ class ReviewGenerationManifest(StrictModel):
     observation_version: str
     signal_version: str
     planner_version: str
+    provider: Literal["DETERMINISTIC_TEMPLATE", "DEEPSEEK"] = "DETERMINISTIC_TEMPLATE"
+    model: str | None = None
+    prompt_version: str = "deterministic-coach-template/1.1.0"
+    status: Literal["DISABLED", "SUCCEEDED", "FALLBACK"] = "DISABLED"
+    narration_deterministic: bool = True
     analysis_subject_selection: Literal["FIRST_TIMELINE_PLAYER_DEFAULT", "EXPLICIT_PLAYER"]
     analysis_subject_player_id: str
     limitations: list[str] = Field(default_factory=list)

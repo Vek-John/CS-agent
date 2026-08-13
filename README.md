@@ -15,11 +15,28 @@ pnpm dev
 
 打开 <http://localhost:3000>。
 
+DeepSeek 只负责把已有事实、判断和建议改写成更自然的直接讲解；未配置 key 时自动保留确定性模板，完整会话仍可运行。本地可选配置：
+
+```bash
+cp apps/web/.env.local.example apps/web/.env.local
+# 再把 DEEPSEEK_API_KEY 写入未跟踪的 apps/web/.env.local
+```
+
+隔离的 PixiJS 迁移 PoC 位于 <http://localhost:3000/pixi-poc>。它用于验证统一 frame、真实雷达和玩家信息边界，当前不会替换 AI 带看的主地图。
+
 前端与 TypeScript 领域验证：
 
 ```bash
 pnpm check
 ```
+
+Cloudflare 上只需添加 Worker Secret；不要把 key 写入 `wrangler.jsonc`、GitHub 或任何 `NEXT_PUBLIC_*` 变量：
+
+```bash
+pnpm exec wrangler secret put DEEPSEEK_API_KEY --config wrangler.jsonc
+```
+
+默认模型是 `deepseek-v4-flash`；如需覆盖，在 Cloudflare 配置普通变量 `DEEPSEEK_MODEL=deepseek-v4-flash` 或 `deepseek-v4-pro`。`main` 的 Cloudflare 构建只承载 Web 和讲解 API，当前不在线运行 Python Demo parser；本地 `.dem` 上传解析仍只在 localhost 可用。
 
 真实 Demo Parser Adapter 使用 Python 3.12。首次建立本地环境：
 
@@ -73,6 +90,8 @@ pnpm assets:valve-items
 - 结果揭示前，讲解和当前局面追问只能引用玩家当时可知事实；
 - 播放结果后可回看，再继续到后续回合；
 - 总结只从已消费的讲解点生成，并在全场路径完成前保持锁定。
+- DeepSeek Cloudflare route 一场最多处理 32 个 cue；真实 Falcons/Spirit 的 15 个 cue 已覆盖。缺 key、超时或上游失败时无感回退到确定性直接讲解；
+- `/pixi-poc` 已用 `test_demo` 与 Falcons/Spirit 跑通统一 `PlaybackFrameViewModel`、Pixi ticker 和知识帧白名单，迁移证据见 `docs/experiments/pixi-playback-poc-2026-08-13.md`。
 
 ## 当前限制
 
@@ -84,7 +103,7 @@ pnpm assets:valve-items
 - 状态采用 24-tick 网格加回合边界；播放器只对连续存活、同阵营的真实位置/朝向做显示插值，离散装备状态保持前值；
 - 库存数量不可得时以 `count=1` 呈现并在 coverage/manifest 标注限制；C4 只在直接库存名出现时判真；
 - 第 10 回合缺少 parser `freeze_end`，Bundle 以该回合 start tick 作为播放器边界回退并记录 warning；
-- 当前追问由证据约束模板回答，还没有接入 LLM；
+- 当前 cue 讲解可由 DeepSeek 润色；用户自由追问仍由证据约束模板回答，尚未接入通用 LLM 问答；
 
 真实雷达与物品图标都作为版本化 localhost 本地缓存使用；图标目录记录源 URL、内容 SHA-256、生成器版本和 `LOCALHOST_ONLY` 权利状态。用户已授权本地使用这些 Valve 游戏内容；公开分发前仍需单独复核。没有复制参考站点的 UI、布局、组件、品牌或自有图标。生成资产、生成数据、上传原始文件、`.venv` 和解析缓存均被忽略，不随源码提交。
 

@@ -348,8 +348,14 @@ def test_explicit_selected_player_rebuilds_observation_and_plan_for_all_ten_play
         assert bundle.match_timeline.selected_player_id == player_id
         assert bundle.generation_manifest.analysis_subject_player_id == player_id
         assert bundle.generation_manifest.analysis_subject_selection == "EXPLICIT_PLAYER"
+        assert any(
+            "explicitly selected by the user" in limitation
+            for limitation in bundle.generation_manifest.limitations
+        )
         assert bundle.review_plan is not None
         assert bundle.review_plan.player_id == player_id
+        assert bundle.review_plan.generation_manifest.analysis_subject_selection == "EXPLICIT_PLAYER"
+        assert bundle.review_plan.generation_manifest.analysis_subject_player_id == player_id
         assert all(state.observer_player_id == player_id for state in bundle.observable_states)
         assert all(
             claim.evidence_tick <= state.at_tick

@@ -487,7 +487,11 @@ export function createFixtureReviewPlan(timeline: MatchTimeline): ReviewPlan {
       parser_version: "fixture-parser/1.0.0",
       observation_version: "fixture-observation/1.0.0",
       signal_version: "fixture-signals/1.0.0",
-      planner_version: "fixture-planner/1.0.0"
+      planner_version: "fixture-planner/1.0.0",
+      provider: "DETERMINISTIC_TEMPLATE",
+      prompt_version: "fixture-coach-template/1.0.0",
+      status: "DISABLED",
+      narration_deterministic: true
     }
   };
 

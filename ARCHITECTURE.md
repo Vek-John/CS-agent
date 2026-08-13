@@ -1,7 +1,7 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**  
-> 版本：1.3.0  
+> 版本：1.5.0
 > 最后更新：2026-08-13  
 > 适用范围：浏览器首版至桌面端长期产品  
 > 产品定义：[PRD.md](./PRD.md)  
@@ -68,7 +68,7 @@ Demo
 
 ### 2.2 完整覆盖，显式跳过
 
-复盘计划必须无缝覆盖从第一回合开始到最后一回合结束的比赛时间。每段都有明确处理方式和原因；跳过只能缩短观看时间，不能在产品上伪装成未发生。
+复盘计划必须无缝覆盖从第一回合开始到最后一回合结束的比赛时间。每段都有明确处理方式和原因；跳过只能缩短观看时间，不能在产品上伪装成未发生。`FREEZE_TIME` 等完全确定、没有用户选择价值的系统等待段由 `SessionOrchestrator` 自动消费，不向用户询问，但仍保留在 `ReviewPlan` 覆盖和会话事件日志中；基于教学价值判断的普通 `SKIP` 仍显式说明原因并允许展开。
 
 ### 2.3 播放器与分析解耦
 
@@ -76,7 +76,7 @@ Demo
 
 ### 2.4 决策前暂停，禁止未来泄漏
 
-讲解点区分 `decision_tick`、`reveal_tick` 和 `outcome_range`。在揭示结果之前，建议与问答只能读取 `decision_tick` 之前的 `ObservableState`；后续事件只用于播放结果与复盘解释。
+讲解点区分 `decision_tick`、`reveal_tick` 和 `outcome_range`，并满足 `decision_tick <= outcome_start_tick < reveal_tick <= outcome_end_tick`。教练在决策点暂停后直接说明当时事实、判断、理由和一个可执行动作，不要求用户先作答；用户点击“看结果”后才从决策点播放到结果，并可切换到全知结果视角。在揭示动作发生之前，建议与问答只能读取 `decision_tick` 之前的 `ObservableState`；后续事件只用于结果播放与复盘解释。
 
 ### 2.5 事实、推断、建议分层
 
@@ -90,6 +90,8 @@ Demo
 ### 2.6 上帝视角与玩家视角分离
 
 完整状态用于 2D 回放、结果解释和离线评测；教学判断默认只读取指定观察者在当时可知的 `ObservableState`。二者是不同的数据产品，不能靠临时隐藏几个敌人图标来切换。所有特征声明 `ground_truth`、`observed`、`inferred` 或 `user_asserted` 来源。
+
+`.dem` 只由 Parser Adapter 完整解析一次，形成不可删减的全知事实型 `GroundTruthReplayBundle`；底层解析不得为了玩家视角删除敌人、装备、结果或投掷物信息。`ObservationBuilder(observer, tick)` 在这份全知事实之上独立派生 `ObservableState`，不启动第二次 Demo 解析。全知和玩家已知回放共享 canonical tick 与同一个 renderer，但进入 renderer 前必须分别生成 `PlaybackFrameViewModel`：全知 builder 可以读取全知事实；玩家已知 builder 必须从空白 frame 开始，只按有效 `ObservationClaim` 白名单添加内容，禁止先生成全知 frame 再隐藏节点。
 
 `ObservableState` 不是“可见圆”或 `observed: boolean`。它由带时间、来源、空间精度、身份精度、置信度和过期规则的 `ObservationClaim` 组成：直视可以形成较精确位置；脚步、枪声和伤害方向通常只形成区域或方向信息；最后已知位置会随时间衰减并扩大不确定范围；队友看见不等于所选玩家已经知道，必须存在可靠的游戏共享机制或用户补充的沟通上下文。
 
@@ -210,9 +212,13 @@ Worker 使用至少三档队列优先级：`interactive` 处理用户即将观�
 
 当前 localhost 默认入口允许用户选择单个 `.dem`，BFF 直接从请求流写入临时文件，同时校验扩展名、512 MB 上限、长度、`PBDEMS2` 文件头和 SHA-256，再只做地图/10 名玩家预检；当前只接受已具备版本化雷达与标定的 `de_mirage`。用户显式选择分析主体后才异步生成对应 `ObservableState`、`ReviewPlan` 和 `ReplayBundle`。原始文件、SHA-256 与作业元数据保存在 `.local-data/demo-jobs/<uuid>`，生成 Bundle 位于忽略的 localhost 静态缓存；作业可跨开发服务重启读取，但当前不是多用户上传服务，也没有 UI 删除/保留策略。
 
+`main` 的 Cloudflare/OpenNext 形态当前只发布 Web 会话、内置 `SYNTHETIC_FIXTURE` 与云端讲解措辞适配器，不运行 Python、`demoparser2`、本地子进程或可持久文件系统，因此不得声称已经支持线上上传解析 Demo。云端讲解 API 只接收匿名短 ID 和每个 cue 的决策侧事实、既有推断/建议/限制；服务端再调用 DeepSeek，严格校验 ID 与输出字段，只允许替换标题和讲解措辞。`DEEPSEEK_API_KEY` 只存在于 Cloudflare Secret；缺少密钥、超时、上游错误或输出越权时保留确定性模板，不阻塞会话。
+
 当前样本在版本化 Mirage 雷达上播放 10 回合、10 名玩家、逐采样点位置/朝向、生命护甲、经济、手持、库存、C4、事件和 150 条投掷物轨迹。AI 全场带看仍由真实 `ReviewPlan` 驱动；segment 覆盖 canonical 全场与回合间隙，cue 在决策前暂停，播放结果后才开放结果事实与完整复盘，走完全部路线后才解锁总结。地图解析与回放不是并列的主产品，而是 AI 带看的证据画布与 `PlaybackPort` 实现；自由时间轴与全知回放只作为二级“自由复查”入口。独立的四回合 `SYNTHETIC_FIXTURE` 只用于测试与真实分析缺失时的诚实回退，不得用于宣称真实 Demo 解析准确率，也不得把夹具 tick 当成真实比赛证据。
 
-当前 `ObservableState` 必须按用户所选主体独立重建；主体自身位置与状态精确可知；脚步和枪声只在基于距离的保守规则命中时形成 `POSSIBLY_AUDIBLE`、`UNKNOWN_ACTOR` 的方向扇区，不携带具体敌人身份或可渲染精确位置。墙体遮挡、同时噪声、可靠 spotted/视线、队友通信与职业样本尚不可得，必须继续记录为 limitation。当前 deterministic teaching signal 只把主体死亡前接触识别为“生存选择复查点”；死亡是 outcome fact，不足以证明决策错误。生产基线中的 FastAPI、Worker、LangGraph、PostgreSQL、Redis 和对象存储尚未接入；本地生成 JSON、确定性规则、作业文件与内存会话不是这些组件的替代架构。
+当前 `ObservableState` 必须按用户所选主体独立重建；主体自身位置与状态精确可知；脚步和枪声只在基于距离的保守规则命中时形成 `POSSIBLY_AUDIBLE`、`UNKNOWN_ACTOR` 的方向信息，不携带具体敌人身份或可渲染精确位置。声音最大距离只是推断门槛，不是地图上的精确声源范围；常态 renderer 只画短小、无填充的方向提示，禁止用大面积实心扇区制造“已知区域”的错觉。墙体遮挡、同时噪声、可靠 spotted/视线、队友通信与职业样本尚不可得，必须继续记录为 limitation。当前 deterministic teaching signal 只把主体死亡前接触识别为“生存选择复查点”；死亡是 outcome fact，不足以证明决策错误。生产基线中的 FastAPI、Worker、LangGraph、PostgreSQL、Redis 和对象存储尚未接入；本地生成 JSON、确定性规则、作业文件与内存会话不是这些组件的替代架构。
+
+Parser Adapter 对没有有效 `winner` 的初始化/热身 `round_end` 只记录 `ROUND_END_INCOMPLETE`，不得让它消耗 canonical 回合结束边界，也不得从 `reason` 猜测胜方；该约束用于兼容 Falcons vs Spirit 等首 tick 同时出现占位结束事件的真实 Demo。
 
 `ReviewSegment` 在代码与交换契约中统一使用半开区间 `[start_tick, end_tick)`。相邻区间必须满足前一段 `end_tick ==` 后一段 `start_tick`；比赛最后的 `end_tick` 是排他边界。该约定避免相邻段重复消费边界 tick，并适用于未来 Web 2D 与本地 CS2 播放适配器。
 
@@ -263,6 +269,8 @@ Worker 使用至少三档队列优先级：`interactive` 处理用户即将观�
 ### 6.2 DemoDomain
 
 Parser Adapter 将解析器输出转换为稳定的 `MatchTimeline`：比赛、半场、回合、tick、玩家状态、事件和轨迹。玩家状态以 CS2 world 坐标保存，不在解析层转换为屏幕百分比；状态快照至少保留存活、位置、高度、视角、生命、护甲、头盔、金钱、当前手持物、库存/道具数量、拆弹器和 C4 携带。下游回放可以读取全知事实，但 Observation 必须另行推导观察者当时可知的信息。
+
+当前 Python `demoparser2` Adapter、canonical tick、事实/警告契约与兼容修复继续作为唯一解析入口。它一次产出的 `MatchTimeline`、`PlayerStateSample`、`MatchEvent`、投掷物轨迹、coverage、warnings 和 generation manifest 构成 `GroundTruthReplayBundle`；`ObservableState`、教学信号和 `ReviewPlan` 是引用该全知事实的版本化派生物，不允许通过重跑并裁剪 Parser 生成“玩家版 Demo”。
 
 Parser Adapter 还要规范化击杀、伤害、开火、换弹、投掷物、炸弹和解析器能够提供的声音发射事件。声音事件只能证明“某处发生了一个可能发声的动作”，不能直接证明某个玩家一定听到；字段不可得时输出带 parser/game 版本的 warning，绝不补造默认值。所有下游只依赖标准模型，不依赖解析器私有字段或 DataFrame 列名。
 
@@ -355,9 +363,19 @@ propose_memory_update(proposal)
 
 所有命令带 `command_id`，播放器返回当前 canonical tick 和执行结果。未收到暂停/跳转确认前，会话状态不得提前推进。
 
+`Web2DPlaybackAdapter` 分成三个严格边界：
+
+1. `buildOmniscientFrame(groundTruth, tick)` 从全知事实生成 `PlaybackFrameViewModel`；
+2. `buildKnowledgeFrame(observableInput, tick)` 从空白 frame 开始，只加入当前 tick 已可用且未过期的 claim、自身可知状态和明确允许的已观察历史；它的类型签名不得接收 `GroundTruthReplayBundle`、全知 frame、全知玩家状态/事件或未来投掷物轨迹，也不得调用 `buildOmniscientFrame`；
+3. 统一 PixiJS renderer 只接收 `PlaybackFrameViewModel` 与地图资产清单，不接收 `ReplayBundle`、`PlayerStateSample`、`ObservableState` 或产品会话对象，因此不拥有视角判断、可听性、共享信息或未来揭示规则。
+
+当前 PixiJS 路线先以隔离 PoC 验证，不立即替换可运行 renderer。主要技术上游为 MIT 的 `benginN/csfreezetime`，只复用/改写其 PixiJS 图层组织、缩放平移和高频更新等底层实现；MIT 的 `sparkoo/csgo-2d-demo-viewer` 仅用于参考 Worker、逐回合消息、解析/播放解耦和多楼层设计。不得复制两者的产品页面、API、报告/ML/数据库功能，也不得复制 cs2replays 未公开许可的 JS/WASM 或 UI。任何实质复用必须锁定上游 commit，并在 `THIRD_PARTY_NOTICES.md` 保留原版权和 MIT 文本；第三方代码许可与 Valve 雷达/图标资产权利分别记录。
+
+当前 `/pixi-poc` 已证明同一 PixiJS layer 可以消费 `test_demo` 与 Falcons/Spirit 的统一 frame，并在决策视角只显示白名单 claim；它仍是隔离验证入口，不是 AI 带看主地图的替代实现。PoC 尚未完成生产 HUD、多楼层、逐回合浏览器缓存、教练会话控制和所有效果生命周期，因此迁移决策保持 Proposed。PoC 性能数字、上游文件清单和代码量比较属于可重跑实验记录，不作为长期容量承诺。
+
 `Web2DPlaybackAdapter` 的信息密度以成熟 2D Demo viewer 为基线，而不是以当前原型为基线。首版 renderer 至少具有以下可独立开关且共享 canonical tick 的图层：真实雷达、10 名玩家、朝向/视角辅助、轨迹、投掷物飞行与生效范围、击杀/伤害/炸弹事件、教练标注和 HUD。玩家或侧边名单同步显示生命、护甲、当前手持、库存/道具、金钱、拆弹器/C4 与回合数据；字段不可得时显示未知，不使用看似精确的默认值。
 
-朝向锥只表达视角方向与配置的显示距离，本身不是“敌人已被看见”的证据。全知视角读取 `PlayerStateSample` 和 `MatchEvent`；玩家已知视角只读取 `ObservableState`，声音区域、最后已知幽灵与队友共享信息必须使用不同视觉编码和图例。Renderer 不得自行推导可见性、可听性或信息共享。
+朝向箭头只表达玩家朝向，本身不是“敌人已被看见”的证据。大范围朝向锥不作为常态图层；只有讲枪线或清点顺序时才能由受证据约束的短生命周期标注显式开启。全知视角读取 `PlayerStateSample` 和 `MatchEvent`；玩家已知视角只读取 `ObservableState`，声音方向、最后已知幽灵与队友共享信息必须使用不同视觉编码和图例。Renderer 不得自行推导可见性、可听性或信息共享，也不得把声音 audibility threshold 画成实心月牙或精确范围。
 
 ### 6.9 Annotation
 
@@ -371,9 +389,9 @@ propose_memory_update(proposal)
 
 ### 6.11 Coaching
 
-`CoachingPackage` 是 LLM 的唯一正式输入，包含：当前讲解点、决策前事实、推断、结果事实、替代方案、职业证据、已讲习惯和表达约束。
+`CoachingPackage` 是 LLM 的唯一正式输入。决策前讲解只包含匿名 cue/fact/inference/advice 短 ID、决策前事实、既有推断/建议/限制和表达约束，不包含原始 Demo、完整事件流、用户或玩家身份、本机路径、结果事实或播放器控制。结果解释需要单独的 outcome-scoped package，且只能在用户已触发揭示后生成。
 
-LLM 负责：自然语言表达、根据玩家水平调整讲法、当前局面追问和总结组织。LLM 不负责：解析 tick、计算比分、选择暂停点、生成样本比例或改变事实。
+LLM 负责：自然语言表达、根据玩家水平调整讲法、当前局面追问和总结组织。LLM 不负责：解析 tick、计算比分、选择暂停点、生成样本比例或改变事实、引用、置信度、建议结构和播放器控制。当前 Cloudflare 适配器使用 DeepSeek 的 JSON 输出能力；上游返回必须经过字段全集、匿名 ID 一一对应、长度与完成状态校验后才能替换 `title` 与首条 inference 的自然语言讲解。旧 `question` 字段仅同步保存同一段直接讲解以兼容现有契约，不得在 UI 中重新呈现为要求用户预测的门槛。
 
 所有正式讲解先通过引用校验和禁止未来泄漏校验。模型失败时回退到结构化模板，不阻塞会话。
 
@@ -481,7 +499,8 @@ GameAssetCatalog
     canonical_item_id, item_class
     display_name, aliases[]
     raster_ref, width, height, content_sha256
-    source_uri, rights_status
+    source_uri, source_content_sha256
+    media_type, render_mode, rights_status
   generated_at, generation_manifest
 ```
 
@@ -489,7 +508,7 @@ GameAssetCatalog
 
 Parser Adapter 的原始武器/物品名先通过版本化 alias 表规范化为 `canonical_item_id`，renderer 只能以该 ID 查询图标，不得把不可信的 Demo 字符串拼进文件路径或 URL。图标缺失时保留文字名称并显式降级，不用错误图标代替。
 
-`tools/fetch_valve_item_icons.mjs` 从版本锁定的公开物品元数据取得 Valve/Steam 托管图像，逐项下载到 `apps/web/public/generated-assets/items` 并生成 source URI、尺寸、SHA-256、source revision 与权利状态。地图和物品图标的固定快照现在作为小型静态 release 资产随 Web 应用发布，运行时只读取本地绝对路径目录，不热链；本机上传产生的 `generated-data/**` 仍是本地缓存，Cloudflare 部署脚本会显式排除它，避免泄露 Demo 或超过 Workers 单文件大小限制。任何商业化或大规模公开再分发仍需单独复核上游权利。
+`tools/fetch_valve_item_icons.mjs` 使用显式映射与逐项上游 SHA-256 pin 缓存 CS2 HUD 单色 SVG 到 `apps/web/public/generated-assets/items`，拒绝 script、foreignObject、image、事件处理器、href/xlink 等 active content，重建白名单根属性，并把可见 fill/stroke 归一为 `currentColor`。目录同时生成 source URI、source/content SHA-256、media type、render mode 与权利状态。地图和物品图标的固定快照现在作为小型静态 release 资产随 Web 应用发布，运行时只读取 `/generated-assets/items/<safe-id>.svg|png`，不热链；本机上传产生的 `generated-data/**` 仍是本地缓存，Cloudflare 部署脚本会显式排除它，避免泄露 Demo 或超过 Workers 单文件大小限制。任何商业化或大规模公开再分发仍需单独复核上游权利。
 
 ### 7.3 ObservableState
 
@@ -567,7 +586,40 @@ CoachCue
   confidence, limitations[]
 ```
 
+强制时序为 `decision_tick <= outcome_start_tick < reveal_tick <= outcome_end_tick`。用户点击“看结果”是揭示授权边界：播放器从 `outcome_start_tick`（MVP 通常等于 `decision_tick`）开始展示决策到结果的过程；此时允许并默认切到 `OMNISCIENT` 结果视角，但 outcome 文本事实只在窗口完成后标记为已消费。决策前 seek、问答与标注仍锁在观察者信息边界。
+
 ### 7.7 Playback 协议
+
+Renderer 的唯一逐帧输入为：
+
+```text
+PlaybackFrameViewModel
+  tick, tick_rate, selected_player_id
+  perspective: OMNISCIENT | PLAYER_KNOWLEDGE
+  actors[]
+    id, label, side, radar_position, radar_yaw?, status
+    health?, armor?, active_item?, inventory?
+    source_fact_refs[], source_claim_ids[]
+  projectiles[]
+    id, label, radar_current_position?, radar_landing_position?
+    radar_flight_points[]      # 只到当前 tick
+    radar_effect_area?
+    source_fact_refs[], source_claim_ids[]
+  effects[]
+    id, event_type, radar_position?
+    source_fact_refs[], source_claim_ids[]
+  bomb?
+    state, radar_position?, source_event_id?
+    source_fact_refs[], source_claim_ids[]
+  dropped_weapons[]
+  evidence[]                   # 声音/伤害方向、区域、最后已知
+  annotations[]
+    id, kind, radar geometry, label?
+    source_fact_refs[], source_claim_ids[]
+  round?                       # 玩家已知帧不含 winner/score_after/end_tick
+```
+
+所有数组每帧重新由 builder 白名单生成，不能携带超出当前 tick 的轨迹点。玩家已知 frame 中：直视/可靠 spotted 才能形成带身份的精确 actor；脚步、枪声和伤害只形成方向或区域 annotation，不形成隐藏敌人的精确 actor；最后已知形成固定旧位置、带年龄/置信衰减的幽灵；队友 claim 只有 `VERIFIED_TEAM_SHARED` 或显式用户上下文才可加入；投掷物只显示当前 tick 之前已经发生且对观察者有证据的路径。地图元素与教练文案必须引用同一组 `ObservationClaim.id`，缺少引用时不得渲染为玩家已知事实。
 
 ```text
 PlaybackCommand
@@ -765,6 +817,8 @@ sequenceDiagram
 
 当前 `demoparser2` Adapter 按完整文件查询，不把“上传过程中按字节实时解析”作为基线能力。上传完成后先执行一次尽可能轻量的整场扫描，再把深度分析、职业检索和讲解准备按回合渐进执行。若未来 Parser Adapter 原生支持可靠的增量事件流，可通过 ADR 增加上传期解析，但不得改变下游标准契约。
 
+“轻量整场扫描”和逐回合发布是同一次 Parser 事实产物的索引、切片与缓存，不是为全知/玩家视角分别解析 Demo。逐回合 `header_ready → index_ready → round_ready` 只改变可消费范围；任何已发布 round artifact 都引用同一个内容哈希、parser version、timeline version 和 canonical tick 空间。
+
 每个阶段幂等并写入版本清单。LLM 失败不回滚已完成的解析和计划，可重试讲解文本或使用模板。
 
 ### 9.2 调度与缓冲
@@ -784,6 +838,8 @@ priority = proximity_to_playhead
 ### 9.3 复盘阶段
 
 客户端加载轻量 session package 和分块轨迹。LangGraph 根据当前 segment 和用户交互选择教学动作，`SessionOrchestrator` 安全内核将动作转换成受限播放命令并在 cue 点暂停；用户追问时 Agent 只能通过领域工具取得当前 cue 和允许的上下文。Graph checkpoint 和业务会话事件分别持久化，均不能阻塞播放器基本控制。
+
+视角由会话状态确定而非 renderer 自由切换：`PLAYING` 到未揭示 cue 的 `decision_tick` 以及 `PAUSED_FOR_COACHING` 使用 `PLAYER_KNOWLEDGE`；用户点击“看结果”后，`REVEALING` 与 `REPLAYING` 使用 `OMNISCIENT`；进入下一个未揭示 cue 时重新生成 `PLAYER_KNOWLEDGE` frame。已揭示片段可由用户切换全知复查，但不能把该权限带入下一个未揭示 cue。
 
 ### 9.4 会后阶段
 
@@ -863,7 +919,9 @@ Cache 主要加速重复上传、同场不同玩家和回看；不能消除首�
 - 不得因为 Demo 记录了脚步、枪声或队友 spotted，就直接断言所选玩家确实听到、得到报点或知道敌人身份；
 - 所有数值、tick、人数、经济和样本量由代码计算；
 - LLM 输出引用 ID，服务端校验后才能显示为正式讲解；
+- 决策前 DeepSeek 请求使用当前会话内匿名短 ID，禁止携带 Demo/玩家身份、原始稳定 ID、结果事件、tick、路径或完整事件流；
 - 引用缺失、矛盾或越过 `decision_tick` 时拒绝该句并模板降级；
+- 上游缺 key、超时、HTTP/JSON/完成状态失败、额外字段或 ID 不一致时返回 `DISABLED/FALLBACK`，保留模板且不把上游正文或密钥写入响应与日志；
 - 用户要求“再放一遍”等控制意图先映射到白名单命令，再由 Orchestrator 执行；
 - Prompt injection 内容不得从 Demo 元数据、昵称或职业语料进入系统指令。
 
@@ -987,6 +1045,8 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 | localhost ReplayBundle | Accepted | 事实型 `replay-bundle.v1`；扁平全知状态、事件、coverage/warnings/manifest；采样与渲染插值边界显式版本化 |
 | 全知比赛状态 | Accepted | 每 tick/变化点保留位置、朝向、生命护甲、当前手持、库存道具、经济和 C4 等解析器可得事实 |
 | 玩家已知信息 | Accepted | 多来源 `ObservationClaim`；声音、最后已知和队友信息按精度、置信度、共享与衰减建模，不用布尔可见性 |
+| 单次解析与帧模型 | Accepted | `.dem` 只生成一份全知事实；Observation 独立派生；全知/玩家已知分别白名单构建统一 `PlaybackFrameViewModel` |
+| PixiJS renderer 迁移 | Proposed | 隔离 PoC 已通过 test_demo/Falcons、未来泄漏与 frame-builder 性能验证；生产 HUD、多楼层、缓存和 AI 会话集成完成前不替换旧 renderer |
 | 桌面长期形态 | Proposed | 本地 CS2 Demo＋教练侧窗，通过 PlaybackPort 接入 |
 | 服务端架构 | Accepted | 模块化单体＋异步 Worker |
 | 分析启动策略 | Accepted | 完整快速索引后渐进式按回合分析，前 2–3 回合就绪即可开始 |
@@ -996,6 +1056,7 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 | Agent 数据访问 | Accepted | 仅调用强类型领域工具，不授予 LLM 任意 SQL 或数据库连接 |
 | 职业行为路线 | Accepted | 数据库/规则先行，监督排序与行为先验后续 |
 | LLM 职责 | Accepted | 讲解和问答，不负责事实、计划或任意播放器控制 |
+| Cloudflare 讲解 Provider | Accepted | DeepSeek 仅润色匿名决策侧 CoachingPackage；`DEEPSEEK_API_KEY` 为 Worker Secret；严格校验并模板降级 |
 | 个人记忆 | Accepted | 本地优先、用户可控、只影响优先级 |
 | 视频弱标注 | Accepted | 仅作为已授权离线教学行为启动语料；无原 Demo 时只使用媒体时间，不产生精确 tick 或黄金集 |
 | 强化学习 | Deferred | 无可靠环境与奖励前不采用 |
@@ -1014,3 +1075,5 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 | 1.1.0 | 2026-08-12 | 固化 localhost `replay-bundle.v1` 传输形状、24-tick 单样本采样与全知显示插值边界；记录真实 Mirage 雷达/10 回合 Web 回放已接入，Observation 与 ReviewPlan 尚未接入 |
 | 1.2.0 | 2026-08-12 | 接入真实 Demo 的 20 个 ObservableState 检查点与 38 段完整 ReviewPlan；默认入口改为 5 个 cue 的 AI 全场带看，地图降为证据画布/自由复查；固化保守声音方向与结果前无未来标注边界 |
 | 1.3.0 | 2026-08-13 | 增加 localhost 本机 Demo 选择与可恢复作业记录、10 人分析主体选择、按主体重建 ReviewPlan；接入 150 条真实投掷物轨迹/生命周期与地图两侧紧凑玩家栏；增加版本锁定的 Valve/Steam 物品图标本地清单，维持地图为 AI 讲解证据画布 |
+| 1.4.0 | 2026-08-13 | 冻结时间改为保留覆盖但自动消费；决策点改为教练直接讲、decision→outcome 播放并在用户揭示后切全知结果；声音标注改为短小无填充方向提示；修复无 winner 占位 round_end；固化安全 HUD SVG 管线与 Cloudflare DeepSeek 匿名讲解边界 |
+| 1.5.0 | 2026-08-13 | 固化单次全知解析、Observation 独立派生、空白白名单 `PlaybackFrameViewModel` 与统一 renderer 边界；将 Freezetime/PixiJS 迁移设为需经真实 Demo、未来泄漏和性能证据验证的隔离 PoC |

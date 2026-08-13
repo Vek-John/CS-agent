@@ -1,0 +1,5 @@
+# Local Cloudflare preview only. Copy to .dev.vars; never commit a real key.
+DEEPSEEK_API_KEY=
+
+# Optional non-secret override. Allowed: deepseek-v4-flash, deepseek-v4-pro.
+DEEPSEEK_MODEL=deepseek-v4-flash

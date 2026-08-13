@@ -41,7 +41,7 @@ from .review_planner import PLANNER_VERSION, build_review_plan
 from .teaching_signals import SIGNAL_VERSION, detect_teaching_signals
 
 
-BUILDER_VERSION = "0.5.0"
+BUILDER_VERSION = "0.6.0"
 DEFAULT_SAMPLING_STRIDE_TICKS = 24
 DEFAULT_TICK_RATE = 64.0
 
@@ -736,6 +736,9 @@ def build_replay_bundle(
         observable_states=observable_states,
         signals=signals,
         parser_version=metadata.parser_version,
+        analysis_subject_selection=(
+            "EXPLICIT_PLAYER" if selected_player_id is not None else "FIRST_TIMELINE_PLAYER_DEFAULT"
+        ),
     )
     limitations = [
         f"player_state_tracks uses a {sampling_stride_ticks}-tick grid plus parsed round boundary ticks; it is not lossless full-tick state",
@@ -748,11 +751,16 @@ def build_replay_bundle(
         "sound claims are only POSSIBLY_AUDIBLE from observer/actor state joins and conservative distance gates; occlusion and simultaneous noise are not modeled",
         "utility/bomb hidden ground-truth positions are not converted into uncertain observer claims without observable evidence",
         "ReviewPlan is a deterministic rule-based MVP with contact-survival review opportunities; death does not prove a bad decision",
-        "analysis subject is explicitly the first timeline player by default; this bundle does not claim all-player coaching support",
+        (
+            "analysis subject was explicitly selected by the user; this bundle does not claim all-player coaching support"
+            if selected_player_id is not None
+            else "analysis subject defaults to the first timeline player; this bundle does not claim all-player coaching support"
+        ),
     ]
     manifest = GenerationManifest(
         builder_version=BUILDER_VERSION,
         parser_version=metadata.parser_version,
+        deterministic=True,
         sampling_stride_ticks=sampling_stride_ticks,
         trajectory_sampling_strategy=f"every {sampling_stride_ticks} ticks plus parsed round boundary ticks",
         preserved_round_boundary_ticks=len(boundary_ticks),
@@ -893,6 +901,8 @@ def main(argv: list[str] | None = None) -> int:
                 "observable_states": len(bundle.observable_states),
                 "review_segments": len(bundle.review_plan.segments) if bundle.review_plan else 0,
                 "review_cues": len(bundle.review_plan.cues) if bundle.review_plan else 0,
+                "narration_provider": bundle.review_plan.generation_manifest.provider if bundle.review_plan else None,
+                "narration_status": bundle.review_plan.generation_manifest.status if bundle.review_plan else None,
                 "warnings": len(bundle.warnings),
             },
             ensure_ascii=False,

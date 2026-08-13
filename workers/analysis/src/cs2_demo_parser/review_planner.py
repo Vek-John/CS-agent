@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Iterable
+from typing import Iterable, Literal
 
 from .models import ParseWarning
 from .replay_models import (
@@ -418,6 +418,9 @@ def build_review_plan(
     observable_states: list[ReplayObservableState],
     signals: list[TeachingSignal],
     parser_version: str,
+    analysis_subject_selection: Literal[
+        "FIRST_TIMELINE_PLAYER_DEFAULT", "EXPLICIT_PLAYER"
+    ] = "FIRST_TIMELINE_PLAYER_DEFAULT",
 ) -> ReplayReviewPlan:
     """Build a complete canonical coverage path and cue evidence graph."""
 
@@ -605,10 +608,14 @@ def build_review_plan(
             observation_version=OBSERVATION_VERSION,
             signal_version=SIGNAL_VERSION,
             planner_version=PLANNER_VERSION,
-            analysis_subject_selection="FIRST_TIMELINE_PLAYER_DEFAULT",
+            analysis_subject_selection=analysis_subject_selection,
             analysis_subject_player_id=selected_player_id,
             limitations=[
-                "MVP 分析主体固定为 timeline.players[0]（除非 CLI 明确传入 selected_player_id）；不伪装支持所有玩家。",
+                (
+                    "本次分析主体由用户显式选择；ObservableState、教学信号与 ReviewPlan 均按该主体独立重建。"
+                    if analysis_subject_selection == "EXPLICIT_PLAYER"
+                    else "本次未显式选择主体，使用 timeline.players[0] 作为 localhost 默认值。"
+                ),
                 "当前 plan 只生成少量事实型受击前后选择复查点；没有可靠证据时不声称职业水平、意图或决策错误。",
                 "完整 canonical 区间由 teaching segments 与 round_number=0 的 inter-round gap segments 覆盖。",
             ],

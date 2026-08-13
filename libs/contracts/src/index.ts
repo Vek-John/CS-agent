@@ -207,11 +207,12 @@ export interface GenerationManifest {
   signal_version: string;
   planner_version: string;
   /** Natural-language cue provider; facts and playback remain worker-owned. */
-  provider?: "DETERMINISTIC_TEMPLATE" | "CODEX_TERRA";
+  provider: "DETERMINISTIC_TEMPLATE" | "DEEPSEEK";
   model?: string;
-  prompt_version?: string;
-  status?: "DISABLED" | "SUCCEEDED" | "FALLBACK";
-  /** Terra narration is non-deterministic even when the underlying plan is not. */
+  prompt_version: string;
+  status: "DISABLED" | "SUCCEEDED" | "FALLBACK";
+  /** False only when model-generated wording was accepted into this artifact. */
+  narration_deterministic: boolean;
   /** Explicitly records the MVP subject-selection policy. */
   analysis_subject_selection?: "FIRST_TIMELINE_PLAYER_DEFAULT" | "EXPLICIT_PLAYER";
   analysis_subject_player_id?: string;
