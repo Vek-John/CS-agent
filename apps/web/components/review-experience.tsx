@@ -28,6 +28,7 @@ import {
 } from "@cs-coach/session";
 import { ReplayViewer, type ReplayPerspective } from "./replay-viewer";
 import { createFixtureReplayView, type ReplayViewModel } from "../lib/replay-bundle";
+import { canShowGroundTruthForPhase } from "../lib/review-perspective";
 import { sampleStateAtTick } from "../lib/replay-sampling";
 
 const fixtureView = createFixtureReplayView();
@@ -156,6 +157,8 @@ function CoachContent({
   onQuestionSubmit,
   dispatch,
   setRunning,
+  setShowGroundTruth,
+  setPerspective,
   running
 }: {
   timeline: MatchTimeline;
@@ -171,6 +174,8 @@ function CoachContent({
   onQuestionSubmit: (event: FormEvent) => void;
   dispatch: (action: SessionAction) => void;
   setRunning: (running: boolean) => void;
+  setShowGroundTruth: (show: boolean) => void;
+  setPerspective: (perspective: ReplayPerspective) => void;
   running: boolean;
 }) {
   if (phase === "INTRO") {
@@ -248,6 +253,11 @@ function CoachContent({
 
   const observableFacts = cue.facts.filter((fact) => cue.observable_fact_refs.includes(fact.id));
   const outcomeFacts = cue.facts.filter((fact) => fact.availability === "OUTCOME");
+  const isHabitCheck = segment.mode === "HABIT_CHECK" || cue.cue_type === "HABIT_RECHECK";
+  const displayedObservableFacts = observableFacts.slice(0, isHabitCheck ? 2 : 3);
+  const displayedOutcomeFacts = outcomeFacts.slice(0, isHabitCheck ? 1 : 2);
+  const primaryInference = cue.inferences[0];
+  const primaryAdvice = cue.advice[0];
 
   if (phase === "REVEALING" || phase === "REPLAYING") {
     const playbackLabel = phase === "REVEALING" ? "播放真实结果" : "回看结果";
@@ -269,48 +279,90 @@ function CoachContent({
   }
 
   return (
-    <div className="coach-state" key={`${cue.id}-${revealed ? "revealed" : "decision"}`}>
+    <div
+      className={`coach-state coach-teaching-state${isHabitCheck ? " is-habit-check" : ""}`}
+      key={`${cue.id}-${revealed ? "revealed" : "decision"}`}
+    >
       <span className="coach-kicker">
-        第 {segment.round_number} 回合 · {revealed ? "结果已揭示" : "决策前暂停"}
+        第 {segment.round_number} 回合 · {revealed ? "结果与动作" : isHabitCheck ? "习惯复查" : "决策前暂停"}
       </span>
-      <h2>{cue.title}</h2>
-      <p className="coach-question">{cue.question}</p>
+      <h2>{revealed
+        ? isHabitCheck ? "同一个习惯，结果也重复了。" : "结果出来了。"
+        : isHabitCheck ? "同一个习惯又出现了。" : cue.title}</h2>
+      {revealed && !isHabitCheck ? <p className="coach-recap">{cue.title}</p> : null}
 
-      <div className="evidence-block">
-        <span>你当时能知道</span>
-        {observableFacts.map((fact) => <p key={fact.id}>{fact.text}</p>)}
-      </div>
+      {!revealed || !isHabitCheck ? (
+        <div className="evidence-block" aria-label="暂停点前的可知事实">
+          <div className="coach-block-heading">
+            <span>当时可知</span>
+            <small>只到暂停点</small>
+          </div>
+          <ol>
+            {displayedObservableFacts.map((fact) => (
+              <li key={fact.id}><i aria-hidden="true" /><p>{fact.text}</p></li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
 
       {!revealed ? (
         <>
-          <div className="inference-block">
-            <span>教练判断 · {Math.round(cue.confidence * 100)}% 置信</span>
-            <p>{cue.inferences[0]?.text}</p>
-          </div>
+          {primaryInference ? (
+            <div className="inference-block">
+              <div className="coach-block-heading">
+                <span>教练判断与理由</span>
+                <small>{Math.round(cue.confidence * 100)}% 置信</small>
+              </div>
+              <p>{primaryInference.text}</p>
+            </div>
+          ) : null}
           <button
             className="primary-action reveal-action"
-            onClick={() => { dispatch({ type: "REVEAL_OUTCOME" }); setRunning(true); }}
+            onClick={() => {
+              setShowGroundTruth(true);
+              setPerspective("OMNISCIENT");
+              dispatch({ type: "REVEAL_OUTCOME" });
+              setRunning(true);
+            }}
           >
-            播放真实结果 <span aria-hidden="true">▶</span>
+            看结果 <span aria-hidden="true">▶</span>
           </button>
+          <p className="outcome-lock-note"><i aria-hidden="true" />暂停点之后的结果仍隐藏</p>
         </>
       ) : (
         <>
           <div className="outcome-block">
-            <span>真实结果</span>
-            {outcomeFacts.map((fact) => <p key={fact.id}>{fact.text}</p>)}
+            <div className="coach-block-heading">
+              <span>真实结果</span>
+              <small>已揭示</small>
+            </div>
+            {displayedOutcomeFacts.map((fact) => <p key={fact.id}>{fact.text}</p>)}
           </div>
-          <div className="advice-block">
-            <span>下次这样执行</span>
-            <p>{cue.advice[0]?.text}</p>
-          </div>
+          {primaryAdvice ? (
+            <div className="advice-block">
+              <div className="coach-block-heading">
+                <span>一个具体动作</span>
+                <small>下一次执行</small>
+              </div>
+              <p>{primaryAdvice.text}</p>
+              <div className="action-trigger">
+                <span>触发条件</span>
+                <p>{primaryAdvice.trigger}</p>
+              </div>
+            </div>
+          ) : null}
           <div className="action-row">
             <button className="primary-action" onClick={() => dispatch({ type: "ADVANCE_SEGMENT" })}>
-              记住了，继续 <span aria-hidden="true">→</span>
+              继续看下一段 <span aria-hidden="true">→</span>
             </button>
             <button
               className="secondary-action"
-              onClick={() => { dispatch({ type: "REPLAY_OUTCOME" }); setRunning(true); }}
+              onClick={() => {
+                setShowGroundTruth(true);
+                setPerspective("OMNISCIENT");
+                dispatch({ type: "REPLAY_OUTCOME" });
+                setRunning(true);
+              }}
             >
               再看一遍
             </button>
@@ -319,13 +371,17 @@ function CoachContent({
       )}
 
       <form className="question-form" onSubmit={onQuestionSubmit}>
-        <label htmlFor="coach-question">围绕当前局面追问</label>
+        <label htmlFor="coach-question">
+          <span>可选追问</span>
+          <small id="coach-question-note">不影响继续观看</small>
+        </label>
         <div>
           <input
             id="coach-question"
+            aria-describedby="coach-question-note"
             value={question}
             onChange={(event) => onQuestionChange(event.target.value)}
-            placeholder="例如：如果队友有语音指令呢？"
+            placeholder="例如：如果队友有语音指令呢？（可选）"
           />
           <button type="submit" disabled={!question.trim()} aria-label="发送追问">↑</button>
         </div>
@@ -390,7 +446,7 @@ export function ReviewExperience({
     { T: 0, CT: 0 }
   );
 
-  const canShowGroundTruth = !cue || revealed;
+  const canShowGroundTruth = canShowGroundTruthForPhase(state.phase, Boolean(cue), revealed);
   const isPlaybackPhase = ["PLAYING", "REVEALING", "REPLAYING"].includes(state.phase);
   const summary = useMemo(
     () => (state.phase === "WRAP_UP" || state.phase === "COMPLETED" ? buildSessionSummary(activePlan, state) : undefined),
@@ -414,11 +470,14 @@ export function ReviewExperience({
   }, [isPlaybackPhase]);
 
   useEffect(() => {
-    if (!canShowGroundTruth) {
+    if (state.phase === "REVEALING" || state.phase === "REPLAYING") {
+      setShowGroundTruth(true);
+      setPerspective("OMNISCIENT");
+    } else if (!canShowGroundTruth) {
       setShowGroundTruth(false);
       setPerspective("PLAYER_KNOWLEDGE");
     }
-  }, [canShowGroundTruth]);
+  }, [canShowGroundTruth, state.phase]);
 
   useEffect(() => {
     setQuestion("");
@@ -576,6 +635,8 @@ export function ReviewExperience({
                 onQuestionSubmit={submitQuestion}
                 dispatch={dispatch}
                 setRunning={setRunning}
+                setShowGroundTruth={setShowGroundTruth}
+                setPerspective={setPerspective}
                 running={running}
               />
             )}

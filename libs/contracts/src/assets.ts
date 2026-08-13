@@ -10,6 +10,10 @@ export interface ItemIconManifest {
   height: number;
   content_sha256: string;
   source_uri: string;
+  /** Hash of the pinned upstream bytes before local normalization. */
+  source_content_sha256?: string;
+  media_type?: "image/png" | "image/svg+xml";
+  render_mode?: "RASTER" | "MONOCHROME_CURRENT_COLOR";
   rights_status: MapAssetRightsStatus;
 }
 
@@ -90,6 +94,15 @@ export function collectGameAssetCatalogIssues(catalog: GameAssetCatalog): string
     }
     if (!icon.source_uri?.trim()) {
       issues.push(`item ${icon.canonical_item_id || "<unknown>"} needs source_uri.`);
+    }
+    if (icon.source_content_sha256 !== undefined && !isSha256(icon.source_content_sha256)) {
+      issues.push(`item ${icon.canonical_item_id || "<unknown>"} has an invalid source_content_sha256.`);
+    }
+    if (icon.media_type !== undefined && !["image/png", "image/svg+xml"].includes(icon.media_type)) {
+      issues.push(`item ${icon.canonical_item_id || "<unknown>"} has an unsupported media_type.`);
+    }
+    if (icon.render_mode !== undefined && !["RASTER", "MONOCHROME_CURRENT_COLOR"].includes(icon.render_mode)) {
+      issues.push(`item ${icon.canonical_item_id || "<unknown>"} has an unsupported render_mode.`);
     }
     if (!icon.rights_status?.trim()) {
       issues.push(`item ${icon.canonical_item_id || "<unknown>"} needs rights_status.`);

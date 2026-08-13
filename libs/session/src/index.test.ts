@@ -15,20 +15,52 @@ const plan = createFixtureReviewPlan(timeline);
 function reachFirstCue() {
   let state = createCoachingSession(plan);
   state = reduceCoachingSession(plan, state, { type: "START" });
-  state = reduceCoachingSession(plan, state, { type: "SKIP_SEGMENT" });
   state = reduceCoachingSession(plan, state, { type: "ADVANCE_SEGMENT" });
-  state = reduceCoachingSession(plan, state, { type: "SKIP_SEGMENT" });
   state = reduceCoachingSession(plan, state, { type: "TICK", tick: 2350 });
   return state;
 }
 
 describe("CoachingSession deterministic safety kernel", () => {
-  it("keeps skips explicit and allows the user to expand them", () => {
+  it("auto-consumes freeze time while retaining it in the event log and full plan", () => {
     let state = createCoachingSession(plan);
     state = reduceCoachingSession(plan, state, { type: "START" });
 
+    expect(state.phase).toBe("PLAYING");
+    expect(state.current_segment_index).toBe(1);
+    expect(state.current_tick).toBe(256);
+    expect(plan.segments[0]).toMatchObject({
+      id: "seg-r1-freeze",
+      mode: "SKIP",
+      reason_code: "FREEZE_TIME",
+      start_tick: 0,
+      end_tick: 256
+    });
+    expect(state.user_events).toContainEqual(
+      expect.objectContaining({
+        type: "SEGMENT_SKIPPED",
+        segment_id: "seg-r1-freeze",
+        at_tick: 256,
+        detail: "AUTO_FREEZE_TIME"
+      })
+    );
+  });
+
+  it("keeps non-freeze skips explicit and expandable by the user", () => {
+    const planWithManualSkip = {
+      ...plan,
+      id: "plan-fixture-manual-skip",
+      segments: plan.segments.map((segment) =>
+        segment.id === "seg-r1-freeze"
+          ? { ...segment, reason_code: "LOW_VALUE_NO_SUBJECT_EVENT" }
+          : segment
+      )
+    };
+    let state = createCoachingSession(planWithManualSkip);
+    state = reduceCoachingSession(planWithManualSkip, state, { type: "START" });
+
     expect(state.phase).toBe("SKIPPING");
-    state = reduceCoachingSession(plan, state, { type: "EXPAND_SKIP" });
+    expect(state.current_segment_index).toBe(0);
+    state = reduceCoachingSession(planWithManualSkip, state, { type: "EXPAND_SKIP" });
     expect(state.phase).toBe("PLAYING");
     expect(state.expanded_segment_ids).toContain("seg-r1-freeze");
   });
@@ -45,18 +77,24 @@ describe("CoachingSession deterministic safety kernel", () => {
     expect(answer.text).not.toContain("先被击杀");
   });
 
-  it("requires outcome reveal before advancing a teaching segment", () => {
+  it("reveals the outcome after direct coaching without requiring a player answer", () => {
     let state = reachFirstCue();
     const blocked = reduceCoachingSession(plan, state, { type: "ADVANCE_SEGMENT" });
     expect(blocked).toEqual(state);
 
     state = reduceCoachingSession(plan, state, { type: "REVEAL_OUTCOME" });
+    expect(state.phase).toBe("REVEALING");
+    expect(state.current_tick).toBe(plan.cues[0].decision_tick);
+    expect(state.user_events.some((event) => event.type === "QUESTION_ASKED")).toBe(false);
+    const preReveal = reduceCoachingSession(plan, state, { type: "TICK", tick: plan.cues[0].reveal_tick });
+    expect(preReveal.phase).toBe("REVEALING");
+    expect(preReveal.revealed_cue_ids).not.toContain("cue-r2-overpeek");
     state = reduceCoachingSession(plan, state, { type: "TICK", tick: 2700 });
     expect(state.revealed_cue_ids).toContain("cue-r2-overpeek");
 
     state = reduceCoachingSession(plan, state, { type: "ADVANCE_SEGMENT" });
     expect(state.consumed_cue_ids).toContain("cue-r2-overpeek");
-    expect(state.current_segment_index).toBe(4);
+    expect(state.current_segment_index).toBe(5);
   });
 
   it("unlocks a summary only after the entire path is consumed", () => {

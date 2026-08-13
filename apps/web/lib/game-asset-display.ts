@@ -15,7 +15,7 @@ export interface ItemPresentation {
  * data URLs, and any value derived from the parser item id.
  */
 export function isLocalBrowserAssetRef(value: string | undefined): value is string {
-  return Boolean(value && value.startsWith("/") && !value.startsWith("//") && !value.includes("\0"));
+  return Boolean(value && /^\/generated-assets\/items\/[a-z0-9_-]+\.(?:png|svg)$/.test(value));
 }
 
 export function resolveItemPresentation(

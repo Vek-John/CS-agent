@@ -24,15 +24,19 @@ function validateCue(cue: CoachCue, plan: ReviewPlan, issues: string[]): void {
   if (cue.decision_tick < segment.start_tick || cue.decision_tick >= segment.end_tick) {
     issues.push(`Cue ${cue.id} decision_tick is outside segment ${segment.id}.`);
   }
+  if (cue.outcome_start_tick < cue.decision_tick) {
+    issues.push(`Cue ${cue.id} outcome playback starts before the decision tick.`);
+  }
   if (cue.reveal_tick <= cue.decision_tick) {
     issues.push(`Cue ${cue.id} must reveal strictly after its decision tick.`);
   }
-  if (cue.outcome_start_tick < cue.reveal_tick) {
-    issues.push(`Cue ${cue.id} outcome starts before reveal.`);
+  if (cue.reveal_tick > cue.outcome_end_tick) {
+    issues.push(`Cue ${cue.id} reveals after its outcome range ends.`);
   }
   if (
     cue.outcome_end_tick <= cue.outcome_start_tick ||
-    cue.outcome_end_tick > segment.end_tick
+    cue.outcome_end_tick > segment.end_tick ||
+    cue.outcome_start_tick >= cue.reveal_tick
   ) {
     issues.push(`Cue ${cue.id} has an invalid outcome range.`);
   }
@@ -264,7 +268,7 @@ export function createFixtureReviewPlan(timeline: MatchTimeline): ReviewPlan {
         end_tick: 3200,
         mode: "DEEP_DIVE",
         reason_code: "ADVANTAGE_OVERPEEK",
-        display_reason: "人数领先后的二次前压：在真实选择发生前暂停。",
+        display_reason: "人数领先后的二次前压：在真实选择发生前暂停，直接说明判断与理由。",
         playback_speed: 1,
         cue_ids: ["cue-r2-overpeek"],
         expandable: true
@@ -288,7 +292,7 @@ export function createFixtureReviewPlan(timeline: MatchTimeline): ReviewPlan {
         end_tick: 4800,
         mode: "HABIT_CHECK",
         reason_code: "RECHECK_ADVANTAGE_OVERPEEK",
-        display_reason: "相同风险再次出现：先让你判断，再揭示真实结果。",
+        display_reason: "相同风险再次出现：直接复盘判断与理由，再揭示真实结果。",
         playback_speed: 1,
         cue_ids: ["cue-r3-habit"],
         expandable: true
@@ -335,11 +339,11 @@ export function createFixtureReviewPlan(timeline: MatchTimeline): ReviewPlan {
         id: "cue-r2-overpeek",
         segment_id: "seg-r2-deep",
         cue_type: "DECISION",
-        title: "领先后还要继续拿空间吗？",
-        question: "现在是 4 打 3。你会继续压过中路拐角，还是留在可被队友补枪的位置？",
+        title: "领先后，先把优势留在队友能补枪的位置",
+        question: "教练先停在这里：当前是 4 打 3，但最近队友还不能立刻覆盖拐角后的交火。继续前压会把团队优势变成缺少补枪保障的单挑；先留在队友能补枪的位置，等队友贴近或有新信息再拿空间。",
         decision_tick: 2350,
         reveal_tick: 2460,
-        outcome_start_tick: 2460,
+        outcome_start_tick: 2350,
         outcome_end_tick: 2700,
         facts: [
           {
@@ -403,11 +407,11 @@ export function createFixtureReviewPlan(timeline: MatchTimeline): ReviewPlan {
         id: "cue-r3-habit",
         segment_id: "seg-r3-habit",
         cue_type: "HABIT_RECHECK",
-        title: "同一个选择，再判断一次",
-        question: "上一回合刚讲过领先后的风险重置。这里最近队友仍未到位，你会怎么做？",
+        title: "同类风险再次出现，先重置而不是单独接触",
+        question: "教练直接复盘这里：上一回合讲过的风险又出现了——你方仍有人数优势，但队友还不能同步接触。此刻先停、换位或后撤，能保住补枪关系；不要让一次单独过角抹掉团队优势。",
         decision_tick: 3910,
         reveal_tick: 4020,
-        outcome_start_tick: 4020,
+        outcome_start_tick: 3910,
         outcome_end_tick: 4250,
         facts: [
           {

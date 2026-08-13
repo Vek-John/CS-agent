@@ -1,4 +1,6 @@
 packages:
   - "apps/*"
   - "libs/*"
-
+minimumReleaseAgeExclude:
+  - miniflare@5.20260811.0-alpha
+  - wrangler@4.122.0

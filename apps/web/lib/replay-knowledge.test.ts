@@ -41,6 +41,9 @@ describe("player knowledge evidence rendering", () => {
     expect(buildKnowledgeEvidenceOverlays([soundClaim], manifest)).toMatchObject([
       { id: "claim-1", type: "DIRECTION_SECTOR" }
     ]);
+    const overlay = buildKnowledgeEvidenceOverlays([soundClaim], manifest)[0];
+    expect(overlay?.type === "DIRECTION_SECTOR" && overlay.rayPath).toContain(" L ");
+    expect(overlay?.type === "DIRECTION_SECTOR" && overlay.boundaryPath).not.toContain(" Z");
   });
 
   it("renders area and last-known claims as uncertainty overlays", () => {

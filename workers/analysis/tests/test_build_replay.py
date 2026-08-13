@@ -377,7 +377,7 @@ def test_checked_in_real_bundle_has_executable_plan_and_sound_boundary() -> None
         assert previous["end_tick"] == current["start_tick"]
     for cue in plan["cues"]:
         assert timeline["start_tick"] <= cue["decision_tick"] < cue["reveal_tick"]
-        assert cue["reveal_tick"] <= cue["outcome_start_tick"] < cue["outcome_end_tick"] <= timeline["end_tick"]
+        assert cue["decision_tick"] <= cue["outcome_start_tick"] < cue["reveal_tick"] <= cue["outcome_end_tick"] <= timeline["end_tick"]
         assert all(ref in {fact["id"] for fact in cue["facts"]} for ref in cue["observable_fact_refs"])
         assert all(annotation["coordinate_space"] == "WORLD" for annotation in cue["annotations"])
         assert all("结果" not in annotation["label"] for annotation in cue["annotations"])

@@ -10,7 +10,9 @@ export type KnowledgeEvidenceOverlay =
   | {
       id: string;
       type: "DIRECTION_SECTOR";
-      path: string;
+      /** Short, display-only direction hint. It is not an audibility range. */
+      rayPath: string;
+      boundaryPath: string;
     }
   | {
       id: string;
@@ -66,35 +68,31 @@ function directionPoint(
   };
 }
 
-function directionSectorPath(
+function directionHintPaths(
   origin: WorldPoint,
   bearingDegrees: number,
   widthDegrees: number,
-  maxDistance: number | undefined,
   manifest: MapAssetManifest
-): string {
+): { rayPath: string; boundaryPath: string } {
   const normalizedOrigin = worldToNormalized(origin, manifest);
-  const radius = maxDistance === undefined
-    ? 0.16
-    : Math.max(0.02, worldRadiusToNormalized(origin, maxDistance, manifest));
+  // `max_distance` on a sound claim is the conservative audibility gate, not
+  // a known source distance. Keep the renderer deliberately compact so it
+  // cannot be mistaken for a visible area or an exact enemy location.
+  const radius = 0.065;
   const halfWidth = widthDegrees / 2;
   const startAngle = directionAngle(origin, bearingDegrees - halfWidth, manifest);
   const endAngle = directionAngle(origin, bearingDegrees + halfWidth, manifest);
   const start = directionPoint(normalizedOrigin, startAngle, radius);
   const end = directionPoint(normalizedOrigin, endAngle, radius);
-  const largeArc = widthDegrees > 180 ? 1 : 0;
   const centerAngle = directionAngle(origin, bearingDegrees, manifest);
-
-  // Keep a stable clockwise SVG sweep while using the transformed center
-  // direction to choose the visual side of the sector.
-  const center = directionPoint(normalizedOrigin, centerAngle, radius * 0.55);
-  const sweep = Math.atan2(center.y - normalizedOrigin.y, center.x - normalizedOrigin.x) >= 0 ? 1 : 0;
-  return [
-    `M ${normalizedOrigin.x} ${normalizedOrigin.y}`,
-    `L ${start.x} ${start.y}`,
-    `A ${radius} ${radius} 0 ${largeArc} ${sweep} ${end.x} ${end.y}`,
-    "Z"
-  ].join(" ");
+  const rayEnd = directionPoint(normalizedOrigin, centerAngle, radius * 1.08);
+  return {
+    rayPath: `M ${normalizedOrigin.x} ${normalizedOrigin.y} L ${rayEnd.x} ${rayEnd.y}`,
+    boundaryPath: [
+      `M ${normalizedOrigin.x} ${normalizedOrigin.y} L ${start.x} ${start.y}`,
+      `M ${normalizedOrigin.x} ${normalizedOrigin.y} L ${end.x} ${end.y}`
+    ].join(" ")
+  };
 }
 
 export function getRenderablePlayerClaims(
@@ -115,16 +113,16 @@ export function buildKnowledgeEvidenceOverlays(
   return claims.flatMap((claim): KnowledgeEvidenceOverlay[] => {
     const spatial = claim.spatial_estimate;
     if (spatial.type === "DIRECTION_SECTOR" && spatial.origin) {
+      const paths = directionHintPaths(
+        spatial.origin,
+        spatial.bearing_degrees,
+        spatial.width_degrees,
+        manifest
+      );
       return [{
         id: claim.id,
         type: "DIRECTION_SECTOR" as const,
-        path: directionSectorPath(
-          spatial.origin,
-          spatial.bearing_degrees,
-          spatial.width_degrees,
-          spatial.max_distance,
-          manifest
-        )
+        ...paths
       }];
     }
     if (spatial.type === "AREA") {

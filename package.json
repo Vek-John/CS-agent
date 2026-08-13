@@ -12,11 +12,16 @@
     "test:watch": "vitest",
     "assets:valve-items": "node tools/fetch_valve_item_icons.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
-    "check": "pnpm test && pnpm typecheck && pnpm build"
+    "check": "pnpm test && pnpm typecheck && pnpm build",
+    "cloudflare:build": "opennextjs-cloudflare build",
+    "cloudflare:preview": "opennextjs-cloudflare preview",
+    "cloudflare:deploy": "opennextjs-cloudflare deploy"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "1.20.2",
     "@types/node": "^24.3.0",
     "typescript": "7.0.2",
-    "vitest": "^4.0.0"
+    "vitest": "^4.0.0",
+    "wrangler": "4.122.0"
   }
 }

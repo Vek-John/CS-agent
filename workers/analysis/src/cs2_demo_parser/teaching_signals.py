@@ -9,7 +9,7 @@ from .models import ParseWarning
 from .replay_models import ReplayEvent, ReplayMatchTimeline, ReplayRoundTimeline
 
 
-SIGNAL_VERSION = "demo-signals/1.0.0"
+SIGNAL_VERSION = "demo-signals/1.1.0"
 CONTACT_LOOKBACK_TICKS = 192
 DECISION_CONTEXT_TICKS = 96
 OUTCOME_WINDOW_TICKS = 192
@@ -81,8 +81,9 @@ def detect_teaching_signals(
 
     A death is a ground-truth outcome, not proof of a bad decision.  The
     signal therefore creates a review opportunity with an explicit limitation
-    and only uses preceding damage rows as observable context.  It never
-    reads opponent coordinates, raw sound emissions, or post-decision facts.
+    and only uses damage rows available no later than its decision tick as
+    observable context. It never reads opponent coordinates, raw sound
+    emissions, or post-decision facts.
     """
 
     local_warnings = warnings if warnings is not None else []
@@ -105,7 +106,7 @@ def detect_teaching_signals(
         round_timeline = _round_for_tick(timeline.rounds, death.tick)
         if round_timeline is None:
             continue
-        prior_damage = [
+        damage_in_lookback = [
             event
             for event in damage_by_target.get(selected_player_id, [])
             if death.tick - CONTACT_LOOKBACK_TICKS <= event.tick < death.tick
@@ -122,10 +123,26 @@ def detect_teaching_signals(
         if outcome_end <= death.tick:
             continue
 
-        first_damage_refs = list(prior_damage[0].fact_refs) if prior_damage else []
-        fact_refs = tuple(dict.fromkeys([*first_damage_refs, *death.fact_refs]))
-        taxonomy_id = "CONTACT_SURVIVAL_AFTER_DAMAGE" if prior_damage else "SURVIVAL_AFTER_CONTACT"
-        score = min(0.85, 0.52 + 0.05 * min(len(prior_damage), 5))
+        # A damage row can occur between this pause point and the death. It
+        # remains a later outcome fact, not evidence that the player had
+        # already made contact when the coach pauses. Keeping only facts that
+        # were available at ``decision_tick`` prevents both future leakage and
+        # the misleading "after contact" framing seen in the first MVP.
+        decision_damage = [
+            event for event in damage_in_lookback if event.tick <= decision_tick
+        ]
+        decision_damage_refs = [
+            ref
+            for event in decision_damage
+            for ref in (event.fact_refs or [event.id])
+        ]
+        fact_refs = tuple(dict.fromkeys([*decision_damage_refs, *death.fact_refs]))
+        taxonomy_id = (
+            "CONTACT_SURVIVAL_AFTER_DAMAGE"
+            if decision_damage
+            else "PRE_CONTACT_SURVIVAL_DECISION"
+        )
+        score = min(0.85, 0.52 + 0.05 * min(len(decision_damage), 5))
         signals.append(
             TeachingSignal(
                 id=f"signal:{selected_player_id}:{death.id}",
@@ -134,15 +151,19 @@ def detect_teaching_signals(
                 event_id=death.id,
                 event_tick=death.tick,
                 decision_tick=decision_tick,
-                outcome_start_tick=death.tick,
+                # Start the result playback at the decision boundary so the
+                # user sees the decision-to-contact sequence.  The death tick
+                # remains reveal_tick; no outcome fact is unlocked until the
+                # outcome window finishes.
+                outcome_start_tick=decision_tick,
                 outcome_end_tick=outcome_end,
                 fact_refs=fact_refs,
-                prior_damage_event_ids=tuple(event.id for event in prior_damage),
-                prior_damage_count=len(prior_damage),
+                prior_damage_event_ids=tuple(event.id for event in decision_damage),
+                prior_damage_count=len(decision_damage),
                 score=score,
                 limitations=(
                     "死亡是结果事实，不单独证明决策错误；缺少 spotted/视线、可靠声学、队友通信与意图字段。",
-                    "该信号只用于暂停复查接触后的选择，不使用敌方实时坐标。",
+                    "该信号只使用 decision tick 前的主体受击事实，不使用敌方实时坐标或之后发生的伤害。",
                 ),
             )
         )

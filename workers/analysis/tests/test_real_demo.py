@@ -195,3 +195,13 @@ def test_large_demo_header_and_players_opt_in() -> None:
     adapter = DemoParserAdapter()
     assert adapter.inspect(LARGE_DEMO).map_name == "de_mirage"
     assert len(adapter.read_players(LARGE_DEMO).players) == 10
+    rounds = adapter.read_rounds(LARGE_DEMO)
+    assert len(rounds.rounds) == 21
+    assert (
+        rounds.rounds[0].start_tick,
+        rounds.rounds[0].end_tick,
+        rounds.rounds[0].winner,
+    ) == (1, 4_744, TeamSide.CT)
+    assert all(item.end_tick is not None and item.winner is not None for item in rounds.rounds)
+    incomplete = [warning for warning in rounds.warnings if warning.code == "ROUND_END_INCOMPLETE"]
+    assert [warning.details for warning in incomplete] == [{"tick": 1, "source_round_number": 0}]

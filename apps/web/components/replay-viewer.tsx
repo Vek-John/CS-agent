@@ -298,13 +298,17 @@ function AnnotationLayer({ cue }: { cue?: CoachCue }) {
           );
         }
         const point = annotationPointToRadarPercent(annotation.point, annotation.coordinate_space, mirageManifest);
+        const label = annotation.label
+          .replace(/主体决策前位置[（(]WORLD[）)]/u, "决策点")
+          .replace(/[（(]WORLD[）)]/gu, "")
+          .trim();
         return (
           <div
             className="replay-annotation-point"
             key={annotation.id}
             style={{ left: `${point.x}%`, top: `${point.y}%` }}
           >
-            {annotation.label}
+            <span>{label}</span>
           </div>
         );
       })}
@@ -324,9 +328,11 @@ function KnowledgeEvidenceLayer({ overlays }: { overlays: readonly KnowledgeEvid
       {overlays.map((overlay) => {
         if (overlay.type === "DIRECTION_SECTOR") {
           return (
-            <path className="knowledge-direction-sector" key={overlay.id} d={overlay.path}>
-              <title>脚步/枪声方向区域</title>
-            </path>
+            <g className="knowledge-direction-hint" key={overlay.id}>
+              <path className="knowledge-direction-boundaries" d={overlay.boundaryPath} />
+              <path className="knowledge-direction-ray" d={overlay.rayPath} />
+              <title>可能听见的脚步/枪声方向；不是敌人位置或可见范围</title>
+            </g>
           );
         }
         return (
@@ -658,7 +664,7 @@ export function TacticalMap({
         {!hasSpatialEventData && hasEventData ? <small className="map-layer-note">事件已提供，但当前 bundle 没有可落图的 world_origin。</small> : null}
         <div className="map-legend" aria-label="玩家已知图例">
           <span><i className="legend-visual" />视觉确认</span>
-          <span><i className="legend-sound" />脚步/枪声区域</span>
+          <span><i className="legend-sound" />可能听见方向（非位置）</span>
           <span><i className="legend-last-known" />最后已知</span>
           <span><i className="legend-shared" />验证共享</span>
         </div>

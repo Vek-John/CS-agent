@@ -49,7 +49,9 @@ describe("generated parsed Demo ReviewPlan", () => {
     }
     for (const cue of plan.cues) {
       expect(cue.decision_tick).toBeLessThan(cue.reveal_tick);
-      expect(cue.reveal_tick).toBeLessThanOrEqual(cue.outcome_start_tick);
+      expect(cue.outcome_start_tick).toBeGreaterThanOrEqual(cue.decision_tick);
+      expect(cue.outcome_start_tick).toBeLessThan(cue.reveal_tick);
+      expect(cue.reveal_tick).toBeLessThanOrEqual(cue.outcome_end_tick);
       expect(cue.outcome_start_tick).toBeLessThan(cue.outcome_end_tick);
       expect(cue.outcome_end_tick).toBeLessThanOrEqual(bundle.match_timeline.end_tick);
       expect(cue.annotations.every((annotation) => annotation.coordinate_space === "WORLD")).toBe(true);

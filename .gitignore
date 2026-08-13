@@ -1,5 +1,9 @@
 node_modules/
 .next/
+.open-next/
+.wrangler/
+cloudflare-env.d.ts
+.dev.vars*
 dist/
 coverage/
 *.tsbuildinfo

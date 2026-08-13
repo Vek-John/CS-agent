@@ -5,10 +5,15 @@ import type { MatchEvent } from "@cs-coach/contracts";
 import { ReplayViewer, type ReplayPerspective } from "./replay-viewer";
 import { ReviewExperience } from "./review-experience";
 import {
+  createFixtureReplayView,
   loadReplayBundle,
   type ReplayViewModel,
   REPLAY_BUNDLE_URL
 } from "../lib/replay-bundle";
+
+const deployTarget = process.env.NEXT_PUBLIC_DEPLOY_TARGET ?? "localhost";
+const isCloudflareRelease = deployTarget === "cloudflare";
+const fixtureView = createFixtureReplayView();
 
 function eventLabel(event: MatchEvent): string {
   const actor = event.actor_player_id ? ` · ${event.actor_player_id}` : "";
@@ -38,6 +43,12 @@ interface LocalDemoJob {
   error?: string;
 }
 
+interface DemoUploadActivity {
+  fileName: string;
+  phase: "UPLOADING" | "INSPECTING";
+  percent?: number;
+}
+
 function formatFileSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(bytes >= 100 * 1024 * 1024 ? 0 : 1)} MB`;
 }
@@ -48,9 +59,95 @@ async function readJsonResponse<T>(response: Response): Promise<T> {
   return payload;
 }
 
+function uploadLocalDemo(
+  file: File,
+  onActivity: (activity: DemoUploadActivity) => void
+): Promise<LocalDemoJob> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", "/api/local-demo");
+    request.setRequestHeader("content-type", "application/octet-stream");
+    request.setRequestHeader("x-demo-name", encodeURIComponent(file.name));
+    request.setRequestHeader("x-demo-size", String(file.size));
+    request.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable || event.total <= 0) return;
+      const percent = Math.max(0, Math.min(100, Math.round((event.loaded / event.total) * 100)));
+      onActivity({
+        fileName: file.name,
+        phase: percent >= 100 ? "INSPECTING" : "UPLOADING",
+        percent
+      });
+    });
+    request.upload.addEventListener("load", () => {
+      onActivity({ fileName: file.name, phase: "INSPECTING", percent: 100 });
+    });
+    request.addEventListener("error", () => reject(new Error("无法读取本地 Demo，请重试。")));
+    request.addEventListener("abort", () => reject(new Error("Demo 读取已取消。")));
+    request.addEventListener("load", () => {
+      let payload: LocalDemoJob & { error?: string };
+      try {
+        payload = JSON.parse(request.responseText) as LocalDemoJob & { error?: string };
+      } catch {
+        reject(new Error(`Demo 读取失败（HTTP ${request.status || "unknown"}）。`));
+        return;
+      }
+      if (request.status < 200 || request.status >= 300) {
+        reject(new Error(payload.error || `Demo 读取失败（HTTP ${request.status}）。`));
+        return;
+      }
+      resolve(payload);
+    });
+    onActivity({ fileName: file.name, phase: "UPLOADING", percent: 0 });
+    request.send(file);
+  });
+}
+
+function DemoLoadProgress({
+  activity,
+  job
+}: {
+  activity?: DemoUploadActivity;
+  job?: LocalDemoJob;
+}) {
+  const analyzing = job?.status === "ANALYZING";
+  if (!activity && !analyzing) return null;
+  const selectedPlayer = job?.players.find((player) => player.player_id === job.selected_player_id);
+  const determinate = activity?.phase === "UPLOADING" && activity.percent !== undefined;
+  const title = activity
+    ? activity.phase === "UPLOADING"
+      ? `正在读取 ${activity.fileName}`
+      : "文件已读取，正在识别比赛"
+    : `正在为 ${selectedPlayer?.display_name || "所选玩家"} 编排带看路线`;
+  const detail = activity
+    ? activity.phase === "UPLOADING"
+      ? `已读取 ${activity.percent ?? 0}% · 文件只写入 localhost`
+      : "校验文件 · 识别地图 · 读取 10 名玩家"
+    : "完整时间轴 → 玩家已知 → 关键暂停 → 全场路线";
+  return (
+    <div className="demo-analysis-progress" role="status" aria-live="polite">
+      <div className="demo-progress-copy">
+        <b>{title}</b>
+        <span>{detail}</span>
+      </div>
+      <div
+        className={`demo-progress-track ${determinate ? "is-determinate" : "is-indeterminate"}`}
+        role="progressbar"
+        aria-label={title}
+        aria-valuemin={0}
+        aria-valuemax={determinate ? 100 : undefined}
+        aria-valuenow={determinate ? activity.percent : undefined}
+        aria-valuetext={determinate ? `${activity.percent}%` : detail}
+      >
+        <i style={determinate ? { transform: `scaleX(${(activity.percent ?? 0) / 100})` } : undefined} />
+      </div>
+    </div>
+  );
+}
+
 function DemoIntake({
   job,
   busy,
+  uploadActivity,
   error,
   onFile,
   onAnalyze,
@@ -58,6 +155,7 @@ function DemoIntake({
 }: {
   job?: LocalDemoJob;
   busy: boolean;
+  uploadActivity?: DemoUploadActivity;
   error?: string;
   onFile: (file: File) => void;
   onAnalyze: (playerId: string) => void;
@@ -163,12 +261,7 @@ function DemoIntake({
           </div>
         ) : null}
 
-        {job?.status === "ANALYZING" ? (
-          <div className="demo-analysis-progress" role="status">
-            <i aria-hidden="true" />
-            <div><b>正在为 {job.players.find((player) => player.player_id === job.selected_player_id)?.display_name} 生成 AI 路线</b><span>解析完整时间轴、玩家已知信息、投掷物与教学节点…</span></div>
-          </div>
-        ) : null}
+        <DemoLoadProgress activity={uploadActivity} job={job} />
         {error || job?.error ? <div className="demo-intake-error" role="alert">{error || job?.error}</div> : null}
 
         <footer className="demo-intake-footer">
@@ -370,13 +463,20 @@ function RealReplayScreen({
 
 export function RealReplayExperience() {
   const [view, setView] = useState<ReplayViewModel>();
-  const [screen, setScreen] = useState<"INTAKE" | "FREE_REPLAY" | "COACHING" | "FIXTURE">("INTAKE");
+  const [screen, setScreen] = useState<"INTAKE" | "FREE_REPLAY" | "COACHING" | "FIXTURE">(
+    isCloudflareRelease ? "FIXTURE" : "INTAKE"
+  );
   const [job, setJob] = useState<LocalDemoJob>();
   const [busy, setBusy] = useState(false);
+  const [uploadActivity, setUploadActivity] = useState<DemoUploadActivity>();
   const [intakeError, setIntakeError] = useState<string>();
   const [bundleUrl, setBundleUrl] = useState(REPLAY_BUNDLE_URL);
 
   useEffect(() => {
+    if (isCloudflareRelease) {
+      setView(fixtureView);
+      return;
+    }
     let active = true;
     loadReplayBundle(bundleUrl).then((nextView) => {
       if (active) setView(nextView);
@@ -414,27 +514,23 @@ export function RealReplayExperience() {
     setBusy(true);
     setIntakeError(undefined);
     setJob(undefined);
+    setUploadActivity({ fileName: file.name, phase: "UPLOADING", percent: 0 });
     try {
-      setJob(await readJsonResponse<LocalDemoJob>(await fetch("/api/local-demo", {
-        method: "POST",
-        headers: {
-          "content-type": "application/octet-stream",
-          "x-demo-name": encodeURIComponent(file.name),
-          "x-demo-size": String(file.size)
-        },
-        body: file
-      })));
+      setJob(await uploadLocalDemo(file, setUploadActivity));
     } catch (error) {
       setIntakeError(error instanceof Error ? error.message : "Demo 上传失败。");
     } finally {
       setBusy(false);
+      setUploadActivity(undefined);
     }
   }
 
   async function analyzePlayer(playerId: string) {
     if (!job) return;
+    const previousJob = job;
     setBusy(true);
     setIntakeError(undefined);
+    setJob({ ...job, status: "ANALYZING", selected_player_id: playerId, error: undefined });
     try {
       const nextJob = await readJsonResponse<LocalDemoJob>(await fetch(`/api/local-demo/${job.id}`, {
         method: "POST",
@@ -444,6 +540,7 @@ export function RealReplayExperience() {
       setJob(nextJob);
     } catch (error) {
       setBusy(false);
+      setJob(previousJob);
       setIntakeError(error instanceof Error ? error.message : "无法开始分析。");
     }
   }
@@ -453,6 +550,7 @@ export function RealReplayExperience() {
       <DemoIntake
         job={job}
         busy={busy}
+        uploadActivity={uploadActivity}
         error={intakeError}
         onFile={uploadDemo}
         onAnalyze={analyzePlayer}

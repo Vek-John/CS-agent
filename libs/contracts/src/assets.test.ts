@@ -22,6 +22,9 @@ const catalog: GameAssetCatalog = {
       height: 64,
       content_sha256: "a".repeat(64),
       source_uri: "https://example.invalid/asset-metadata",
+      source_content_sha256: "b".repeat(64),
+      media_type: "image/svg+xml",
+      render_mode: "MONOCHROME_CURRENT_COLOR",
       rights_status: "LOCALHOST_ONLY_REVIEW_REQUIRED"
     }
   ],
@@ -46,6 +49,7 @@ describe("GameAssetCatalog", () => {
     expect(assertValidGameAssetCatalog(catalog)).toBe(catalog);
     const invalid = structuredClone(catalog);
     invalid.item_icons[0].content_sha256 = "not-a-hash";
+    invalid.item_icons[0].source_content_sha256 = "also-not-a-hash";
     invalid.item_icons = [
       ...invalid.item_icons,
       {
@@ -57,6 +61,7 @@ describe("GameAssetCatalog", () => {
 
     const issues = collectGameAssetCatalogIssues(invalid);
     expect(issues.join(" ")).toContain("invalid content_sha256");
+    expect(issues.join(" ")).toContain("invalid source_content_sha256");
     expect(issues.join(" ")).toContain("claimed by both");
     expect(issues.join(" ")).toContain("collides with canonical item ID weapon_ak47");
   });

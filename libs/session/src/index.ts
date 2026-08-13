@@ -65,29 +65,61 @@ export function getCurrentCue(
   return plan.cues.find((cue) => cue.id === state.current_cue_id);
 }
 
+function isAutomaticFreezeSkip(segment: ReviewSegment): boolean {
+  return segment.mode === "SKIP" && segment.reason_code === "FREEZE_TIME";
+}
+
 function enterSegment(
   plan: ReviewPlan,
   state: CoachingSessionState,
   segmentIndex: number
 ): CoachingSessionState {
-  if (segmentIndex >= plan.segments.length) {
+  let nextState = state;
+  let nextIndex = segmentIndex;
+
+  // Freeze time stays in ReviewPlan coverage and the session event log, but
+  // it is not a user decision. Consume consecutive freeze segments in one
+  // deterministic transition so the coach never asks the user to skip them.
+  while (nextIndex < plan.segments.length) {
+    const segment = plan.segments[nextIndex];
+    if (isAutomaticFreezeSkip(segment)) {
+      const completedFreeze = {
+        ...nextState,
+        current_segment_index: nextIndex,
+        current_cue_id: undefined,
+        current_tick: segment.end_tick
+      };
+      nextState = {
+        ...completedFreeze,
+        user_events: [
+          ...completedFreeze.user_events,
+          event(completedFreeze, "SEGMENT_SKIPPED", {
+            segment_id: segment.id,
+            at_tick: segment.end_tick,
+            detail: "AUTO_FREEZE_TIME"
+          })
+        ]
+      };
+      nextIndex += 1;
+      continue;
+    }
+
+    const wasExpanded = nextState.expanded_segment_ids.includes(segment.id);
     return {
-      ...state,
-      phase: "WRAP_UP",
-      current_segment_index: plan.segments.length,
-      current_cue_id: undefined,
-      current_tick: plan.segments.at(-1)?.end_tick ?? state.current_tick
+      ...nextState,
+      phase: segment.mode === "SKIP" && !wasExpanded ? "SKIPPING" : "PLAYING",
+      current_segment_index: nextIndex,
+      current_cue_id: segment.cue_ids[0],
+      current_tick: segment.start_tick
     };
   }
 
-  const segment = plan.segments[segmentIndex];
-  const wasExpanded = state.expanded_segment_ids.includes(segment.id);
   return {
-    ...state,
-    phase: segment.mode === "SKIP" && !wasExpanded ? "SKIPPING" : "PLAYING",
-    current_segment_index: segmentIndex,
-    current_cue_id: segment.cue_ids[0],
-    current_tick: segment.start_tick
+    ...nextState,
+    phase: "WRAP_UP",
+    current_segment_index: plan.segments.length,
+    current_cue_id: undefined,
+    current_tick: plan.segments.at(-1)?.end_tick ?? nextState.current_tick
   };
 }
 

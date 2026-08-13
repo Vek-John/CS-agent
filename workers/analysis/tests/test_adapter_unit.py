@@ -132,6 +132,26 @@ class BoundaryParser(FakeParser):
         return rows.get(event_name, [])
 
 
+class WarmupBoundaryParser(FakeParser):
+    """Mirror pro Demos that emit an incomplete setup row at tick 1."""
+
+    def parse_event(self, event_name: str):
+        rows = {
+            "round_start": [
+                {"tick": 1, "round": 1},
+                {"tick": 5_064, "round": 2},
+            ],
+            "round_freeze_end": [{"tick": 1_274}, {"tick": 6_344}],
+            "round_end": [
+                {"tick": 1, "round": 0, "winner": None},
+                {"tick": 4_744, "round": 1, "winner": "CT"},
+                {"tick": 10_497, "round": 2, "winner": "T"},
+            ],
+            "round_officially_ended": [{"tick": 5_064}],
+        }
+        return rows.get(event_name, [])
+
+
 class SwapParser(FakeParser):
     def parse_ticks(self, wanted_props, *, players=None, ticks=None, **_kwargs):
         assert wanted_props == ["X", "Y", "team_num"]
@@ -230,6 +250,25 @@ def test_round_source_and_same_tick_boundary_assignment(tmp_path: Path) -> None:
     assert by_type["weapon_fire"][0].source_round_number == 41
     assert by_type["player_death"][0].canonical_round_number == 1
     assert by_type["player_death"][0].source_round_number == 40
+
+
+def test_incomplete_setup_round_end_does_not_consume_first_round(tmp_path: Path) -> None:
+    adapter = DemoParserAdapter(parser_factory=WarmupBoundaryParser, parser_version="fake-warmup")
+    demo = tmp_path / "fixture.dem"
+    demo.write_bytes(b"demo")
+
+    result = adapter.read_rounds(demo)
+
+    assert [
+        (item.start_tick, item.end_tick, item.winner)
+        for item in result.rounds
+    ] == [
+        (1, 4_744, TeamSide.CT),
+        (5_064, 10_497, TeamSide.T),
+    ]
+    incomplete = [warning for warning in result.warnings if warning.code == "ROUND_END_INCOMPLETE"]
+    assert len(incomplete) == 1
+    assert incomplete[0].details == {"tick": 1, "source_round_number": 0}
 
 
 def test_trajectory_side_is_derived_per_row_not_from_player_summary(tmp_path: Path) -> None:

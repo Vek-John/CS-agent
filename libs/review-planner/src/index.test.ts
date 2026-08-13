@@ -38,4 +38,16 @@ describe("ReviewPlan invariants", () => {
       "future or unobserved fact fact-r2-outcome"
     );
   });
+
+  it("uses direct pre-reveal coaching narration instead of a required player answer", () => {
+    const plan = createFixtureReviewPlan(createSyntheticMirageTimeline());
+
+    for (const cue of plan.cues) {
+      expect(cue.question).toMatch(/^教练/);
+      expect(cue.question).not.toContain("你会怎么做？");
+      expect(cue.outcome_start_tick).toBeGreaterThanOrEqual(cue.decision_tick);
+      expect(cue.outcome_start_tick).toBeLessThan(cue.reveal_tick);
+      expect(cue.reveal_tick).toBeLessThanOrEqual(cue.outcome_end_tick);
+    }
+  });
 });

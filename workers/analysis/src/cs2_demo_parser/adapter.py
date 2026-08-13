@@ -768,14 +768,31 @@ class DemoParserAdapter:
             if tick is None:
                 collector.add("ROUND_BOUNDARY_TICK_INVALID", "round_end row has no usable tick.", field="tick")
                 continue
+            winner_raw = _first(row, "winner")
+            winner = _team_side(winner_raw)
+            if winner is None:
+                if winner_raw is not None:
+                    collector.add(
+                        "WINNER_UNNORMALIZED",
+                        "round_end winner could not be normalized to T or CT.",
+                        field="winner",
+                    )
+                collector.add(
+                    "ROUND_END_INCOMPLETE",
+                    "Ignored a round_end row without a usable winner so it cannot consume a canonical round boundary.",
+                    field="winner",
+                    details={
+                        "tick": tick,
+                        "source_round_number": _clean_value(
+                            _first(row, "round", "round_number", "source_round_number")
+                        ),
+                    },
+                )
+                continue
             state = choose_state(row, "end_tick")
             if state is None:
                 continue
             state["end_tick"] = tick
-            winner_raw = _first(row, "winner")
-            winner = _team_side(winner_raw)
-            if winner_raw is not None and winner is None:
-                collector.add("WINNER_UNNORMALIZED", "round_end winner could not be normalized to T or CT.", field="winner")
             state["winner"] = winner
             half_number = report_half_number(row, "round_end")
             if state["half_number"] is None:
