@@ -1,0 +1,12 @@
+{
+  "name": "@cs-coach/map-semantics",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@cs-coach/contracts": "workspace:*"
+  }
+}

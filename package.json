@@ -1,0 +1,22 @@
+{
+  "name": "cs2-ai-demo-coach",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@11.16.0",
+  "scripts": {
+    "dev": "pnpm --filter @cs-coach/web dev",
+    "build": "pnpm --filter @cs-coach/web build",
+    "start": "pnpm --filter @cs-coach/web start",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "assets:valve-items": "node tools/fetch_valve_item_icons.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+    "check": "pnpm test && pnpm typecheck && pnpm build"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "7.0.2",
+    "vitest": "^4.0.0"
+  }
+}

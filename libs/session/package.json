@@ -1,0 +1,16 @@
+{
+  "name": "@cs-coach/session",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@cs-coach/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@cs-coach/demo-domain": "workspace:*",
+    "@cs-coach/review-planner": "workspace:*"
+  }
+}

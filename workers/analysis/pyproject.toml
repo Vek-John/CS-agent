@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cs2-demo-parser-adapter"
+version = "0.1.0"
+description = "Stable Pydantic adapter around demoparser2 for CS2 Demo facts"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "demoparser2==0.42.0",
+  "pydantic>=2.7,<3",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8,<9",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+  "integration: parses a real Demo fixture",
+  "slow: may parse the large 433 MB Demo fixture",
+]

@@ -1,0 +1,26 @@
+{
+  "name": "@cs-coach/web",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@cs-coach/contracts": "workspace:*",
+    "@cs-coach/demo-domain": "workspace:*",
+    "@cs-coach/map-semantics": "workspace:*",
+    "@cs-coach/observation": "workspace:*",
+    "@cs-coach/review-planner": "workspace:*",
+    "@cs-coach/session": "workspace:*",
+    "next": "16.3.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "7.0.2"
+  }
+}
