@@ -1,0 +1,1300 @@
+{
+  "game_build_id": "steam-app-730",
+  "asset_version": "valve-hud-items/2.0.0-localhost",
+  "maps": [],
+  "item_icons": [
+    {
+      "canonical_item_id": "weapon_ak47",
+      "item_class": "RIFLE",
+      "display_name": "AK-47",
+      "aliases": [
+        "weapon_ak47",
+        "ak47",
+        "ak-47"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_ak47.svg",
+      "width": 89,
+      "height": 32,
+      "content_sha256": "afad608c0eb9c021cd11e3698249509ccdd20507d9e0f1f7a7e4bc1d891692ba",
+      "source_uri": "https://cs2replays.com/icons/ak47.svg",
+      "source_content_sha256": "d0f98522d69a90d2dae644e29e114e9520ec7186e0cd462f1541ab0ef3289bfe",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_aug",
+      "item_class": "RIFLE",
+      "display_name": "AUG",
+      "aliases": [
+        "weapon_aug",
+        "aug"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_aug.svg",
+      "width": 76,
+      "height": 32,
+      "content_sha256": "c14dc079ded0d89cfab4413f09a5ae7e248124a84c74f724c8c68aabef1fc079",
+      "source_uri": "https://cs2replays.com/icons/aug.svg",
+      "source_content_sha256": "145aa54e61b616544e86ec895ba303c7a6480a197c6176a07265f5f234b5bc52",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_awp",
+      "item_class": "RIFLE",
+      "display_name": "AWP",
+      "aliases": [
+        "weapon_awp",
+        "awp"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_awp.svg",
+      "width": 110,
+      "height": 32,
+      "content_sha256": "458741d5f1f5def75b1cfde381a5550a1bdb6da3d1dd289b18bf7757ba424deb",
+      "source_uri": "https://cs2replays.com/icons/awp.svg",
+      "source_content_sha256": "21e1c6ccbef3a93bc5e984587fa97a0de64417646a48a789864d0e5731a625d6",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_bizon",
+      "item_class": "SMG",
+      "display_name": "PP-Bizon",
+      "aliases": [
+        "weapon_bizon",
+        "bizon"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_bizon.svg",
+      "width": 90,
+      "height": 32,
+      "content_sha256": "2eee29b12cda4c51e70fb7d351cbede551cdd7d3417878dfed14393ca5c229f9",
+      "source_uri": "https://cs2replays.com/icons/bizon.svg",
+      "source_content_sha256": "ae6259ba48323e132d37a2df13d162101898c35b3a1873e1b8913c8c193f9905",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_c4",
+      "item_class": "OBJECTIVE",
+      "display_name": "C4",
+      "aliases": [
+        "weapon_c4",
+        "c4"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_c4.svg",
+      "width": 32,
+      "height": 32,
+      "content_sha256": "05a4e798e393641f1d6ca9d57c11980ce7f253d70d7b33f29aac24be3a653a49",
+      "source_uri": "https://cs2replays.com/icons/c4.svg",
+      "source_content_sha256": "4ccfa5c0b98f54e3815f92779814d5ef3ddb6f01d2f3ccebd049372efb2ee310",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_cz75a",
+      "item_class": "PISTOL",
+      "display_name": "CZ75-Auto",
+      "aliases": [
+        "weapon_cz75a",
+        "cz75a",
+        "cz75-auto"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_cz75a.svg",
+      "width": 48,
+      "height": 32,
+      "content_sha256": "ccb55e817c06edd778e2fed99eb68cfd3fed50037f1d191f3cf977e3b5d9a2f9",
+      "source_uri": "https://cs2replays.com/icons/cz75a.svg",
+      "source_content_sha256": "bc0fdaf5d7806adca94a9d4224d73d4819a6966ec989570682ffa62febcff89b",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_deagle",
+      "item_class": "PISTOL",
+      "display_name": "Desert Eagle",
+      "aliases": [
+        "weapon_deagle",
+        "deagle"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_deagle.svg",
+      "width": 51,
+      "height": 32,
+      "content_sha256": "a55a4c9e2c959b91acbc6f18b89ccb503a2d28f360fc4b85c65922976219d1a9",
+      "source_uri": "https://cs2replays.com/icons/deagle.svg",
+      "source_content_sha256": "5ab139d7151ceaa530deb352a08146ce625ce5a9f0fcf1b8554c57c42999b950",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_decoy",
+      "item_class": "GRENADE",
+      "display_name": "Decoy Grenade",
+      "aliases": [
+        "weapon_decoy",
+        "decoy"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_decoy.svg",
+      "width": 30,
+      "height": 32,
+      "content_sha256": "338160a16aab6e12d8a8fe7c995f4fab132950d14d500683ba711b6e725e36f9",
+      "source_uri": "https://cs2replays.com/icons/decoy.svg",
+      "source_content_sha256": "2d49015e12f7ad1217d89509fedd5801e0103c646a22d144509004147a3b67b0",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_elite",
+      "item_class": "PISTOL",
+      "display_name": "Dual Berettas",
+      "aliases": [
+        "weapon_elite",
+        "elite"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_elite.svg",
+      "width": 69,
+      "height": 32,
+      "content_sha256": "fcffa9a1b184684c6301ce224b3c85edf0100b5ef97aa415f3fdd6e5d3b49f3c",
+      "source_uri": "https://cs2replays.com/icons/elite.svg",
+      "source_content_sha256": "f8e43a50d1b21bc30843c61b543bd965d108010d5f4998e6ffa44a9f96b3630f",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_famas",
+      "item_class": "RIFLE",
+      "display_name": "FAMAS",
+      "aliases": [
+        "weapon_famas",
+        "famas"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_famas.svg",
+      "width": 78,
+      "height": 32,
+      "content_sha256": "61cc980afea90a081925d31504bc46fd62f1f3407b35e869118c686d948fcd9d",
+      "source_uri": "https://cs2replays.com/icons/famas.svg",
+      "source_content_sha256": "ba5d5bed81d8efd6fcd049d8400c5a78a587a9f62f0585910b4cff593d8030ec",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_fiveseven",
+      "item_class": "PISTOL",
+      "display_name": "Five-SeveN",
+      "aliases": [
+        "weapon_fiveseven",
+        "fiveseven",
+        "five-seven"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_fiveseven.svg",
+      "width": 39,
+      "height": 32,
+      "content_sha256": "68b076917e10acfe7377968452fce0a23989a7b8cf5e625ebbb090dbd684d24c",
+      "source_uri": "https://cs2replays.com/icons/fiveseven.svg",
+      "source_content_sha256": "7b9aa3b6fdb84329a43e537dff69275b224d548cbd73e7eb1272fa973322dcda",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_flashbang",
+      "item_class": "GRENADE",
+      "display_name": "Flashbang",
+      "aliases": [
+        "weapon_flashbang",
+        "flashbang"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_flashbang.svg",
+      "width": 30,
+      "height": 32,
+      "content_sha256": "7159f11fdfeb375d752597702de110485e4abc23c9a6992f87ace9fdcd56253c",
+      "source_uri": "https://cs2replays.com/icons/flashbang.svg",
+      "source_content_sha256": "bccb65a3452c6695a342654566510e6f20352d4449740ad477c2a4eeea3d3645",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_g3sg1",
+      "item_class": "RIFLE",
+      "display_name": "G3SG1",
+      "aliases": [
+        "weapon_g3sg1",
+        "g3sg1"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_g3sg1.svg",
+      "width": 94,
+      "height": 32,
+      "content_sha256": "c6cb8871d0fe691047a5373f68d3efffa7636b1fddab0ea338793766ba9d4db2",
+      "source_uri": "https://cs2replays.com/icons/g3sg1.svg",
+      "source_content_sha256": "a4806843e5010f9cdf6349b58998a976703ec65d44b0862ddaf78673609d583a",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_galilar",
+      "item_class": "RIFLE",
+      "display_name": "Galil AR",
+      "aliases": [
+        "weapon_galilar",
+        "galilar"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_galilar.svg",
+      "width": 91,
+      "height": 32,
+      "content_sha256": "6b7e4cef623818bc119c72aafc936c7e0695bdaa4f73e895beeef606d425d3ab",
+      "source_uri": "https://cs2replays.com/icons/galilar.svg",
+      "source_content_sha256": "935b679077b5a6ea4264e66541260fb905a058f5b999e82191b79e1d94452c56",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_glock",
+      "item_class": "PISTOL",
+      "display_name": "Glock-18",
+      "aliases": [
+        "weapon_glock",
+        "glock"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_glock.svg",
+      "width": 45,
+      "height": 32,
+      "content_sha256": "8fc22b0a9318a40bc846a7c7dcacc50f9fd5f7f75481c7503704188c219a12bb",
+      "source_uri": "https://cs2replays.com/icons/glock.svg",
+      "source_content_sha256": "0ca4c81b4888d84e54e699cc4831a69992005e246dc24ffb9aa52cade6133692",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_healthshot",
+      "item_class": "EQUIPMENT",
+      "display_name": "Medi-Shot",
+      "aliases": [
+        "weapon_healthshot",
+        "healthshot"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_healthshot.svg",
+      "width": 44,
+      "height": 32,
+      "content_sha256": "cf47003b18c86a1ad658cf55b61bdcc90e85d148836d183549cf9299ca04571a",
+      "source_uri": "https://cs2replays.com/icons/healthshot.svg",
+      "source_content_sha256": "340dd961ee5096e41860e1d3bc065043ccfdafb1b36c311522ce00b1823397ec",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_hegrenade",
+      "item_class": "GRENADE",
+      "display_name": "High Explosive Grenade",
+      "aliases": [
+        "weapon_hegrenade",
+        "hegrenade"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_hegrenade.svg",
+      "width": 25,
+      "height": 33,
+      "content_sha256": "51c11aac8c72fed33e15f971732c71a3cb91baa3a86ee86a027037ffd096a4d5",
+      "source_uri": "https://cs2replays.com/icons/hegrenade.svg",
+      "source_content_sha256": "8c33330ea8db7626d62fd6cd60139e2242be9e4b5adde54a5d43a967c462e479",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_hkp2000",
+      "item_class": "PISTOL",
+      "display_name": "P2000",
+      "aliases": [
+        "weapon_hkp2000",
+        "hkp2000",
+        "p2000",
+        "weapon_p2000"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_hkp2000.svg",
+      "width": 33,
+      "height": 32,
+      "content_sha256": "117cec0e1d145093c7077555a2cf30869abf4f0eab7e94f24c2d72c6e3471168",
+      "source_uri": "https://cs2replays.com/icons/hkp2000.svg",
+      "source_content_sha256": "66fe96c04579615f3491d662770511785d57557c2bcc21ac81dddfc0ba65238a",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_incgrenade",
+      "item_class": "GRENADE",
+      "display_name": "Incendiary Grenade",
+      "aliases": [
+        "weapon_incgrenade",
+        "incgrenade"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_incgrenade.svg",
+      "width": 15,
+      "height": 32,
+      "content_sha256": "1427f6c025e09c24f5a1152eac1652753dc63729e0da352e13f7c95f9cf523aa",
+      "source_uri": "https://cs2replays.com/icons/incgrenade.svg",
+      "source_content_sha256": "7c87dec72d1c0c622ba248fa88a6cd75f91671086a995e6a72201c9404a205d2",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_m249",
+      "item_class": "HEAVY",
+      "display_name": "M249",
+      "aliases": [
+        "weapon_m249",
+        "m249"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_m249.svg",
+      "width": 97,
+      "height": 32,
+      "content_sha256": "cefe580285b71b21af2f796c2c5494ecc46813a8c4fcec3654e445feae7f084c",
+      "source_uri": "https://cs2replays.com/icons/m249.svg",
+      "source_content_sha256": "7c1b49390f87bdf8ce3f4b1fa0f54ef058b42b52ece09c6e4da92b5cd5f49787",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_m4a1",
+      "item_class": "RIFLE",
+      "display_name": "M4A4",
+      "aliases": [
+        "weapon_m4a1",
+        "m4a1",
+        "m4a4",
+        "weapon_m4a4"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_m4a1.svg",
+      "width": 79,
+      "height": 32,
+      "content_sha256": "2b1441914735d9eab3e0b58328c473fbf89595375306660980fdea05caf1a379",
+      "source_uri": "https://cs2replays.com/icons/m4a1.svg",
+      "source_content_sha256": "4e80e247608b65016e4606c00f49d55492a0f1dc34e71a6b7c7ca88d27cdc650",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_m4a1_silencer",
+      "item_class": "RIFLE",
+      "display_name": "M4A1-S",
+      "aliases": [
+        "weapon_m4a1_silencer",
+        "m4a1_silencer",
+        "m4a1-s",
+        "weapon_m4a1_s"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_m4a1_silencer.svg",
+      "width": 97,
+      "height": 32,
+      "content_sha256": "f38188fb478f5b767c18eba696577e3f1f137900e829905a61a6de9cca177bb0",
+      "source_uri": "https://cs2replays.com/icons/m4a1_silencer.svg",
+      "source_content_sha256": "3565857c155b80c0d2289454c1f63c231994229b3e4b347ab594e67203f65035",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_mac10",
+      "item_class": "SMG",
+      "display_name": "MAC-10",
+      "aliases": [
+        "weapon_mac10",
+        "mac10",
+        "mac-10"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_mac10.svg",
+      "width": 45,
+      "height": 32,
+      "content_sha256": "f0177ea908072112ebbd6438bbc3f6c73e139999decf5d6f5a320f25bb427811",
+      "source_uri": "https://cs2replays.com/icons/mac10.svg",
+      "source_content_sha256": "2aafac43011b01bf92f05729bacd09dc939ed492b06e3b6f0a4c33b200d37362",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_mag7",
+      "item_class": "HEAVY",
+      "display_name": "MAG-7",
+      "aliases": [
+        "weapon_mag7",
+        "mag7"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_mag7.svg",
+      "width": 68,
+      "height": 32,
+      "content_sha256": "85d9a885e2c5945f77630a68d90b429924ff5b92b62b4a85a95bb52455367e33",
+      "source_uri": "https://cs2replays.com/icons/mag7.svg",
+      "source_content_sha256": "6c6324b36f5ba9512ea32334222f4a84e4c8f00efe3e7bd0bcd32aeacd5ea272",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_molotov",
+      "item_class": "GRENADE",
+      "display_name": "Molotov",
+      "aliases": [
+        "weapon_molotov",
+        "molotov"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_molotov.svg",
+      "width": 22,
+      "height": 32,
+      "content_sha256": "819bcb1b8ae28fbf5c64dc303800c26dd861ab77a4b56e36ef4fc4607c8890b6",
+      "source_uri": "https://cs2replays.com/icons/molotov.svg",
+      "source_content_sha256": "bb4b5a04eefa1f4cbe7312969a09d2dc70dd2c2cc02b9938fa8e48c0ea4a2a4d",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_mp5sd",
+      "item_class": "SMG",
+      "display_name": "MP5-SD",
+      "aliases": [
+        "weapon_mp5sd",
+        "mp5sd"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_mp5sd.svg",
+      "width": 93,
+      "height": 40,
+      "content_sha256": "84517afdcb0353acee97634e95f65a891358fd627aaf3aebe8f597df565cd75e",
+      "source_uri": "https://cs2replays.com/icons/mp5sd.svg",
+      "source_content_sha256": "293459424fa4f707e2633db6e25897f34a12795bee702fc6caaf5e83902593d2",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_mp7",
+      "item_class": "SMG",
+      "display_name": "MP7",
+      "aliases": [
+        "weapon_mp7",
+        "mp7"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_mp7.svg",
+      "width": 50,
+      "height": 32,
+      "content_sha256": "d8e1914d88659c44e9cdaf1c4054cce6bcfa0385ab70d61162a5e1da24b93945",
+      "source_uri": "https://cs2replays.com/icons/mp7.svg",
+      "source_content_sha256": "21d90992afa8a726542e861a4dfb07a154a36a06c875d3096709944a85768813",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_mp9",
+      "item_class": "SMG",
+      "display_name": "MP9",
+      "aliases": [
+        "weapon_mp9",
+        "mp9"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_mp9.svg",
+      "width": 74,
+      "height": 32,
+      "content_sha256": "d2497ebd2e47012ed133ee4a0090cb53c30556e9cd450db4b58781921b7e75f5",
+      "source_uri": "https://cs2replays.com/icons/mp9.svg",
+      "source_content_sha256": "6e62964b1ebe9e50c2584a771e24eaa4c6f63fc5204648c3d178fb81a938c799",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_negev",
+      "item_class": "HEAVY",
+      "display_name": "Negev",
+      "aliases": [
+        "weapon_negev",
+        "negev"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_negev.svg",
+      "width": 82,
+      "height": 32,
+      "content_sha256": "bf6cfbfbc6f9234214ae7f10f61fa334392daa63adfad67f47c6d6a4c762cc5a",
+      "source_uri": "https://cs2replays.com/icons/negev.svg",
+      "source_content_sha256": "743eccc4dace49146e82a68c1dcd333a9b5be30aa08aba3c86db7fca9a360dc0",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_nova",
+      "item_class": "HEAVY",
+      "display_name": "Nova",
+      "aliases": [
+        "weapon_nova",
+        "nova"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_nova.svg",
+      "width": 101,
+      "height": 32,
+      "content_sha256": "d76fd79024500ce77ef9e4076617cc20ca37523cfddf22dfcdbc53c3fad7268a",
+      "source_uri": "https://cs2replays.com/icons/nova.svg",
+      "source_content_sha256": "9a2d5e7db9dcf0211a588d73f6dbbfbff22d79d0a858bb8cc34b6de5302c6467",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_p250",
+      "item_class": "PISTOL",
+      "display_name": "P250",
+      "aliases": [
+        "weapon_p250",
+        "p250"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_p250.svg",
+      "width": 38,
+      "height": 32,
+      "content_sha256": "3c39f053708951aad2cb5cc9093282b3eec7cf66816b2d920c7141e65fe9bc35",
+      "source_uri": "https://cs2replays.com/icons/p250.svg",
+      "source_content_sha256": "df86b3b3a4f2168610dfcde2796577f9aaa4049ad23f9b7cca60b8d78c4ee0ea",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_p90",
+      "item_class": "SMG",
+      "display_name": "P90",
+      "aliases": [
+        "weapon_p90",
+        "p90"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_p90.svg",
+      "width": 69,
+      "height": 32,
+      "content_sha256": "5e79d95a38ae503d0e664b060d0a71e1b8a81e90543eaff33746c4e44212bf1d",
+      "source_uri": "https://cs2replays.com/icons/p90.svg",
+      "source_content_sha256": "13d3a3fa692b16c280f08cceba7bad8bf89225526a70e9be10a00cd0c64c4057",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_revolver",
+      "item_class": "PISTOL",
+      "display_name": "R8 Revolver",
+      "aliases": [
+        "weapon_revolver",
+        "revolver",
+        "r8 revolver"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_revolver.svg",
+      "width": 53,
+      "height": 32,
+      "content_sha256": "51cd2e958daec7efaacfe0a0f486d90a9e78272748a4f638bf4194e0704cb663",
+      "source_uri": "https://cs2replays.com/icons/revolver.svg",
+      "source_content_sha256": "e0c5ba5ba7b0cdad3b775dd345ec7cb34243346fb84645e2e17ea8a39194a855",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_sawedoff",
+      "item_class": "HEAVY",
+      "display_name": "Sawed-Off",
+      "aliases": [
+        "weapon_sawedoff",
+        "sawedoff"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_sawedoff.svg",
+      "width": 85,
+      "height": 32,
+      "content_sha256": "74d4173fdbb9425833ec99b873c2d8e42512d63e6d11a08ad35bba8b5729a7b7",
+      "source_uri": "https://cs2replays.com/icons/sawedoff.svg",
+      "source_content_sha256": "45a3f55fa526d6948033d99a50cd965b7ecfa6c3eb810785f3d74ffb5556b061",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_scar20",
+      "item_class": "RIFLE",
+      "display_name": "SCAR-20",
+      "aliases": [
+        "weapon_scar20",
+        "scar20"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_scar20.svg",
+      "width": 98,
+      "height": 32,
+      "content_sha256": "b3a230b60d3c43057dc2dbbe8d3c8d8e27e0815c310702b745fc10f9dac97770",
+      "source_uri": "https://cs2replays.com/icons/scar20.svg",
+      "source_content_sha256": "177b6a4490be9a2d456f9cc933ae7aa14b7ff6d7fb858473fb7cae019a790b0e",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_sg556",
+      "item_class": "RIFLE",
+      "display_name": "SG 553",
+      "aliases": [
+        "weapon_sg556",
+        "sg556"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_sg556.svg",
+      "width": 90,
+      "height": 32,
+      "content_sha256": "247f4587bb6780c07c315ac309126268683d43f0b5d92f72066ca38946ee34aa",
+      "source_uri": "https://cs2replays.com/icons/sg556.svg",
+      "source_content_sha256": "6c0105235017802611d302d11bac4bdf9e83e9edeb6b5d91bbf449052128d3f3",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_smokegrenade",
+      "item_class": "GRENADE",
+      "display_name": "Smoke Grenade",
+      "aliases": [
+        "weapon_smokegrenade",
+        "smokegrenade"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_smokegrenade.svg",
+      "width": 15,
+      "height": 32,
+      "content_sha256": "32e02fada19cd8054642bbbdea99a6b0551810377bc11c3f5d8f5aa69eb60e53",
+      "source_uri": "https://cs2replays.com/icons/smokegrenade.svg",
+      "source_content_sha256": "fdf505befaa9d3dbf04d27204088b93e5941ba62ed8744e9675c907aa69056f9",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_ssg08",
+      "item_class": "RIFLE",
+      "display_name": "SSG 08",
+      "aliases": [
+        "weapon_ssg08",
+        "ssg08",
+        "ssg 08"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_ssg08.svg",
+      "width": 100,
+      "height": 32,
+      "content_sha256": "f13d937982251ca59e751655f2f4e1901082c1146dbca949535fe4d2b7212049",
+      "source_uri": "https://cs2replays.com/icons/ssg08.svg",
+      "source_content_sha256": "82bbb1b093f405a26f87c2e85d07909267814f117ce7a9035ef4ee3e23fd2ced",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_taser",
+      "item_class": "EQUIPMENT",
+      "display_name": "Zeus x27",
+      "aliases": [
+        "weapon_taser",
+        "taser"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_taser.svg",
+      "width": 42,
+      "height": 32,
+      "content_sha256": "6eb346aebb86d6a11dcaee54c52d482bd8f2ab8c882e58a1033387198d916e16",
+      "source_uri": "https://cs2replays.com/icons/taser.svg",
+      "source_content_sha256": "a3e119853a03ebbb0267ff7721246c5ae5132dd6b325ec21d74638dc72a7b7ec",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_tec9",
+      "item_class": "PISTOL",
+      "display_name": "Tec-9",
+      "aliases": [
+        "weapon_tec9",
+        "tec9"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_tec9.svg",
+      "width": 53,
+      "height": 32,
+      "content_sha256": "295467c04fb59e84000df893516697f4b738c95ff0c75dca355d86789022acec",
+      "source_uri": "https://cs2replays.com/icons/tec9.svg",
+      "source_content_sha256": "dce734f0a08b42aa6ebb7946d1c3653823c4c70da99d05f2b23afa6ba80b27a6",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_ump45",
+      "item_class": "SMG",
+      "display_name": "UMP-45",
+      "aliases": [
+        "weapon_ump45",
+        "ump45"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_ump45.svg",
+      "width": 84,
+      "height": 32,
+      "content_sha256": "63510b896c72d6260487952997bc65d15965ade6fb234b29b1a31a6d5f397b27",
+      "source_uri": "https://cs2replays.com/icons/ump45.svg",
+      "source_content_sha256": "db234c16c85e5f7aa81821cdd41303857783673ca96792072c9ba51205108124",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_usp_silencer",
+      "item_class": "PISTOL",
+      "display_name": "USP-S",
+      "aliases": [
+        "weapon_usp_silencer",
+        "usp_silencer",
+        "usp-s",
+        "weapon_usp_s"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_usp_silencer.svg",
+      "width": 70,
+      "height": 32,
+      "content_sha256": "05750f40cec83e23216ec6bcbc58071be8a96ca75051a49e4fb78e3cdfb8aea4",
+      "source_uri": "https://cs2replays.com/icons/usp_silencer.svg",
+      "source_content_sha256": "6f2693049050b883cbabeac89437fbcb8504520ec779156d4f7877e077ec3d7c",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_xm1014",
+      "item_class": "HEAVY",
+      "display_name": "XM1014",
+      "aliases": [
+        "weapon_xm1014",
+        "xm1014"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_xm1014.svg",
+      "width": 98,
+      "height": 32,
+      "content_sha256": "6d80641dc969d161918143a418cecab78a54c7a792a0c20b05cc81f30841033b",
+      "source_uri": "https://cs2replays.com/icons/xm1014.svg",
+      "source_content_sha256": "ec202a1ccdda27830262f764ac741eba5349211eb72776e4f8e65e78ec0ccea5",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_bayonet",
+      "item_class": "MELEE",
+      "display_name": "Bayonet",
+      "aliases": [
+        "weapon_bayonet",
+        "bayonet"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_bayonet.svg",
+      "width": 92,
+      "height": 32,
+      "content_sha256": "98808dc1680451e0ce22195828333a2bcade9addfbcbb9bbdf53d2e81cb858c2",
+      "source_uri": "https://cs2replays.com/icons/bayonet.svg",
+      "source_content_sha256": "2dfdb1d3e1e2f9f3374d49cd7589b4fc450cfc91111e0670d5739327e82d2a86",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife",
+      "item_class": "MELEE",
+      "display_name": "Knife",
+      "aliases": [
+        "weapon_knife",
+        "knife"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife.svg",
+      "width": 77,
+      "height": 32,
+      "content_sha256": "5175c50c963a7af4ee9bf37d34f3c53810430b59cfbd64c9ea06b806bd8f0490",
+      "source_uri": "https://cs2replays.com/icons/knife.svg",
+      "source_content_sha256": "865edd79e600f5812dbaf910438af1f4ca2fb74a75fa815cc00d95802de25185",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_t",
+      "item_class": "MELEE",
+      "display_name": "T Knife",
+      "aliases": [
+        "weapon_knife_t",
+        "knife_t"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_t.svg",
+      "width": 77,
+      "height": 32,
+      "content_sha256": "5175c50c963a7af4ee9bf37d34f3c53810430b59cfbd64c9ea06b806bd8f0490",
+      "source_uri": "https://cs2replays.com/icons/knife.svg",
+      "source_content_sha256": "865edd79e600f5812dbaf910438af1f4ca2fb74a75fa815cc00d95802de25185",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_butterfly",
+      "item_class": "MELEE",
+      "display_name": "Butterfly Knife",
+      "aliases": [
+        "weapon_knife_butterfly",
+        "knife_butterfly"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_butterfly.svg",
+      "width": 80,
+      "height": 32,
+      "content_sha256": "c6bb3ad2b371b9666fe6a4988f923467e3f68667e542e532b1881063fa07db11",
+      "source_uri": "https://cs2replays.com/icons/knife_butterfly.svg",
+      "source_content_sha256": "efe285cdfd79b518544ccf6fc0203b8c25517c4ae36f27d640caff37c1db34fc",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_canis",
+      "item_class": "MELEE",
+      "display_name": "Nomad Knife",
+      "aliases": [
+        "weapon_knife_canis",
+        "knife_canis"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_canis.svg",
+      "width": 93,
+      "height": 32,
+      "content_sha256": "76cd569251f37cb7c1ceea01148673c15e00d8267e111baca73e9cbaddab2b4c",
+      "source_uri": "https://cs2replays.com/icons/knife_canis.svg",
+      "source_content_sha256": "e67136c2bf4fe95c637fa5ef897ec22852419f7326a7a4b9a77d488b1faf675a",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_cord",
+      "item_class": "MELEE",
+      "display_name": "Paracord Knife",
+      "aliases": [
+        "weapon_knife_cord",
+        "knife_cord"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_cord.svg",
+      "width": 92,
+      "height": 34,
+      "content_sha256": "3386f6d4beb94f564d4301f99a734b84a8a693a5221a88295bc0e4c8309cf46a",
+      "source_uri": "https://cs2replays.com/icons/knife_cord.svg",
+      "source_content_sha256": "1ca8f25a7272c9ac68938409a23eb5e5cd6667d8c46167e1217ef7f34ff892ac",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_css",
+      "item_class": "MELEE",
+      "display_name": "Classic Knife",
+      "aliases": [
+        "weapon_knife_css",
+        "knife_css"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_css.svg",
+      "width": 93,
+      "height": 32,
+      "content_sha256": "4d26102f49341c80b4bd25078bb0d5b1840085bfe306fa19c39ce700938e16aa",
+      "source_uri": "https://cs2replays.com/icons/knife_css.svg",
+      "source_content_sha256": "a5a8ae19f0d669524f63697b3364e3405dc0e233343b62fa3ed8eaed2a64dcd9",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_falchion",
+      "item_class": "MELEE",
+      "display_name": "Falchion Knife",
+      "aliases": [
+        "weapon_knife_falchion",
+        "knife_falchion"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_falchion.svg",
+      "width": 89,
+      "height": 32,
+      "content_sha256": "beb50ece89dfe3001b249faf628aab21cbe3ac5e0a22e4aa7b28e3342093defc",
+      "source_uri": "https://cs2replays.com/icons/knife_falchion.svg",
+      "source_content_sha256": "ae2f359bed8616c1d84e02c39211888a2ad2ca403e0fd6a9702a11d06e0223cc",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_flip",
+      "item_class": "MELEE",
+      "display_name": "Flip Knife",
+      "aliases": [
+        "weapon_knife_flip",
+        "knife_flip"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_flip.svg",
+      "width": 80,
+      "height": 32,
+      "content_sha256": "eae80c6e16f22a7e608d2779b062212a231a234a9835ca191f4f8c3c5ef85839",
+      "source_uri": "https://cs2replays.com/icons/knife_flip.svg",
+      "source_content_sha256": "60d0c80a50a1c0bc868022a66b0dcf04f1581a15374f44bf7fb9e60b13a276de",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_gut",
+      "item_class": "MELEE",
+      "display_name": "Gut Knife",
+      "aliases": [
+        "weapon_knife_gut",
+        "knife_gut"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_gut.svg",
+      "width": 72,
+      "height": 32,
+      "content_sha256": "0dd7499fbc0e5896fcd1071007a73783d61796531e544060ce992e508b063e08",
+      "source_uri": "https://cs2replays.com/icons/knife_gut.svg",
+      "source_content_sha256": "fd99f93a3f13ce2ea0707ecec0782b64df15800ddcdc48923f021450886e7b17",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_gypsy_jackknife",
+      "item_class": "MELEE",
+      "display_name": "Navaja Knife",
+      "aliases": [
+        "weapon_knife_gypsy_jackknife",
+        "knife_gypsy_jackknife",
+        "weapon_knife_navaja"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_gypsy_jackknife.svg",
+      "width": 92,
+      "height": 32,
+      "content_sha256": "93beb23df2e56a3c58444204da127c9abd7d8d2e42baf14e844342683cbe4c08",
+      "source_uri": "https://cs2replays.com/icons/knife_gypsy_jackknife.svg",
+      "source_content_sha256": "79fd9c5895ecd945a98f90c6da25d07bf564be0d1b0c75bbf92c8675c152161f",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_karambit",
+      "item_class": "MELEE",
+      "display_name": "Karambit",
+      "aliases": [
+        "weapon_knife_karambit",
+        "knife_karambit"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_karambit.svg",
+      "width": 66,
+      "height": 32,
+      "content_sha256": "bb7a7adcd57b206386ec12ab27114a20eca17a1f2a73e4fe0166b4939aa58b7b",
+      "source_uri": "https://cs2replays.com/icons/knife_karambit.svg",
+      "source_content_sha256": "6331908a5dd5b8133619910a8435bd4f466a9332d82971eb8cacc005637d00e2",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_kukri",
+      "item_class": "MELEE",
+      "display_name": "Kukri Knife",
+      "aliases": [
+        "weapon_knife_kukri",
+        "knife_kukri"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_kukri.svg",
+      "width": 93,
+      "height": 32,
+      "content_sha256": "b81c4297265d136394cbef0f1fc831957ce8deb01f49ec5487f0ecda3e9c3c21",
+      "source_uri": "https://cs2replays.com/icons/knife_kukri.svg",
+      "source_content_sha256": "6da3005441cf3b8070c191cf0c65249dae59dd7b7d6ba91043f621467c889bb3",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_m9_bayonet",
+      "item_class": "MELEE",
+      "display_name": "M9 Bayonet",
+      "aliases": [
+        "weapon_knife_m9_bayonet",
+        "knife_m9_bayonet"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_m9_bayonet.svg",
+      "width": 88,
+      "height": 32,
+      "content_sha256": "d9038b9cb921172b941dbe7050e6776c27a2103aa16f4f4017d38d6645d7abb5",
+      "source_uri": "https://cs2replays.com/icons/knife_m9_bayonet.svg",
+      "source_content_sha256": "24f15d95965434cd9335868ede8c0dcae120e7fcea028179e5039daeaac81ac8",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_outdoor",
+      "item_class": "MELEE",
+      "display_name": "Survival Knife",
+      "aliases": [
+        "weapon_knife_outdoor",
+        "knife_outdoor"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_outdoor.svg",
+      "width": 92,
+      "height": 32,
+      "content_sha256": "faafc82c79fcde85627076832d2f7d6aa1747b0f164ee347d6aec11f344ce899",
+      "source_uri": "https://cs2replays.com/icons/knife_outdoor.svg",
+      "source_content_sha256": "408f30849b86d7bf5a8ac190bf3588943b660df88d9dc8c4ad8bbb57a66fe395",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_push",
+      "item_class": "MELEE",
+      "display_name": "Shadow Daggers",
+      "aliases": [
+        "weapon_knife_push",
+        "knife_push"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_push.svg",
+      "width": 83,
+      "height": 32,
+      "content_sha256": "39a945c7be47f6e830d46277cca6833280e9c04444eb05b2d2b10ded007ea16b",
+      "source_uri": "https://cs2replays.com/icons/knife_push.svg",
+      "source_content_sha256": "673892df666df0e5d1cbc470e00a19b123e9d05539ee10d063483d2c1cbe1645",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_skeleton",
+      "item_class": "MELEE",
+      "display_name": "Skeleton Knife",
+      "aliases": [
+        "weapon_knife_skeleton",
+        "knife_skeleton"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_skeleton.svg",
+      "width": 93,
+      "height": 32,
+      "content_sha256": "e575dd0329e101b9279fe48df7a227852116ced6a57e15b068c15010ebb2afda",
+      "source_uri": "https://cs2replays.com/icons/knife_skeleton.svg",
+      "source_content_sha256": "e9d657fa897d5976d9ceff048687e73a2097d76f96b12556c17d353703e31847",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_stiletto",
+      "item_class": "MELEE",
+      "display_name": "Stiletto Knife",
+      "aliases": [
+        "weapon_knife_stiletto",
+        "knife_stiletto"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_stiletto.svg",
+      "width": 92,
+      "height": 32,
+      "content_sha256": "3ad9860854a54a3f9a18a0408cfcedc518e05966296e3020ba419e04f879e437",
+      "source_uri": "https://cs2replays.com/icons/knife_stiletto.svg",
+      "source_content_sha256": "10f28d76011b29fa9bae8e539df3c6c8448bf6fc8f6e2f3f820471412e2f95f5",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_survival_bowie",
+      "item_class": "MELEE",
+      "display_name": "Bowie Knife",
+      "aliases": [
+        "weapon_knife_survival_bowie",
+        "knife_survival_bowie",
+        "weapon_knife_bowie",
+        "bowie knife"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_survival_bowie.svg",
+      "width": 101,
+      "height": 32,
+      "content_sha256": "0a7d9276e162e7f7b9d7640fe6c980d56ec146ccf5b862c99600c79a1c7267ac",
+      "source_uri": "https://cs2replays.com/icons/knife_bowie.svg",
+      "source_content_sha256": "4045c643ee98ed91a02ec90780e35ce38045c9aacb4cfa294a6d80588cb02e5c",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_tactical",
+      "item_class": "MELEE",
+      "display_name": "Huntsman Knife",
+      "aliases": [
+        "weapon_knife_tactical",
+        "knife_tactical",
+        "weapon_huntsman_knife",
+        "huntsman knife"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_tactical.svg",
+      "width": 96,
+      "height": 32,
+      "content_sha256": "2d9c892b24dc94774e94d75cce8990ae5b744252e1e69b8b04a55c388bd846d7",
+      "source_uri": "https://cs2replays.com/icons/knife_tactical.svg",
+      "source_content_sha256": "2b115d5911c397c20fb3c7130c392ec27498c3b6b00fd59015bcd74ae40f6d02",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_twinblade",
+      "item_class": "MELEE",
+      "display_name": "Twin Blade",
+      "aliases": [
+        "weapon_knife_twinblade",
+        "knife_twinblade"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_twinblade.svg",
+      "width": 93,
+      "height": 32,
+      "content_sha256": "60d4f83dc8d25506b114ccac7fd3c80482c1ac8b11ae3faf7aa6d1de084f60a2",
+      "source_uri": "https://cs2replays.com/icons/knife_twinblade.svg",
+      "source_content_sha256": "ac5ae164dd93119fcb8a5bfad7cea06f5c7a9d61710eefef0991af3e9d86e9c6",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_ursus",
+      "item_class": "MELEE",
+      "display_name": "Ursus Knife",
+      "aliases": [
+        "weapon_knife_ursus",
+        "knife_ursus"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_ursus.svg",
+      "width": 93,
+      "height": 32,
+      "content_sha256": "30d5c95caa7fb32f0668b13d90a13aabf6597a5a9791ae8329a5b279b2e4a628",
+      "source_uri": "https://cs2replays.com/icons/knife_ursus.svg",
+      "source_content_sha256": "9adbc60d84e303ff08c159330db3e31ae8c350292b9c261289e34b14bec7db63",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "weapon_knife_widowmaker",
+      "item_class": "MELEE",
+      "display_name": "Talon Knife",
+      "aliases": [
+        "weapon_knife_widowmaker",
+        "knife_widowmaker"
+      ],
+      "raster_ref": "/generated-assets/items/weapon_knife_widowmaker.svg",
+      "width": 92,
+      "height": 33,
+      "content_sha256": "1d4e9df54d24160307cdeb054db8586c1cbf952781eef30f268a4a6a6b39453c",
+      "source_uri": "https://cs2replays.com/icons/knife_widowmaker.svg",
+      "source_content_sha256": "5c6d3a1a62f0cf2321cd6243ccf27e8512935d86154d91cdb6ae5e78ceb8f0c7",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "armor",
+      "item_class": "EQUIPMENT",
+      "display_name": "Kevlar Vest",
+      "aliases": [
+        "armor",
+        "kevlar",
+        "vest"
+      ],
+      "raster_ref": "/generated-assets/items/armor.svg",
+      "width": 26,
+      "height": 32,
+      "content_sha256": "04e6e3fc88f2af5d9b8b9518d7141c1b591effdd25d10180fed43582eb16c23a",
+      "source_uri": "https://cs2replays.com/icons/armor.svg",
+      "source_content_sha256": "57e008aba6c52c6f8dc61f78599932072ec2f2101dcab754f75e7f0ac7d6d711",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "armor_helmet",
+      "item_class": "EQUIPMENT",
+      "display_name": "Kevlar + Helmet",
+      "aliases": [
+        "armor_helmet",
+        "helmet",
+        "vesthelm",
+        "assaultsuit"
+      ],
+      "raster_ref": "/generated-assets/items/armor_helmet.svg",
+      "width": 49,
+      "height": 32,
+      "content_sha256": "48fe4dde286a3221bce9dbaf84a1aae8b1a5cfade7b069cecbe24de622e1a123",
+      "source_uri": "https://cs2replays.com/icons/armor_helmet.svg",
+      "source_content_sha256": "bd10d6837ee1f23ab505c68aacf93e0d6dbd4b6c6021ccbd9325ac740b4881d0",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "defuse_kit",
+      "item_class": "EQUIPMENT",
+      "display_name": "Defuse Kit",
+      "aliases": [
+        "defuse_kit",
+        "defuser",
+        "weapon_defuser"
+      ],
+      "raster_ref": "/generated-assets/items/defuse_kit.svg",
+      "width": 36,
+      "height": 32,
+      "content_sha256": "e7825ba2715d20a5a5b2f7c636e6d512d13dae1699dc6163c2c04cebdf6af7d8",
+      "source_uri": "https://cs2replays.com/icons/defuser.svg",
+      "source_content_sha256": "9810a89c92279b7eeeb1837d16a0a9a7a782114fb8e23aeb5d48872146bdf3be",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    },
+    {
+      "canonical_item_id": "planted_c4",
+      "item_class": "OBJECTIVE",
+      "display_name": "Planted C4",
+      "aliases": [
+        "planted_c4"
+      ],
+      "raster_ref": "/generated-assets/items/planted_c4.svg",
+      "width": 31,
+      "height": 29,
+      "content_sha256": "ca3269f6355c6e8d9fcc340fad4dd542afa14fb7454c2b9f69890a7c6b5bebe8",
+      "source_uri": "https://cs2replays.com/icons/planted_c4.svg",
+      "source_content_sha256": "fa96cc9eefa17acb6e0e8891f76b50c9b3c3964d171e4e0125bd31c9617dae31",
+      "media_type": "image/svg+xml",
+      "render_mode": "MONOCHROME_CURRENT_COLOR",
+      "rights_status": "LOCALHOST_ONLY"
+    }
+  ],
+  "generated_at": "2026-08-13T01:46:14.783Z",
+  "generation_manifest": {
+    "generator": "tools/fetch_valve_item_icons.mjs",
+    "generator_version": "2.0.0",
+    "source_revision": "cs2replays-icons@app.js-sha256-a8a8c7386dd387fdb506d78b3891b7f4b12630c7d7e889f32dfd07503d76f648",
+    "source_index_uri": "https://cs2replays.com/js/app.js",
+    "source_index_sha256": "a8a8c7386dd387fdb506d78b3891b7f4b12630c7d7e889f32dfd07503d76f648",
+    "redistribution_policy": "LOCALHOST_ONLY",
+    "rights_note": "User-authorized Valve game HUD asset cache; upstream page provides no standalone icon-license grant. Public redistribution requires review.",
+    "normalization": "Standalone SVG sanitized; non-none fill/stroke normalized to currentColor; root defaults to white."
+  }
+}

@@ -13,7 +13,6 @@ coverage/
 **/__pycache__/
 *.py[cod]
 .cache/
-apps/web/public/generated-assets/
 apps/web/public/generated-data/
 .local-data/
 .DS_Store

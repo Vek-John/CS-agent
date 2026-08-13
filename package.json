@@ -14,8 +14,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "check": "pnpm test && pnpm typecheck && pnpm build",
     "cloudflare:build": "cd apps/web && ../../node_modules/.bin/opennextjs-cloudflare build -c ../../wrangler.jsonc --openNextConfigPath ../../open-next.config.ts",
+    "cloudflare:assets": "node tools/prepare_cloudflare_assets.mjs",
     "cloudflare:preview": "cd apps/web && ../../node_modules/.bin/opennextjs-cloudflare preview -c ../../wrangler.jsonc --openNextConfigPath ../../open-next.config.ts",
-    "cloudflare:deploy": "pnpm cloudflare:build && pnpm exec wrangler deploy apps/web/.open-next/worker.js --config wrangler.jsonc --assets apps/web/.open-next/assets"
+    "cloudflare:deploy": "pnpm cloudflare:build && pnpm cloudflare:assets && pnpm exec wrangler deploy apps/web/.open-next/worker.js --config wrangler.jsonc --assets apps/web/.open-next/cloudflare-assets"
   },
   "devDependencies": {
     "@opennextjs/cloudflare": "1.20.2",

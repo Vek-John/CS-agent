@@ -489,7 +489,7 @@ GameAssetCatalog
 
 Parser Adapter 的原始武器/物品名先通过版本化 alias 表规范化为 `canonical_item_id`，renderer 只能以该 ID 查询图标，不得把不可信的 Demo 字符串拼进文件路径或 URL。图标缺失时保留文字名称并显式降级，不用错误图标代替。
 
-localhost 的 `tools/fetch_valve_item_icons.mjs` 从版本锁定的公开物品元数据取得 Valve/Steam 托管图像，逐项下载到 `apps/web/public/generated-assets/items` 并生成 source URI、尺寸、SHA-256、source revision 与 `LOCALHOST_ONLY` 权利状态。运行时只读取该本地绝对路径目录，不热链；公开发行仍需单独复核再分发权利。
+`tools/fetch_valve_item_icons.mjs` 从版本锁定的公开物品元数据取得 Valve/Steam 托管图像，逐项下载到 `apps/web/public/generated-assets/items` 并生成 source URI、尺寸、SHA-256、source revision 与权利状态。地图和物品图标的固定快照现在作为小型静态 release 资产随 Web 应用发布，运行时只读取本地绝对路径目录，不热链；本机上传产生的 `generated-data/**` 仍是本地缓存，Cloudflare 部署脚本会显式排除它，避免泄露 Demo 或超过 Workers 单文件大小限制。任何商业化或大规模公开再分发仍需单独复核上游权利。
 
 ### 7.3 ObservableState
 
