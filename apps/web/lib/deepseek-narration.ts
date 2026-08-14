@@ -6,7 +6,7 @@ const MAX_REQUEST_BYTES = 64 * 1024;
 const MAX_ID_LENGTH = 12;
 const MAX_TEXT_LENGTH = 1600;
 const MAX_TITLE_LENGTH = 120;
-export const DEEPSEEK_PROMPT_VERSION = "deepseek-cue-narration/1.0.0";
+export const DEEPSEEK_PROMPT_VERSION = "deepseek-cue-narration/1.1.0";
 const EXPLICIT_TICK_PATTERN = /(?:\bticks?\s*(?:[:=#-]|\s)\s*\d+\b|第\s*\d+\s*(?:tick|帧|刻)|(?:tick|帧|刻)\s*[:=#-]?\s*\d+)/i;
 const EXPLICIT_URL_PATTERN = /(?:https?:\/\/|file:\/\/|data:|mailto:)/i;
 const ABS_UNIX_PATH_PATTERN = /\/(?:Users|home|tmp|var|private|Volumes)\/[^\s"'，。；;）】)}]+/i;
@@ -238,9 +238,13 @@ function providerPayload(request: NarrationRequest): Record<string, unknown> {
 function systemPrompt(): string {
   return [
     "You are a CS2 coaching narration adapter.",
-    "Return JSON only with exactly one item per supplied cue: cue_id, title, explanation.",
+    "Return JSON only. The top-level object must contain exactly one key named items; never name it cues.",
+    "Each item must contain exactly cue_id, title, and explanation, with exactly one item per supplied cue.",
+    'Exact JSON shape example: {"items":[{"cue_id":"c1","title":"简短标题","explanation":"简短讲解"}]}.',
     "Use only the supplied decision-time facts, inferences, advice and limitations.",
     "Do not add players, identities, positions, ticks, outcomes, voice comms, paths, files, demos or citations.",
+    "Write natural Simplified Chinese for CS players. Retain supplied map callouts and prefer familiar terms such as 首接触、补枪、交叉火力、转点、回防 and 道具覆盖 only when the supplied material supports them.",
+    "Never invent a callout, teammate comm, enemy location, crossfire, trade setup, rotation or save condition that is not supplied.",
     "Speak directly: state the coaching judgment and its reason; do not ask the user to predict, choose, guess or answer first.",
     "Do not change the advice semantics; make the wording concise, direct and honest about uncertainty."
   ].join(" ");

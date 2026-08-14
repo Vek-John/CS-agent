@@ -97,7 +97,7 @@ describe("DeepSeek narration provider", () => {
       status: "SUCCEEDED",
       items: [{ cue_id: "c1", title: "保护 C4 / A1", explanation: "基于当前可见事实，保留撤退路线。" }],
       model: "deepseek-v4-flash",
-      manifest: { model: "deepseek-v4-flash", prompt_version: "deepseek-cue-narration/1.0.0" }
+      manifest: { model: "deepseek-v4-flash", prompt_version: "deepseek-cue-narration/1.1.0" }
     });
     expect(seenUrl).toBe("https://api.deepseek.com/chat/completions");
     expect(seenInit?.method).toBe("POST");
@@ -116,6 +116,10 @@ describe("DeepSeek narration provider", () => {
     expect(body.max_tokens).toBe(2400);
     expect(body.thinking).toEqual({ type: "disabled" });
     expect(body.response_format).toEqual({ type: "json_object" });
+    expect(body.messages[0].content).toContain('top-level object must contain exactly one key named items');
+    expect(body.messages[0].content).toContain('{"items":');
+    expect(body.messages[0].content).toContain("Retain supplied map callouts");
+    expect(body.messages[0].content).toContain("首接触、补枪、交叉火力");
     const userPayload = body.messages[1].content;
     expect(userPayload).toContain('"cue_id":"c1"');
     expect(userPayload).toContain('"id":"f1"');
@@ -158,7 +162,7 @@ describe("DeepSeek narration provider", () => {
     );
     expect(result.manifest).toEqual({
       model: "deepseek-v4-flash",
-      prompt_version: "deepseek-cue-narration/1.0.0"
+      prompt_version: "deepseek-cue-narration/1.1.0"
     });
   });
 
