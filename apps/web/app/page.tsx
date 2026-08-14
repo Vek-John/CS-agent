@@ -1,5 +1,5 @@
-import { RealReplayExperience } from "../components/real-replay-experience";
+import { Cs2dPlaybackHost } from "../components/cs2d-playback-host";
 
 export default function Home() {
-  return <RealReplayExperience />;
+  return <Cs2dPlaybackHost />;
 }

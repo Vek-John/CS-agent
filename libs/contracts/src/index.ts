@@ -296,4 +296,5 @@ export * from "./geometry";
 export * from "./assets";
 export * from "./map";
 export * from "./match";
+export * from "./playback-bridge";
 export * from "./observation";

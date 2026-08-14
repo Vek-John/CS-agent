@@ -1,0 +1,837 @@
+diff --git a/apps/app/src/shell/PublicShell.vue b/apps/app/src/shell/PublicShell.vue
+index 057a546..54be0a2 100644
+--- a/apps/app/src/shell/PublicShell.vue
++++ b/apps/app/src/shell/PublicShell.vue
+@@ -52,6 +52,7 @@ const sidebarShown = computed(() => (isDesktop.value ? !collapsed.value : mobile
+ 
+ const route = useRoute()
+ const router = useRouter()
++const hostMode = computed(() => route.query.host === '1')
+ 
+ // Close the mobile drawer when navigating or once the viewport grows to desktop
+ // (where the sidebar is in-flow and the overlay no longer applies).
+@@ -84,7 +85,7 @@ provide(appFullscreenKey, { isFullscreen, toggle })
+ 
+ <template>
+   <div ref="shellRoot" class="flex h-dvh overflow-hidden bg-ink-950">
+-    <AppSidebar v-show="!isFullscreen && !inDemo" />
++    <AppSidebar v-show="!hostMode && !isFullscreen && !inDemo" />
+ 
+     <!-- Mobile drawer backdrop: taps outside the open sidebar close it. -->
+     <div
+@@ -95,7 +96,7 @@ provide(appFullscreenKey, { isFullscreen, toggle })
+ 
+     <div class="flex min-w-0 flex-1 flex-col">
+       <header
+-        v-show="!isFullscreen"
++        v-show="!hostMode && !isFullscreen"
+         class="relative z-20 flex h-14 shrink-0 items-center gap-4 border-b border-ink-800/80 bg-ink-950/80 px-4 backdrop-blur-md sm:px-6"
+       >
+         <!-- Start: a Back button while viewing a demo, the sidebar toggle otherwise.
+diff --git a/apps/app/src/style.css b/apps/app/src/style.css
+index 327973e..69b029c 100644
+--- a/apps/app/src/style.css
++++ b/apps/app/src/style.css
+@@ -294,3 +294,30 @@
+     transform: translateY(100%);
+   }
+ }
++
++/* CS2 AI Demo Coach localhost host: compact, current-tick roster cards. */
++.host-roster-card {
++  min-height: 44px;
++  box-shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 8px 20px rgb(0 0 0 / 0.2);
++  transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1), border-color 150ms ease, opacity 150ms ease;
++}
++.host-roster-card:active {
++  transform: scale(0.98);
++}
++.host-roster-card--dead {
++  opacity: 0.42;
++  filter: saturate(0.55);
++}
++.host-roster-card__top {
++  background: #151922;
++}
++@media (prefers-reduced-motion: reduce) {
++  .host-roster-card { transition: none; }
++  .host-roster-card:active { transform: none; }
++}
++@media (prefers-reduced-transparency: reduce) {
++  .host-roster-card__top { background: #151922; backdrop-filter: none; }
++}
++@media (prefers-contrast: more) {
++  .host-roster-card { border-width: 2px; }
++}
+diff --git a/apps/app/src/viewer/DemoAnalyzerView.vue b/apps/app/src/viewer/DemoAnalyzerView.vue
+index 9c4c084..3911740 100644
+--- a/apps/app/src/viewer/DemoAnalyzerView.vue
++++ b/apps/app/src/viewer/DemoAnalyzerView.vue
+@@ -20,6 +20,7 @@ import { fetchReplay } from '@/viewer/ingest/replaySource'
+ import { listenForExtensionDemo } from '@/viewer/ingest/extensionBridge'
+ import { fmtSize } from '@/viewer/domain/demoMeta'
+ import { useI18n } from '@/app/i18n'
++import { emitPlaybackEvent, replayReadyMessage } from '@/viewer/player/hostBridge'
+ 
+ const { t } = useI18n()
+ 
+@@ -31,6 +32,39 @@ const route = useRoute()
+ const router = useRouter()
+ const parser = useDemoParser()
+ 
++const hostMode = computed(() => route.query.host === '1')
++const hostRouteQuery = computed(() => ({
++  host: '1',
++  ...(typeof route.query.parentOrigin === 'string' ? { parentOrigin: route.query.parentOrigin } : {}),
++}))
++const hostSelectedPlayerId = ref<string | null>(null)
++const hostSelectionLocked = computed(() => hostSelectedPlayerId.value !== null)
++
++function selectHostPlayer(playerId: string) {
++  if (!hostMode.value || hostSelectionLocked.value) return
++  const replay = parser.replay.value
++  const selectionIndex = replay?.players.findIndex((player) => player.steamId === playerId) ?? -1
++  const player = replay?.players[selectionIndex]
++  if (!player || selectionIndex < 0) return
++  hostSelectedPlayerId.value = player.steamId
++  emitPlaybackEvent({
++    type: 'PLAYER_SELECTED',
++    playerId: player.steamId,
++    displayName: player.name,
++    side: player.startSide,
++    selectionIndex,
++  })
++}
++
++watch(
++  () => parser.replay.value,
++  (replay, previous) => {
++    if (!hostMode.value || !replay || replay === previous) return
++    hostSelectedPlayerId.value = null
++    emitPlaybackEvent(replayReadyMessage(replay))
++  },
++)
++
+ // Phase → i18n key for the loading label (the `reading` phase uses `readingFile`).
+ const PHASE_LABEL: Record<string, string> = {
+   reading: 'analyzer.readingFile',
+@@ -286,7 +320,7 @@ async function handleFile(file: File) {
+     })
+     if (id) {
+       currentId.value = id // already loaded: keeps the watcher from reloading
+-      router.push(`/${id}`)
++      hostMode.value ? router.push({ path: `/${id}`, query: hostRouteQuery.value }) : router.push(`/${id}`)
+     }
+   }
+ }
+@@ -314,7 +348,7 @@ async function onImportArchive(file: File) {
+       fileSize: file.size,
+     })
+     currentId.value = id
+-    router.push(`/${id}`)
++    hostMode.value ? router.push({ path: `/${id}`, query: hostRouteQuery.value }) : router.push(`/${id}`)
+   } catch (err) {
+     importError.value = err instanceof Error ? err.message : String(err)
+   } finally {
+@@ -457,16 +491,48 @@ function onImportInput(e: Event) {
+     <template v-if="parser.status.value === 'done' && parser.replay.value">
+       <!-- v-show keeps the stage mounted (preserves playback position across tab switches) -->
+       <div v-show="activeTab === 'viewer'" class="h-full w-full">
++        <div
++          v-if="hostMode && !hostSelectionLocked"
++          class="flex h-full items-center justify-center bg-ink-950 px-5 py-8"
++        >
++          <section class="w-full max-w-4xl rounded-2xl border border-ink-700 bg-ink-900/95 p-5 shadow-2xl">
++            <div class="mb-4">
++              <p class="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-surge-400">Demo ready</p>
++              <h1 class="mt-1 font-display text-xl text-ink-50">选择本场要分析的玩家</h1>
++              <p class="mt-1 text-sm text-ink-300">只选择一次；进入回放后点击玩家卡仅跟随镜头。</p>
++            </div>
++            <div class="grid gap-4 md:grid-cols-2">
++              <div v-for="side in (['CT', 'T'] as const)" :key="side">
++                <div class="mb-2 flex items-center gap-2 text-xs font-semibold" :style="{ color: side === 'CT' ? '#418ac5' : '#c7a247' }">
++                  <span class="h-2 w-2 rounded-full bg-current" />{{ side }}
++                </div>
++                <div class="grid gap-2">
++                  <button
++                    v-for="player in parser.replay.value.players.filter((candidate) => candidate.startSide === side)"
++                    :key="player.steamId"
++                    type="button"
++                    class="min-h-11 rounded-lg border border-ink-700 bg-ink-800 px-3 py-2 text-left text-sm font-medium text-ink-100 transition-[transform,border-color,background-color] duration-150 hover:border-ink-500 hover:bg-ink-750 active:scale-[0.985] motion-reduce:transition-none motion-reduce:active:scale-100"
++                    @click="selectHostPlayer(player.steamId)"
++                  >
++                    {{ player.name }}
++                  </button>
++                </div>
++              </div>
++            </div>
++          </section>
++        </div>
+         <ViewerStage
++          v-else
+           ref="stage"
+           :replay="parser.replay.value"
+           :voice="parser.voice.value"
+           :source-label="parser.fileName.value"
+           :id="currentId ?? undefined"
+           :file-name="parser.fileName.value"
+-          :skip-freeze="skipFreeze"
+-          :autoplay="autoplay && activeTab === 'viewer'"
++          :skip-freeze="hostMode || skipFreeze"
++          :autoplay="!hostMode && autoplay && activeTab === 'viewer'"
+           :active="activeTab === 'viewer'"
++          :host-mode="hostMode"
+         />
+       </div>
+       <HeatmapView
+@@ -494,7 +560,7 @@ function onImportInput(e: Event) {
+       />
+ 
+       <!-- Tabs (2D / Duels / Heatmaps / Utilities / Economy) in the center of the appbar -->
+-      <Teleport to="#publicbar-center">
++      <Teleport v-if="!hostMode" to="#publicbar-center">
+         <div class="flex items-center gap-0.5 rounded-lg border border-ink-700 bg-ink-900/60 p-0.5">
+           <button
+             type="button"
+diff --git a/apps/app/src/viewer/player/ViewerRoster.vue b/apps/app/src/viewer/player/ViewerRoster.vue
+index 4ed06bf..baac7f3 100644
+--- a/apps/app/src/viewer/player/ViewerRoster.vue
++++ b/apps/app/src/viewer/player/ViewerRoster.vue
+@@ -1,6 +1,6 @@
+ <script setup lang="ts">
+ import { computed } from 'vue'
+-import type { PlayerMeta, PlayerState, Side } from '@/viewer/domain/schema'
++import type { PlayerMeta, PlayerState, Round, Side } from '@/viewer/domain/schema'
+ import { SIDE_COLOR } from '@/viewer/domain/colors'
+ import { weaponIconPath } from '@/viewer/domain/weaponIcons'
+ import { useI18n } from '@/app/i18n'
+@@ -13,20 +13,17 @@ const props = withDefaults(
+     playersById: Map<string, PlayerMeta>
+     score: Record<Side, number>
+     hideScore?: boolean
+-    /** Render only this side (one team per corner). */
+     side?: Side
+-    /** Mirror the content, for the right corner. */
+     align?: 'left' | 'right'
+-    /** steamId of the player being followed (highlights its card). */
+     selectedId?: string | null
++    hostMode?: boolean
++    round?: Round | null
++    currentT?: number
+   }>(),
+-  { align: 'left' },
++  { align: 'left', currentT: 0 },
+ )
+ 
+-const emit = defineEmits<{
+-  /** A player card was clicked (toggles follow on the map). */
+-  select: [steamId: string]
+-}>()
++const emit = defineEmits<{ select: [steamId: string] }>()
+ 
+ const sides = computed<{ side: Side; label: string }[]>(() =>
+   props.side
+@@ -36,116 +33,128 @@ const sides = computed<{ side: Side; label: string }[]>(() =>
+         { side: 'T', label: 'T' },
+       ],
+ )
+-
+ const mirror = computed(() => props.align === 'right')
+ 
+ function roster(side: Side) {
+   return props.players
+-    .filter((p) => p.side === side)
+-    .map((p) => ({ ...p, name: props.playersById.get(p.steamId)?.name ?? '?' }))
+-    .sort((a, b) => a.name.localeCompare(b.name))
++    .filter((player) => player.side === side)
++    .map((player) => ({ ...player, name: props.playersById.get(player.steamId)?.name ?? '?' }))
++    .sort((left, right) => left.name.localeCompare(right.name))
++}
++
++const armorIcon = (player: PlayerState) =>
++  player.armor > 0 ? (player.helmet ? '/weapons/vesthelm.svg' : '/weapons/vest.svg') : null
++
++const bombState = computed(() => {
++  const states = props.round?.bomb ?? []
++  let current = states[0]
++  for (const state of states) {
++    if (state.t > props.currentT) break
++    current = state
++  }
++  return current
++})
++
++function carriesC4(player: PlayerState): boolean {
++  return player.weapon === 'C4' || (
++    bombState.value?.state === 'carried' && bombState.value.carrierSteamId === player.steamId
++  )
+ }
+ 
+-const armorIcon = (p: PlayerState) =>
+-  p.armor > 0 ? (p.helmet ? '/weapons/vesthelm.svg' : '/weapons/vest.svg') : null
++function shownWeapon(player: PlayerState): string {
++  if (props.hostMode) return player.weapon
++  return player.weapon === 'Faca' ? (player.primary ?? player.weapon) : player.weapon
++}
+ </script>
+ 
+ <template>
+   <div class="flex flex-col gap-4">
+-    <!-- Score (rounds won per side) -->
+-    <div
+-      v-if="!hideScore"
+-      class="flex items-center justify-center gap-3 font-mono text-2xl"
+-    >
++    <div v-if="!hideScore" class="flex items-center justify-center gap-3 font-mono text-2xl">
+       <span class="tabular-nums" :style="{ color: SIDE_COLOR.CT }">{{ score.CT }}</span>
+       <span class="text-ink-500">:</span>
+       <span class="tabular-nums" :style="{ color: SIDE_COLOR.T }">{{ score.T }}</span>
+     </div>
+ 
+-    <div v-for="s in sides" :key="s.side" class="flex flex-col gap-1.5">
+-      <div
+-        v-for="p in roster(s.side)"
+-        :key="p.steamId"
+-        class="flex cursor-pointer flex-col gap-1 rounded-md border bg-ink-800 px-2.5 py-1.5 transition-colors"
++    <div v-for="team in sides" :key="team.side" class="flex flex-col gap-1.5">
++      <button
++        v-for="player in roster(team.side)"
++        :key="player.steamId"
++        type="button"
++        class="host-roster-card w-full cursor-pointer overflow-hidden border text-left"
+         :class="[
+-          { 'opacity-45': !p.alive },
+-          p.steamId === selectedId
++          hostMode ? 'min-h-12 rounded-[5px] bg-[#151922]' : 'flex flex-col gap-1 rounded-md bg-ink-800 px-2.5 py-1.5',
++          !player.alive && 'host-roster-card--dead',
++          player.steamId === selectedId
+             ? 'border-surge-400 ring-1 ring-surge-400'
+             : 'border-ink-700 hover:border-ink-500',
+         ]"
+-        @click="emit('select', p.steamId)"
++        :data-dead="!player.alive"
++        :aria-label="`${player.name}，${player.alive ? `${player.health} HP` : t('viewer.eliminated')}`"
++        @click="emit('select', player.steamId)"
+       >
+-        <div class="flex items-center gap-2" :class="mirror && 'flex-row-reverse'">
+-          <span
+-            class="min-w-0 flex-1 truncate text-sm text-ink-100"
+-            :class="mirror && 'text-right'"
+-          >
+-            {{ p.name }}
+-          </span>
+-          <span class="w-7 font-mono text-xs text-ink-300 tabular-nums" :class="mirror ? 'text-left' : 'text-right'">
+-            {{ p.alive ? p.health : 0 }}
+-          </span>
+-          <span class="font-mono text-[0.7rem] tabular-nums text-win">${{ p.money }}</span>
+-        </div>
+-
+-        <div class="h-1 overflow-hidden rounded-full bg-ink-700">
++        <template v-if="hostMode">
++          <div class="host-roster-card__top flex min-h-7 items-center gap-1.5 px-2 py-1" :class="mirror && 'flex-row-reverse'">
++            <div class="min-w-0 flex-1" :class="mirror && 'text-right'">
++              <div class="truncate text-xs font-semibold leading-none text-white">{{ player.name }}</div>
++              <div class="mt-1 font-mono text-[0.66rem] font-semibold leading-none text-[#35d07f]">${{ player.money }}</div>
++            </div>
++            <div class="flex max-w-[6.75rem] shrink-0 items-center gap-0.5" :class="mirror && 'flex-row-reverse'">
++              <img
++                v-for="(grenade, index) in player.grenades ?? []"
++                :key="`${grenade}-${index}`"
++                :src="weaponIconPath(grenade) ?? ''"
++                :alt="grenade"
++                class="h-3.5 w-3.5 object-contain opacity-95"
++              />
++              <img v-if="player.defuser" src="/weapons/defuse.svg" :alt="t('viewer.defuseKit')" class="h-3.5 w-3.5 object-contain" />
++              <img v-if="carriesC4(player)" src="/weapons/c4.svg" alt="C4" class="h-3.5 w-4 object-contain" />
++            </div>
++          </div>
+           <div
+-            class="h-full rounded-full transition-all duration-200"
+-            :style="{ width: `${p.alive ? p.health : 0}%`, backgroundColor: SIDE_COLOR[s.side] }"
+-          />
+-        </div>
++            class="host-roster-card__status flex min-h-6 items-center gap-1.5 px-2 py-1 text-white"
++            :class="mirror && 'flex-row-reverse'"
++            :style="{ backgroundColor: SIDE_COLOR[team.side] }"
++          >
++            <span class="font-mono text-xs font-bold tabular-nums">{{ player.alive ? player.health : 0 }}</span>
++            <span v-if="player.armor > 0" class="flex items-center gap-0.5 font-mono text-[0.62rem] tabular-nums text-white/90">
++              <img v-if="armorIcon(player)" :src="armorIcon(player)!" alt="Armor" class="h-3.5 w-3.5 object-contain brightness-0 invert" />
++              {{ player.armor }}
++            </span>
++            <span v-else class="text-[0.62rem] text-white/55">—</span>
++            <img
++              v-if="weaponIconPath(shownWeapon(player))"
++              :src="weaponIconPath(shownWeapon(player))!"
++              :alt="shownWeapon(player)"
++              class="ml-auto h-4 max-w-20 flex-1 object-contain brightness-0 invert"
++              :class="mirror ? 'mr-auto ml-0 object-left' : 'object-right'"
++            />
++          </div>
++        </template>
+ 
+-        <div
+-          v-if="p.alive"
+-          class="flex h-4 items-center gap-1"
+-          :class="mirror && 'flex-row-reverse'"
+-        >
+-          <!-- Active weapon, except the knife: while it's out we show the stowed
+-               main gun instead, so the roster always reflects the real loadout. -->
+-          <img
+-            v-if="p.weapon !== 'Faca' && weaponIconPath(p.weapon)"
+-            :src="weaponIconPath(p.weapon)!"
+-            :alt="p.weapon"
+-            class="h-3.5 w-6 shrink-0 object-contain opacity-90"
+-            :class="mirror ? 'object-right' : 'object-left'"
+-          />
+-          <img
+-            v-else-if="p.weapon === 'Faca' && p.primary && weaponIconPath(p.primary)"
+-            :src="weaponIconPath(p.primary)!"
+-            :alt="p.primary"
+-            class="h-3.5 w-6 shrink-0 object-contain opacity-90"
+-            :class="mirror ? 'object-right' : 'object-left'"
+-          />
+-          <img
+-            v-for="(g, i) in p.grenades ?? []"
+-            :key="i"
+-            :src="weaponIconPath(g) ?? ''"
+-            :alt="g"
+-            class="h-3 w-3 shrink-0 object-contain opacity-90"
+-          />
+-          <img
+-            v-if="p.defuser"
+-            v-tooltip="t('viewer.defuseKit')"
+-            src="/weapons/defuse.svg"
+-            alt="Kit"
+-            class="h-3.5 w-3.5 shrink-0 object-contain opacity-90"
+-          />
+-          <img
+-            v-if="armorIcon(p)"
+-            v-tooltip="p.helmet ? t('viewer.vestHelmet') : t('viewer.vest')"
+-            :src="armorIcon(p)!"
+-            alt="Colete"
+-            class="h-4 w-3.5 shrink-0 object-contain opacity-80"
+-          />
+-        </div>
+-        <div
+-          v-else
+-          class="text-[0.65rem] text-ink-500"
+-          :class="mirror && 'text-right'"
+-        >
+-          {{ t('viewer.eliminated') }}
+-        </div>
+-      </div>
++        <template v-else>
++          <div class="flex items-center gap-2" :class="mirror && 'flex-row-reverse'">
++            <span class="min-w-0 flex-1 truncate text-sm text-ink-100" :class="mirror && 'text-right'">{{ player.name }}</span>
++            <span class="w-7 font-mono text-xs text-ink-300 tabular-nums" :class="mirror ? 'text-left' : 'text-right'">{{ player.alive ? player.health : 0 }}</span>
++            <span class="font-mono text-[0.7rem] tabular-nums text-win">${{ player.money }}</span>
++          </div>
++          <div class="h-1 overflow-hidden rounded-full bg-ink-700">
++            <div class="h-full rounded-full transition-all duration-200" :style="{ width: `${player.alive ? player.health : 0}%`, backgroundColor: SIDE_COLOR[team.side] }" />
++          </div>
++          <div v-if="player.alive" class="flex h-4 items-center gap-1" :class="mirror && 'flex-row-reverse'">
++            <img
++              v-if="weaponIconPath(shownWeapon(player))"
++              :src="weaponIconPath(shownWeapon(player))!"
++              :alt="shownWeapon(player)"
++              class="h-3.5 w-6 shrink-0 object-contain opacity-90"
++              :class="mirror ? 'object-right' : 'object-left'"
++            />
++            <img v-for="(grenade, index) in player.grenades ?? []" :key="index" :src="weaponIconPath(grenade) ?? ''" :alt="grenade" class="h-3 w-3 shrink-0 object-contain opacity-90" />
++            <img v-if="player.defuser" src="/weapons/defuse.svg" :alt="t('viewer.defuseKit')" class="h-3.5 w-3.5 shrink-0 object-contain opacity-90" />
++            <img v-if="armorIcon(player)" :src="armorIcon(player)!" alt="Armor" class="h-4 w-3.5 shrink-0 object-contain opacity-80" />
++          </div>
++          <div v-else class="text-[0.65rem] text-ink-500" :class="mirror && 'text-right'">{{ t('viewer.eliminated') }}</div>
++        </template>
++      </button>
+     </div>
+   </div>
+ </template>
+diff --git a/apps/app/src/viewer/player/ViewerStage.vue b/apps/app/src/viewer/player/ViewerStage.vue
+index 85997de..358d00e 100644
+--- a/apps/app/src/viewer/player/ViewerStage.vue
++++ b/apps/app/src/viewer/player/ViewerStage.vue
+@@ -1,5 +1,5 @@
+ <script setup lang="ts">
+-import { computed, inject, ref, watch } from 'vue'
++import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue'
+ import { useLocalStorage } from '@vueuse/core'
+ import { appFullscreenKey } from '@/shell/appFullscreen'
+ import type { Replay, VoiceData } from '@/viewer/domain/schema'
+@@ -28,6 +28,7 @@ import { useCommentFlow } from '@/viewer/player/useCommentFlow'
+ import { useContextMenu } from '@/viewer/player/useContextMenu'
+ import { SIDE_COLOR } from '@/viewer/domain/colors'
+ import { useI18n } from '@/app/i18n'
++import { emitPlaybackEvent, listenForPlaybackCommands } from '@/viewer/player/hostBridge'
+ 
+ const { t } = useI18n()
+ 
+@@ -66,13 +67,18 @@ const props = defineProps<{
+    *  e.g. Space would toggle playback (and audio) from the heatmap. Default true
+    *  for standalone uses (the sample demo viewer). */
+   active?: boolean
++  /** Minimal iframe host used by CS2 AI Demo Coach on localhost. */
++  hostMode?: boolean
+ }>()
+ 
+ const r = useReplay()
+ // Apply the per-view skip-freeze override before the replay loads, so the first
+ // round opens past the freeze. Declared first so its immediate run precedes
+ // setReplay's.
+-watch(() => props.skipFreeze, (v) => r.forceSkipFreeze(!!v), { immediate: true })
++watch(() => [props.skipFreeze, props.hostMode] as const, ([skipFreeze, hostMode]) => {
++  r.forceSkipFreeze(hostMode || !!skipFreeze)
++  if (hostMode) r.autoAdvance.value = true
++}, { immediate: true })
+ watch(
+   () => props.replay,
+   (rep) => {
+@@ -82,6 +88,43 @@ watch(
+   { immediate: true },
+ )
+ 
++
++const canonicalTick = computed(() => {
++  const round = r.round.value
++  if (!round) return 0
++  const freezeStart = round.freezeStartTick ?? round.startTick
++  return Math.round(freezeStart + r.currentT.value * (r.replay.value?.demoTickRate || 64))
++})
++
++let stopHostBridge: (() => void) | null = null
++onMounted(() => {
++  if (!props.hostMode) return
++  stopHostBridge = listenForPlaybackCommands({
++    play: r.play,
++    pause: r.pause,
++    seekCanonicalTick: r.seekCanonicalTick,
++    selectRound: r.selectRound,
++    setSpeed: (next) => {
++      if (Number.isFinite(next) && next > 0 && next <= 16) r.speed.value = next
++    },
++  })
++})
++onUnmounted(() => stopHostBridge?.())
++watch(
++  () => [props.hostMode, r.roundIndex.value, canonicalTick.value, r.playing.value, r.speed.value] as const,
++  ([hostMode, roundIndex, tick, playing, speed]) => {
++    if (!hostMode) return
++    emitPlaybackEvent({
++      type: 'PLAYBACK_STATE',
++      roundIndex,
++      canonicalTick: tick,
++      playing,
++      speed,
++    })
++  },
++  { immediate: true },
++)
++
+ // Comms audio synced to the replay clock. Voice comes via prop (may not exist,
+ // e.g. a demo with no recorded voice).
+ const voiceRef = computed(() => props.voice ?? null)
+@@ -258,12 +301,12 @@ const advancedOptions = computed(() => [
+     description: t('viewer.autoAdvanceDesc'),
+     enabled: r.autoAdvance.value,
+   },
+-  {
++  ...(props.hostMode ? [] : [{
+     key: 'skipFreeze',
+     label: t('viewer.skipFreeze'),
+     description: t('viewer.skipFreezeDesc'),
+     enabled: r.skipFreeze.value,
+-  },
++  }]),
+ ])
+ function toggleAdvanced(key: string) {
+   if (key === 'autoZoom') autoZoom.value = !autoZoom.value
+@@ -464,7 +507,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+         </div>
+ 
+         <!-- Right: coach mode, export (the comments panel opens via comment mode) -->
+-        <div v-if="!hudHidden" class="pointer-events-auto flex items-center gap-1.5">
++        <div v-if="!hudHidden && !props.hostMode" class="pointer-events-auto flex items-center gap-1.5">
+           <button
+             v-tooltip="t('viewer.coach.enter')"
+             class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-ink-200 transition-colors duration-150 hover:bg-white/10 hover:text-white"
+@@ -540,7 +583,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+          panel, and hidden on mobile where there's no room for the rosters) -->
+     <aside
+       v-if="!hudHidden && !commentMode"
+-      class="pointer-events-auto absolute bottom-4 left-4 z-10 hidden w-52 sm:block"
++      class="pointer-events-auto absolute bottom-20 left-3 z-10 hidden w-60 sm:block"
+     >
+       <ViewerRoster
+         :players="r.players.value"
+@@ -549,6 +592,9 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+         side="CT"
+         align="left"
+         :hide-score="true"
++        :host-mode="props.hostMode"
++        :round="r.round.value"
++        :current-t="r.currentT.value"
+         :selected-id="followSteamId"
+         @select="toggleFollow"
+       />
+@@ -558,7 +604,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+          panel, and hidden on mobile where there's no room for the rosters) -->
+     <aside
+       v-if="!hudHidden && !commentMode"
+-      class="pointer-events-auto absolute bottom-4 right-4 z-10 hidden w-52 sm:block"
++      class="pointer-events-auto absolute bottom-20 right-3 z-10 hidden w-60 sm:block"
+     >
+       <ViewerRoster
+         :players="r.players.value"
+@@ -567,6 +613,9 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+         side="T"
+         align="right"
+         :hide-score="true"
++        :host-mode="props.hostMode"
++        :round="r.round.value"
++        :current-t="r.currentT.value"
+         :selected-id="followSteamId"
+         @select="toggleFollow"
+       />
+diff --git a/apps/app/src/viewer/player/hostBridge.ts b/apps/app/src/viewer/player/hostBridge.ts
+new file mode 100644
+index 0000000..0e6e799
+--- /dev/null
++++ b/apps/app/src/viewer/player/hostBridge.ts
+@@ -0,0 +1,191 @@
++/**
++ * The smallest possible control-plane bridge for the localhost playback host.
++ * Parsed Replay data stays in this Vue/WASM document; only summaries and
++ * playback commands cross the iframe boundary.
++ */
++
++export const PLAYBACK_BRIDGE_CHANNEL = 'cs2d-playback-bridge.v1' as const
++
++export interface PlaybackPlayerSummary {
++  playerId: string
++  displayName: string
++  startSide: 'T' | 'CT'
++}
++
++export interface PlaybackRoundSummary {
++  roundIndex: number
++  roundNumber: number
++  startCanonicalTick: number
++  endCanonicalTick: number
++}
++
++export interface ReplayReadyMessage {
++  type: 'REPLAY_READY'
++  schemaVersion: 'cs2d-replay-ready.v1'
++  map: string
++  tickRate: number
++  startCanonicalTick: number
++  endCanonicalTick: number
++  roundCount: number
++  rounds: PlaybackRoundSummary[]
++  players: PlaybackPlayerSummary[]
++  freezeSkipped: true
++}
++
++export interface PlayerSelectedMessage {
++  type: 'PLAYER_SELECTED'
++  playerId: string
++  displayName: string
++  side: 'T' | 'CT'
++  selectionIndex: number
++}
++
++export interface PlaybackStateMessage {
++  type: 'PLAYBACK_STATE'
++  roundIndex: number
++  canonicalTick: number
++  playing: boolean
++  speed: number
++}
++
++export type PlaybackEvent = ReplayReadyMessage | PlayerSelectedMessage | PlaybackStateMessage
++
++export type PlaybackCommand =
++  | { type: 'play' }
++  | { type: 'pause' }
++  | { type: 'seekCanonicalTick'; canonicalTick: number }
++  | { type: 'selectRound'; roundIndex: number }
++  | { type: 'setSpeed'; speed: number }
++
++interface EventEnvelope {
++  channel: typeof PLAYBACK_BRIDGE_CHANNEL
++  direction: 'event'
++  payload: PlaybackEvent
++}
++
++interface CommandEnvelope {
++  channel: typeof PLAYBACK_BRIDGE_CHANNEL
++  direction: 'command'
++  payload: PlaybackCommand
++}
++
++function parentOrigin(): string | null {
++  try {
++    // cs2d navigates from `/` to a generated replay route after parsing. At
++    // that point document.referrer is the previous cs2d URL rather than the
++    // embedding Next shell, so the host supplies its origin explicitly.
++    const configured = new URL(window.location.href).searchParams.get('parentOrigin')
++    if (configured) {
++      const parsed = new URL(configured)
++      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.origin
++    }
++    return document.referrer ? new URL(document.referrer).origin : null
++  } catch {
++    return null
++  }
++}
++
++export function emitPlaybackEvent(payload: PlaybackEvent): void {
++  if (window.parent === window) return
++  const message: EventEnvelope = {
++    channel: PLAYBACK_BRIDGE_CHANNEL,
++    direction: 'event',
++    payload,
++  }
++  const origin = parentOrigin()
++  if (!origin) return
++  window.parent.postMessage(message, origin)
++}
++
++function isRecord(value: unknown): value is Record<string, unknown> {
++  return typeof value === 'object' && value !== null
++}
++
++function isFiniteNumber(value: unknown): value is number {
++  return typeof value === 'number' && Number.isFinite(value)
++}
++
++function isCommandEnvelope(value: unknown): value is CommandEnvelope {
++  if (!isRecord(value) || value.channel !== PLAYBACK_BRIDGE_CHANNEL || value.direction !== 'command') return false
++  const payload = value.payload
++  if (!isRecord(payload) || typeof payload.type !== 'string') return false
++  switch (payload.type) {
++    case 'play':
++    case 'pause':
++      return Object.keys(payload).length === 1
++    case 'seekCanonicalTick':
++      return Object.keys(payload).length === 2 && isFiniteNumber(payload.canonicalTick)
++    case 'selectRound':
++      return Object.keys(payload).length === 2 && isFiniteNumber(payload.roundIndex) && Number.isInteger(payload.roundIndex) && payload.roundIndex >= 0
++    case 'setSpeed':
++      return Object.keys(payload).length === 2 && isFiniteNumber(payload.speed) && payload.speed > 0
++    default:
++      return false
++  }
++}
++
++export function listenForPlaybackCommands(
++  handlers: {
++    play: () => void
++    pause: () => void
++    seekCanonicalTick: (tick: number) => void
++    selectRound: (roundIndex: number) => void
++    setSpeed: (speed: number) => void
++  },
++): () => void {
++  if (window.parent === window) return () => {}
++  const onMessage = (event: MessageEvent<unknown>) => {
++    const origin = parentOrigin()
++    if (!origin || event.source !== window.parent || event.origin !== origin || !isCommandEnvelope(event.data)) return
++    const command = event.data.payload
++    switch (command.type) {
++      case 'play':
++        handlers.play()
++        break
++      case 'pause':
++        handlers.pause()
++        break
++      case 'seekCanonicalTick':
++        handlers.seekCanonicalTick(command.canonicalTick)
++        break
++      case 'selectRound':
++        handlers.selectRound(command.roundIndex)
++        break
++      case 'setSpeed':
++        handlers.setSpeed(command.speed)
++        break
++    }
++  }
++  window.addEventListener('message', onMessage)
++  return () => window.removeEventListener('message', onMessage)
++}
++
++export function replayReadyMessage(replay: {
++  map: string
++  demoTickRate: number
++  players: { steamId: string; name: string; startSide: 'T' | 'CT' }[]
++  rounds: { number: number; freezeStartTick?: number; startTick: number; postEndTick?: number; endTick: number }[]
++}): ReplayReadyMessage {
++  const rounds = replay.rounds.map((round, roundIndex) => ({
++    roundIndex,
++    roundNumber: round.number,
++    startCanonicalTick: round.freezeStartTick ?? round.startTick,
++    endCanonicalTick: round.postEndTick ?? round.endTick,
++  }))
++  return {
++    type: 'REPLAY_READY',
++    schemaVersion: 'cs2d-replay-ready.v1',
++    map: replay.map,
++    tickRate: replay.demoTickRate,
++    startCanonicalTick: rounds[0]?.startCanonicalTick ?? 0,
++    endCanonicalTick: rounds.at(-1)?.endCanonicalTick ?? 0,
++    roundCount: rounds.length,
++    rounds,
++    players: replay.players.map((player) => ({
++      playerId: player.steamId,
++      displayName: player.name,
++      startSide: player.startSide,
++    })),
++    freezeSkipped: true,
++  }
++}
+diff --git a/apps/app/src/viewer/player/useReplay.ts b/apps/app/src/viewer/player/useReplay.ts
+index 576f3ac..6a9f55e 100644
+--- a/apps/app/src/viewer/player/useReplay.ts
++++ b/apps/app/src/viewer/player/useReplay.ts
+@@ -306,6 +306,32 @@ export function useReplay() {
+     seek(best)
+   }
+ 
++
++  /** Seek using the demo's canonical absolute tick without re-parsing Replay. */
++  function seekCanonicalTick(tick: number) {
++    const rep = replay.value
++    if (!rep || !Number.isFinite(tick)) return
++    const target = Math.round(tick)
++    let index = rep.rounds.findIndex((candidate) => {
++      const start = candidate.freezeStartTick ?? candidate.startTick
++      const end = candidate.postEndTick ?? candidate.endTick
++      return target >= start && target <= end
++    })
++    if (index < 0) {
++      index = target < (rep.rounds[0]?.freezeStartTick ?? rep.rounds[0]?.startTick ?? 0)
++        ? 0
++        : Math.max(0, rep.rounds.length - 1)
++    }
++    if (index !== roundIndex.value) selectRound(index)
++    const targetRound = rep.rounds[index]
++    const frames = targetRound?.frames
++    if (!targetRound || !frames.length) return
++    const freezeStart = targetRound.freezeStartTick ?? targetRound.startTick
++    const targetT = Math.max(0, (target - freezeStart) / (rep.demoTickRate || 64))
++    frameIndex.value = frameAtT(frames, targetT)
++    frac.value = 0
++  }
++
+   /**
+    * Bounds playback to a window of the current round, given in seconds (since
+    * freeze, same units as a frame's `t`), and seeks to its start. Pass `null` to
+@@ -427,6 +453,7 @@ export function useReplay() {
+     selectRound,
+     seek,
+     seekBySeconds,
++    seekCanonicalTick,
+     setClip,
+     play,
+     pause,

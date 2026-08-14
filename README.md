@@ -10,10 +10,11 @@
 
 ```bash
 pnpm install
-pnpm dev
+pnpm cs2d:setup   # 首次克隆固定版本的 cs2d、安装依赖并应用本地 host patch
+pnpm dev          # 同时启动 cs2d :5174 与教练壳 :3000
 ```
 
-打开 <http://localhost:3000>。
+打开 <http://localhost:3000>。默认入口是 cs2d 浏览器 Worker/WASM 回放宿主；旧回放链路保留在 <http://localhost:3000/legacy> 供迁移回归。
 
 DeepSeek 只负责把已有事实、判断和建议改写成更自然的直接讲解；未配置 key 时自动保留确定性模板，完整会话仍可运行。本地可选配置：
 
@@ -22,7 +23,7 @@ cp apps/web/.env.local.example apps/web/.env.local
 # 再把 DEEPSEEK_API_KEY 写入未跟踪的 apps/web/.env.local
 ```
 
-隔离的 PixiJS 迁移 PoC 位于 <http://localhost:3000/pixi-poc>。它用于验证统一 frame、真实雷达和玩家信息边界，当前不会替换 AI 带看的主地图。
+新的主地图直接运行固定版本的 cs2d 源码及其 Vue/Vite Worker/WASM 播放器，主仓库只保存可重放 patch，不复制整份上游源码或构建产物。隔离的旧 PixiJS PoC 仍位于 <http://localhost:3000/pixi-poc>，仅作迁移回归。
 
 前端与 TypeScript 领域验证：
 

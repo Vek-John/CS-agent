@@ -50,3 +50,18 @@ renderer uses the project's existing version-pinned manifest:
 
 No csfreezetime or cs2replays radar image, game icon, brand, or proprietary
 asset is copied.
+
+## cs2d localhost source reference
+
+Repository: <https://github.com/zenojunior/cs2d>
+
+Pinned commit: `dbbe698c9b9c91f9a14cecea92374b4114bf60ec`
+
+The localhost playback host clones that exact upstream commit into the ignored
+`.local-data/upstream/cs2d` directory and applies
+`tools/cs2d-host/patches/0001-cs2d-playback-host.patch`. The repository did
+not contain a `LICENSE`, package license, or other explicit grant when audited
+on 2026-08-14. Consequently the upstream source, WASM, maps, icons, and build
+outputs are not vendored into this repository and are not part of the Cloudflare
+deployment. This integration remains a localhost source-reference PoC until the
+upstream license is clarified.
