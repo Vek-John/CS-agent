@@ -391,7 +391,7 @@ export function Cs2dPlaybackHost() {
           max={tickMax}
           value={tick}
           disabled={!replay}
-          onChange={(event) => seekFromTimeline(Number(event.target.value))}
+          onInput={(event) => seekFromTimeline(Number(event.currentTarget.value))}
         />
         <output>{replay ? `${Math.max(0, Math.round(((tick - tickMin) / Math.max(1, tickMax - tickMin)) * 100))}%` : "—"}</output>
       </footer>
