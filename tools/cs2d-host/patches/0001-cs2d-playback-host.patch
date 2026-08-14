@@ -350,7 +350,7 @@ index 9c4c084..f465c0f 100644
              </div>
            </div>
 diff --git a/apps/app/src/viewer/player/ViewerMap.vue b/apps/app/src/viewer/player/ViewerMap.vue
-index e737b9b..7bbe4fd 100644
+index e737b9b..97014d6 100644
 --- a/apps/app/src/viewer/player/ViewerMap.vue
 +++ b/apps/app/src/viewer/player/ViewerMap.vue
 @@ -1,5 +1,6 @@
@@ -474,7 +474,7 @@ index e737b9b..7bbe4fd 100644
    draw: () => draw(),
  })
  
-@@ -1599,6 +1619,14 @@ function reset() {
+@@ -1599,6 +1619,19 @@ function reset() {
    draw()
  }
  
@@ -482,7 +482,12 @@ index e737b9b..7bbe4fd 100644
 +  () => [props.hostCameraMode, props.hostCameraRevision] as const,
 +  ([mode]) => {
 +    if (mode === 'full') reset()
-+    else draw()
++    else if (mode === 'target') {
++      // A coaching pause must visibly frame the problem rather than only pan the
++      // 1× overview. Keep enough surrounding map for routes and nearby trades.
++      followZoom.value = 2.45
++      draw()
++    }
 +  },
 +)
 +
