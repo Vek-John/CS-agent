@@ -1,120 +1,88 @@
 # CS2 AI Demo Coach
 
-当前仓库交付一个 `localhost` 最小可用纵向切片：用户可从本机选择 `.dem`、在识别出的 10 名玩家中指定分析主体，AI 再带用户走完整场；低价值区间显式跳过，关键接触在结果前暂停、讲解、播放结果、回看和追问，全部完成后才生成总结。内置样本当前为 5 个讲解点，另选玩家会依真实事件生成自己的讲解点数量。真实地图回放是讲解证据画布与二级“自由复查”入口，不是并列主产品；四回合合成夹具只保留为开发测试回退。
+当前交付是一个可运行的 `localhost` 纵向 MVP：用户选择本地 `.dem`，cs2d 在浏览器内解析并显示真实 2D 回放；用户选择一名玩家后，AI 教练接管同一个播放头，自动跳过冻结/低价值片段，在决策前暂停并直接讲解，点击“看结果”后播放结果，可回看或继续，整场结束后再总结。
 
-架构事实以 [ARCHITECTURE.md](./ARCHITECTURE.md) 为准；[PRD.md](./PRD.md) 与 [MVP_SCOPE.md](./MVP_SCOPE.md) 分别定义产品和首版边界。
+长期架构唯一事实来源是 [ARCHITECTURE.md](./ARCHITECTURE.md)，本次底座决策见 [ADR-0002](./docs/adr/ADR-0002-adopt-cs2d-localhost-playback-substrate.md)。
 
 ## 本地运行
 
-需要 Node.js 22+ 与 pnpm 11+。
+需要 Node.js 22+、pnpm 11+、Git 和 Rust/WASM 构建依赖已就绪。
 
 ```bash
 pnpm install
-pnpm cs2d:setup   # 首次克隆固定版本的 cs2d、安装依赖并应用本地 host patch
-pnpm dev          # 同时启动 cs2d :5174 与教练壳 :3000
+pnpm cs2d:setup   # 克隆固定 cs2d commit、应用 host patch、安装上游依赖
+pnpm dev          # cs2d http://localhost:5174 + 教练壳 http://localhost:3000
 ```
 
-打开 <http://localhost:3000>。默认入口是 cs2d 浏览器 Worker/WASM 回放宿主；旧回放链路保留在 <http://localhost:3000/legacy> 供迁移回归。
+打开 <http://localhost:3000>，点击回放区域选择本机 `.dem`。文件直接进入 cs2d 的浏览器 File/Worker/WASM 管线，不上传到 Next，也不写入服务器。
 
-DeepSeek 只负责把已有事实、判断和建议改写成更自然的直接讲解；未配置 key 时自动保留确定性模板，完整会话仍可运行。本地可选配置：
+旧实现仅用于回归：
+
+- <http://localhost:3000/legacy>：Python ReplayBundle / 旧回放链路；
+- <http://localhost:3000/pixi-poc>：已停止扩展的自研 PixiJS PoC。
+
+## DeepSeek
+
+DeepSeek 只润色已经存在的匿名决策侧事实、判断和建议；它不读取原始 Demo、完整事件流、稳定玩家 ID 或未来结果。缺少 key、超时或输出校验失败时自动保留确定性讲解，回放会话仍可继续。
+
+本地可选：
 
 ```bash
 cp apps/web/.env.local.example apps/web/.env.local
-# 再把 DEEPSEEK_API_KEY 写入未跟踪的 apps/web/.env.local
+# 只在未跟踪的 apps/web/.env.local 中填写 DEEPSEEK_API_KEY
 ```
 
-新的主地图直接运行固定版本的 cs2d 源码及其 Vue/Vite Worker/WASM 播放器，主仓库只保存可重放 patch，不复制整份上游源码或构建产物。隔离的旧 PixiJS PoC 仍位于 <http://localhost:3000/pixi-poc>，仅作迁移回归。
-
-前端与 TypeScript 领域验证：
-
-```bash
-pnpm check
-```
-
-Cloudflare 上只需添加 Worker Secret；不要把 key 写入 `wrangler.jsonc`、GitHub 或任何 `NEXT_PUBLIC_*` 变量：
+Cloudflare 配置：
 
 ```bash
 pnpm exec wrangler secret put DEEPSEEK_API_KEY --config wrangler.jsonc
+# 可选普通变量：DEEPSEEK_MODEL=deepseek-v4-flash 或 deepseek-v4-pro
 ```
 
-默认模型是 `deepseek-v4-flash`；如需覆盖，在 Cloudflare 配置普通变量 `DEEPSEEK_MODEL=deepseek-v4-flash` 或 `deepseek-v4-pro`。`main` 的 Cloudflare 构建只承载 Web 和讲解 API，当前不在线运行 Python Demo parser；本地 `.dem` 上传解析仍只在 localhost 可用。
+任何 key 都不要写入 `wrangler.jsonc`、GitHub、日志或 `NEXT_PUBLIC_*` 变量。Cloudflare 当前只部署 Next 教练壳和 `/api/coaching/narrate`；由于 cs2d 上游没有明确许可证，cs2d 源码/WASM/资产不进入 Cloudflare 构建，线上暂不提供 `.dem` 回放。
 
-真实 Demo Parser Adapter 使用 Python 3.12。首次建立本地环境：
+## 当前已经能做什么
+
+- 解析本地 `.dem`，显示真实阶段与 tick 进度条；
+- 在 Mirage 真实雷达和多楼层上播放 10 人位置、存活、朝向、击杀、炸弹、掉落武器与投掷物；
+- 地图两侧显示紧凑 5+5 HUD：姓名、金钱、道具/C4、生命、护甲/头盔和当前手持；C4/轨迹只读取当前播放位置以前的事实；
+- 从 10 名玩家中选择一次分析主体；
+- 从同一份 cs2d Replay 派生连续 `MatchTimeline`、内部 `ObservableState` 和 `ReviewPlan`，不二次解析 Demo；
+- 自动消费冻结时间与低价值区间，全场最多安排 8 个跨回合教学停顿；
+- 在 `decision_tick` 暂停后直接给出事实、判断、理由和一个主动作，不要求用户先预测；
+- 点击“看结果”后在同一张全知地图推进 outcome，可“再看一遍”或“继续下一段”；
+- 完整走完 ReviewPlan 后才进入全场总结；
+- 模型不可用时使用确定性模板，数据与播放进度不丢失。
+
+地图始终显示当前 tick 的全知事实。`ObservableState` 只作为规则/LLM 的内部证据白名单，不在 UI 中显式显示“玩家已知”模式；地图全知显示不能被教练当作决策前证据。
+
+## 验证
 
 ```bash
-/opt/anaconda3/bin/python -m venv .venv
-.venv/bin/python -m pip install -e 'workers/analysis[test]'
-.venv/bin/python -m pytest -q -m 'not slow' workers/analysis/tests
+pnpm test
+pnpm typecheck
+pnpm build
+pnpm cs2d:typecheck
+pnpm --dir .local-data/upstream/cs2d --filter cs2-demo-viewer build
 ```
 
-默认测试包含 `demoTests/test_demo.dem` 单样本；433 MB Demo 仅在显式设置 `CS2_RUN_LARGE_DEMO_TESTS=1` 时做轻量检查。
-
-生成/刷新 localhost 真实回放数据：
-
-```bash
-.venv/bin/python -m cs2_demo_parser.build_replay \
-  demoTests/test_demo.dem \
-  apps/web/public/generated-data/test_demo.replay.json
-```
-
-显式选择分析玩家：
-
-```bash
-.venv/bin/python -m cs2_demo_parser.build_replay \
-  demoTests/test_demo.dem \
-  apps/web/public/generated-data/test_demo.replay.json \
-  --selected-player-id 76561198244754626
-```
-
-缓存 Valve/Steam 托管的游戏物品图标与版本清单：
-
-```bash
-pnpm assets:valve-items
-```
-
-生成文件、上传原始 Demo、本地 Valve 雷达和物品图标缓存都在 `.gitignore` 中；执行 `pnpm dev` 后打开 <http://localhost:3000>。
-
-## 当前已经能验证
-
-- 默认进入本机 Demo 选择入口；预检只读取地图与 10 名玩家，选择主体后才生成 AI 全场带看；
-- 真实 Mirage 雷达、固定 world→radar 标定与 10 名玩家同步；
-- `test_demo.dem` 的 10 回合、23,846 条状态样本和 7,374 个事件可在 Web 时间轴播放；
-- 150 条 parser 投掷物轨迹将 87,024 个有效坐标压缩为 9,967 个可追溯点，并展示飞行路径和解析器终点；
-- HUD 显示逐样本阵营、生命、护甲、经济、当前手持、库存、拆弹器/C4；不可得字段显示未知；
-- 10 名玩家栏紧凑放在地图两侧，地图与名单下方是共享 canonical tick 的播放条和完整比赛进度；
-- 当前手持与库存使用版本锁定、本机缓存的 Valve/Steam 游戏物品图片；清单缺项时保留规范化文字，不拼接外部 URL；
-- “完整复盘 / 玩家已知”数据层明确分离；20 个主体视角检查点包含自身状态与保守声音方向证据；
-- 脚步/枪声只显示“可能听见的未知来源区域”，不据隐藏真值标出具体敌人；
-- `ReviewPlan` 以 38 个半开 tick 区间连续覆盖真实 10 回合及回合间隙，无空洞或重叠；
-- `SKIP` 片段显示原因并允许展开；
-- `DEEP_DIVE` / `HABIT_CHECK` 在决策前暂停；
-- 结果揭示前，讲解和当前局面追问只能引用玩家当时可知事实；
-- 播放结果后可回看，再继续到后续回合；
-- 总结只从已消费的讲解点生成，并在全场路径完成前保持锁定。
-- DeepSeek Cloudflare route 一场最多处理 32 个 cue；真实 Falcons/Spirit 的 15 个 cue 已覆盖。缺 key、超时或上游失败时无感回退到确定性直接讲解；
-- `/pixi-poc` 已用 `test_demo` 与 Falcons/Spirit 跑通统一 `PlaybackFrameViewModel`、Pixi ticker 和知识帧白名单，迁移证据见 `docs/experiments/pixi-playback-poc-2026-08-13.md`。
+`test_demo.dem` 已通过真实浏览器链路：58 MB 本地解析、9 个正式回合、10 人选择、自动跳过、决策前暂停、同图结果播放与继续下一段。旧 Python worker 仍保留 Falcons/Spirit 首 tick 占位 `round_end` 的回归修复。
 
 ## 当前限制
 
-- `apps/web` 仍是 localhost BFF，没有 FastAPI、队列 Worker、LangGraph 或多用户服务；上传文件与作业元数据保存在 `.local-data/demo-jobs`，可跨开发服务重启恢复，但当前 UI 尚无删除入口；
-- 投掷物落点只使用 parser 轨迹末端或生命周期事件，不推断投掷起手 tick；没有明确半径事实时不绘制烟雾/燃烧范围；
-- 当前教学信号是确定性的“主体死亡前接触生存复查”规则，尚不覆盖站位、经济、道具配合、残局等完整教练 taxonomy；死亡只作为复查入口，不被当作错误证明；
-- 声音可听性仅用距离阈值做 `POSSIBLY_AUDIBLE` 保守判断，尚未建模墙体遮挡、同时噪声和语音；
-- 当前只接受 `de_mirage` 的单个 `.dem` 文件，最大 512 MB；浏览器把文件流式写入本地作业目录，尚未实现断点续传；
-- 状态采用 24-tick 网格加回合边界；播放器只对连续存活、同阵营的真实位置/朝向做显示插值，离散装备状态保持前值；
-- 库存数量不可得时以 `count=1` 呈现并在 coverage/manifest 标注限制；C4 只在直接库存名出现时判真；
-- 第 10 回合缺少 parser `freeze_end`，Bundle 以该回合 start tick 作为播放器边界回退并记录 warning；
-- 当前 cue 讲解可由 DeepSeek 润色；用户自由追问仍由证据约束模板回答，尚未接入通用 LLM 问答；
+- 当前分析仅支持 `de_mirage`；其他地图可由 cs2d 回放，但 Adapter 会诚实拒绝生成教练计划；
+- cs2d Frame 常见约 8 Hz，下采样状态不是逐 tick 无损；GrenadePath 时间约为 0.1 秒精度；
+- cs2d 当前缺少可靠逐次 HurtEvent、ShotEvent shooter、完整声学遮挡、队内语音和战术上下文，因此建议以自身状态与可验证决策上下文为主；
+- 当前 deterministic signal 以选手参与的接触、生命变化、持包和投掷物为教学索引，已限制到 4–8 个停顿，但还没有职业样本检索、复杂站位/补枪模型或自由追问；
+- 一次选择玩家后若分析失败，当前通过重新载入 Demo 重试；会话进度还没有持久化；
+- cs2d 固定 commit `dbbe698c9b9c91f9a14cecea92374b4114bf60ec` 未发现明确 LICENSE，当前只作为 localhost source-reference；详见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
 
-真实雷达与物品图标都作为版本化 localhost 本地缓存使用；图标目录记录源 URL、内容 SHA-256、生成器版本和 `LOCALHOST_ONLY` 权利状态。用户已授权本地使用这些 Valve 游戏内容；公开分发前仍需单独复核。没有复制参考站点的 UI、布局、组件、品牌或自有图标。生成资产、生成数据、上传原始文件、`.venv` 和解析缓存均被忽略，不随源码提交。
+## 主要代码边界
 
-## 代码边界
-
-- `apps/web`：localhost 在线 2D 会话页；
-- `libs/contracts`：首批 TypeScript 语义契约；
-- `libs/demo-domain`：合成时间轴夹具、Parser Port 和轨迹采样；
-- `libs/review-planner`：全场覆盖与未来信息边界校验；
-- `libs/session`：确定性会话安全内核、受限追问和总结门禁；
-- `workers/analysis`：Python Demo Parser Adapter 与确定性 ReplayBundle builder，可读取真实小 Demo 的玩家、回合、状态以及击杀/伤害/脚步/开火/投掷物/炸弹事件；缺失字段以 coverage、warning 和 generation manifest 返回。
-
-真实媒体验证遵循单样本优先：先处理一条已授权视频或一份 Demo，人工确认时间轴与边界，再批量扩展。视频媒体时间不得冒充精确 Demo tick。
+- `apps/web/components/cs2d-playback-host.tsx`：Next 教练壳与 Session 集成；
+- `apps/web/lib/cs2d-guided-session.ts`：Session → cs2d 播放命令的纯映射；
+- `libs/cs2d-analysis-adapter`：结构化 Replay → MatchTimeline / Observation / ReviewPlan；
+- `libs/contracts/src/playback-bridge.ts`：严格 iframe bridge 契约；
+- `libs/session`：确定性会话 reducer、冻结时间自动消费与总结门禁；
+- `tools/cs2d-host/patches/0001-cs2d-playback-host.patch`：固定上游的最小 HUD/bridge/Adapter patch；
+- `workers/analysis`、`/legacy`、`/pixi-poc`：迁移回归，不是默认产品数据流。

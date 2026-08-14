@@ -26,6 +26,7 @@ describe("cs2d localhost host boundary", () => {
     });
     expect(() => cs2dHostConfig("file:///tmp/index.html")).toThrow(/http/);
     expect(() => cs2dHostConfig(undefined, "file:///tmp/parent.html")).toThrow(/parent origin/);
+    expect(() => cs2dHostConfig("https://replay.example.com/")).toThrow(/localhost/);
   });
   it("requires both iframe source and exact origin", () => {
     expect(acceptedPlaybackEvent({ data: event, eventOrigin: "http://localhost:5174", expectedOrigin: "http://localhost:5174", sourceMatches: true })).toEqual(event);

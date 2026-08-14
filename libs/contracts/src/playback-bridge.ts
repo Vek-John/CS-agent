@@ -38,7 +38,25 @@ export interface PlaybackStateEvent {
   playing: boolean;
   speed: number;
 }
-export type PlaybackBridgeEvent = ReplayReadyEvent | PlayerSelectedEvent | PlaybackStateEvent;
+export interface AnalysisReadyEvent {
+  type: "ANALYSIS_READY";
+  schemaVersion: "cs2d-analysis-ready.v1";
+  selectedPlayerId: string;
+  /** Strictly validated adapter output; the raw Replay never crosses the iframe. */
+  bundleJson: string;
+}
+export interface AnalysisFailedEvent {
+  type: "ANALYSIS_FAILED";
+  schemaVersion: "cs2d-analysis-ready.v1";
+  selectedPlayerId: string;
+  message: string;
+}
+export type PlaybackBridgeEvent =
+  | ReplayReadyEvent
+  | PlayerSelectedEvent
+  | PlaybackStateEvent
+  | AnalysisReadyEvent
+  | AnalysisFailedEvent;
 export type PlaybackCommand =
   | { type: "play" }
   | { type: "pause" }
@@ -104,6 +122,16 @@ function isEvent(value: unknown): value is PlaybackBridgeEvent {
   if (value.type === "PLAYBACK_STATE") {
     return exactKeys(value, ["type", "roundIndex", "canonicalTick", "playing", "speed"]) && safeIndex(value.roundIndex) &&
       finite(value.canonicalTick) && typeof value.playing === "boolean" && finite(value.speed) && value.speed > 0 && value.speed <= 16;
+  }
+  if (value.type === "ANALYSIS_READY") {
+    return exactKeys(value, ["type", "schemaVersion", "selectedPlayerId", "bundleJson"]) &&
+      value.schemaVersion === "cs2d-analysis-ready.v1" && nonEmpty(value.selectedPlayerId) &&
+      nonEmpty(value.bundleJson) && value.bundleJson.length <= 32 * 1024 * 1024;
+  }
+  if (value.type === "ANALYSIS_FAILED") {
+    return exactKeys(value, ["type", "schemaVersion", "selectedPlayerId", "message"]) &&
+      value.schemaVersion === "cs2d-analysis-ready.v1" && nonEmpty(value.selectedPlayerId) &&
+      nonEmpty(value.message) && value.message.length <= 512;
   }
   return false;
 }

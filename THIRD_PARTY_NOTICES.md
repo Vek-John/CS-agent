@@ -1,6 +1,6 @@
 # Third-party notices
 
-This file records the limited upstream audit for the isolated replay PoC. It
+This file records the limited upstream audit for localhost replay integrations. It
 does not grant rights to map or game assets.
 
 ## MIT code references
@@ -57,11 +57,14 @@ Repository: <https://github.com/zenojunior/cs2d>
 
 Pinned commit: `dbbe698c9b9c91f9a14cecea92374b4114bf60ec`
 
-The localhost playback host clones that exact upstream commit into the ignored
+The default localhost playback host clones that exact upstream commit into the ignored
 `.local-data/upstream/cs2d` directory and applies
 `tools/cs2d-host/patches/0001-cs2d-playback-host.patch`. The repository did
 not contain a `LICENSE`, package license, or other explicit grant when audited
 on 2026-08-14. Consequently the upstream source, WASM, maps, icons, and build
 outputs are not vendored into this repository and are not part of the Cloudflare
-deployment. This integration remains a localhost source-reference PoC until the
-upstream license is clarified.
+deployment. The patch adds the compact 5+5 HUD, local host bridge and a link to
+the repository-owned `@cs-coach/cs2d-analysis-adapter`; raw Replay data remains
+inside the iframe. This is the accepted localhost source-reference substrate,
+but it is not approved for public redistribution until the upstream license is
+clarified or replaced.

@@ -44,13 +44,14 @@ export const CS2D_SOURCE = {
   input_boundary: "WASM_WORKER_STRUCTURED_REPLAY_ONLY"
 } as const;
 
-export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.0.0" as const;
+export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.1.0" as const;
 export const CS2D_TIMELINE_VERSION = "zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec/timeline/1.0.0" as const;
 export const CS2D_OBSERVATION_VERSION = "cs2d-analysis-adapter/1.0.0/internal-observation" as const;
-export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.0.0/signals" as const;
-export const CS2D_PLANNER_VERSION = "cs2d-analysis-adapter/1.0.0/planner" as const;
+export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.1.0/signals" as const;
+export const CS2D_PLANNER_VERSION = "cs2d-analysis-adapter/1.1.0/planner" as const;
 
-const MAX_TEACHING_CUES = 32;
+/** MVP pacing target: a full match should feel coached, not interrupted. */
+const MAX_TEACHING_CUES = 8;
 const OUTCOME_WINDOW_SECONDS = 4;
 
 export const CS2D_LIMITATIONS = {
@@ -535,9 +536,32 @@ function classifyItem(item: string): string {
   if (["smoke", "fire", "he", "flash", "decoy", "molotov", "incendiary"].some((word) => normalized.includes(word))) {
     return "UTILITY";
   }
-  if (normalized.includes("knife")) return "KNIFE";
+  if (
+    normalized.includes("knife") ||
+    normalized.includes("bayonet") ||
+    normalized === "faca" ||
+    normalized.includes("karambit")
+  ) return "KNIFE";
   if (normalized.includes("bomb") || normalized === "c4") return "BOMB";
   return "WEAPON";
+}
+
+function decisionHabitKey(candidate: SignalCandidate): string {
+  const source = candidate.state?.source;
+  let context = "contact-preparation";
+  if (source) {
+    const activeClass = classifyItem(safeText(source.weapon, "UNKNOWN_ITEM"));
+    if (activeClass === "BOMB") context = "bomb-carrier-safety";
+    else if (activeClass === "UTILITY") context = "utility-readiness";
+    else if (source.health <= 45) context = "low-health-survival";
+    else if (activeClass === "KNIFE") context = "rotation-safety";
+    else if (source.armor <= 0) context = "unarmored-contact";
+  }
+
+  const liveSpan = Math.max(1, candidate.round.decidedTick - candidate.round.freezeEndTick);
+  const progress = (candidate.decisionTick - candidate.round.freezeEndTick) / liveSpan;
+  const phase = progress < 0.34 ? "early" : progress < 0.72 ? "mid" : "late";
+  return `${context}.${phase}`;
 }
 
 function collectStates(
@@ -738,8 +762,8 @@ function selectCandidates(
   tickRate: number,
   warnings: string[]
 ): SelectedCandidate[] {
-  const groupedCounts = new Map<string, number>();
-  const selected: SelectedCandidate[] = [];
+  type WindowedCandidate = SignalCandidate & { outcomeEndTick: number };
+  const accepted: WindowedCandidate[] = [];
   let cursorByRound = new Map<number, number>();
   const outcomeSpan = Math.max(1, Math.round(tickRate * OUTCOME_WINDOW_SECONDS));
 
@@ -748,17 +772,62 @@ function selectCandidates(
     if (candidate.decisionTick < cursor || candidate.revealTick <= candidate.decisionTick || candidate.revealTick >= candidate.round.decidedTick) continue;
     const outcomeEndTick = Math.min(candidate.round.decidedTick, Math.max(candidate.revealTick + 1, candidate.revealTick + outcomeSpan));
     if (outcomeEndTick <= candidate.revealTick) continue;
-    const occurrenceIndex = (groupedCounts.get(candidate.habitKey) ?? 0) + 1;
-    groupedCounts.set(candidate.habitKey, occurrenceIndex);
-    selected.push({ ...candidate, outcomeEndTick, occurrenceIndex });
+    accepted.push({
+      ...candidate,
+      habitKey: decisionHabitKey(candidate),
+      outcomeEndTick
+    });
     cursorByRound = new Map(cursorByRound).set(candidate.round.number, outcomeEndTick);
   }
 
-  if (selected.length > MAX_TEACHING_CUES) {
-    issue(warnings, `Teaching cues were capped at ${MAX_TEACHING_CUES}; all timeline segments remain covered.`);
-    return selected.slice(0, MAX_TEACHING_CUES);
+  const priority: Record<SignalKind, number> = { DEATH: 0, HP_CHANGE: 1, KILL: 2, BOMB: 3, UTILITY: 4 };
+  const byRound = new Map<number, WindowedCandidate[]>();
+  for (const candidate of accepted) {
+    const group = byRound.get(candidate.round.number) ?? [];
+    group.push(candidate);
+    byRound.set(candidate.round.number, group);
   }
-  return selected;
+
+  const representativePerRound = [...byRound.values()]
+    .map((group) => [...group].sort((left, right) =>
+      priority[left.kind] - priority[right.kind] ||
+      left.decisionTick - right.decisionTick ||
+      left.sourceRef.localeCompare(right.sourceRef)
+    )[0])
+    .filter((candidate): candidate is WindowedCandidate => Boolean(candidate))
+    .sort((left, right) => left.decisionTick - right.decisionTick);
+
+  let chosen: WindowedCandidate[];
+  if (representativePerRound.length > MAX_TEACHING_CUES) {
+    const indexes = new Set<number>();
+    for (let index = 0; index < MAX_TEACHING_CUES; index += 1) {
+      indexes.add(Math.round(index * (representativePerRound.length - 1) / (MAX_TEACHING_CUES - 1)));
+    }
+    chosen = [...indexes].map((index) => representativePerRound[index]).filter(Boolean);
+  } else {
+    chosen = [...representativePerRound];
+    const chosenRefs = new Set(chosen.map((candidate) => candidate.sourceRef));
+    const remaining = accepted
+      .filter((candidate) => !chosenRefs.has(candidate.sourceRef))
+      .sort((left, right) =>
+        priority[left.kind] - priority[right.kind] ||
+        left.decisionTick - right.decisionTick ||
+        left.sourceRef.localeCompare(right.sourceRef)
+      );
+    chosen.push(...remaining.slice(0, Math.max(0, MAX_TEACHING_CUES - chosen.length)));
+  }
+
+  chosen.sort((left, right) => left.decisionTick - right.decisionTick || left.sourceRef.localeCompare(right.sourceRef));
+  if (accepted.length > chosen.length) {
+    issue(warnings, `Teaching cues were paced to ${chosen.length}/${accepted.length} candidates (maximum ${MAX_TEACHING_CUES}); all timeline segments remain covered.`);
+  }
+
+  const groupedCounts = new Map<string, number>();
+  return chosen.map((candidate) => {
+    const occurrenceIndex = (groupedCounts.get(candidate.habitKey) ?? 0) + 1;
+    groupedCounts.set(candidate.habitKey, occurrenceIndex);
+    return { ...candidate, occurrenceIndex };
+  });
 }
 
 function buildRoundTimeline(round: NormalizedRound): RoundTimeline {
@@ -815,7 +884,7 @@ function worldAnnotation(state: NormalizedState | undefined): Annotation[] {
   }];
 }
 
-function cueText(isHabit: boolean): {
+function cueText(habitKey: string, isHabit: boolean): {
   title: string;
   explanation: string;
   advice: string;
@@ -823,13 +892,59 @@ function cueText(isHabit: boolean): {
   ruleId: string;
   taxonomy: string;
 } {
+  const context = habitKey.split(".")[0];
+  const base = context === "utility-readiness"
+    ? {
+        title: "道具出手前先定义它要创造的窗口",
+        explanation: "教练判断：你现在手持道具，先确认它要阻断哪条视线、帮助谁启动，以及出手后能否安全回到掩体。",
+        advice: "先用一句话定义这颗道具的目标；队友尚未能同步就保留，能同步时再出手。",
+        trigger: "手持道具并准备离开掩体或进入投掷动作时",
+        ruleId: "utility-window"
+      }
+    : context === "low-health-survival"
+      ? {
+          title: "低血量时把第一接触让给更有容错的人",
+          explanation: "教练判断：当前生命值压低了你的换血容错，优先保留交叉、补枪或延迟信息价值，而不是主动承担第一接触。",
+          advice: "让高血量队友先确认接触，你从第二枪线补枪；独自时只做能立刻撤回的短探。",
+          trigger: "生命值较低且下一步可能进入正面接触时",
+          ruleId: "low-health-second-contact"
+        }
+      : context === "rotation-safety"
+        ? {
+            title: "切刀提速前先确认这段路已经安全",
+            explanation: "教练判断：刀在手能换来速度，也会放大突然接触的代价；先用已有信息确认安全窗口，再决定提速距离。",
+            advice: "只在已确认安全的路段切刀；接近未知拐角前提前切回武器并完成预瞄。",
+            trigger: "刀在手且即将进入未确认区域时",
+            ruleId: "rotation-weapon-ready"
+          }
+        : context === "bomb-carrier-safety"
+          ? {
+              title: "持包决策先保证掉包位置可以回收",
+              explanation: "教练判断：你承担的不只是个人对枪，C4 的可回收性会改变全队后续选择；先把包留在队友能接应的位置。",
+              advice: "不要带包单独穿过未知区域；需要先探时把包交出，或让队友建立可回收枪线。",
+              trigger: "携带 C4 且准备脱离队友覆盖时",
+              ruleId: "bomb-recoverability"
+            }
+          : context === "unarmored-contact"
+            ? {
+                title: "无甲接触更依赖第一枪和撤回线",
+                explanation: "教练判断：当前护甲不足会降低连续换血容错，接触前要让准星、掩体和撤回方向同时就位。",
+                advice: "先把准星落在最可能的第一接触位，只暴露能立即撤回的身位，不做长距离连续找人。",
+                trigger: "护甲不足且准备离开掩体进入接触区时",
+                ruleId: "unarmored-contact-discipline"
+              }
+            : {
+                title: "接触前把准星和撤回路线对齐",
+                explanation: "教练判断：当前最重要的是让第一枪位置、可撤回掩体和队友接应形成同一个动作，而不是边移动边临时决定。",
+                advice: "进入未知角度前先停半拍确认准星与退路；没有新增信息时保留可调整站位。",
+                trigger: "准备进入下一段未知枪线且退出条件尚未确认时",
+                ruleId: "contact-preparation"
+              };
+
   return {
-    title: isHabit ? "再次检查决策前的可撤回选择" : "决策前先保留可撤回选择",
-    explanation: "教练直接说明：当前信息不足以承诺下一步，先把可撤回路线、准星位置和队友接应一起纳入判断。",
-    advice: "先确认可撤回路线、准星位置和队友接应；没有新增信息时保持可调整的位置。",
-    trigger: "准备进入下一段高风险动作且退出条件尚未确认时",
-    ruleId: "r1",
-    taxonomy: "decision.reset"
+    ...base,
+    title: isHabit ? `再次出现：${base.title}` : base.title,
+    taxonomy: habitKey
   };
 }
 
@@ -838,7 +953,9 @@ function stateFactText(state: NormalizedState): string {
   const weapon = safeText(source.weapon, "未知手持");
   const hp = finiteNumber(source.health) ? String(Math.max(0, source.health)) : "未知";
   const armor = finiteNumber(source.armor) ? String(Math.max(0, source.armor)) : "未知";
-  return `当前可验证的自身状态：生命值 ${hp}，护甲 ${armor}，手持 ${weapon}；位置来自下采样 Frame。`;
+  const helmet = source.helmet === true ? "有头盔" : "无头盔";
+  const utilityCount = asArray(source.grenades).length;
+  return `当前可验证的自身状态：生命值 ${hp}，护甲 ${armor}（${helmet}），手持 ${weapon}，剩余道具 ${utilityCount}；位置来自下采样 Frame。`;
 }
 
 function buildCue(
@@ -884,7 +1001,7 @@ function buildCue(
     });
   }
 
-  const text = cueText(candidate.occurrenceIndex > 1);
+  const text = cueText(candidate.habitKey, candidate.occurrenceIndex > 1);
   const inferenceId = `i${counters.inference++}`;
   const adviceId = `a${counters.advice++}`;
   const evidenceId = `e${counters.evidence++}`;
@@ -1072,10 +1189,10 @@ function buildPlanSegments(
   segments.sort((left, right) => left.start_tick - right.start_tick || left.end_tick - right.end_tick || left.id.localeCompare(right.id));
 
   const habitClusters = [...habitCueIds.entries()]
-    .filter(([, cueIds]) => cueIds.length >= 2)
+    .filter(([, cueIds]) => cueIds.length >= 1)
     .map(([habitKey, cueIds], index) => ({
       id: `habit-${index + 1}`,
-      title: "同类决策前反复需要重置",
+      title: cueText(habitKey, false).title,
       taxonomy_id: habitKey,
       cue_ids: cueIds,
       occurrence_count: cueIds.length,
@@ -1204,7 +1321,7 @@ function failedBundle(input: Cs2dAnalysisInput, metadata: Cs2dAnalysisMetadata, 
       signal_version: CS2D_SIGNAL_VERSION,
       planner_version: CS2D_PLANNER_VERSION,
       provider: "DETERMINISTIC_TEMPLATE",
-      prompt_version: "cs2d-decision-template/1.0.0",
+      prompt_version: "cs2d-decision-template/1.1.0",
       status: "FALLBACK",
       narration_deterministic: true,
       analysis_subject_selection: "EXPLICIT_PLAYER",

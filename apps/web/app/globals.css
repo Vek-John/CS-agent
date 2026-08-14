@@ -2078,6 +2078,49 @@ button:disabled {
 .cs2d-coach-badge { padding: 0.22rem 0.4rem; border: 0.0625rem solid rgba(48,209,88,0.25); border-radius: 99rem; color: #78e993; font: 650 0.49rem/1 ui-monospace, monospace; }
 .cs2d-coach-card { margin-top: 0.8rem; padding: 0.75rem; border: 0.0625rem solid var(--line); border-radius: 0.8rem; background: rgba(255,255,255,0.035); }
 .cs2d-coach-card p { margin: 0.3rem 0 0; color: var(--text-secondary); font-size: 0.67rem; line-height: 1.55; }
+.cs2d-coach-card--error { border-color: rgba(255,69,58,0.35); background: rgba(255,69,58,0.075); }
+.cs2d-coach-card--error small { color: #ff8f88; }
+.cs2d-coach-cue,
+.cs2d-coach-summary {
+  margin-top: 0.8rem;
+  padding: 0.85rem;
+  border: 0.0625rem solid rgba(100,170,255,0.24);
+  border-radius: 0.9rem;
+  background: linear-gradient(145deg, rgba(10,132,255,0.1), rgba(255,255,255,0.025) 58%);
+}
+.cs2d-coach-cue > small,
+.cs2d-coach-summary > small { color: var(--blue-bright); font-size: 0.56rem; font-weight: 720; letter-spacing: 0.09em; }
+.cs2d-coach-cue h3,
+.cs2d-coach-summary h3 { margin: 0.32rem 0 0; color: var(--text); font-size: 0.88rem; line-height: 1.36; letter-spacing: -0.015em; }
+.cs2d-coach-cue > p,
+.cs2d-coach-summary p { margin: 0.58rem 0 0; color: var(--text-secondary); font-size: 0.67rem; line-height: 1.58; }
+.cs2d-coach-cue ul { margin: 0.7rem 0 0; padding: 0; display: grid; gap: 0.4rem; list-style: none; }
+.cs2d-coach-cue li { position: relative; padding-left: 0.85rem; color: #d5d8dd; font-size: 0.63rem; line-height: 1.48; }
+.cs2d-coach-cue li::before { position: absolute; top: 0.58em; left: 0.08rem; width: 0.28rem; height: 0.28rem; border-radius: 50%; background: var(--blue); content: ""; }
+.cs2d-coach-action { margin-top: 0.72rem; padding: 0.65rem; border-left: 0.14rem solid var(--green); border-radius: 0 0.62rem 0.62rem 0; background: rgba(48,209,88,0.07); }
+.cs2d-coach-action b { color: #93f2aa; font-size: 0.58rem; letter-spacing: 0.04em; }
+.cs2d-coach-action p { margin: 0.26rem 0; color: #e5e8ec; font-size: 0.66rem; line-height: 1.52; }
+.cs2d-coach-action small { color: var(--text-tertiary); font-size: 0.56rem; line-height: 1.45; }
+.cs2d-coach-primary,
+.cs2d-coach-result-actions button {
+  min-height: 2.65rem;
+  margin-top: 0.72rem;
+  padding: 0.55rem 0.72rem;
+  border: 0.0625rem solid var(--line-strong);
+  border-radius: 0.7rem;
+  background: rgba(255,255,255,0.055);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.63rem;
+  font-weight: 680;
+  transition: transform 140ms var(--ease-out), background-color 140ms ease, border-color 140ms ease;
+}
+.cs2d-coach-primary { width: 100%; border-color: rgba(100,170,255,0.52); background: #0a74df; color: #fff; }
+.cs2d-coach-result-actions { display: grid; grid-template-columns: 1fr 1.2fr; gap: 0.38rem; }
+.cs2d-coach-result-actions p { grid-column: 1 / -1; margin: 0.6rem 0 0; color: var(--text-secondary); font-size: 0.66rem; line-height: 1.52; }
+.cs2d-coach-result-actions .cs2d-coach-primary { width: auto; }
+.cs2d-coach-summary { border-color: rgba(48,209,88,0.25); background: linear-gradient(145deg, rgba(48,209,88,0.085), rgba(255,255,255,0.025) 58%); }
+.cs2d-coach-summary > small { color: #8ce9a2; }
 .cs2d-coach-facts { margin: 0.75rem 0 0; border-top: 0.0625rem solid var(--line); }
 .cs2d-coach-facts div { min-height: 2.1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 0.0625rem solid var(--line); }
 .cs2d-coach-facts dt { color: var(--text-tertiary); font-size: 0.6rem; }
@@ -2106,7 +2149,9 @@ button:disabled {
 .cs2d-host-timeline output { color: var(--text-secondary); font: 600 0.62rem/1 ui-monospace, monospace; text-align: right; }
 @media (hover: hover) and (pointer: fine) {
   .cs2d-host-controls button:hover:not(:disabled),
-  .cs2d-round-list button:hover:not(:disabled) { border-color: rgba(255,255,255,0.25); background: rgba(255,255,255,0.085); color: var(--text); }
+  .cs2d-round-list button:hover:not(:disabled),
+  .cs2d-coach-result-actions button:hover { border-color: rgba(255,255,255,0.25); background: rgba(255,255,255,0.085); color: var(--text); }
+  .cs2d-coach-primary:hover { border-color: rgba(141,194,255,0.76); background: #1284f3; }
 }
 @media (max-width: 70rem) {
   .cs2d-host-workspace { grid-template-columns: 1fr; overflow-y: auto; }
@@ -2124,14 +2169,20 @@ button:disabled {
 }
 @media (prefers-reduced-motion: reduce) {
   .cs2d-host-controls button,
-  .cs2d-round-list button { transition: none; }
+  .cs2d-round-list button,
+  .cs2d-coach-primary,
+  .cs2d-coach-result-actions button { transition: none; }
   .cs2d-host-controls button:active:not(:disabled),
-  .cs2d-round-list button:active:not(:disabled) { transform: none; }
+  .cs2d-round-list button:active:not(:disabled),
+  .cs2d-coach-primary:active,
+  .cs2d-coach-result-actions button:active { transform: none; }
 }
 @media (prefers-reduced-transparency: reduce) {
   .cs2d-host-header,
   .cs2d-host-timeline,
-  .cs2d-host-coach { background: #111317; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .cs2d-host-coach,
+  .cs2d-coach-cue,
+  .cs2d-coach-summary { background: #111317; backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
 @media (prefers-contrast: more) {
   .cs2d-host-header,

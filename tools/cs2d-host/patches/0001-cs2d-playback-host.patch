@@ -1,3 +1,18 @@
+diff --git a/apps/app/package.json b/apps/app/package.json
+index a14a9f8..c194807 100644
+--- a/apps/app/package.json
++++ b/apps/app/package.json
+@@ -14,8 +14,9 @@
+   "dependencies": {
+     "@blade-flags/core": "^0.1.3",
+     "@blade-flags/vue": "^0.1.3",
+-    "@cs2/replay-core": "workspace:*",
+     "@bokuweb/zstd-wasm": "^0.0.27",
++    "@cs-coach/cs2d-analysis-adapter": "link:../../../../../libs/cs2d-analysis-adapter",
++    "@cs2/replay-core": "workspace:*",
+     "@floating-ui/vue": "^2.0.0",
+     "@vueuse/core": "^14.3.0",
+     "clsx": "^2.1.1",
 diff --git a/apps/app/src/shell/PublicShell.vue b/apps/app/src/shell/PublicShell.vue
 index 057a546..54be0a2 100644
 --- a/apps/app/src/shell/PublicShell.vue
@@ -64,18 +79,30 @@ index 327973e..69b029c 100644
 +  .host-roster-card { border-width: 2px; }
 +}
 diff --git a/apps/app/src/viewer/DemoAnalyzerView.vue b/apps/app/src/viewer/DemoAnalyzerView.vue
-index 9c4c084..3911740 100644
+index 9c4c084..6533edf 100644
 --- a/apps/app/src/viewer/DemoAnalyzerView.vue
 +++ b/apps/app/src/viewer/DemoAnalyzerView.vue
-@@ -20,6 +20,7 @@ import { fetchReplay } from '@/viewer/ingest/replaySource'
+@@ -1,5 +1,5 @@
+ <script setup lang="ts">
+-import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
++import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+ import { useRoute, useRouter } from 'vue-router'
+ import { useMediaQuery } from '@vueuse/core'
+ import UiIcon from '@/ui/UiIcon.vue'
+@@ -20,6 +20,12 @@ import { fetchReplay } from '@/viewer/ingest/replaySource'
  import { listenForExtensionDemo } from '@/viewer/ingest/extensionBridge'
  import { fmtSize } from '@/viewer/domain/demoMeta'
  import { useI18n } from '@/app/i18n'
 +import { emitPlaybackEvent, replayReadyMessage } from '@/viewer/player/hostBridge'
++import {
++  buildCs2dAnalysisBundle,
++  serializeCs2dAnalysisBundle,
++  type Cs2dReplay,
++} from '@cs-coach/cs2d-analysis-adapter'
  
  const { t } = useI18n()
  
-@@ -31,6 +32,39 @@ const route = useRoute()
+@@ -31,6 +37,61 @@ const route = useRoute()
  const router = useRouter()
  const parser = useDemoParser()
  
@@ -87,7 +114,7 @@ index 9c4c084..3911740 100644
 +const hostSelectedPlayerId = ref<string | null>(null)
 +const hostSelectionLocked = computed(() => hostSelectedPlayerId.value !== null)
 +
-+function selectHostPlayer(playerId: string) {
++async function selectHostPlayer(playerId: string) {
 +  if (!hostMode.value || hostSelectionLocked.value) return
 +  const replay = parser.replay.value
 +  const selectionIndex = replay?.players.findIndex((player) => player.steamId === playerId) ?? -1
@@ -101,6 +128,28 @@ index 9c4c084..3911740 100644
 +    side: player.startSide,
 +    selectionIndex,
 +  })
++  await nextTick()
++  try {
++    const routeId = Array.isArray(route.params.id) ? route.params.id[0] : route.params.id
++    const bundle = buildCs2dAnalysisBundle({
++      replay: replay as unknown as Cs2dReplay,
++      selectedSteamId: player.steamId,
++      demoId: typeof routeId === 'string' && routeId.trim() ? routeId : 'cs2d-local-demo',
++    })
++    emitPlaybackEvent({
++      type: 'ANALYSIS_READY',
++      schemaVersion: 'cs2d-analysis-ready.v1',
++      selectedPlayerId: player.steamId,
++      bundleJson: serializeCs2dAnalysisBundle(bundle),
++    })
++  } catch (error) {
++    emitPlaybackEvent({
++      type: 'ANALYSIS_FAILED',
++      schemaVersion: 'cs2d-analysis-ready.v1',
++      selectedPlayerId: player.steamId,
++      message: error instanceof Error ? error.message.slice(0, 240) : '本地分析失败',
++    })
++  }
 +}
 +
 +watch(
@@ -115,7 +164,7 @@ index 9c4c084..3911740 100644
  // Phase → i18n key for the loading label (the `reading` phase uses `readingFile`).
  const PHASE_LABEL: Record<string, string> = {
    reading: 'analyzer.readingFile',
-@@ -286,7 +320,7 @@ async function handleFile(file: File) {
+@@ -286,7 +347,7 @@ async function handleFile(file: File) {
      })
      if (id) {
        currentId.value = id // already loaded: keeps the watcher from reloading
@@ -124,7 +173,7 @@ index 9c4c084..3911740 100644
      }
    }
  }
-@@ -314,7 +348,7 @@ async function onImportArchive(file: File) {
+@@ -314,7 +375,7 @@ async function onImportArchive(file: File) {
        fileSize: file.size,
      })
      currentId.value = id
@@ -133,7 +182,7 @@ index 9c4c084..3911740 100644
    } catch (err) {
      importError.value = err instanceof Error ? err.message : String(err)
    } finally {
-@@ -457,16 +491,48 @@ function onImportInput(e: Event) {
+@@ -457,16 +518,48 @@ function onImportInput(e: Event) {
      <template v-if="parser.status.value === 'done' && parser.replay.value">
        <!-- v-show keeps the stage mounted (preserves playback position across tab switches) -->
        <div v-show="activeTab === 'viewer'" class="h-full w-full">
@@ -184,7 +233,7 @@ index 9c4c084..3911740 100644
          />
        </div>
        <HeatmapView
-@@ -494,7 +560,7 @@ function onImportInput(e: Event) {
+@@ -494,7 +587,7 @@ function onImportInput(e: Event) {
        />
  
        <!-- Tabs (2D / Duels / Heatmaps / Utilities / Economy) in the center of the appbar -->
@@ -194,7 +243,7 @@ index 9c4c084..3911740 100644
            <button
              type="button"
 diff --git a/apps/app/src/viewer/player/ViewerRoster.vue b/apps/app/src/viewer/player/ViewerRoster.vue
-index 4ed06bf..baac7f3 100644
+index 4ed06bf..df44398 100644
 --- a/apps/app/src/viewer/player/ViewerRoster.vue
 +++ b/apps/app/src/viewer/player/ViewerRoster.vue
 @@ -1,6 +1,6 @@
@@ -253,7 +302,7 @@ index 4ed06bf..baac7f3 100644
 +
 +const bombState = computed(() => {
 +  const states = props.round?.bomb ?? []
-+  let current = states[0]
++  let current: (typeof states)[number] | undefined
 +  for (const state of states) {
 +    if (state.t > props.currentT) break
 +    current = state
@@ -593,203 +642,6 @@ index 85997de..358d00e 100644
          :selected-id="followSteamId"
          @select="toggleFollow"
        />
-diff --git a/apps/app/src/viewer/player/hostBridge.ts b/apps/app/src/viewer/player/hostBridge.ts
-new file mode 100644
-index 0000000..0e6e799
---- /dev/null
-+++ b/apps/app/src/viewer/player/hostBridge.ts
-@@ -0,0 +1,191 @@
-+/**
-+ * The smallest possible control-plane bridge for the localhost playback host.
-+ * Parsed Replay data stays in this Vue/WASM document; only summaries and
-+ * playback commands cross the iframe boundary.
-+ */
-+
-+export const PLAYBACK_BRIDGE_CHANNEL = 'cs2d-playback-bridge.v1' as const
-+
-+export interface PlaybackPlayerSummary {
-+  playerId: string
-+  displayName: string
-+  startSide: 'T' | 'CT'
-+}
-+
-+export interface PlaybackRoundSummary {
-+  roundIndex: number
-+  roundNumber: number
-+  startCanonicalTick: number
-+  endCanonicalTick: number
-+}
-+
-+export interface ReplayReadyMessage {
-+  type: 'REPLAY_READY'
-+  schemaVersion: 'cs2d-replay-ready.v1'
-+  map: string
-+  tickRate: number
-+  startCanonicalTick: number
-+  endCanonicalTick: number
-+  roundCount: number
-+  rounds: PlaybackRoundSummary[]
-+  players: PlaybackPlayerSummary[]
-+  freezeSkipped: true
-+}
-+
-+export interface PlayerSelectedMessage {
-+  type: 'PLAYER_SELECTED'
-+  playerId: string
-+  displayName: string
-+  side: 'T' | 'CT'
-+  selectionIndex: number
-+}
-+
-+export interface PlaybackStateMessage {
-+  type: 'PLAYBACK_STATE'
-+  roundIndex: number
-+  canonicalTick: number
-+  playing: boolean
-+  speed: number
-+}
-+
-+export type PlaybackEvent = ReplayReadyMessage | PlayerSelectedMessage | PlaybackStateMessage
-+
-+export type PlaybackCommand =
-+  | { type: 'play' }
-+  | { type: 'pause' }
-+  | { type: 'seekCanonicalTick'; canonicalTick: number }
-+  | { type: 'selectRound'; roundIndex: number }
-+  | { type: 'setSpeed'; speed: number }
-+
-+interface EventEnvelope {
-+  channel: typeof PLAYBACK_BRIDGE_CHANNEL
-+  direction: 'event'
-+  payload: PlaybackEvent
-+}
-+
-+interface CommandEnvelope {
-+  channel: typeof PLAYBACK_BRIDGE_CHANNEL
-+  direction: 'command'
-+  payload: PlaybackCommand
-+}
-+
-+function parentOrigin(): string | null {
-+  try {
-+    // cs2d navigates from `/` to a generated replay route after parsing. At
-+    // that point document.referrer is the previous cs2d URL rather than the
-+    // embedding Next shell, so the host supplies its origin explicitly.
-+    const configured = new URL(window.location.href).searchParams.get('parentOrigin')
-+    if (configured) {
-+      const parsed = new URL(configured)
-+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.origin
-+    }
-+    return document.referrer ? new URL(document.referrer).origin : null
-+  } catch {
-+    return null
-+  }
-+}
-+
-+export function emitPlaybackEvent(payload: PlaybackEvent): void {
-+  if (window.parent === window) return
-+  const message: EventEnvelope = {
-+    channel: PLAYBACK_BRIDGE_CHANNEL,
-+    direction: 'event',
-+    payload,
-+  }
-+  const origin = parentOrigin()
-+  if (!origin) return
-+  window.parent.postMessage(message, origin)
-+}
-+
-+function isRecord(value: unknown): value is Record<string, unknown> {
-+  return typeof value === 'object' && value !== null
-+}
-+
-+function isFiniteNumber(value: unknown): value is number {
-+  return typeof value === 'number' && Number.isFinite(value)
-+}
-+
-+function isCommandEnvelope(value: unknown): value is CommandEnvelope {
-+  if (!isRecord(value) || value.channel !== PLAYBACK_BRIDGE_CHANNEL || value.direction !== 'command') return false
-+  const payload = value.payload
-+  if (!isRecord(payload) || typeof payload.type !== 'string') return false
-+  switch (payload.type) {
-+    case 'play':
-+    case 'pause':
-+      return Object.keys(payload).length === 1
-+    case 'seekCanonicalTick':
-+      return Object.keys(payload).length === 2 && isFiniteNumber(payload.canonicalTick)
-+    case 'selectRound':
-+      return Object.keys(payload).length === 2 && isFiniteNumber(payload.roundIndex) && Number.isInteger(payload.roundIndex) && payload.roundIndex >= 0
-+    case 'setSpeed':
-+      return Object.keys(payload).length === 2 && isFiniteNumber(payload.speed) && payload.speed > 0
-+    default:
-+      return false
-+  }
-+}
-+
-+export function listenForPlaybackCommands(
-+  handlers: {
-+    play: () => void
-+    pause: () => void
-+    seekCanonicalTick: (tick: number) => void
-+    selectRound: (roundIndex: number) => void
-+    setSpeed: (speed: number) => void
-+  },
-+): () => void {
-+  if (window.parent === window) return () => {}
-+  const onMessage = (event: MessageEvent<unknown>) => {
-+    const origin = parentOrigin()
-+    if (!origin || event.source !== window.parent || event.origin !== origin || !isCommandEnvelope(event.data)) return
-+    const command = event.data.payload
-+    switch (command.type) {
-+      case 'play':
-+        handlers.play()
-+        break
-+      case 'pause':
-+        handlers.pause()
-+        break
-+      case 'seekCanonicalTick':
-+        handlers.seekCanonicalTick(command.canonicalTick)
-+        break
-+      case 'selectRound':
-+        handlers.selectRound(command.roundIndex)
-+        break
-+      case 'setSpeed':
-+        handlers.setSpeed(command.speed)
-+        break
-+    }
-+  }
-+  window.addEventListener('message', onMessage)
-+  return () => window.removeEventListener('message', onMessage)
-+}
-+
-+export function replayReadyMessage(replay: {
-+  map: string
-+  demoTickRate: number
-+  players: { steamId: string; name: string; startSide: 'T' | 'CT' }[]
-+  rounds: { number: number; freezeStartTick?: number; startTick: number; postEndTick?: number; endTick: number }[]
-+}): ReplayReadyMessage {
-+  const rounds = replay.rounds.map((round, roundIndex) => ({
-+    roundIndex,
-+    roundNumber: round.number,
-+    startCanonicalTick: round.freezeStartTick ?? round.startTick,
-+    endCanonicalTick: round.postEndTick ?? round.endTick,
-+  }))
-+  return {
-+    type: 'REPLAY_READY',
-+    schemaVersion: 'cs2d-replay-ready.v1',
-+    map: replay.map,
-+    tickRate: replay.demoTickRate,
-+    startCanonicalTick: rounds[0]?.startCanonicalTick ?? 0,
-+    endCanonicalTick: rounds.at(-1)?.endCanonicalTick ?? 0,
-+    roundCount: rounds.length,
-+    rounds,
-+    players: replay.players.map((player) => ({
-+      playerId: player.steamId,
-+      displayName: player.name,
-+      startSide: player.startSide,
-+    })),
-+    freezeSkipped: true,
-+  }
-+}
 diff --git a/apps/app/src/viewer/player/useReplay.ts b/apps/app/src/viewer/player/useReplay.ts
 index 576f3ac..6a9f55e 100644
 --- a/apps/app/src/viewer/player/useReplay.ts
@@ -835,3 +687,53 @@ index 576f3ac..6a9f55e 100644
      setClip,
      play,
      pause,
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index d7e3b34..fd72cda 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -23,6 +23,9 @@ importers:
+       '@bokuweb/zstd-wasm':
+         specifier: ^0.0.27
+         version: 0.0.27
++      '@cs-coach/cs2d-analysis-adapter':
++        specifier: link:../../../../../libs/cs2d-analysis-adapter
++        version: link:../../../../../libs/cs2d-analysis-adapter
+       '@cs2/replay-core':
+         specifier: workspace:*
+         version: link:../../packages/replay-core
+@@ -1566,6 +1569,11 @@ packages:
+ 
+   '@volar/typescript@2.4.15':
+     resolution: {integrity: sha512-2aZ8i0cqPGjXb4BhkMsPYDkkuc2ZQ6yOpqwAuNwUoncELqoy5fRgOQtLR9gB0g902iS0NAkvpIzs27geVyVdPg==}
++    peerDependencies:
++      typescript: '*'
++    peerDependenciesMeta:
++      typescript:
++        optional: true
+ 
+   '@vue/compiler-core@3.5.38':
+     resolution: {integrity: sha512-s99aGxWYig9ErHbct27KXEGhrBYlRI6c4MwAgXErOAbX9xiW37/uMa+XUDO69zLz83dng8UUZ70CTOJrLrYrEQ==}
+@@ -5143,11 +5151,13 @@ snapshots:
+ 
+   '@volar/source-map@2.4.15': {}
+ 
+-  '@volar/typescript@2.4.15':
++  '@volar/typescript@2.4.15(typescript@5.9.3)':
+     dependencies:
+       '@volar/language-core': 2.4.15
+       path-browserify: 1.0.1
+       vscode-uri: 3.1.0
++    optionalDependencies:
++      typescript: 5.9.3
+ 
+   '@vue/compiler-core@3.5.38':
+     dependencies:
+@@ -7385,7 +7395,7 @@ snapshots:
+ 
+   vue-tsc@2.2.12(typescript@5.9.3):
+     dependencies:
+-      '@volar/typescript': 2.4.15
++      '@volar/typescript': 2.4.15(typescript@5.9.3)
+       '@vue/language-core': 2.2.12(typescript@5.9.3)
+       typescript: 5.9.3
+ 

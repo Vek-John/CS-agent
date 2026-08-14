@@ -44,4 +44,31 @@ describe("cs2d playback bridge", () => {
     expect(isPlaybackEventEnvelope({ ...ready, payload: { ...ready.payload, players: [] } })).toBe(false);
     expect(isPlaybackEventEnvelope({ ...ready, payload: { ...ready.payload, tickRate: 0 } })).toBe(false);
   });
+  it("accepts only bounded analysis results and rejects raw Replay fields", () => {
+    const analysis = {
+      channel: PLAYBACK_BRIDGE_CHANNEL,
+      direction: "event",
+      payload: {
+        type: "ANALYSIS_READY",
+        schemaVersion: "cs2d-analysis-ready.v1",
+        selectedPlayerId: "p1",
+        bundleJson: "{\"demo_id\":\"d1\"}"
+      }
+    } as const;
+    expect(isPlaybackEventEnvelope(analysis)).toBe(true);
+    expect(isPlaybackEventEnvelope({
+      ...analysis,
+      payload: { ...analysis.payload, rawReplay: {} }
+    })).toBe(false);
+    expect(isPlaybackEventEnvelope({
+      channel: PLAYBACK_BRIDGE_CHANNEL,
+      direction: "event",
+      payload: {
+        type: "ANALYSIS_FAILED",
+        schemaVersion: "cs2d-analysis-ready.v1",
+        selectedPlayerId: "p1",
+        message: "unsupported map"
+      }
+    })).toBe(true);
+  });
 });

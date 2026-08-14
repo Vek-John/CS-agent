@@ -176,6 +176,56 @@ describe("cs2d analysis adapter", () => {
     expect(segments.some((segment) => segment.reason_code === "INTER_ROUND_GAP")).toBe(true);
   });
 
+  it("paces a full match to at most eight teaching stops and spreads them across the timeline", () => {
+    const base = replayFixture();
+    const source = base.rounds[0];
+    const rounds = Array.from({ length: 12 }, (_, index) => {
+      const offset = index * 1_000;
+      return {
+        ...source,
+        number: index + 1,
+        freezeStartTick: source.freezeStartTick + offset,
+        startTick: source.startTick + offset,
+        decidedTick: source.decidedTick + offset,
+        endTick: source.endTick + offset,
+        postEndTick: source.postEndTick + offset,
+        scoreT: index,
+        frames: source.frames.map((frame) => ({ ...frame, tick: frame.tick + offset })),
+        events: source.events.map((event) => ({ ...event, tick: event.tick + offset })),
+      };
+    });
+    const bundle = buildCs2dAnalysisBundle({
+      replay: { ...base, rounds },
+      selectedSteamId: "p-t1",
+      demoId: "paced-full-match"
+    });
+    expect(bundle.review_plan.cues).toHaveLength(8);
+    expect(bundle.review_plan.cues[0].decision_tick).toBeLessThan(1_000);
+    expect(bundle.review_plan.cues.at(-1)?.decision_tick).toBeGreaterThan(11_000);
+    expect(bundle.metadata.warnings.some((warning) => warning.includes("maximum 8"))).toBe(true);
+  });
+
+  it("derives actionable coaching context only from the decision-time player state", () => {
+    const replay = replayFixture();
+    const frames = replay.rounds[0].frames.map((frame) => ({
+      ...frame,
+      players: frame.players.map((current) => frame.tick <= 160
+        ? { ...current, weapon: "Smoke", grenades: ["Smoke", "Flash"] }
+        : current)
+    }));
+    const bundle = buildCs2dAnalysisBundle({
+      replay: { ...replay, rounds: [{ ...replay.rounds[0], frames }, replay.rounds[1]] },
+      selectedSteamId: "p-t1",
+      demoId: "decision-context"
+    });
+    expect(bundle.review_plan.cues[0]).toMatchObject({
+      title: "道具出手前先定义它要创造的窗口"
+    });
+    expect(bundle.review_plan.cues[0].question).toContain("现在手持道具");
+    expect(bundle.review_plan.cues[0].facts[0].text).toContain("剩余道具 2");
+    expect(bundle.review_plan.cues[0].question).not.toMatch(/击杀|死亡|结果|随后|最终/);
+  });
+
   it("keeps freeze skips compatible with Session auto-consumption", () => {
     const bundle = buildCs2dAnalysisBundle({ replay: replayFixture(), selectedSteamId: "p-t1", demoId: "demo-fixture" });
     const session = createCoachingSession(bundle.review_plan, "session-cs2d");

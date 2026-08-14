@@ -29,6 +29,9 @@ importers:
       '@cs-coach/contracts':
         specifier: workspace:*
         version: link:../../libs/contracts
+      '@cs-coach/cs2d-analysis-adapter':
+        specifier: workspace:*
+        version: link:../../libs/cs2d-analysis-adapter
       '@cs-coach/demo-domain':
         specifier: workspace:*
         version: link:../../libs/demo-domain

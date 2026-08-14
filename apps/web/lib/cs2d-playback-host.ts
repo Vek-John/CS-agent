@@ -12,6 +12,10 @@ export interface Cs2dHostConfig {
   origin: string;
 }
 
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
+}
+
 export function cs2dHostConfig(
   raw = process.env.NEXT_PUBLIC_CS2D_HOST_URL,
   parentOrigin = process.env.NEXT_PUBLIC_APP_ORIGIN || "http://localhost:3000"
@@ -19,6 +23,9 @@ export function cs2dHostConfig(
   const parsed = new URL(raw?.trim() || DEFAULT_CS2D_HOST_URL);
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error("cs2d host URL must use http or https.");
+  }
+  if (!isLoopbackHostname(parsed.hostname)) {
+    throw new Error("cs2d host must remain on localhost until the upstream license is clarified.");
   }
   const parent = new URL(parentOrigin);
   if (parent.protocol !== "http:" && parent.protocol !== "https:") {
