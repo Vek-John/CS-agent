@@ -10,7 +10,7 @@
 
 ```bash
 pnpm install
-pnpm cs2d:setup   # 克隆固定 cs2d commit、应用 host patch、安装上游依赖
+pnpm cs2d:setup   # 克隆固定 cs2d commit、应用 host patch、安装依赖并本机重建 parser WASM
 pnpm dev          # cs2d http://localhost:5174 + 教练壳 http://localhost:3000
 ```
 
@@ -43,13 +43,16 @@ pnpm exec wrangler secret put DEEPSEEK_API_KEY --config wrangler.jsonc
 
 ## 当前已经能做什么
 
-- 解析本地 `.dem`，显示真实阶段与 tick 进度条；
+- 解析本地 `.dem`，只显示真实阶段与百分比进度，不向玩家暴露 tick；
 - 在 Mirage 真实雷达和多楼层上播放 10 人位置、存活、朝向、击杀、炸弹、掉落武器与投掷物；
 - 地图两侧显示紧凑 5+5 HUD：姓名、金钱、道具/C4、生命、护甲/头盔和当前手持；C4/轨迹只读取当前播放位置以前的事实；
-- 从 10 名玩家中选择一次分析主体；
+- 从 10 名玩家中选择一次分析主体；选定后 HUD 锁定，目标玩家显示为“你”；
+- 只保留一套中文播放控制和一条整场进度条，可自由跳转、切回合和调速；手动查看时地图、HUD、回合与侧栏同步，随时可返回教练路线；
+- 普通播放固定全图居中，关键讲解暂停时才受控聚焦目标玩家；
 - 从同一份 cs2d Replay 派生连续 `MatchTimeline`、内部 `ObservableState` 和 `ReviewPlan`，不二次解析 Demo；
+- 同次解析保留 Source engine 点位名，使用版本化中文 Mirage 报点和常见 CS 术语讲解，未知点位不猜测；
 - 自动消费冻结时间与低价值区间，全场最多安排 8 个跨回合教学停顿；
-- 在 `decision_tick` 暂停后直接给出事实、判断、理由和一个主动作，不要求用户先预测；
+- 在关键决策前暂停后直接给出事实、判断、理由和一个主动作，不要求用户先预测；
 - 点击“看结果”后在同一张全知地图推进 outcome，可“再看一遍”或“继续下一段”；
 - 完整走完 ReviewPlan 后才进入全场总结；
 - 模型不可用时使用确定性模板，数据与播放进度不丢失。

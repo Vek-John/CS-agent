@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { delimiter, dirname, resolve } from 'node:path'
+import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 
@@ -15,6 +16,7 @@ function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd ?? root,
     encoding: 'utf8',
+    env: options.env ?? process.env,
     stdio: options.capture ? 'pipe' : 'inherit',
   })
   if (result.status !== 0 && !options.allowFailure) {
@@ -54,4 +56,15 @@ if (reverse.status === 0) {
 
 if (flags.has('--install')) {
   run('pnpm', ['install', '--frozen-lockfile'], { cwd: upstream })
+}
+
+if (flags.has('--build-parser')) {
+  const cargoBin = resolve(homedir(), '.cargo/bin')
+  run('bash', [resolve(upstream, 'packages/parser/build.sh')], {
+    cwd: resolve(upstream, 'packages/parser'),
+    env: {
+      ...process.env,
+      PATH: [cargoBin, process.env.PATH].filter(Boolean).join(delimiter),
+    },
+  })
 }

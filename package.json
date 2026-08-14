@@ -18,8 +18,8 @@
     "cloudflare:preview": "cd apps/web && ../../node_modules/.bin/opennextjs-cloudflare preview -c ../../wrangler.jsonc --openNextConfigPath ../../open-next.config.ts",
     "cloudflare:deploy": "pnpm cloudflare:build && pnpm cloudflare:assets && pnpm exec wrangler deploy apps/web/.open-next/worker.js --config wrangler.jsonc --assets apps/web/.open-next/cloudflare-assets",
     "dev:web": "pnpm --filter @cs-coach/web dev",
-    "cs2d:setup": "node tools/apply-cs2d-host-patch.mjs --clone --install",
-    "cs2d:patch": "node tools/apply-cs2d-host-patch.mjs",
+    "cs2d:setup": "node tools/apply-cs2d-host-patch.mjs --clone --install --build-parser",
+    "cs2d:patch": "node tools/apply-cs2d-host-patch.mjs --build-parser",
     "cs2d:typecheck": "pnpm --dir .local-data/upstream/cs2d --filter cs2-demo-viewer exec vue-tsc --noEmit"
   },
   "devDependencies": {

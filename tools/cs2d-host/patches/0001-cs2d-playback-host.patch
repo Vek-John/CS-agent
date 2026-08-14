@@ -988,6 +988,76 @@ index 576f3ac..6a9f55e 100644
      setClip,
      play,
      pause,
+diff --git a/packages/parser/src/assemble.rs b/packages/parser/src/assemble.rs
+index 185ad46..e8240d3 100644
+--- a/packages/parser/src/assemble.rs
++++ b/packages/parser/src/assemble.rs
+@@ -289,6 +289,7 @@ pub(crate) fn build_replay(c: &Collector) -> Replay {
+                     alive: p.alive,
+                     side: p.side.clone(),
+                     weapon: p.weapon.clone(),
++                    last_place_name: p.last_place_name.clone(),
+                     primary: p.primary.clone(),
+                     money: p.money,
+                     equip_value: p.equip_value,
+diff --git a/packages/parser/src/collector.rs b/packages/parser/src/collector.rs
+index 9bd080e..4c43781 100644
+--- a/packages/parser/src/collector.rs
++++ b/packages/parser/src/collector.rs
+@@ -389,6 +389,7 @@ impl Collector {
+                 alive: prop_i32(pawn, "m_lifeState") == 0,
+                 side: side.into(),
+                 weapon: active_weapon_label(ctx, pawn),
++                last_place_name: prop_string(pawn, "m_szLastPlaceName"),
+                 primary: primary_weapon(ctx, pawn),
+                 money: prop_i32(ctrl, "m_pInGameMoneyServices.m_iAccount"),
+                 equip_value: prop_i32(pawn, "m_unCurrentEquipmentValue"),
+diff --git a/packages/parser/src/props.rs b/packages/parser/src/props.rs
+index ffa21fc..98eec36 100644
+--- a/packages/parser/src/props.rs
++++ b/packages/parser/src/props.rs
+@@ -46,6 +46,13 @@ pub(crate) fn prop_u32(e: &Entity, name: &str) -> u32 {
+     }
+ }
+ 
++pub(crate) fn prop_string(e: &Entity, name: &str) -> String {
++    match e.get_property_by_name(name) {
++        Ok(FieldValue::String(value)) => value.to_string(),
++        _ => String::new(),
++    }
++}
++
+ /// World coordinate from the pawn cell + offset pair (CS2).
+ pub(crate) fn world_coord(e: &Entity, cell: &str, vec: &str) -> f64 {
+     let c = match e.get_property_by_name(cell) {
+diff --git a/packages/parser/src/schema.rs b/packages/parser/src/schema.rs
+index d6a3d72..8beec0c 100644
+--- a/packages/parser/src/schema.rs
++++ b/packages/parser/src/schema.rs
+@@ -160,6 +160,10 @@ pub(crate) struct PlayerState {
+     pub(crate) alive: bool,
+     pub(crate) side: String,
+     pub(crate) weapon: String,
++    /// Source-engine navigation place token (`m_szLastPlaceName`). This is a
++    /// parser fact; the host maps it to localized CS callouts.
++    #[serde(skip_serializing_if = "String::is_empty")]
++    pub(crate) last_place_name: String,
+     /// The player's main gun stowed in the inventory (rifle/SMG/sniper/shotgun/MG,
+     /// or a pistol if that's all they carry). Lets the UI keep showing the real
+     /// weapon while the player has their knife out. Empty when they hold only a
+diff --git a/packages/replay-core/src/schema.ts b/packages/replay-core/src/schema.ts
+index bb72209..7eb5b06 100644
+--- a/packages/replay-core/src/schema.ts
++++ b/packages/replay-core/src/schema.ts
+@@ -235,6 +235,8 @@ export interface PlayerState {
+   side: Side
+   /** Short label of the active weapon (e.g. "AK-47", "AWP", "HE"). */
+   weapon: string
++  /** Source-engine navigation place token (`m_szLastPlaceName`). */
++  lastPlaceName?: string
+   /** The main gun stowed in the inventory (rifle/SMG/sniper/shotgun/MG, or a pistol
+    *  if that's all they carry). Lets the UI keep showing the real weapon while the
+    *  knife is out. Omitted when the player holds only a knife/grenades/C4/Zeus. */
 diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
 index d7e3b34..fd72cda 100644
 --- a/pnpm-lock.yaml

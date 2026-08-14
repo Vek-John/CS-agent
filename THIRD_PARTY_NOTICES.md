@@ -63,8 +63,10 @@ The default localhost playback host clones that exact upstream commit into the i
 not contain a `LICENSE`, package license, or other explicit grant when audited
 on 2026-08-14. Consequently the upstream source, WASM, maps, icons, and build
 outputs are not vendored into this repository and are not part of the Cloudflare
-deployment. The patch adds the compact 5+5 HUD, local host bridge and a link to
-the repository-owned `@cs-coach/cs2d-analysis-adapter`; raw Replay data remains
-inside the iframe. This is the accepted localhost source-reference substrate,
+deployment. The patch adds the compact 5+5 HUD, local host bridge, retention of
+the Source engine `m_szLastPlaceName` fact, and a link to the repository-owned
+`@cs-coach/cs2d-analysis-adapter`; raw Replay data remains inside the iframe.
+`pnpm cs2d:setup` builds the modified parser WASM locally instead of storing the
+generated binary in this repository. This is the accepted localhost source-reference substrate,
 but it is not approved for public redistribution until the upstream license is
 clarified or replaced.

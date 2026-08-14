@@ -1,7 +1,7 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：2.0.0
+> 版本：2.1.0
 > 最后更新：2026-08-14
 > 适用范围：浏览器首版至桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
@@ -208,11 +208,13 @@ Worker 使用至少三档队列优先级：`interactive` 处理用户即将观�
 
 ### 4.3 当前可运行切片
 
-当前纵向切片以 `localhost` 为运行目标：`pnpm cs2d:setup` 把 `zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec` 克隆到忽略的 `.local-data/upstream/cs2d` 并应用可重放 patch；`pnpm dev` 同时启动 cs2d `:5174` 与 Next 教练壳 `:3000`。上游仓库审查时没有明确 LICENSE，因此源码、WASM、地图、图标和构建产物不进入主仓库或 Cloudflare 部署；权利状态与固定 commit 记录在 `THIRD_PARTY_NOTICES.md` 和 ADR-0002。
+当前纵向切片以 `localhost` 为运行目标：`pnpm cs2d:setup` 把 `zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec` 克隆到忽略的 `.local-data/upstream/cs2d`，应用可重放 patch，并在本机从已固定源码重建 parser WASM；`pnpm dev` 同时启动 cs2d `:5174` 与 Next 教练壳 `:3000`。上游仓库审查时没有明确 LICENSE，因此源码、WASM、地图、图标和构建产物不进入主仓库或 Cloudflare 部署；权利状态与固定 commit 记录在 `THIRD_PARTY_NOTICES.md` 和 ADR-0002。
 
 用户在 cs2d iframe 中选择本地 `.dem`。文件只进入浏览器 File/Worker/WASM 管线，不经过 Next 上传 API，也不写入服务器。cs2d 一次解析后保留完整结构化 Replay，并直接驱动同一个全知 renderer：真实雷达、多楼层、双方 5 人紧凑 HUD、当前手持、库存道具、金钱、护甲/头盔、拆弹器/C4、投掷物、击杀/炸弹事件和当前播放位置之前的轨迹都按同一 canonical tick 更新。
 
 用户只选择一次分析主体。iframe 内的 `@cs-coach/cs2d-analysis-adapter` 从该 Replay 派生所选玩家的 `MatchTimeline`、内部 `ObservableState` 与连续 `ReviewPlan`，序列化后的严格白名单 `Cs2dAnalysisBundle` 通过 `cs2d-playback-bridge.v1` 传给 Next；原始 Replay 不跨 iframe。Session reducer 自动消费 `FREEZE_TIME` 和低价值区间，在 `decision_tick` 暂停并直接讲解；“看结果”只推进同一张全知地图的时间，不切换显示模式。当前全场最多安排 8 个教学暂停，并在候选多于预算时跨回合均匀取样；同类上下文进入 `HABIT_CHECK`。
+
+Host 模式只呈现 Next 教练壳的一套中文播放控制和一条整场进度条；canonical tick 只作为内部寻址坐标，不出现在用户文案。目标玩家选择后锁定，目标 HUD 与地图标签显示“你”，其余九人只展示事实而不可切换分析主体。普通播放、结果播放和自由查看使用固定地图几何中心；只有关键 cue 暂停可受控聚焦目标，且 reduced-motion 下立即切换。用户 seek、切回合、调速或手动播放后进入临时 `UserTakeover`：播放器/HUD/回合/侧栏跟随真实播放头，Session reducer 暂停消费；“返回教练路线”后再重发当前确定性 directive，不改写 `ReviewPlan`。
 
 DeepSeek 只改写已经存在的匿名决策侧事实、推断和建议。`/api/coaching/narrate` 不接收原始 Demo、稳定玩家 ID、路径、完整事件流或结果事实；Cloudflare 只配置 `DEEPSEEK_API_KEY` Secret。缺 key、超时、上游失败或输出校验失败时保留确定性中文讲解，不阻塞播放。当前自由追问仍未接入通用模型。
 
@@ -266,13 +268,15 @@ DeepSeek 只改写已经存在的匿名决策侧事实、推断和建议。`/api
 
 Parser Adapter 将解析器输出转换为稳定的 `MatchTimeline`：比赛、半场、回合、tick、玩家状态、事件和轨迹。玩家状态以 CS2 world 坐标保存，不在解析层转换为屏幕百分比；状态快照至少保留存活、位置、高度、视角、生命、护甲、头盔、金钱、当前手持物、库存/道具数量、拆弹器和 C4 携带。下游回放可以读取全知事实，但 Observation 必须另行推导观察者当时可知的信息。
 
-当前默认解析入口是固定版本 cs2d 的浏览器 Worker/WASM；其结构化 Replay 是 renderer 的全知事实来源。`@cs-coach/cs2d-analysis-adapter` 只依赖 Replay 的结构化端口，把 Round/Frame/GameEvent/GrenadePath 转成稳定的 `MatchTimeline`、warnings、内部 `ObservableState` 与 `ReviewPlan`，不导入上游实现、不重读 `.dem`、不猜测缺失 winner，也不把 raw Replay 序列化到教练壳。Python `demoparser2` Adapter、canonical tick 契约和 Falcons/Spirit 兼容修复保留为迁移回归与未来 server-side 备选，不再是 localhost 默认入口。
+当前默认解析入口是固定版本 cs2d 的浏览器 Worker/WASM；其结构化 Replay 是 renderer 的全知事实来源。同一次解析还保留 Source engine 的 `m_szLastPlaceName` 字符串，作为玩家状态事实进入 Replay；不得为了中文报点二次解析 Demo。`@cs-coach/cs2d-analysis-adapter` 只依赖 Replay 的结构化端口，把 Round/Frame/GameEvent/GrenadePath 转成稳定的 `MatchTimeline`、warnings、内部 `ObservableState` 与 `ReviewPlan`，不导入上游实现、不重读 `.dem`、不猜测缺失 winner，也不把 raw Replay 序列化到教练壳。Python `demoparser2` Adapter、canonical tick 契约和 Falcons/Spirit 兼容修复保留为迁移回归与未来 server-side 备选，不再是 localhost 默认入口。
 
 Parser Adapter 还要规范化击杀、伤害、开火、换弹、投掷物、炸弹和解析器能够提供的声音发射事件。声音事件只能证明“某处发生了一个可能发声的动作”，不能直接证明某个玩家一定听到；字段不可得时输出带 parser/game 版本的 warning，绝不补造默认值。所有下游只依赖标准模型，不依赖解析器私有字段或 DataFrame 列名。
 
 ### 6.3 MapSemantics
 
 维护版本化的真实雷达资源清单、world→radar 仿射变换、楼层、点位多边形、区域层级、相邻关系、常见路径、掩体、简化视线和声音传播近似。`MatchTimeline` 永远保留 world X/Y/Z；只有渲染边界使用 `MapAssetManifest` 转换为雷达像素。固定锚点与固定 tick 截图必须做坐标回归，禁止靠 CSS 百分比手调位置。
+
+首版中文报点优先使用同一 player frame 的 Source engine place token，经版本化 `@cs-coach/map-semantics` 精确映射为玩家熟悉的 CS 报点；未知 token 保持未知，不做模糊匹配或坐标猜测。报点是可追溯事实的本地化，打法术语属于推断/建议层；二者不得混写成 parser 事实。
 
 地图图片、武器/道具图标、坐标参数和区域配置必须锁定到地图/游戏构建版本，记录来源 URI、内容哈希、生成清单和权利状态。用户已确认 localhost 可以使用参考站点提供的 Valve 游戏雷达/游戏图标，也可以使用版本锁定的公开工具数据包或用户本机 CS2 安装；这些资产下载为本地缓存，不做运行时热链。该授权不包含第三方站点的 UI、布局、组件、品牌或自有图标，也不自动扩大为公开再分发许可。公开构建发布 Valve 资产前仍需单独复核。资产来源可替换，领域坐标和回放协议不随供应方变化。
 
@@ -364,7 +368,7 @@ propose_memory_update(proposal)
 1. `.dem` 由 cs2d File → Worker/WASM 解析一次，raw Replay 始终留在 iframe；
 2. cs2d renderer 直接消费 Replay，并始终显示当前 canonical tick 的全知地图、10 人 HUD、投掷物、炸弹、掉落武器、效果、多楼层、缩放和平移；
 3. `@cs-coach/cs2d-analysis-adapter` 在 iframe 内从同一 Replay 派生严格白名单 `Cs2dAnalysisBundle`；它是分析端口，不是 renderer frame builder；
-4. Next 教练壳只通过 `cs2d-playback-bridge.v1` 接收摘要、选择、播放状态与 AnalysisBundle，并发送 `play/pause/seekCanonicalTick/selectRound/setSpeed`；bridge 对 envelope 与 payload 使用精确字段校验；
+4. Next 教练壳只通过 `cs2d-playback-bridge.v1` 接收摘要、选择、播放状态与 AnalysisBundle，并发送 `play/pause/seekCanonicalTick/selectRound/setSpeed/setCamera`；bridge 对 envelope 与 payload 使用精确字段校验；
 5. `SessionOrchestrator` 根据 `ReviewPlan` 控制同一个 cs2d 播放头，在 cue 前暂停、用户点击“看结果”后播放 outcome、必要时回看，再继续下一段。
 
 用户界面不提供 `PLAYER_KNOWLEDGE` renderer。`ObservableState` 是教练内部证据边界；renderer 不根据它隐藏敌人，教练也不得因为地图上显示全知事实而读取这些事实。当前投掷物只显示播放位置以前的轨迹，C4/HUD 只能读取 `t <= currentT` 的状态，禁止用数组首项或未来落点补值。
@@ -372,6 +376,8 @@ propose_memory_update(proposal)
 旧 `/pixi-poc` 的 `PlaybackFrameViewModel`、Freezetime 审查与 `csgo-2d-demo-viewer` 参考结论保留为实验记录和回滚证据，不再是生产迁移方向；不得继续为默认产品扩展第二套 renderer。cs2d 上游没有明确许可证，故只做固定 commit 的 localhost source-reference，不把其源码、构建物或资产提交/发布。上游权利明确或选择可发布替代项时，必须新增 ADR。
 
 首版 HUD 采用双方各 5 人紧凑卡片：深色姓名/金钱/道具层＋阵营色生命/护甲/手持层；死亡降低层级但保留事件上下文。朝向只用小箭头，不显示大面积实心朝向月牙。字段不可得时显示未知，不使用看似精确的默认值。
+
+Host 模式不复用 cs2d 的产品控制栏、设置面板或自动镜头 UI。地图 overview 是固定几何中心和固定缩放，不按玩家包围盒持续漂移；`setCamera(target)` 只供教练在 `PAUSED_FOR_COACHING` 聚焦问题点，离开 cue 立即回到 `setCamera(full)`。
 
 ### 6.9 Annotation
 
@@ -604,11 +610,14 @@ PlaybackCommandEnvelope
     seekCanonicalTick(canonicalTick)
     selectRound(roundIndex)
     setSpeed(speed)
+    setCamera(full | target)
 ```
 
 `ANALYSIS_READY.bundleJson` 只能是 `serializeCs2dAnalysisBundle` 的白名单结果：`demo_id`、`selected_steam_id`、`match_timeline`、`review_plan`、`observation_evidence` 与版本/限制 metadata；raw Replay、二进制 Demo、上游私有状态或额外顶层字段必须拒绝。父窗口同时校验 iframe source、localhost origin、channel、direction 与精确 payload shape。
 
 Session 只在 phase/segment/cue/reveal 状态变化时发送新的 playback directive，不随每个 `PLAYBACK_STATE` tick 重复 seek。冻结时间和确定性低价值段由 reducer 记录后自动跳过；`PLAYING` 使用 segment speed；`PAUSED_FOR_COACHING` pause 在 decision tick；`REVEALING/REPLAYING` 从 outcome start 以 1× 播放至 outcome end。
+
+外层整场时间轴始终可 seek。手动命令把 UI 置为 `UserTakeover`，此时侧栏按 `PLAYBACK_STATE.canonicalTick` 使用半开区间定位实际回合和 `ReviewSegment`，隐藏原 cue 的结果按钮；恢复教练路线后，Session 状态机继续掌握播放头。该交互状态只属于前端协调层，不写回领域会话或分析产物。
 
 旧 `PlaybackFrameViewModel` 契约只服务 `/pixi-poc` 迁移回归，不是当前 Web 主入口协议。
 
@@ -791,7 +800,7 @@ sequenceDiagram
     W->>S: 标记 ReviewPlan COMPLETE
 ```
 
-当前 cs2d Worker/WASM 在浏览器读取完整本地文件并生成一份 Replay，不把文件上传到 Next，也不为全知/教练证据重复解析。解析 UI 展示读取、解压、parse tick、building 与 serializing 的真实进度；Replay 就绪后才允许选择分析主体。未来若接入 cs2d 的逐回合 `header_ready → index_ready → round_ready`，只允许增量发布同一 Replay 的索引/切片，不改变 canonical tick 或下游领域契约。
+当前 cs2d Worker/WASM 在浏览器读取完整本地文件并生成一份 Replay，不把文件上传到 Next，也不为全知/教练证据重复解析。Host 解析 UI 只展示阶段和真实百分比，不暴露 parser tick；Replay 就绪后才允许选择分析主体。未来若接入 cs2d 的逐回合 `header_ready → index_ready → round_ready`，只允许增量发布同一 Replay 的索引/切片，不改变 canonical tick 或下游领域契约。
 
 “轻量整场扫描”和逐回合发布是同一次 Parser 事实产物的索引、切片与缓存，不是为全知/玩家视角分别解析 Demo。逐回合 `header_ready → index_ready → round_ready` 只改变可消费范围；任何已发布 round artifact 都引用同一个内容哈希、parser version、timeline version 和 canonical tick 空间。
 
@@ -816,6 +825,8 @@ priority = proximity_to_playhead
 客户端加载轻量 session package 和分块轨迹。LangGraph 根据当前 segment 和用户交互选择教学动作，`SessionOrchestrator` 安全内核将动作转换成受限播放命令并在 cue 点暂停；用户追问时 Agent 只能通过领域工具取得当前 cue 和允许的上下文。Graph checkpoint 和业务会话事件分别持久化，均不能阻塞播放器基本控制。
 
 地图在所有会话状态都显示当前 tick 的 cs2d 全知 Replay，不提供显式视角切换。信息授权发生在教练输入而非 renderer：`PLAYING` 与 `PAUSED_FOR_COACHING` 的文案/追问只能读 cue 绑定的 `ObservableState`；用户点击“看结果”后播放器在同一地图推进 outcome 区间，只有结果窗口完成后才允许结果 scoped 文案。进入下一个 cue 时重新绑定下一份内部 ObservableState。
+
+自动路线继续主持完整 Demo；用户主动操作时仅暂时交出播放头，不丢弃会话。自由查看侧栏显示实际回合与覆盖该位置的 segment，地图/HUD/事件均由同一播放头更新。用户可随时返回当前教练节点；未接管时冻结时间直接自动消费、低价值段显式快进、关键 cue 暂停聚焦并直接讲解。
 
 ### 9.4 会后阶段
 
@@ -1023,6 +1034,9 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 | 内部观察证据 | Accepted | `ObservationClaim` 仅约束规则/LLM 决策证据；不作为用户可见 renderer 模式，不用布尔可见性 |
 | 单次解析与分析派生 | Accepted | `.dem` 只生成一份 cs2d Replay；Adapter 从同一 Replay 派生 MatchTimeline/Observation/ReviewPlan，不二次解析 |
 | cs2d localhost 底座 | Accepted | 固定 `dbbe698…`＋可重放 patch；上游无明确 LICENSE，源码/WASM/资产不提交、不进入 Cloudflare |
+| Host 控制与接管 | Accepted | Next 只保留一套中文控制和整场时间轴；手动接管暂停 reducer，恢复后继续确定性教练路线；用户 UI 不显示 tick |
+| 地图镜头与目标主体 | Accepted | 普通状态固定全图中心，cue 暂停才聚焦；分析主体锁定且标为“你”，其他 HUD 不可切换 |
+| 中文报点事实 | Accepted | 同次 cs2d 解析保留 `m_szLastPlaceName`，由版本化精确词典本地化；未知不猜测，不二次解析 |
 | 自研 PixiJS renderer | Superseded | `/pixi-poc` 与旧 renderer 只保留回归；默认产品不再扩展第二套 renderer |
 | 桌面长期形态 | Proposed | 本地 CS2 Demo＋教练侧窗，通过 PlaybackPort 接入 |
 | 服务端架构 | Accepted | 模块化单体＋异步 Worker |
@@ -1055,3 +1069,4 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 | 1.4.0 | 2026-08-13 | 冻结时间改为保留覆盖但自动消费；决策点改为教练直接讲、decision→outcome 播放并在用户揭示后切全知结果；声音标注改为短小无填充方向提示；修复无 winner 占位 round_end；固化安全 HUD SVG 管线与 Cloudflare DeepSeek 匿名讲解边界 |
 | 1.5.0 | 2026-08-13 | 固化单次全知解析、Observation 独立派生、空白白名单 `PlaybackFrameViewModel` 与统一 renderer 边界；将 Freezetime/PixiJS 迁移设为需经真实 Demo、未来泄漏和性能证据验证的隔离 PoC |
 | 2.0.0 | 2026-08-14 | 默认回放底座切换为固定版本 cs2d 浏览器 Worker/WASM＋renderer；地图始终显示当前 tick 全知事实，Observation 收敛为内部 LLM 证据；新增严格 iframe bridge、Replay→ReviewPlan Adapter、最多 8 个跨回合教学停顿、同图 outcome 播放与 localhost-only 权利边界 |
+| 2.1.0 | 2026-08-14 | Host 收敛为一套中文播放控制和自由 seek 时间轴；新增手动接管/恢复、目标玩家锁定与“你”、固定全图/关键 cue 聚焦、用户 UI 隐藏 tick；同次解析保留 Source place token 并用版本化中文 CS 报点驱动讲解 |
