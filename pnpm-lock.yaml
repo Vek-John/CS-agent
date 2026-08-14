@@ -69,6 +69,22 @@ importers:
 
   libs/contracts: {}
 
+  libs/cs2d-analysis-adapter:
+    dependencies:
+      '@cs-coach/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@cs-coach/observation':
+        specifier: workspace:*
+        version: link:../observation
+      '@cs-coach/review-planner':
+        specifier: workspace:*
+        version: link:../review-planner
+    devDependencies:
+      '@cs-coach/session':
+        specifier: workspace:*
+        version: link:../session
+
   libs/demo-domain:
     dependencies:
       '@cs-coach/contracts':
