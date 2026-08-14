@@ -737,3 +737,230 @@ index d7e3b34..fd72cda 100644
        '@vue/language-core': 2.2.12(typescript@5.9.3)
        typescript: 5.9.3
  
+diff --git a/apps/app/src/viewer/player/hostBridge.ts b/apps/app/src/viewer/player/hostBridge.ts
+new file mode 100644
+index 0000000..1c63cec
+--- /dev/null
++++ b/apps/app/src/viewer/player/hostBridge.ts
+@@ -0,0 +1,221 @@
++/**
++ * The smallest possible control-plane bridge for the localhost playback host.
++ * Parsed Replay data stays in this Vue/WASM document; only summaries and
++ * playback commands cross the iframe boundary.
++ */
++
++export const PLAYBACK_BRIDGE_CHANNEL = 'cs2d-playback-bridge.v1' as const
++
++export interface PlaybackPlayerSummary {
++  playerId: string
++  displayName: string
++  startSide: 'T' | 'CT'
++}
++
++export interface PlaybackRoundSummary {
++  roundIndex: number
++  roundNumber: number
++  startCanonicalTick: number
++  endCanonicalTick: number
++}
++
++export interface ReplayReadyMessage {
++  type: 'REPLAY_READY'
++  schemaVersion: 'cs2d-replay-ready.v1'
++  map: string
++  tickRate: number
++  startCanonicalTick: number
++  endCanonicalTick: number
++  roundCount: number
++  rounds: PlaybackRoundSummary[]
++  players: PlaybackPlayerSummary[]
++  freezeSkipped: true
++}
++
++export interface PlayerSelectedMessage {
++  type: 'PLAYER_SELECTED'
++  playerId: string
++  displayName: string
++  side: 'T' | 'CT'
++  selectionIndex: number
++}
++
++export interface PlaybackStateMessage {
++  type: 'PLAYBACK_STATE'
++  roundIndex: number
++  canonicalTick: number
++  playing: boolean
++  speed: number
++}
++
++export interface AnalysisReadyMessage {
++  type: 'ANALYSIS_READY'
++  schemaVersion: 'cs2d-analysis-ready.v1'
++  selectedPlayerId: string
++  bundleJson: string
++}
++
++export interface AnalysisFailedMessage {
++  type: 'ANALYSIS_FAILED'
++  schemaVersion: 'cs2d-analysis-ready.v1'
++  selectedPlayerId: string
++  message: string
++}
++
++export type PlaybackEvent =
++  | ReplayReadyMessage
++  | PlayerSelectedMessage
++  | PlaybackStateMessage
++  | AnalysisReadyMessage
++  | AnalysisFailedMessage
++
++export type PlaybackCommand =
++  | { type: 'play' }
++  | { type: 'pause' }
++  | { type: 'seekCanonicalTick'; canonicalTick: number }
++  | { type: 'selectRound'; roundIndex: number }
++  | { type: 'setSpeed'; speed: number }
++
++interface EventEnvelope {
++  channel: typeof PLAYBACK_BRIDGE_CHANNEL
++  direction: 'event'
++  payload: PlaybackEvent
++}
++
++interface CommandEnvelope {
++  channel: typeof PLAYBACK_BRIDGE_CHANNEL
++  direction: 'command'
++  payload: PlaybackCommand
++}
++
++function parentOrigin(): string | null {
++  try {
++    // cs2d navigates from `/` to a generated replay route after parsing. At
++    // that point document.referrer is the previous cs2d URL rather than the
++    // embedding Next shell, so the host supplies its origin explicitly.
++    const configured = new URL(window.location.href).searchParams.get('parentOrigin')
++    if (configured) {
++      const parsed = new URL(configured)
++      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.origin
++    }
++    return document.referrer ? new URL(document.referrer).origin : null
++  } catch {
++    return null
++  }
++}
++
++export function emitPlaybackEvent(payload: PlaybackEvent): void {
++  if (window.parent === window) return
++  const message: EventEnvelope = {
++    channel: PLAYBACK_BRIDGE_CHANNEL,
++    direction: 'event',
++    payload,
++  }
++  const origin = parentOrigin()
++  if (!origin) return
++  window.parent.postMessage(message, origin)
++}
++
++function isRecord(value: unknown): value is Record<string, unknown> {
++  return typeof value === 'object' && value !== null
++}
++
++function isFiniteNumber(value: unknown): value is number {
++  return typeof value === 'number' && Number.isFinite(value)
++}
++
++function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
++  const actual = Object.keys(value).sort()
++  const expected = [...keys].sort()
++  return actual.length === expected.length && actual.every((key, index) => key === expected[index])
++}
++
++function isCommandEnvelope(value: unknown): value is CommandEnvelope {
++  if (
++    !isRecord(value) ||
++    !hasExactKeys(value, ['channel', 'direction', 'payload']) ||
++    value.channel !== PLAYBACK_BRIDGE_CHANNEL ||
++    value.direction !== 'command'
++  ) return false
++  const payload = value.payload
++  if (!isRecord(payload) || typeof payload.type !== 'string') return false
++  switch (payload.type) {
++    case 'play':
++    case 'pause':
++      return Object.keys(payload).length === 1
++    case 'seekCanonicalTick':
++      return Object.keys(payload).length === 2 && isFiniteNumber(payload.canonicalTick)
++    case 'selectRound':
++      return Object.keys(payload).length === 2 && isFiniteNumber(payload.roundIndex) && Number.isInteger(payload.roundIndex) && payload.roundIndex >= 0
++    case 'setSpeed':
++      return Object.keys(payload).length === 2 && isFiniteNumber(payload.speed) && payload.speed > 0
++    default:
++      return false
++  }
++}
++
++export function listenForPlaybackCommands(
++  handlers: {
++    play: () => void
++    pause: () => void
++    seekCanonicalTick: (tick: number) => void
++    selectRound: (roundIndex: number) => void
++    setSpeed: (speed: number) => void
++  },
++): () => void {
++  if (window.parent === window) return () => {}
++  const onMessage = (event: MessageEvent<unknown>) => {
++    const origin = parentOrigin()
++    if (!origin || event.source !== window.parent || event.origin !== origin || !isCommandEnvelope(event.data)) return
++    const command = event.data.payload
++    switch (command.type) {
++      case 'play':
++        handlers.play()
++        break
++      case 'pause':
++        handlers.pause()
++        break
++      case 'seekCanonicalTick':
++        handlers.seekCanonicalTick(command.canonicalTick)
++        break
++      case 'selectRound':
++        handlers.selectRound(command.roundIndex)
++        break
++      case 'setSpeed':
++        handlers.setSpeed(command.speed)
++        break
++    }
++  }
++  window.addEventListener('message', onMessage)
++  return () => window.removeEventListener('message', onMessage)
++}
++
++export function replayReadyMessage(replay: {
++  map: string
++  demoTickRate: number
++  players: { steamId: string; name: string; startSide: 'T' | 'CT' }[]
++  rounds: { number: number; freezeStartTick?: number; startTick: number; postEndTick?: number; endTick: number }[]
++}): ReplayReadyMessage {
++  const rounds = replay.rounds.map((round, roundIndex) => ({
++    roundIndex,
++    roundNumber: round.number,
++    startCanonicalTick: round.freezeStartTick ?? round.startTick,
++    endCanonicalTick: round.postEndTick ?? round.endTick,
++  }))
++  return {
++    type: 'REPLAY_READY',
++    schemaVersion: 'cs2d-replay-ready.v1',
++    map: replay.map,
++    tickRate: replay.demoTickRate,
++    startCanonicalTick: rounds[0]?.startCanonicalTick ?? 0,
++    endCanonicalTick: rounds.at(-1)?.endCanonicalTick ?? 0,
++    roundCount: rounds.length,
++    rounds,
++    players: replay.players.map((player) => ({
++      playerId: player.steamId,
++      displayName: player.name,
++      startSide: player.startSide,
++    })),
++    freezeSkipped: true,
++  }
++}
