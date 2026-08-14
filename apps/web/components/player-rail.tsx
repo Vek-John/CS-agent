@@ -131,8 +131,13 @@ function PlayerRailRow({
         </span>
         <span className="player-rail-inventory" title={inventoryLabel}>
           <small>背包</small>
-          {state?.inventory?.length ? state.inventory.map((item) => (
-            <ItemGlyph key={`${item.item_id}-${item.count}`} item={item} catalog={catalog} compact />
+          {state?.inventory?.length ? state.inventory.map((item, index) => (
+            <ItemGlyph
+              key={`${item.item_id}-${item.count}-${index}`}
+              item={item}
+              catalog={catalog}
+              compact
+            />
           )) : <span className="player-rail-unknown">{state?.inventory ? "无" : "未知"}</span>}
         </span>
         <span className="player-rail-key-items">
