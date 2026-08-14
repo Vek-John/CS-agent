@@ -695,9 +695,9 @@ function collectCandidates(
         revealTick: revealState.sample.tick,
         state: decisionState,
         sourceRef: "cs2d-r" + String(round.number) + "-grenade-" + String(points[0].t) + "-" + String(points.at(-1)!.t),
-        utilityKind: path.kind,
-        timingLimitation: "GrenadePath t is approximately 0.1s resolution; cue ticks use conservative real Frame boundaries and are not exact throw/detonation ticks."
+        utilityKind: path.kind
       });
+      issue(warnings, "GrenadePath.t is rounded to about 0.1s; utility cue boundaries use conservative canonical Frame ticks and never claim an exact throw or landing tick.");
     }
 
     for (let index = 1; index < roundStates.length; index += 1) {
@@ -1411,8 +1411,13 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
       .filter((cue) => cue.observable_state_id)
       .map((cue) => [cue.observable_state_id!, cue])
   );
+  const seenObservationIds = new Set<string>();
   for (const state of bundle.observation_evidence) {
     assertValidObservableState(state);
+    if (seenObservationIds.has(state.id)) {
+      throw new Error(`ObservationState ${state.id} is duplicated.`);
+    }
+    seenObservationIds.add(state.id);
     const cue = cueByObservation.get(state.id);
     if (
       !cue ||
@@ -1423,6 +1428,9 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
     ) {
       throw new Error(`ObservationState ${state.id} is not bound to its selected-player decision cue.`);
     }
+  }
+  if (seenObservationIds.size !== cueByObservation.size) {
+    throw new Error("Every cue observable_state_id must resolve to exactly one ObservationState.");
   }
 }
 

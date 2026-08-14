@@ -214,6 +214,7 @@ describe("cs2d analysis adapter", () => {
     const bundle = buildCs2dAnalysisBundle({ replay: replayFixture(), selectedSteamId: "p-t1", demoId: "demo-fixture" });
     expect(bundle.metadata.warnings).toContain("cs2d ShotEvent 没有 shooterSteamId；适配层不把射击归因到任何玩家，等待 parser 扩展。");
     expect(bundle.metadata.warnings).toContain("当前 cs2d GameEvent 没有 HurtEvent；Round.damage 只有回合聚合，不能伪装成逐 tick 受击。");
+    expect(bundle.metadata.warnings).toContain("GrenadePath.t is rounded to about 0.1s; utility cue boundaries use conservative canonical Frame ticks and never claim an exact throw or landing tick.");
     expect(bundle.match_timeline.match_events?.some((event) => event.event_type === "DAMAGE" && event.fact_confidence === 1)).toBe(false);
     const damage = bundle.match_timeline.match_events?.find((event) => event.event_type === "DAMAGE");
     expect(damage).toMatchObject({ target_player_id: "p-t1" });
@@ -354,5 +355,7 @@ describe("cs2d analysis adapter", () => {
     const whitelisted = serializeCs2dAnalysisBundle(withRawReplay);
     expect(whitelisted).not.toContain("rawReplay");
     expect(() => deserializeCs2dAnalysisBundle(JSON.stringify({ ...first, rawReplay: replay }))).toThrow(/top-level/);
+    const complete = buildCs2dAnalysisBundle({ replay, selectedSteamId: "p-t1", demoId: "complete-demo" });
+    expect(() => deserializeCs2dAnalysisBundle(JSON.stringify({ ...complete, observation_evidence: [] }))).toThrow(/observable_state_id/);
   });
 });
