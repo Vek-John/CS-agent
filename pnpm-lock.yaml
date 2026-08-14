@@ -77,6 +77,9 @@ importers:
       '@cs-coach/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@cs-coach/map-semantics':
+        specifier: workspace:*
+        version: link:../map-semantics
       '@cs-coach/observation':
         specifier: workspace:*
         version: link:../observation

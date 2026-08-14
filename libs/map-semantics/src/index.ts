@@ -8,6 +8,8 @@ import type {
   WorldToRadarAffine
 } from "@cs-coach/contracts";
 
+export * from "./callouts";
+
 export const MAP_SEMANTICS_VERSION = "map-semantics/1.0.0";
 
 export class MapTransformError extends Error {

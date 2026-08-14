@@ -27,6 +27,7 @@ function state(steamId: string, tick: number, health: number, x = 100 + tick / 1
     alive: health > 0,
     side: steamId.startsWith("p-t") ? "T" as const : "CT" as const,
     weapon: "AK-47",
+    lastPlaceName: "Connector",
     money: 3200,
     equipValue: 4500,
     armor: 100,
@@ -219,10 +220,11 @@ describe("cs2d analysis adapter", () => {
       demoId: "decision-context"
     });
     expect(bundle.review_plan.cues[0]).toMatchObject({
-      title: "道具出手前先定义它要创造的窗口"
+      title: "连接：道具出手前先说清要封哪条枪线"
     });
-    expect(bundle.review_plan.cues[0].question).toContain("现在手持道具");
-    expect(bundle.review_plan.cues[0].facts[0].text).toContain("剩余道具 2");
+    expect(bundle.review_plan.cues[0].question).toContain("你在连接准备出道具");
+    expect(bundle.review_plan.cues[0].facts[0].text).toContain("你在连接");
+    expect(bundle.review_plan.cues[0].facts[0].text).toContain("有 2 颗道具");
     expect(bundle.review_plan.cues[0].question).not.toMatch(/击杀|死亡|结果|随后|最终/);
   });
 

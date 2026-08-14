@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@cs-coach/contracts": "workspace:*",
+    "@cs-coach/map-semantics": "workspace:*",
     "@cs-coach/observation": "workspace:*",
     "@cs-coach/review-planner": "workspace:*"
   },

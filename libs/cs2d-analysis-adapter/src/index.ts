@@ -25,6 +25,7 @@ import {
   buildObservableState,
   directVisionFactFromSample
 } from "@cs-coach/observation";
+import { mirageChineseCallout } from "@cs-coach/map-semantics";
 import { assertValidReviewPlan } from "@cs-coach/review-planner";
 
 /**
@@ -44,11 +45,11 @@ export const CS2D_SOURCE = {
   input_boundary: "WASM_WORKER_STRUCTURED_REPLAY_ONLY"
 } as const;
 
-export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.1.0" as const;
+export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.2.0" as const;
 export const CS2D_TIMELINE_VERSION = "zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec/timeline/1.0.0" as const;
 export const CS2D_OBSERVATION_VERSION = "cs2d-analysis-adapter/1.0.0/internal-observation" as const;
-export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.1.0/signals" as const;
-export const CS2D_PLANNER_VERSION = "cs2d-analysis-adapter/1.1.0/planner" as const;
+export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.2.0/signals" as const;
+export const CS2D_PLANNER_VERSION = "cs2d-analysis-adapter/1.2.0/planner" as const;
 
 /** MVP pacing target: a full match should feel coached, not interrupted. */
 const MAX_TEACHING_CUES = 8;
@@ -84,6 +85,8 @@ export interface Cs2dPlayerState {
   readonly alive: boolean;
   readonly side: TeamSide;
   readonly weapon: string;
+  /** Source-engine navigation place token (`m_szLastPlaceName`). */
+  readonly lastPlaceName?: string;
   readonly primary?: string;
   readonly money: number;
   readonly equipValue: number;
@@ -872,7 +875,14 @@ function buildPlayers(replay: Cs2dReplay, selectedSteamId: string, warnings: str
   return players;
 }
 
-function worldAnnotation(state: NormalizedState | undefined): Annotation[] {
+function stateCallout(state: NormalizedState | undefined): string | undefined {
+  return mirageChineseCallout(state?.source.lastPlaceName);
+}
+
+function worldAnnotation(
+  state: NormalizedState | undefined,
+  callout: string | undefined
+): Annotation[] {
   if (!state) return [];
   const point = state.sample.world_position;
   return [{
@@ -880,11 +890,11 @@ function worldAnnotation(state: NormalizedState | undefined): Annotation[] {
     type: "POINT",
     coordinate_space: "WORLD",
     point,
-    label: "选手决策时的自身位置"
+    label: callout ? `你在${callout}的决策位置` : "你的决策位置"
   }];
 }
 
-function cueText(habitKey: string, isHabit: boolean): {
+function cueText(habitKey: string, isHabit: boolean, callout?: string): {
   title: string;
   explanation: string;
   advice: string;
@@ -893,57 +903,58 @@ function cueText(habitKey: string, isHabit: boolean): {
   taxonomy: string;
 } {
   const context = habitKey.split(".")[0];
+  const where = callout ? `你在${callout}` : "你在这个位置";
   const base = context === "utility-readiness"
     ? {
-        title: "道具出手前先定义它要创造的窗口",
-        explanation: "教练判断：你现在手持道具，先确认它要阻断哪条视线、帮助谁启动，以及出手后能否安全回到掩体。",
-        advice: "先用一句话定义这颗道具的目标；队友尚未能同步就保留，能同步时再出手。",
+        title: "道具出手前先说清要封哪条枪线",
+        explanation: `教练判断：${where}准备出道具，先确认它要封哪条枪线、帮谁启动，以及出手后谁来接空间。`,
+        advice: "先报清这颗道具要封的位置；队友能同步再出手，避免烟闪落地时没人接空间。",
         trigger: "手持道具并准备离开掩体或进入投掷动作时",
         ruleId: "utility-window"
       }
     : context === "low-health-survival"
       ? {
-          title: "低血量时把第一接触让给更有容错的人",
-          explanation: "教练判断：当前生命值压低了你的换血容错，优先保留交叉、补枪或延迟信息价值，而不是主动承担第一接触。",
-          advice: "让高血量队友先确认接触，你从第二枪线补枪；独自时只做能立刻撤回的短探。",
+          title: "低血量别抢首接触，留在第二枪线补枪",
+          explanation: `教练判断：${where}血量偏低，正面换血容错不够；优先留住补枪和交叉火力价值，不要主动吃首接触。`,
+          advice: "让高血量队友打首接触，你站第二枪线补枪；独自时只短探能立刻退回掩体的角度。",
           trigger: "生命值较低且下一步可能进入正面接触时",
           ruleId: "low-health-second-contact"
         }
       : context === "rotation-safety"
         ? {
-            title: "切刀提速前先确认这段路已经安全",
-            explanation: "教练判断：刀在手能换来速度，也会放大突然接触的代价；先用已有信息确认安全窗口，再决定提速距离。",
-            advice: "只在已确认安全的路段切刀；接近未知拐角前提前切回武器并完成预瞄。",
+            title: "切刀转点只跑已确认安全的路",
+            explanation: `教练判断：${where}切刀能提速，但遇到首接触就没有开枪窗口；只把刀用于已经确认安全的转点路段。`,
+            advice: "安全路段切刀提速；接近未知拐角前切回枪，准星先放到首接触位。",
             trigger: "刀在手且即将进入未确认区域时",
             ruleId: "rotation-weapon-ready"
           }
         : context === "bomb-carrier-safety"
           ? {
-              title: "持包决策先保证掉包位置可以回收",
-              explanation: "教练判断：你承担的不只是个人对枪，C4 的可回收性会改变全队后续选择；先把包留在队友能接应的位置。",
-              advice: "不要带包单独穿过未知区域；需要先探时把包交出，或让队友建立可回收枪线。",
+              title: "带包别单走，先保证掉包后有人能回收",
+              explanation: `教练判断：${where}带着 C4，掉包位置会直接限制全队转点；这次推进要先保证队友能补枪、能回收。`,
+              advice: "带包不要单人进未知区；需要先探就交包，或者让队友先架住可回收枪线。",
               trigger: "携带 C4 且准备脱离队友覆盖时",
               ruleId: "bomb-recoverability"
             }
           : context === "unarmored-contact"
             ? {
-                title: "无甲接触更依赖第一枪和撤回线",
-                explanation: "教练判断：当前护甲不足会降低连续换血容错，接触前要让准星、掩体和撤回方向同时就位。",
-                advice: "先把准星落在最可能的第一接触位，只暴露能立即撤回的身位，不做长距离连续找人。",
+                title: "无甲接触只露一个角，第一枪打完就能退",
+                explanation: `教练判断：${where}护甲不足，连续换血很亏；首接触前必须把准星、掩体和退路一次对齐。`,
+                advice: "准星先放在最可能的头线，只露能立刻回掩体的身位，不连续找第二个角。",
                 trigger: "护甲不足且准备离开掩体进入接触区时",
                 ruleId: "unarmored-contact-discipline"
               }
             : {
-                title: "接触前把准星和撤回路线对齐",
-                explanation: "教练判断：当前最重要的是让第一枪位置、可撤回掩体和队友接应形成同一个动作，而不是边移动边临时决定。",
-                advice: "进入未知角度前先停半拍确认准星与退路；没有新增信息时保留可调整站位。",
+                title: "首接触前把准星、补枪位和退路对齐",
+                explanation: `教练判断：${where}准备接触时，第一枪位置、队友补枪线和可退掩体要形成同一个动作，不能边走边临时找角度。`,
+                advice: "过未知角前停半拍，把准星放到首接触位；没有队友补枪或交叉火力，就先保留退路。",
                 trigger: "准备进入下一段未知枪线且退出条件尚未确认时",
                 ruleId: "contact-preparation"
               };
 
   return {
     ...base,
-    title: isHabit ? `再次出现：${base.title}` : base.title,
+    title: `${isHabit ? "又一次：" : ""}${callout ? `${callout}：` : ""}${base.title}`,
     taxonomy: habitKey
   };
 }
@@ -955,7 +966,9 @@ function stateFactText(state: NormalizedState): string {
   const armor = finiteNumber(source.armor) ? String(Math.max(0, source.armor)) : "未知";
   const helmet = source.helmet === true ? "有头盔" : "无头盔";
   const utilityCount = asArray(source.grenades).length;
-  return `当前可验证的自身状态：生命值 ${hp}，护甲 ${armor}（${helmet}），手持 ${weapon}，剩余道具 ${utilityCount}；位置来自下采样 Frame。`;
+  const callout = stateCallout(state);
+  const position = callout ? `你在${callout}，` : "";
+  return `${position}${hp} HP、${armor} 甲（${helmet}），手持 ${weapon}，有 ${utilityCount} 颗道具；状态来自决策前采样。`;
 }
 
 function buildCue(
@@ -1001,7 +1014,8 @@ function buildCue(
     });
   }
 
-  const text = cueText(candidate.habitKey, candidate.occurrenceIndex > 1);
+  const callout = stateCallout(candidate.state);
+  const text = cueText(candidate.habitKey, candidate.occurrenceIndex > 1, callout);
   const inferenceId = `i${counters.inference++}`;
   const adviceId = `a${counters.advice++}`;
   const evidenceId = `e${counters.evidence++}`;
@@ -1046,7 +1060,7 @@ function buildCue(
     evidence,
     observable_fact_refs: [...factRefs],
     ...(observation ? { observable_state_id: observation.id } : {}),
-    annotations: worldAnnotation(candidate.state),
+    annotations: worldAnnotation(candidate.state, callout),
     confidence: candidate.state ? 0.72 : 0.45,
     limitations: cueLimitations
   };
@@ -1321,7 +1335,7 @@ function failedBundle(input: Cs2dAnalysisInput, metadata: Cs2dAnalysisMetadata, 
       signal_version: CS2D_SIGNAL_VERSION,
       planner_version: CS2D_PLANNER_VERSION,
       provider: "DETERMINISTIC_TEMPLATE",
-      prompt_version: "cs2d-decision-template/1.1.0",
+      prompt_version: "cs2d-decision-template/1.2.0",
       status: "FALLBACK",
       narration_deterministic: true,
       analysis_subject_selection: "EXPLICIT_PLAYER",
@@ -1432,7 +1446,7 @@ export function buildCs2dAnalysisBundle(input: Cs2dAnalysisInput): Cs2dAnalysisB
       signal_version: CS2D_SIGNAL_VERSION,
       planner_version: CS2D_PLANNER_VERSION,
       provider: "DETERMINISTIC_TEMPLATE",
-      prompt_version: "cs2d-decision-template/1.0.0",
+      prompt_version: "cs2d-decision-template/1.2.0",
       status: "DISABLED",
       narration_deterministic: true,
       analysis_subject_selection: "EXPLICIT_PLAYER",
