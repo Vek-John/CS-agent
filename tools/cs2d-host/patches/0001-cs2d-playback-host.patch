@@ -44,10 +44,10 @@ index 057a546..54be0a2 100644
        >
          <!-- Start: a Back button while viewing a demo, the sidebar toggle otherwise.
 diff --git a/apps/app/src/style.css b/apps/app/src/style.css
-index 327973e..69b029c 100644
+index 327973e..6ac4b1b 100644
 --- a/apps/app/src/style.css
 +++ b/apps/app/src/style.css
-@@ -294,3 +294,30 @@
+@@ -294,3 +294,42 @@
      transform: translateY(100%);
    }
  }
@@ -65,6 +65,18 @@ index 327973e..69b029c 100644
 +  opacity: 0.42;
 +  filter: saturate(0.55);
 +}
++.host-roster-card--locked:disabled {
++  cursor: default;
++  opacity: 0.58;
++}
++.host-roster-card--target {
++  border-color: rgb(100 170 255 / 0.8);
++  box-shadow: 0 0 0 1px rgb(100 170 255 / 0.35), 0 1px 0 rgb(255 255 255 / 0.08) inset, 0 8px 20px rgb(0 0 0 / 0.2);
++}
++.host-roster-card--target:disabled {
++  cursor: pointer;
++  opacity: 1;
++}
 +.host-roster-card__top {
 +  background: #151922;
 +}
@@ -79,7 +91,7 @@ index 327973e..69b029c 100644
 +  .host-roster-card { border-width: 2px; }
 +}
 diff --git a/apps/app/src/viewer/DemoAnalyzerView.vue b/apps/app/src/viewer/DemoAnalyzerView.vue
-index 9c4c084..6533edf 100644
+index 9c4c084..7da7aed 100644
 --- a/apps/app/src/viewer/DemoAnalyzerView.vue
 +++ b/apps/app/src/viewer/DemoAnalyzerView.vue
 @@ -1,5 +1,5 @@
@@ -164,7 +176,26 @@ index 9c4c084..6533edf 100644
  // Phase → i18n key for the loading label (the `reading` phase uses `readingFile`).
  const PHASE_LABEL: Record<string, string> = {
    reading: 'analyzer.readingFile',
-@@ -286,7 +347,7 @@ async function handleFile(file: File) {
+@@ -39,13 +100,15 @@ const PHASE_LABEL: Record<string, string> = {
+   building: 'analyzer.building',
+   serializing: 'analyzer.serializing',
+ }
+-const phaseLabel = computed(() => t(PHASE_LABEL[parser.phase.value] ?? 'analyzer.parsing'))
++const phaseLabel = computed(() => hostMode.value && parser.phase.value === 'parsing'
++  ? '正在解析比赛数据'
++  : t(PHASE_LABEL[parser.phase.value] ?? 'analyzer.parsing'))
+ // Overall percentage shown next to the bar.
+ const progressPct = computed(() => Math.round(parser.progress.value * 100))
+-// During parsing, a "X / Y ticks" detail so the user sees real movement.
++// Non-host parsing may show a parser detail; host mode keeps this area to phase + percent only.
+ const parseTickDetail = computed(() => {
+   const total = parser.parseTotalTicks.value
+-  if (parser.phase.value !== 'parsing' || !total) return ''
++  if (hostMode.value || parser.phase.value !== 'parsing' || !total) return ''
+   return t('analyzer.parsingTicks', {
+     done: parser.parseTick.value.toLocaleString(),
+     total: total.toLocaleString(),
+@@ -286,7 +349,7 @@ async function handleFile(file: File) {
      })
      if (id) {
        currentId.value = id // already loaded: keeps the watcher from reloading
@@ -173,7 +204,7 @@ index 9c4c084..6533edf 100644
      }
    }
  }
-@@ -314,7 +375,7 @@ async function onImportArchive(file: File) {
+@@ -314,7 +377,7 @@ async function onImportArchive(file: File) {
        fileSize: file.size,
      })
      currentId.value = id
@@ -182,7 +213,7 @@ index 9c4c084..6533edf 100644
    } catch (err) {
      importError.value = err instanceof Error ? err.message : String(err)
    } finally {
-@@ -457,16 +518,48 @@ function onImportInput(e: Event) {
+@@ -457,16 +520,49 @@ function onImportInput(e: Event) {
      <template v-if="parser.status.value === 'done' && parser.replay.value">
        <!-- v-show keeps the stage mounted (preserves playback position across tab switches) -->
        <div v-show="activeTab === 'viewer'" class="h-full w-full">
@@ -226,14 +257,16 @@ index 9c4c084..6533edf 100644
            :file-name="parser.fileName.value"
 -          :skip-freeze="skipFreeze"
 -          :autoplay="autoplay && activeTab === 'viewer'"
+-          :active="activeTab === 'viewer'"
 +          :skip-freeze="hostMode || skipFreeze"
 +          :autoplay="!hostMode && autoplay && activeTab === 'viewer'"
-           :active="activeTab === 'viewer'"
++          :active="activeTab === 'viewer' && !hostMode"
 +          :host-mode="hostMode"
++          :host-target-player-id="hostMode ? hostSelectedPlayerId : null"
          />
        </div>
        <HeatmapView
-@@ -494,7 +587,7 @@ function onImportInput(e: Event) {
+@@ -494,7 +590,7 @@ function onImportInput(e: Event) {
        />
  
        <!-- Tabs (2D / Duels / Heatmaps / Utilities / Economy) in the center of the appbar -->
@@ -242,8 +275,148 @@ index 9c4c084..6533edf 100644
          <div class="flex items-center gap-0.5 rounded-lg border border-ink-700 bg-ink-900/60 p-0.5">
            <button
              type="button"
+diff --git a/apps/app/src/viewer/player/ViewerMap.vue b/apps/app/src/viewer/player/ViewerMap.vue
+index e737b9b..7bbe4fd 100644
+--- a/apps/app/src/viewer/player/ViewerMap.vue
++++ b/apps/app/src/viewer/player/ViewerMap.vue
+@@ -1,5 +1,6 @@
+ <script setup lang="ts">
+ import { onMounted, onUnmounted, ref, watch } from 'vue'
++import { useMediaQuery } from '@vueuse/core'
+ import type { CommentAnchor, CommentKind, GrenadePath, PlayerMeta, PlayerState, ReplayComment, Round, Side } from '@/viewer/domain/schema'
+ import { worldToFraction, worldFromFraction, DEFAULT_BLAST_RADIUS, type MapCalibration } from '@/viewer/domain/calibration'
+ import { SIDE_COLOR } from '@/viewer/domain/colors'
+@@ -25,6 +26,7 @@ import { useI18n } from '@/app/i18n'
+ 
+ // `t` is used internally for time; i18n is aliased as `tr`.
+ const { t: tr } = useI18n()
++const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
+ 
+ const props = defineProps<{
+   players: PlayerState[]
+@@ -51,6 +53,12 @@ const props = defineProps<{
+   /** Player this view observes (e.g. an embedded kill/death clip): a small red
+    *  eye is drawn just before their name, so it reads who the clip is about. */
+   observedSteamId?: string | null
++  /** Locked host analysis subject; its map label is rendered as “你”. */
++  hostTargetSteamId?: string | null
++  /** Host camera state; full is a fixed radar overview, target follows the subject. */
++  hostCameraMode?: 'full' | 'target' | null
++  /** Bumps when a host command requests a fresh full overview, even if mode is unchanged. */
++  hostCameraRevision?: number
+   /** Performance mode: draw smoke/fire as flat circles (no gradients/blur). */
+   lowQualityEffects?: boolean
+   /** Arc to highlight in full (grenades hover): when set, only this one shows. */
+@@ -634,6 +642,9 @@ function drawPlayer(p: PlayerState, death: { x: number; y: number } | undefined)
+   if (!ctx) return
+   const color = SIDE_COLOR[p.side]
+   const name = props.playersById.get(p.steamId)?.name ?? ''
++  const isHostTarget = props.hostTargetSteamId === p.steamId
++  const labelName = isHostTarget ? '你' : name
++  const originalName = isHostTarget && name !== '你' ? name : ''
+   const r = playerRadius()
+   // Coach board: a dragged/overridden player draws at its board position.
+   const ov = coachPosOf(p)
+@@ -651,6 +662,7 @@ function drawPlayer(p: PlayerState, death: { x: number; y: number } | undefined)
+     ctx.arc(x, y, r * 0.7, 0, Math.PI * 2)
+     ctx.fill()
+     ctx.restore()
++    if (isHostTarget) drawLabel('你', x, y - r - 6, '#ffffff', '700 10px Inter, sans-serif', 13)
+     return
+   }
+   // Name and weapon follow the (clamped) circle radius so they stay proportional
+@@ -679,20 +691,24 @@ function drawPlayer(p: PlayerState, death: { x: number; y: number } | undefined)
+     ctx.moveTo(x + s, y - s)
+     ctx.lineTo(x - s, y + s)
+     ctx.stroke()
++    const labelY = y - r - 9 * lblScale
+     drawLabel(
+-      name,
++      labelName,
+       x,
+-      y - r - 9 * lblScale,
++      labelY,
+       color,
+       `600 ${(10 * lblScale).toFixed(1)}px Inter, sans-serif`,
+       14 * lblScale,
+     )
++    if (originalName) {
++      drawLabel(originalName, x, labelY + 10 * lblScale, 'rgba(222,226,234,0.72)', `500 ${(7.5 * lblScale).toFixed(1)}px Inter, sans-serif`, 10 * lblScale)
++    }
+     ctx.restore()
+     // Dead but talking: keep the mic (full opacity) next to the name.
+     if (props.talking?.has(p.steamId) && !props.muted?.[p.side]) {
+       drawVoiceMini(
+         p.side,
+-        name,
++        labelName,
+         x,
+         y - r - 9 * lblScale,
+         `600 ${(10 * lblScale).toFixed(1)}px Inter, sans-serif`,
+@@ -702,7 +718,7 @@ function drawPlayer(p: PlayerState, death: { x: number; y: number } | undefined)
+     // Observed player stays marked after death (e.g. the victim's death spot).
+     if (props.observedSteamId === p.steamId) {
+       drawEyeMini(
+-        name,
++        labelName,
+         x,
+         y - r - 9 * lblScale,
+         `600 ${(10 * lblScale).toFixed(1)}px Inter, sans-serif`,
+@@ -799,7 +815,10 @@ function drawPlayer(p: PlayerState, death: { x: number; y: number } | undefined)
+   // name above the circle, in the side color; equipment (icon) above the name.
+   const nameBh = 15 * lblScale
+   const nameY = y - r - caretH - nameBh / 2 - 2
+-  drawLabel(name, x, nameY, color, `600 ${(11 * lblScale).toFixed(1)}px Inter, sans-serif`, nameBh)
++  drawLabel(labelName, x, nameY, color, `600 ${(11 * lblScale).toFixed(1)}px Inter, sans-serif`, nameBh)
++  if (originalName) {
++    drawLabel(originalName, x, nameY + 10 * lblScale, 'rgba(222,226,234,0.72)', `500 ${(7.5 * lblScale).toFixed(1)}px Inter, sans-serif`, 10 * lblScale)
++  }
+ 
+   // normalized weapon icon: fit into a box (contain), so wide rifles and narrow
+   // grenades end up at a comparable visual size. The box follows the player
+@@ -834,7 +853,7 @@ function drawPlayer(p: PlayerState, death: { x: number; y: number } | undefined)
+   if (props.talking?.has(p.steamId) && !props.muted?.[p.side]) {
+     drawVoiceMini(
+       p.side,
+-      name,
++      labelName,
+       x,
+       nameY,
+       `600 ${(11 * lblScale).toFixed(1)}px Inter, sans-serif`,
+@@ -843,7 +862,7 @@ function drawPlayer(p: PlayerState, death: { x: number; y: number } | undefined)
+   }
+   // red eye before the name of the player this clip observes (the killer/victim)
+   if (props.observedSteamId === p.steamId) {
+-    drawEyeMini(name, x, nameY, `600 ${(11 * lblScale).toFixed(1)}px Inter, sans-serif`, nameBh)
++    drawEyeMini(labelName, x, nameY, `600 ${(11 * lblScale).toFixed(1)}px Inter, sans-serif`, nameBh)
+   }
+   ctx.restore() // end labels jump offset
+ }
+@@ -1531,6 +1550,7 @@ const { followZoom, kickIfFocused } = useMapCamera({
+   focusSteamIds: () => props.focusSteamIds,
+   focusWorld: () => props.focusWorld,
+   followSteamId: () => props.followSteamId,
++  reducedMotion: () => reducedMotion.value,
+   draw: () => draw(),
+ })
+ 
+@@ -1599,6 +1619,14 @@ function reset() {
+   draw()
+ }
+ 
++watch(
++  () => [props.hostCameraMode, props.hostCameraRevision] as const,
++  ([mode]) => {
++    if (mode === 'full') reset()
++    else draw()
++  },
++)
++
+ // Radar source: the active floor (multi-level maps) or the calibration radar.
+ const radarSource = () => props.radarSrc ?? props.calibration.radar
+ 
 diff --git a/apps/app/src/viewer/player/ViewerRoster.vue b/apps/app/src/viewer/player/ViewerRoster.vue
-index 4ed06bf..df44398 100644
+index 4ed06bf..164e68a 100644
 --- a/apps/app/src/viewer/player/ViewerRoster.vue
 +++ b/apps/app/src/viewer/player/ViewerRoster.vue
 @@ -1,6 +1,6 @@
@@ -254,7 +427,7 @@ index 4ed06bf..df44398 100644
  import { SIDE_COLOR } from '@/viewer/domain/colors'
  import { weaponIconPath } from '@/viewer/domain/weaponIcons'
  import { useI18n } from '@/app/i18n'
-@@ -13,20 +13,17 @@ const props = withDefaults(
+@@ -13,20 +13,19 @@ const props = withDefaults(
      playersById: Map<string, PlayerMeta>
      score: Record<Side, number>
      hideScore?: boolean
@@ -265,6 +438,8 @@ index 4ed06bf..df44398 100644
 -    /** steamId of the player being followed (highlights its card). */
      selectedId?: string | null
 +    hostMode?: boolean
++    /** Locked analysis subject in host mode; all other cards are inert. */
++    targetId?: string | null
 +    round?: Round | null
 +    currentT?: number
    }>(),
@@ -280,7 +455,7 @@ index 4ed06bf..df44398 100644
  
  const sides = computed<{ side: Side; label: string }[]>(() =>
    props.side
-@@ -36,116 +33,128 @@ const sides = computed<{ side: Side; label: string }[]>(() =>
+@@ -36,116 +35,142 @@ const sides = computed<{ side: Side; label: string }[]>(() =>
          { side: 'T', label: 'T' },
        ],
  )
@@ -314,13 +489,21 @@ index 4ed06bf..df44398 100644
 +  return player.weapon === 'C4' || (
 +    bombState.value?.state === 'carried' && bombState.value.carrierSteamId === player.steamId
 +  )
++}
++
++function shownWeapon(player: PlayerState): string {
++  if (props.hostMode) return player.weapon
++  return player.weapon === 'Faca' ? (player.primary ?? player.weapon) : player.weapon
  }
  
 -const armorIcon = (p: PlayerState) =>
 -  p.armor > 0 ? (p.helmet ? '/weapons/vesthelm.svg' : '/weapons/vest.svg') : null
-+function shownWeapon(player: PlayerState): string {
-+  if (props.hostMode) return player.weapon
-+  return player.weapon === 'Faca' ? (player.primary ?? player.weapon) : player.weapon
++function isHostTarget(player: PlayerState): boolean {
++  return Boolean(props.hostMode && props.targetId && props.targetId === player.steamId)
++}
++
++function canSelect(player: PlayerState): boolean {
++  return !props.hostMode || isHostTarget(player)
 +}
  </script>
  
@@ -347,6 +530,7 @@ index 4ed06bf..df44398 100644
 +        v-for="player in roster(team.side)"
 +        :key="player.steamId"
 +        type="button"
++        :disabled="props.hostMode && !isHostTarget(player)"
 +        class="host-roster-card w-full cursor-pointer overflow-hidden border text-left"
          :class="[
 -          { 'opacity-45': !p.alive },
@@ -356,11 +540,15 @@ index 4ed06bf..df44398 100644
 +          player.steamId === selectedId
              ? 'border-surge-400 ring-1 ring-surge-400'
              : 'border-ink-700 hover:border-ink-500',
++          props.hostMode && isHostTarget(player) && 'host-roster-card--target',
++          props.hostMode && !isHostTarget(player) && 'host-roster-card--locked',
          ]"
 -        @click="emit('select', p.steamId)"
 +        :data-dead="!player.alive"
-+        :aria-label="`${player.name}，${player.alive ? `${player.health} HP` : t('viewer.eliminated')}`"
-+        @click="emit('select', player.steamId)"
++        :aria-disabled="props.hostMode && !isHostTarget(player) ? 'true' : undefined"
++        :aria-label="`${isHostTarget(player) ? `你，${player.name}` : player.name}，${player.alive ? `${player.health} HP` : t('viewer.eliminated')}`"
++        :title="props.hostMode ? player.name : undefined"
++        @click="canSelect(player) && emit('select', player.steamId)"
        >
 -        <div class="flex items-center gap-2" :class="mirror && 'flex-row-reverse'">
 -          <span
@@ -379,7 +567,8 @@ index 4ed06bf..df44398 100644
 +        <template v-if="hostMode">
 +          <div class="host-roster-card__top flex min-h-7 items-center gap-1.5 px-2 py-1" :class="mirror && 'flex-row-reverse'">
 +            <div class="min-w-0 flex-1" :class="mirror && 'text-right'">
-+              <div class="truncate text-xs font-semibold leading-none text-white">{{ player.name }}</div>
++              <div v-if="isHostTarget(player)" class="text-xs font-bold leading-none text-white">你</div>
++              <div class="truncate leading-none text-white" :class="isHostTarget(player) ? 'mt-1 text-[0.58rem] text-white/60' : 'text-xs font-semibold'">{{ player.name }}</div>
 +              <div class="mt-1 font-mono text-[0.66rem] font-semibold leading-none text-[#35d07f]">${{ player.money }}</div>
 +            </div>
 +            <div class="flex max-w-[6.75rem] shrink-0 items-center gap-0.5" :class="mirror && 'flex-row-reverse'">
@@ -498,7 +687,7 @@ index 4ed06bf..df44398 100644
    </div>
  </template>
 diff --git a/apps/app/src/viewer/player/ViewerStage.vue b/apps/app/src/viewer/player/ViewerStage.vue
-index 85997de..358d00e 100644
+index 85997de..2d4125e 100644
 --- a/apps/app/src/viewer/player/ViewerStage.vue
 +++ b/apps/app/src/viewer/player/ViewerStage.vue
 @@ -1,5 +1,5 @@
@@ -516,27 +705,38 @@ index 85997de..358d00e 100644
  
  const { t } = useI18n()
  
-@@ -66,13 +67,18 @@ const props = defineProps<{
+@@ -66,13 +67,29 @@ const props = defineProps<{
     *  e.g. Space would toggle playback (and audio) from the heatmap. Default true
     *  for standalone uses (the sample demo viewer). */
    active?: boolean
 +  /** Minimal iframe host used by CS2 AI Demo Coach on localhost. */
 +  hostMode?: boolean
++  /** Locked analysis subject, used for the host HUD and controlled camera cue. */
++  hostTargetPlayerId?: string | null
  }>()
  
  const r = useReplay()
++
++// Host mode starts on a stable full-map view. The bridge changes this only for
++// a coaching cue, so player movement never reframes the whole match.
++const hostCameraMode = ref<'full' | 'target'>('full')
++const hostCameraRevision = ref(0)
++
  // Apply the per-view skip-freeze override before the replay loads, so the first
  // round opens past the freeze. Declared first so its immediate run precedes
  // setReplay's.
 -watch(() => props.skipFreeze, (v) => r.forceSkipFreeze(!!v), { immediate: true })
 +watch(() => [props.skipFreeze, props.hostMode] as const, ([skipFreeze, hostMode]) => {
 +  r.forceSkipFreeze(hostMode || !!skipFreeze)
-+  if (hostMode) r.autoAdvance.value = true
++  if (hostMode) {
++    r.autoAdvance.value = true
++    hostCameraMode.value = 'full'
++  }
 +}, { immediate: true })
  watch(
    () => props.replay,
    (rep) => {
-@@ -82,6 +88,43 @@ watch(
+@@ -82,6 +99,47 @@ watch(
    { immediate: true },
  )
  
@@ -559,6 +759,10 @@ index 85997de..358d00e 100644
 +    setSpeed: (next) => {
 +      if (Number.isFinite(next) && next > 0 && next <= 16) r.speed.value = next
 +    },
++    setCamera: (mode) => {
++      hostCameraMode.value = mode
++      hostCameraRevision.value += 1
++    },
 +  })
 +})
 +onUnmounted(() => stopHostBridge?.())
@@ -580,22 +784,53 @@ index 85997de..358d00e 100644
  // Comms audio synced to the replay clock. Voice comes via prop (may not exist,
  // e.g. a demo with no recorded voice).
  const voiceRef = computed(() => props.voice ?? null)
-@@ -258,12 +301,12 @@ const advancedOptions = computed(() => [
-     description: t('viewer.autoAdvanceDesc'),
-     enabled: r.autoAdvance.value,
-   },
--  {
-+  ...(props.hostMode ? [] : [{
-     key: 'skipFreeze',
-     label: t('viewer.skipFreeze'),
-     description: t('viewer.skipFreezeDesc'),
-     enabled: r.skipFreeze.value,
--  },
-+  }]),
- ])
- function toggleAdvanced(key: string) {
-   if (key === 'autoZoom') autoZoom.value = !autoZoom.value
-@@ -464,7 +507,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+@@ -229,17 +287,20 @@ const lowQualityEffects = useLocalStorage('viewer.advanced.lowQualityEffects', f
+ // Clicking the same player (or Esc / the exit badge) stops following.
+ const followSteamId = ref<string | null>(null)
+ function toggleFollow(steamId: string) {
++  // Host camera focus is a coaching directive, never a roster-side effect.
++  if (props.hostMode) return
+   followSteamId.value = followSteamId.value === steamId ? null : steamId
+ }
+ // Dragging the map by hand hands control back to the user: drop follow and auto zoom.
+ function onCancelCamera() {
+   followSteamId.value = null
+   autoZoom.value = false
++  if (props.hostMode) hostCameraMode.value = 'full'
+ }
+ const followName = computed(() =>
+   followSteamId.value ? (r.playersById.value.get(followSteamId.value)?.name ?? '?') : '',
+ )
+-const advancedOptions = computed(() => [
++const advancedOptions = computed(() => props.hostMode ? [] : [
+   {
+     key: 'autoZoom',
+     label: t('viewer.autoZoom'),
+@@ -298,7 +359,7 @@ const clockAlert = computed(
+ // Keyboard shortcuts (space/arrows/undo-redo/Tab scoreboard/Esc). Owns the
+ // held-Tab scoreboard state; play/seek and board undo/redo are wired in.
+ const { scoreboardOpen } = useViewerShortcuts({
+-  active: () => props.active,
++  active: () => props.active && !props.hostMode,
+   coachMode,
+   followSteamId,
+   toggle: () => r.toggle(),
+@@ -327,8 +388,12 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+       :bomb-blink="r.bombBlink.value"
+       :talking="audio.talking.value"
+       :muted="audio.mutedSides.value"
+-      :auto-zoom="autoZoom"
+-      :follow-steam-id="followSteamId"
++      :auto-zoom="props.hostMode ? false : autoZoom"
++      :follow-steam-id="props.hostMode && hostCameraMode === 'target' ? props.hostTargetPlayerId : followSteamId"
++      :host-target-steam-id="props.hostMode ? props.hostTargetPlayerId : null"
++      :host-camera-mode="props.hostMode ? hostCameraMode : null"
++      :host-camera-revision="props.hostMode ? hostCameraRevision : 0"
++      :controls="!props.hostMode"
+       :low-quality-effects="lowQualityEffects"
+       :radar-src="activeLevelRadar"
+       :level-range="activeLevelRange"
+@@ -464,7 +529,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
          </div>
  
          <!-- Right: coach mode, export (the comments panel opens via comment mode) -->
@@ -604,7 +839,7 @@ index 85997de..358d00e 100644
            <button
              v-tooltip="t('viewer.coach.enter')"
              class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-ink-200 transition-colors duration-150 hover:bg-white/10 hover:text-white"
-@@ -540,7 +583,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+@@ -540,7 +605,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
           panel, and hidden on mobile where there's no room for the rosters) -->
      <aside
        v-if="!hudHidden && !commentMode"
@@ -613,17 +848,20 @@ index 85997de..358d00e 100644
      >
        <ViewerRoster
          :players="r.players.value"
-@@ -549,6 +592,9 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+@@ -549,7 +614,11 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
          side="CT"
          align="left"
          :hide-score="true"
+-        :selected-id="followSteamId"
 +        :host-mode="props.hostMode"
 +        :round="r.round.value"
 +        :current-t="r.currentT.value"
-         :selected-id="followSteamId"
++        :selected-id="props.hostMode ? props.hostTargetPlayerId : followSteamId"
++        :target-id="props.hostMode ? props.hostTargetPlayerId : null"
          @select="toggleFollow"
        />
-@@ -558,7 +604,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+     </aside>
+@@ -558,7 +627,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
           panel, and hidden on mobile where there's no room for the rosters) -->
      <aside
        v-if="!hudHidden && !commentMode"
@@ -632,16 +870,79 @@ index 85997de..358d00e 100644
      >
        <ViewerRoster
          :players="r.players.value"
-@@ -567,6 +613,9 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+@@ -567,13 +636,18 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
          side="T"
          align="right"
          :hide-score="true"
+-        :selected-id="followSteamId"
 +        :host-mode="props.hostMode"
 +        :round="r.round.value"
 +        :current-t="r.currentT.value"
-         :selected-id="followSteamId"
++        :selected-id="props.hostMode ? props.hostTargetPlayerId : followSteamId"
++        :target-id="props.hostMode ? props.hostTargetPlayerId : null"
          @select="toggleFollow"
        />
+     </aside>
+ 
+     <!-- Footer: transport -->
+     <div
++      v-if="!props.hostMode || mapLevels"
+       class="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-ink-950/90 to-transparent p-4"
+     >
+       <!-- Floor selector (multi-level maps only, e.g. Nuke): just above the player -->
+@@ -595,7 +669,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+ 
+       <!-- Coach mode: the tactical toolbar replaces the transport bar (no timeline:
+            the board is frozen on the tick the coach entered). -->
+-      <div v-if="coachMode" class="pointer-events-auto flex justify-center">
++      <div v-if="!props.hostMode && coachMode" class="pointer-events-auto flex justify-center">
+         <CoachToolbar
+           :tool="coachTool"
+           :color="coachColor"
+@@ -615,7 +689,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+       </div>
+ 
+       <div
+-        v-else
++        v-else-if="!props.hostMode"
+         class="pointer-events-auto mx-auto max-w-3xl rounded-lg border border-ink-700 bg-ink-900/80 p-3 backdrop-blur"
+       >
+         <ViewerControls
+diff --git a/apps/app/src/viewer/player/useMapCamera.ts b/apps/app/src/viewer/player/useMapCamera.ts
+index d24301f..4f4bb53 100644
+--- a/apps/app/src/viewer/player/useMapCamera.ts
++++ b/apps/app/src/viewer/player/useMapCamera.ts
+@@ -25,6 +25,8 @@ interface MapCameraOptions {
+   focusSteamIds: () => string[] | null | undefined
+   focusWorld: () => { x: number; y: number } | null | undefined
+   followSteamId: () => string | null | undefined
++  /** Disable camera easing when the user requests reduced motion. */
++  reducedMotion?: () => boolean
+   /** Repaint the canvas (called each animation frame). */
+   draw: () => void
+ }
+@@ -106,7 +108,7 @@ export function useMapCamera(opts: MapCameraOptions) {
+   function autoStep() {
+     const tgt = autoTarget()
+     if (tgt) {
+-      const ease = opts.focusWorld() ? FOCUS_POINT_EASE : AUTO_EASE
++      const ease = opts.reducedMotion?.() ? 1 : opts.focusWorld() ? FOCUS_POINT_EASE : AUTO_EASE
+       zoom.value += (tgt.zoom - zoom.value) * ease
+       const { panX, panY } = opts.getPan()
+       opts.setPan(panX + (tgt.panX - panX) * ease, panY + (tgt.panY - panY) * ease)
+@@ -146,9 +148,10 @@ export function useMapCamera(opts: MapCameraOptions) {
+   function followStep() {
+     const tgt = followTarget()
+     if (tgt) {
+-      zoom.value += (tgt.zoom - zoom.value) * FOLLOW_EASE
++      const ease = opts.reducedMotion?.() ? 1 : FOLLOW_EASE
++      zoom.value += (tgt.zoom - zoom.value) * ease
+       const { panX, panY } = opts.getPan()
+-      opts.setPan(panX + (tgt.panX - panX) * FOLLOW_EASE, panY + (tgt.panY - panY) * FOLLOW_EASE)
++      opts.setPan(panX + (tgt.panX - panX) * ease, panY + (tgt.panY - panY) * ease)
+     }
+     draw()
+     followRaf = requestAnimationFrame(followStep)
 diff --git a/apps/app/src/viewer/player/useReplay.ts b/apps/app/src/viewer/player/useReplay.ts
 index 576f3ac..6a9f55e 100644
 --- a/apps/app/src/viewer/player/useReplay.ts
@@ -739,10 +1040,10 @@ index d7e3b34..fd72cda 100644
  
 diff --git a/apps/app/src/viewer/player/hostBridge.ts b/apps/app/src/viewer/player/hostBridge.ts
 new file mode 100644
-index 0000000..1c63cec
+index 0000000..d098f91
 --- /dev/null
 +++ b/apps/app/src/viewer/player/hostBridge.ts
-@@ -0,0 +1,221 @@
+@@ -0,0 +1,230 @@
 +/**
 + * The smallest possible control-plane bridge for the localhost playback host.
 + * Parsed Replay data stays in this Vue/WASM document; only summaries and
@@ -814,12 +1115,15 @@ index 0000000..1c63cec
 +  | AnalysisReadyMessage
 +  | AnalysisFailedMessage
 +
++export type PlaybackCameraMode = 'full' | 'target'
++
 +export type PlaybackCommand =
 +  | { type: 'play' }
 +  | { type: 'pause' }
 +  | { type: 'seekCanonicalTick'; canonicalTick: number }
 +  | { type: 'selectRound'; roundIndex: number }
 +  | { type: 'setSpeed'; speed: number }
++  | { type: 'setCamera'; mode: PlaybackCameraMode }
 +
 +interface EventEnvelope {
 +  channel: typeof PLAYBACK_BRIDGE_CHANNEL
@@ -862,7 +1166,7 @@ index 0000000..1c63cec
 +}
 +
 +function isRecord(value: unknown): value is Record<string, unknown> {
-+  return typeof value === 'object' && value !== null
++  return typeof value === 'object' && value !== null && !Array.isArray(value)
 +}
 +
 +function isFiniteNumber(value: unknown): value is number {
@@ -893,7 +1197,9 @@ index 0000000..1c63cec
 +    case 'selectRound':
 +      return Object.keys(payload).length === 2 && isFiniteNumber(payload.roundIndex) && Number.isInteger(payload.roundIndex) && payload.roundIndex >= 0
 +    case 'setSpeed':
-+      return Object.keys(payload).length === 2 && isFiniteNumber(payload.speed) && payload.speed > 0
++      return hasExactKeys(payload, ['type', 'speed']) && isFiniteNumber(payload.speed) && payload.speed > 0 && payload.speed <= 16
++    case 'setCamera':
++      return hasExactKeys(payload, ['type', 'mode']) && (payload.mode === 'full' || payload.mode === 'target')
 +    default:
 +      return false
 +  }
@@ -906,6 +1212,7 @@ index 0000000..1c63cec
 +    seekCanonicalTick: (tick: number) => void
 +    selectRound: (roundIndex: number) => void
 +    setSpeed: (speed: number) => void
++    setCamera: (mode: PlaybackCameraMode) => void
 +  },
 +): () => void {
 +  if (window.parent === window) return () => {}
@@ -928,6 +1235,9 @@ index 0000000..1c63cec
 +        break
 +      case 'setSpeed':
 +        handlers.setSpeed(command.speed)
++        break
++      case 'setCamera':
++        handlers.setCamera(command.mode)
 +        break
 +    }
 +  }

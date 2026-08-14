@@ -36,7 +36,9 @@ import {
 import {
   acceptedPlaybackEvent,
   cs2dHostConfig,
-  playbackCommandMessage
+  playbackCommandMessage,
+  playbackPositionLabel,
+  reviewPositionAtTick
 } from "../lib/cs2d-playback-host";
 
 type HostPhase = "BOOTING" | "WAITING_FOR_DEMO" | "READY" | "ERROR";
@@ -64,10 +66,33 @@ export function Cs2dPlaybackHost() {
   const [plan, setPlan] = useState<ReviewPlan>();
   const [session, setSession] = useState<CoachingSessionState>();
   const [analysisError, setAnalysisError] = useState<string>();
+  const userTookOverRef = useRef(false);
+  const [userTookOver, setUserTookOver] = useState(false);
 
   const send = useCallback((command: PlaybackCommand) => {
     iframeRef.current?.contentWindow?.postMessage(playbackCommandMessage(command), config.origin);
   }, [config.origin]);
+
+  const markUserTookOver = useCallback(() => {
+    userTookOverRef.current = true;
+    setUserTookOver(true);
+  }, []);
+
+  const resumeGuidedRoute = useCallback(() => {
+    userTookOverRef.current = false;
+    setUserTookOver(false);
+  }, []);
+
+  const issueUserCommand = useCallback((command: PlaybackCommand) => {
+    if (session) markUserTookOver();
+    send(command);
+  }, [markUserTookOver, send, session]);
+
+  const seekFromTimeline = useCallback((canonicalTick: number) => {
+    if (session) markUserTookOver();
+    send({ type: "pause" });
+    send({ type: "seekCanonicalTick", canonicalTick });
+  }, [markUserTookOver, send, session]);
 
   const resetAnalysis = useCallback(() => {
     planRef.current = undefined;
@@ -76,6 +101,8 @@ export function Cs2dPlaybackHost() {
     setPlan(undefined);
     setSession(undefined);
     setAnalysisError(undefined);
+    userTookOverRef.current = false;
+    setUserTookOver(false);
   }, []);
 
   useEffect(() => {
@@ -107,6 +134,8 @@ export function Cs2dPlaybackHost() {
         setPlan(undefined);
         setSession(undefined);
         planRef.current = undefined;
+        userTookOverRef.current = false;
+        setUserTookOver(false);
         return;
       }
       if (payload.type === "ANALYSIS_READY") {
@@ -120,6 +149,8 @@ export function Cs2dPlaybackHost() {
           setBundle(nextBundle);
           setPlan(deterministicPlan);
           setAnalysisError(undefined);
+          userTookOverRef.current = false;
+          setUserTookOver(false);
           setSession(reduceCoachingSession(
             deterministicPlan,
             createCoachingSession(deterministicPlan, `session-${deterministicPlan.id}`),
@@ -143,6 +174,7 @@ export function Cs2dPlaybackHost() {
       }
 
       setPlayback(payload);
+      if (userTookOverRef.current) return;
       const activePlan = planRef.current;
       if (!activePlan) return;
       setSession((current) => {
@@ -160,13 +192,14 @@ export function Cs2dPlaybackHost() {
   const transition = useCallback((action: SessionAction) => {
     const activePlan = planRef.current;
     if (!activePlan) return;
+    resumeGuidedRoute();
     setSession((current) => current ? reduceCoachingSession(activePlan, current, action) : current);
-  }, []);
+  }, [resumeGuidedRoute]);
 
   const transitionKey = session ? guidedTransitionKey(session) : "idle";
   useEffect(() => {
     const activePlan = planRef.current;
-    if (!activePlan || !session || !playback) return;
+    if (!activePlan || !session || !playback || userTookOverRef.current) return;
     const directive = guidedPlaybackDirective(activePlan, session);
     directive.commands.forEach(send);
     if (directive.automaticAction) {
@@ -174,7 +207,7 @@ export function Cs2dPlaybackHost() {
         ? reduceCoachingSession(activePlan, current, directive.automaticAction!)
         : current);
     }
-  }, [playback !== undefined, send, transitionKey]);
+  }, [playback !== undefined, send, transitionKey, userTookOver]);
 
   const activePlan = plan ?? bundle?.review_plan;
   const segment = activePlan && session ? getCurrentSegment(activePlan, session) : undefined;
@@ -195,6 +228,8 @@ export function Cs2dPlaybackHost() {
   const sessionProgress = activePlan && session
     ? `${Math.min(activePlan.segments.length, session.current_segment_index + 1)} / ${activePlan.segments.length}`
     : undefined;
+  const positionLabel = playbackPositionLabel(playback, replay);
+  const freeViewPosition = reviewPositionAtTick(playback, replay, activePlan);
 
   return (
     <main className="cs2d-host-shell">
@@ -225,15 +260,32 @@ export function Cs2dPlaybackHost() {
           <div className="cs2d-coach-heading">
             <div>
               <small>教练</small>
-              <h2>{session ? phaseText[session.phase] : selected ? `正在分析 ${selected.displayName}` : replay ? "先在地图内选择玩家" : "等待 Demo"}</h2>
+              {selected ? <p className="cs2d-coach-focus" title={selected.displayName}>正在复盘：{selected.displayName}</p> : null}
+              <h2>{userTookOver ? "自由查看" : session ? phaseText[session.phase] : selected ? `正在分析 ${selected.displayName}` : replay ? "先在地图内选择玩家" : "等待 Demo"}</h2>
             </div>
             <span className="cs2d-coach-badge">{sessionProgress ?? "LOCAL"}</span>
           </div>
+
+          {session && userTookOver ? (
+            <div className="cs2d-coach-takeover" role="status">
+              <span>手动复查中</span>
+              <button type="button" onClick={resumeGuidedRoute}>返回教练路线</button>
+            </div>
+          ) : null}
 
           {analysisError ? (
             <section className="cs2d-coach-card cs2d-coach-card--error" role="alert">
               <small>分析未完成</small>
               <p>{analysisError}</p>
+            </section>
+          ) : null}
+
+          {session && userTookOver ? (
+            <section className="cs2d-coach-free-view" aria-live="polite">
+              <small>自由查看</small>
+              <h3>{freeViewPosition.roundLabel}</h3>
+              <p>{freeViewPosition.segment?.display_reason ?? "当前是比赛原始位置，教练路线暂时停留。"}</p>
+              <span>{freeViewPosition.segment?.mode === "SKIP" ? "低价值片段" : "普通比赛内容"}</span>
             </section>
           ) : null}
 
@@ -244,7 +296,7 @@ export function Cs2dPlaybackHost() {
             </section>
           ) : null}
 
-          {session && cue && session.phase === "PAUSED_FOR_COACHING" ? (
+          {session && !userTookOver && cue && session.phase === "PAUSED_FOR_COACHING" ? (
             <section className="cs2d-coach-cue" aria-live="polite">
               <small>{cueRevealed ? "结果已播放" : "教练判断与理由"}</small>
               <h3>{cue.title}</h3>
@@ -276,21 +328,21 @@ export function Cs2dPlaybackHost() {
             </section>
           ) : null}
 
-          {session && !cue && ["PLAYING", "SKIPPING"].includes(session.phase) ? (
+          {session && !userTookOver && !cue && ["PLAYING", "SKIPPING"].includes(session.phase) ? (
             <section className="cs2d-coach-card" aria-live="polite">
               <small>{session.phase === "SKIPPING" ? "低价值片段" : "正在带看"}</small>
               <p>{segment?.display_reason ?? "教练会在下一个关键决策前自动暂停。"}</p>
             </section>
           ) : null}
 
-          {session && cue && ["PLAYING", "REVEALING", "REPLAYING"].includes(session.phase) ? (
+          {session && !userTookOver && cue && ["PLAYING", "REVEALING", "REPLAYING"].includes(session.phase) ? (
             <section className="cs2d-coach-card" aria-live="polite">
               <small>{session.phase === "PLAYING" ? "接近讲解点" : "正在播放结果"}</small>
               <p>{session.phase === "PLAYING" ? "到关键决策前会自动暂停并直接讲解。" : "只推进当前时间，不切换地图视角。"}</p>
             </section>
           ) : null}
 
-          {session && ["WRAP_UP", "COMPLETED"].includes(session.phase) ? (
+          {session && !userTookOver && ["WRAP_UP", "COMPLETED"].includes(session.phase) ? (
             <section className="cs2d-coach-summary">
               <small>全场总结</small>
               <h3>{summary?.habit_title ?? "本场讲解已全部看完"}</h3>
@@ -305,23 +357,23 @@ export function Cs2dPlaybackHost() {
               <div><dt>地图</dt><dd>{replay.map}</dd></div>
               <div><dt>玩家</dt><dd>{replay.players.length}</dd></div>
               <div><dt>回合</dt><dd>{replay.roundCount}</dd></div>
-              <div><dt>Tick</dt><dd>{playback?.canonicalTick ?? "—"}</dd></div>
+              <div><dt>进度</dt><dd>{positionLabel}</dd></div>
             </dl>
           ) : null}
 
           <div className="cs2d-host-controls" aria-label="回放控制">
-            <button type="button" disabled={!replay} onClick={() => send({ type: playback?.playing ? "pause" : "play" })}>
+            <button type="button" disabled={!replay} onClick={() => issueUserCommand({ type: playback?.playing ? "pause" : "play" })}>
               {playback?.playing ? "暂停" : "播放"}
             </button>
             {[1, 2, 4, 8].map((speed) => (
-              <button key={speed} type="button" disabled={!replay || Boolean(session)} aria-pressed={playback?.speed === speed} onClick={() => send({ type: "setSpeed", speed })}>{speed}×</button>
+              <button key={speed} type="button" disabled={!replay} aria-pressed={playback?.speed === speed} onClick={() => issueUserCommand({ type: "setSpeed", speed })}>{speed}×</button>
             ))}
           </div>
 
-          {replay && !session ? (
+          {replay ? (
             <div className="cs2d-round-list" aria-label="选择回合">
               {replay.rounds.map((round) => (
-                <button key={`${round.roundIndex}-${round.roundNumber}`} type="button" aria-pressed={playback?.roundIndex === round.roundIndex} onClick={() => send({ type: "selectRound", roundIndex: round.roundIndex })}>
+                <button key={`${round.roundIndex}-${round.roundNumber}`} type="button" aria-pressed={playback?.roundIndex === round.roundIndex} onClick={() => issueUserCommand({ type: "selectRound", roundIndex: round.roundIndex })}>
                   {round.roundNumber === 0 ? "准备" : `R${round.roundNumber}`}
                 </button>
               ))}
@@ -331,15 +383,15 @@ export function Cs2dPlaybackHost() {
       </section>
 
       <footer className="cs2d-host-timeline">
-        <label htmlFor="canonical-tick">整场进度</label>
+        <label htmlFor="match-progress">比赛进度</label>
         <input
-          id="canonical-tick"
+          id="match-progress"
           type="range"
           min={tickMin}
           max={tickMax}
           value={tick}
-          disabled={!replay || Boolean(session)}
-          onChange={(event) => send({ type: "seekCanonicalTick", canonicalTick: Number(event.target.value) })}
+          disabled={!replay}
+          onChange={(event) => seekFromTimeline(Number(event.target.value))}
         />
         <output>{replay ? `${Math.max(0, Math.round(((tick - tickMin) / Math.max(1, tickMax - tickMin)) * 100))}%` : "—"}</output>
       </footer>

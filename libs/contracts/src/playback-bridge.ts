@@ -57,12 +57,15 @@ export type PlaybackBridgeEvent =
   | PlaybackStateEvent
   | AnalysisReadyEvent
   | AnalysisFailedEvent;
+export type PlaybackCameraMode = "full" | "target";
+
 export type PlaybackCommand =
   | { type: "play" }
   | { type: "pause" }
   | { type: "seekCanonicalTick"; canonicalTick: number }
   | { type: "selectRound"; roundIndex: number }
-  | { type: "setSpeed"; speed: number };
+  | { type: "setSpeed"; speed: number }
+  | { type: "setCamera"; mode: PlaybackCameraMode };
 
 export interface PlaybackEventEnvelope {
   channel: typeof PLAYBACK_BRIDGE_CHANNEL;
@@ -144,6 +147,7 @@ export function isPlaybackCommandEnvelope(value: unknown): value is PlaybackComm
   if (payload.type === "seekCanonicalTick") return exactKeys(payload, ["type", "canonicalTick"]) && finite(payload.canonicalTick);
   if (payload.type === "selectRound") return exactKeys(payload, ["type", "roundIndex"]) && safeIndex(payload.roundIndex);
   if (payload.type === "setSpeed") return exactKeys(payload, ["type", "speed"]) && finite(payload.speed) && payload.speed > 0 && payload.speed <= 16;
+  if (payload.type === "setCamera") return exactKeys(payload, ["type", "mode"]) && (payload.mode === "full" || payload.mode === "target");
   return false;
 }
 

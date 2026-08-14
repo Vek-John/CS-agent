@@ -11,6 +11,7 @@ describe("cs2d guided session synchronization", () => {
     let state = reduceCoachingSession(plan, createCoachingSession(plan), { type: "START" });
     const playing = guidedPlaybackDirective(plan, state);
     expect(playing.commands).toEqual([
+      { type: "setCamera", mode: "full" },
       { type: "setSpeed", speed: 4 },
       { type: "seekCanonicalTick", canonicalTick: 256 },
       { type: "play" }
@@ -20,12 +21,14 @@ describe("cs2d guided session synchronization", () => {
     state = reduceCoachingSession(plan, state, { type: "TICK", tick: 2350 });
     expect(state.phase).toBe("PAUSED_FOR_COACHING");
     expect(guidedPlaybackDirective(plan, state).commands).toEqual([
+      { type: "setCamera", mode: "target" },
       { type: "pause" },
       { type: "seekCanonicalTick", canonicalTick: plan.cues[0].decision_tick }
     ]);
 
     state = reduceCoachingSession(plan, state, { type: "REVEAL_OUTCOME" });
     expect(guidedPlaybackDirective(plan, state).commands).toEqual([
+      { type: "setCamera", mode: "full" },
       { type: "setSpeed", speed: 1 },
       { type: "seekCanonicalTick", canonicalTick: plan.cues[0].outcome_start_tick },
       { type: "play" }
@@ -44,6 +47,7 @@ describe("cs2d guided session synchronization", () => {
     expect(state.phase).toBe("SKIPPING");
     expect(guidedPlaybackDirective(manualPlan, state)).toMatchObject({
       commands: [
+        { type: "setCamera", mode: "full" },
         { type: "pause" },
         { type: "seekCanonicalTick", canonicalTick: manualPlan.segments[0].end_tick }
       ],

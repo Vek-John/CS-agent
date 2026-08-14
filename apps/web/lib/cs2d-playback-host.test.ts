@@ -3,7 +3,9 @@ import { PLAYBACK_BRIDGE_CHANNEL } from "@cs-coach/contracts";
 import {
   acceptedPlaybackEvent,
   cs2dHostConfig,
-  playbackCommandMessage
+  playbackCommandMessage,
+  playbackPositionLabel,
+  reviewPositionAtTick
 } from "./cs2d-playback-host";
 
 const event = {
@@ -33,6 +35,58 @@ describe("cs2d localhost host boundary", () => {
     expect(acceptedPlaybackEvent({ data: event, eventOrigin: "http://127.0.0.1:5174", expectedOrigin: "http://localhost:5174", sourceMatches: true })).toBeUndefined();
     expect(acceptedPlaybackEvent({ data: event, eventOrigin: "http://localhost:5174", expectedOrigin: "http://localhost:5174", sourceMatches: false })).toBeUndefined();
   });
+
+
+  it("maps bridge position to round time without exposing canonical coordinates", () => {
+    const replay = {
+      type: "REPLAY_READY",
+      schemaVersion: "cs2d-replay-ready.v1",
+      map: "de_mirage",
+      tickRate: 64,
+      startCanonicalTick: 100,
+      endCanonicalTick: 5000,
+      roundCount: 2,
+      rounds: [
+        { roundIndex: 0, roundNumber: 1, startCanonicalTick: 100, endCanonicalTick: 2500 },
+        { roundIndex: 1, roundNumber: 2, startCanonicalTick: 2600, endCanonicalTick: 5000 }
+      ],
+      players: [{ playerId: "p1", displayName: "Player", startSide: "T" }],
+      freezeSkipped: true
+    } as const;
+    expect(playbackPositionLabel({ type: "PLAYBACK_STATE", roundIndex: 1, canonicalTick: 2920, playing: false, speed: 1 }, replay)).toBe("第 2 回合 · 0:05");
+    expect(playbackPositionLabel(undefined, replay)).toBe("—");
+  });
+  it("maps a manual seek to the current round and ReviewPlan segment", () => {
+    const replay = {
+      type: "REPLAY_READY",
+      schemaVersion: "cs2d-replay-ready.v1",
+      map: "de_mirage",
+      tickRate: 64,
+      startCanonicalTick: 100,
+      endCanonicalTick: 5000,
+      roundCount: 2,
+      rounds: [
+        { roundIndex: 0, roundNumber: 1, startCanonicalTick: 100, endCanonicalTick: 2500 },
+        { roundIndex: 1, roundNumber: 2, startCanonicalTick: 2600, endCanonicalTick: 5000 }
+      ],
+      players: [{ playerId: "p1", displayName: "Player", startSide: "T" }],
+      freezeSkipped: true
+    } as const;
+    const plan = {
+      id: "plan-1",
+      segments: [{
+        id: "segment-2", round_number: 2, start_tick: 2600, end_tick: 5000, mode: "WATCH",
+        reason_code: "ORDINARY_PLAY", display_reason: "普通比赛内容", playback_speed: 1, cue_ids: [], expandable: false
+      }],
+      cues: [], habits: [], generated_at: "now", generation_manifest: {}
+    } as never;
+    const boundary = reviewPositionAtTick({ type: "PLAYBACK_STATE", roundIndex: 1, canonicalTick: 2500, playing: false, speed: 1 }, replay, plan);
+    expect(boundary.roundLabel).toBe("比赛位置");
+    const position = reviewPositionAtTick({ type: "PLAYBACK_STATE", roundIndex: 1, canonicalTick: 3000, playing: false, speed: 1 }, replay, plan);
+    expect(position.roundLabel).toBe("第 2 回合");
+    expect(position.segment?.display_reason).toBe("普通比赛内容");
+  });
+
   it("sends compact command envelopes only", () => {
     const message = playbackCommandMessage({ type: "seekCanonicalTick", canonicalTick: 4096 });
     expect(message).toEqual({ channel: PLAYBACK_BRIDGE_CHANNEL, direction: "command", payload: { type: "seekCanonicalTick", canonicalTick: 4096 } });

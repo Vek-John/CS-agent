@@ -35,9 +35,20 @@ describe("cs2d playback bridge", () => {
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "seekCanonicalTick", canonicalTick: 123 }))).toBe(true);
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "selectRound", roundIndex: 2 }))).toBe(true);
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "setSpeed", speed: 8 }))).toBe(true);
+    expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "setCamera", mode: "full" }))).toBe(true);
+    expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "setCamera", mode: "target" }))).toBe(true);
     expect(isPlaybackCommandEnvelope({ ...commandEnvelope({ type: "play" }), replay: {} })).toBe(false);
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "selectRound", roundIndex: -1 }))).toBe(false);
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "setSpeed", speed: Number.NaN }))).toBe(false);
+    expect(isPlaybackCommandEnvelope({
+      channel: PLAYBACK_BRIDGE_CHANNEL,
+      direction: "command",
+      payload: { type: "setCamera", mode: "follow" }
+    })).toBe(false);
+    expect(isPlaybackCommandEnvelope({
+      ...commandEnvelope({ type: "setCamera", mode: "full" }),
+      payload: { type: "setCamera", mode: "full", playerId: "p1" }
+    })).toBe(false);
   });
   it("rejects malformed event summaries", () => {
     expect(isPlaybackEventEnvelope({ ...ready, payload: { ...ready.payload, roundCount: 2 } })).toBe(false);

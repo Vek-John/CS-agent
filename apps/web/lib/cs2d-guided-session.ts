@@ -33,6 +33,7 @@ export function guidedPlaybackDirective(
   if (state.phase === "SKIPPING" && segment) {
     return {
       commands: [
+        { type: "setCamera", mode: "full" },
         { type: "pause" },
         { type: "seekCanonicalTick", canonicalTick: segment.end_tick }
       ],
@@ -43,6 +44,7 @@ export function guidedPlaybackDirective(
   if (state.phase === "PLAYING" && segment) {
     return {
       commands: [
+        { type: "setCamera", mode: "full" },
         { type: "setSpeed", speed: boundedSpeed(segment.playback_speed) },
         { type: "seekCanonicalTick", canonicalTick: state.current_tick },
         { type: "play" }
@@ -53,6 +55,7 @@ export function guidedPlaybackDirective(
   if ((state.phase === "REVEALING" || state.phase === "REPLAYING") && cue) {
     return {
       commands: [
+        { type: "setCamera", mode: "full" },
         { type: "setSpeed", speed: 1 },
         { type: "seekCanonicalTick", canonicalTick: cue.outcome_start_tick },
         { type: "play" }
@@ -60,8 +63,19 @@ export function guidedPlaybackDirective(
     };
   }
 
+  if (state.phase === "PAUSED_FOR_COACHING") {
+    return {
+      commands: [
+        { type: "setCamera", mode: "target" },
+        { type: "pause" },
+        { type: "seekCanonicalTick", canonicalTick: state.current_tick }
+      ]
+    };
+  }
+
   return {
     commands: [
+      { type: "setCamera", mode: "full" },
       { type: "pause" },
       { type: "seekCanonicalTick", canonicalTick: state.current_tick }
     ]
