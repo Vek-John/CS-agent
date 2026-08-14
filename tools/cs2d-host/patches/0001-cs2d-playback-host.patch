@@ -91,7 +91,7 @@ index 327973e..6ac4b1b 100644
 +  .host-roster-card { border-width: 2px; }
 +}
 diff --git a/apps/app/src/viewer/DemoAnalyzerView.vue b/apps/app/src/viewer/DemoAnalyzerView.vue
-index 9c4c084..7da7aed 100644
+index 9c4c084..f465c0f 100644
 --- a/apps/app/src/viewer/DemoAnalyzerView.vue
 +++ b/apps/app/src/viewer/DemoAnalyzerView.vue
 @@ -1,5 +1,5 @@
@@ -176,13 +176,20 @@ index 9c4c084..7da7aed 100644
  // Phase → i18n key for the loading label (the `reading` phase uses `readingFile`).
  const PHASE_LABEL: Record<string, string> = {
    reading: 'analyzer.readingFile',
-@@ -39,13 +100,15 @@ const PHASE_LABEL: Record<string, string> = {
+@@ -39,13 +100,22 @@ const PHASE_LABEL: Record<string, string> = {
    building: 'analyzer.building',
    serializing: 'analyzer.serializing',
  }
 -const phaseLabel = computed(() => t(PHASE_LABEL[parser.phase.value] ?? 'analyzer.parsing'))
-+const phaseLabel = computed(() => hostMode.value && parser.phase.value === 'parsing'
-+  ? '正在解析比赛数据'
++const HOST_PHASE_LABEL: Record<string, string> = {
++  reading: '正在读取 Demo',
++  decompressing: '正在解压 Demo',
++  parsing: '正在解析比赛数据',
++  building: '正在整理回放',
++  serializing: '正在准备回放',
++}
++const phaseLabel = computed(() => hostMode.value
++  ? (HOST_PHASE_LABEL[parser.phase.value] ?? '正在解析比赛数据')
 +  : t(PHASE_LABEL[parser.phase.value] ?? 'analyzer.parsing'))
  // Overall percentage shown next to the bar.
  const progressPct = computed(() => Math.round(parser.progress.value * 100))
@@ -195,7 +202,7 @@ index 9c4c084..7da7aed 100644
    return t('analyzer.parsingTicks', {
      done: parser.parseTick.value.toLocaleString(),
      total: total.toLocaleString(),
-@@ -286,7 +349,7 @@ async function handleFile(file: File) {
+@@ -286,7 +356,7 @@ async function handleFile(file: File) {
      })
      if (id) {
        currentId.value = id // already loaded: keeps the watcher from reloading
@@ -204,7 +211,7 @@ index 9c4c084..7da7aed 100644
      }
    }
  }
-@@ -314,7 +377,7 @@ async function onImportArchive(file: File) {
+@@ -314,7 +384,7 @@ async function onImportArchive(file: File) {
        fileSize: file.size,
      })
      currentId.value = id
@@ -213,7 +220,7 @@ index 9c4c084..7da7aed 100644
    } catch (err) {
      importError.value = err instanceof Error ? err.message : String(err)
    } finally {
-@@ -457,16 +520,49 @@ function onImportInput(e: Event) {
+@@ -457,16 +527,49 @@ function onImportInput(e: Event) {
      <template v-if="parser.status.value === 'done' && parser.replay.value">
        <!-- v-show keeps the stage mounted (preserves playback position across tab switches) -->
        <div v-show="activeTab === 'viewer'" class="h-full w-full">
@@ -223,9 +230,9 @@ index 9c4c084..7da7aed 100644
 +        >
 +          <section class="w-full max-w-4xl rounded-2xl border border-ink-700 bg-ink-900/95 p-5 shadow-2xl">
 +            <div class="mb-4">
-+              <p class="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-surge-400">Demo ready</p>
++              <p class="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-surge-400">解析完成</p>
 +              <h1 class="mt-1 font-display text-xl text-ink-50">选择本场要分析的玩家</h1>
-+              <p class="mt-1 text-sm text-ink-300">只选择一次；进入回放后点击玩家卡仅跟随镜头。</p>
++              <p class="mt-1 text-sm text-ink-300">只选择一次；选定后锁定，回放中不能切换分析主体。</p>
 +            </div>
 +            <div class="grid gap-4 md:grid-cols-2">
 +              <div v-for="side in (['CT', 'T'] as const)" :key="side">
@@ -266,7 +273,7 @@ index 9c4c084..7da7aed 100644
          />
        </div>
        <HeatmapView
-@@ -494,7 +590,7 @@ function onImportInput(e: Event) {
+@@ -494,7 +597,7 @@ function onImportInput(e: Event) {
        />
  
        <!-- Tabs (2D / Duels / Heatmaps / Utilities / Economy) in the center of the appbar -->
@@ -275,6 +282,73 @@ index 9c4c084..7da7aed 100644
          <div class="flex items-center gap-0.5 rounded-lg border border-ink-700 bg-ink-900/60 p-0.5">
            <button
              type="button"
+@@ -598,10 +701,10 @@ function onImportInput(e: Event) {
+       "
+       class="flex h-full flex-col items-center justify-center gap-4 px-6 text-center"
+     >
+-      <UiIcon name="loader" class="h-10 w-10 animate-spin text-surge-400" />
++      <UiIcon v-if="!hostMode" name="loader" class="h-10 w-10 animate-spin text-surge-400" />
+       <div>
+         <p class="font-display text-lg text-ink-50">
+-          {{ importing ? t('analyzer.importing') : routeLoading ? t('analyzer.openingDemo') : phaseLabel }}
++          {{ importing ? t('analyzer.importing') : routeLoading ? (hostMode ? '正在打开 Demo' : t('analyzer.openingDemo')) : phaseLabel }}
+         </p>
+         <p v-if="!importing && parser.fileName.value" class="mt-1 text-sm text-ink-300">
+           {{ parser.fileName.value }}
+@@ -628,7 +731,7 @@ function onImportInput(e: Event) {
+       </div>
+ 
+       <p class="max-w-sm text-xs text-ink-500">
+-        {{ t('analyzer.localNote') }}
++        {{ hostMode ? 'Demo 只在本机浏览器内解析，不会上传。' : t('analyzer.localNote') }}
+       </p>
+     </div>
+ 
+@@ -654,9 +757,10 @@ function onImportInput(e: Event) {
+         <!-- Hero content, centered in the window (the preview sits behind it). -->
+         <div class="mx-auto max-w-xl">
+           <div class="mb-6">
+-            <h1 class="font-display text-3xl text-ink-50">{{ t('analyzer.title') }}</h1>
++            <h1 class="font-display text-3xl text-ink-50">{{ hostMode ? '选择本地 Demo' : t('analyzer.title') }}</h1>
+             <p class="mt-2 max-w-md text-sm text-ink-300">
+-              {{ t('analyzer.subtitleA') }}<span class="font-mono text-ink-100">.dem</span>{{ t('analyzer.subtitleB') }}
++              <template v-if="hostMode">选择一场 CS2 比赛，解析完成后再选本场要复盘的玩家。</template>
++              <template v-else>{{ t('analyzer.subtitleA') }}<span class="font-mono text-ink-100">.dem</span>{{ t('analyzer.subtitleB') }}</template>
+             </p>
+           </div>
+ 
+@@ -680,10 +784,10 @@ function onImportInput(e: Event) {
+               <UiIcon name="upload" class="h-7 w-7" />
+             </div>
+             <div>
+-              <p class="font-display text-ink-50">{{ t('analyzer.dragHere') }}</p>
+-              <p class="mt-1 text-sm text-ink-400">{{ t('analyzer.orClick') }}</p>
++              <p class="font-display text-ink-50">{{ hostMode ? '点击选择 CS2 Demo' : t('analyzer.dragHere') }}</p>
++              <p class="mt-1 text-sm text-ink-400">{{ hostMode ? '也可以把文件拖到这里' : t('analyzer.orClick') }}</p>
+             </div>
+-            <p class="text-xs text-ink-500">{{ t('analyzer.formatHint') }}</p>
++            <p class="text-xs text-ink-500">{{ hostMode ? '.dem / .gz / .zip / .zst · 本机处理' : t('analyzer.formatHint') }}</p>
+ 
+             <input
+               ref="input"
+@@ -696,7 +800,7 @@ function onImportInput(e: Event) {
+           </div>
+ 
+           <!-- Import an exported replay (.cs2dv); scoped picker, not the demo dropzone -->
+-          <div class="mt-3">
++          <div v-if="!hostMode" class="mt-3">
+             <button
+               type="button"
+               class="flex w-full items-center justify-center gap-2 rounded-lg border border-ink-800 bg-ink-900/40 px-4 py-2.5 text-sm text-ink-300 transition-colors hover:border-ink-600 hover:bg-ink-900/70 hover:text-ink-100 disabled:cursor-not-allowed disabled:opacity-60"
+@@ -726,7 +830,7 @@ function onImportInput(e: Event) {
+           >
+             <UiIcon name="ban" class="mt-0.5 h-4 w-4 shrink-0" />
+             <div>
+-              <p class="font-medium">{{ t('analyzer.errorTitle') }}</p>
++              <p class="font-medium">{{ hostMode ? 'Demo 解析失败' : t('analyzer.errorTitle') }}</p>
+               <p class="mt-0.5 text-xs text-loss/80">{{ parser.error.value }}</p>
+             </div>
+           </div>
 diff --git a/apps/app/src/viewer/player/ViewerMap.vue b/apps/app/src/viewer/player/ViewerMap.vue
 index e737b9b..7bbe4fd 100644
 --- a/apps/app/src/viewer/player/ViewerMap.vue
