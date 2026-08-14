@@ -761,7 +761,7 @@ index 4ed06bf..164e68a 100644
    </div>
  </template>
 diff --git a/apps/app/src/viewer/player/ViewerStage.vue b/apps/app/src/viewer/player/ViewerStage.vue
-index 85997de..2d4125e 100644
+index 85997de..445d1a3 100644
 --- a/apps/app/src/viewer/player/ViewerStage.vue
 +++ b/apps/app/src/viewer/player/ViewerStage.vue
 @@ -1,5 +1,5 @@
@@ -904,7 +904,20 @@ index 85997de..2d4125e 100644
        :low-quality-effects="lowQualityEffects"
        :radar-src="activeLevelRadar"
        :level-range="activeLevelRange"
-@@ -464,7 +529,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+@@ -381,7 +446,11 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+       <div class="relative flex items-center justify-between gap-4">
+         <div v-if="!hudHidden" class="pointer-events-auto">
+           <h2 class="font-display text-base text-ink-50">
+-            <template v-if="r.currentRoundLabel.value === '0'">{{ t('viewer.knifeRound') }}</template>
++            <template v-if="r.currentRoundLabel.value === '0'">{{ props.hostMode ? '准备回合' : t('viewer.knifeRound') }}</template>
++            <template v-else-if="props.hostMode">
++              第 {{ r.currentRoundLabel.value }} 回合
++              <span class="text-ink-400">共 {{ r.totalRounds.value }} 回合</span>
++            </template>
+             <template v-else>
+               {{ t('viewer.round') }} {{ r.currentRoundLabel.value }}
+               <span class="text-ink-400">{{ t('viewer.of') }} {{ r.totalRounds.value }}</span>
+@@ -464,7 +533,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
          </div>
  
          <!-- Right: coach mode, export (the comments panel opens via comment mode) -->
@@ -913,7 +926,7 @@ index 85997de..2d4125e 100644
            <button
              v-tooltip="t('viewer.coach.enter')"
              class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-ink-200 transition-colors duration-150 hover:bg-white/10 hover:text-white"
-@@ -540,7 +605,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+@@ -540,7 +609,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
           panel, and hidden on mobile where there's no room for the rosters) -->
      <aside
        v-if="!hudHidden && !commentMode"
@@ -922,7 +935,7 @@ index 85997de..2d4125e 100644
      >
        <ViewerRoster
          :players="r.players.value"
-@@ -549,7 +614,11 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+@@ -549,7 +618,11 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
          side="CT"
          align="left"
          :hide-score="true"
@@ -935,7 +948,7 @@ index 85997de..2d4125e 100644
          @select="toggleFollow"
        />
      </aside>
-@@ -558,7 +627,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+@@ -558,7 +631,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
           panel, and hidden on mobile where there's no room for the rosters) -->
      <aside
        v-if="!hudHidden && !commentMode"
@@ -944,7 +957,7 @@ index 85997de..2d4125e 100644
      >
        <ViewerRoster
          :players="r.players.value"
-@@ -567,13 +636,18 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+@@ -567,13 +640,18 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
          side="T"
          align="right"
          :hide-score="true"
@@ -964,7 +977,7 @@ index 85997de..2d4125e 100644
        class="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-ink-950/90 to-transparent p-4"
      >
        <!-- Floor selector (multi-level maps only, e.g. Nuke): just above the player -->
-@@ -595,7 +669,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+@@ -595,7 +673,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
  
        <!-- Coach mode: the tactical toolbar replaces the transport bar (no timeline:
             the board is frozen on the tick the coach entered). -->
@@ -973,7 +986,7 @@ index 85997de..2d4125e 100644
          <CoachToolbar
            :tool="coachTool"
            :color="coachColor"
-@@ -615,7 +689,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+@@ -615,7 +693,7 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
        </div>
  
        <div
