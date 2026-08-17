@@ -33,6 +33,17 @@ describe("cs2d guided session synchronization", () => {
       { type: "seekCanonicalTick", canonicalTick: plan.cues[0].outcome_start_tick },
       { type: "play" }
     ]);
+
+    state = reduceCoachingSession(plan, state, {
+      type: "TICK",
+      tick: plan.cues[0].outcome_end_tick
+    });
+    expect(state.phase).toBe("PAUSED_FOR_COACHING");
+    expect(guidedPlaybackDirective(plan, state).commands).toEqual([
+      { type: "setCamera", mode: "full" },
+      { type: "pause" },
+      { type: "seekCanonicalTick", canonicalTick: plan.cues[0].outcome_end_tick }
+    ]);
   });
 
   it("auto-consumes explicit low-value skips without asking the user", () => {

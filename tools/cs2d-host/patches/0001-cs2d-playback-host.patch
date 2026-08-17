@@ -157,7 +157,7 @@ index 9c4c084..f465c0f 100644
 +  } catch (error) {
 +    emitPlaybackEvent({
 +      type: 'ANALYSIS_FAILED',
-+      schemaVersion: 'cs2d-analysis-ready.v1',
++      schemaVersion: 'cs2d-analysis-failed.v1',
 +      selectedPlayerId: player.steamId,
 +      message: error instanceof Error ? error.message.slice(0, 240) : '本地分析失败',
 +    })
@@ -1039,7 +1039,7 @@ diff --git a/apps/app/src/viewer/player/useReplay.ts b/apps/app/src/viewer/playe
 index 576f3ac..6a9f55e 100644
 --- a/apps/app/src/viewer/player/useReplay.ts
 +++ b/apps/app/src/viewer/player/useReplay.ts
-@@ -306,6 +306,32 @@ export function useReplay() {
+@@ -306,6 +306,38 @@ export function useReplay() {
      seek(best)
    }
  
@@ -1065,14 +1065,20 @@ index 576f3ac..6a9f55e 100644
 +    if (!targetRound || !frames.length) return
 +    const freezeStart = targetRound.freezeStartTick ?? targetRound.startTick
 +    const targetT = Math.max(0, (target - freezeStart) / (rep.demoTickRate || 64))
-+    frameIndex.value = frameAtT(frames, targetT)
-+    frac.value = 0
++    const nextIndex = frameAtT(frames, targetT)
++    const baseIndex = frames[nextIndex].t > targetT ? Math.max(0, nextIndex - 1) : nextIndex
++    const current = frames[baseIndex]
++    const next = frames[baseIndex + 1] ?? current
++    frameIndex.value = baseIndex
++    frac.value = next.t > current.t
++      ? Math.max(0, Math.min(1, (targetT - current.t) / (next.t - current.t)))
++      : 0
 +  }
 +
    /**
     * Bounds playback to a window of the current round, given in seconds (since
     * freeze, same units as a frame's `t`), and seeks to its start. Pass `null` to
-@@ -427,6 +453,7 @@ export function useReplay() {
+@@ -427,6 +459,7 @@ export function useReplay() {
      selectRound,
      seek,
      seekBySeconds,
@@ -1265,7 +1271,7 @@ index 0000000..d098f91
 +
 +export interface AnalysisFailedMessage {
 +  type: 'ANALYSIS_FAILED'
-+  schemaVersion: 'cs2d-analysis-ready.v1'
++  schemaVersion: 'cs2d-analysis-failed.v1'
 +  selectedPlayerId: string
 +  message: string
 +}

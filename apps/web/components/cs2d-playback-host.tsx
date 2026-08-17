@@ -74,9 +74,10 @@ export function Cs2dPlaybackHost() {
   }, [config.origin]);
 
   const markUserTookOver = useCallback(() => {
+    send({ type: "setCamera", mode: "full" });
     userTookOverRef.current = true;
     setUserTookOver(true);
-  }, []);
+  }, [send]);
 
   const resumeGuidedRoute = useCallback(() => {
     userTookOverRef.current = false;

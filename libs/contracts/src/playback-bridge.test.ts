@@ -76,10 +76,20 @@ describe("cs2d playback bridge", () => {
       direction: "event",
       payload: {
         type: "ANALYSIS_FAILED",
-        schemaVersion: "cs2d-analysis-ready.v1",
+        schemaVersion: "cs2d-analysis-failed.v1",
         selectedPlayerId: "p1",
         message: "unsupported map"
       }
     })).toBe(true);
+    expect(isPlaybackEventEnvelope({
+      channel: PLAYBACK_BRIDGE_CHANNEL,
+      direction: "event",
+      payload: {
+        type: "ANALYSIS_FAILED",
+        schemaVersion: "cs2d-analysis-ready.v1",
+        selectedPlayerId: "p1",
+        message: "unsupported map"
+      }
+    })).toBe(false);
   });
 });

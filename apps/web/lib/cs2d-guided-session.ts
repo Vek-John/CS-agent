@@ -64,9 +64,10 @@ export function guidedPlaybackDirective(
   }
 
   if (state.phase === "PAUSED_FOR_COACHING") {
+    const cameraMode = cue && !state.revealed_cue_ids.includes(cue.id) ? "target" : "full";
     return {
       commands: [
-        { type: "setCamera", mode: "target" },
+        { type: "setCamera", mode: cameraMode },
         { type: "pause" },
         { type: "seekCanonicalTick", canonicalTick: state.current_tick }
       ]

@@ -47,7 +47,7 @@ export interface AnalysisReadyEvent {
 }
 export interface AnalysisFailedEvent {
   type: "ANALYSIS_FAILED";
-  schemaVersion: "cs2d-analysis-ready.v1";
+  schemaVersion: "cs2d-analysis-failed.v1";
   selectedPlayerId: string;
   message: string;
 }
@@ -133,7 +133,7 @@ function isEvent(value: unknown): value is PlaybackBridgeEvent {
   }
   if (value.type === "ANALYSIS_FAILED") {
     return exactKeys(value, ["type", "schemaVersion", "selectedPlayerId", "message"]) &&
-      value.schemaVersion === "cs2d-analysis-ready.v1" && nonEmpty(value.selectedPlayerId) &&
+      value.schemaVersion === "cs2d-analysis-failed.v1" && nonEmpty(value.selectedPlayerId) &&
       nonEmpty(value.message) && value.message.length <= 512;
   }
   return false;
