@@ -2,13 +2,17 @@ import { describe, expect, it } from "vitest";
 import { PLAYBACK_BRIDGE_CHANNEL, type ReviewPlan } from "@cs-coach/contracts";
 import {
   acceptedPlaybackEvent,
+  adjacentRoundIndex,
   cs2dHostConfig,
+  HOST_SPEED_OPTIONS,
   playbackCommandMessage,
   playbackPositionLabel,
   reviewPositionAtTick,
   reviewSegmentLabel,
   reviewSegmentTone,
-  timelinePercent
+  seekCanonicalBySeconds,
+  timelinePercent,
+  timelineRange
 } from "./cs2d-playback-host";
 
 const event = {
@@ -120,5 +124,28 @@ describe("cs2d localhost host boundary", () => {
     expect(timelinePercent(-10, 0, 100)).toBe(0);
     expect(timelinePercent(120, 0, 100)).toBe(100);
     expect(timelinePercent(10, 10, 10)).toBe(0);
+  });
+
+  it("maps round and segment durations to proportional timeline ranges", () => {
+    expect(timelineRange(100, 300, 100, 900)).toEqual({ leftPercent: 0, widthPercent: 25 });
+    expect(timelineRange(300, 700, 100, 900)).toEqual({ leftPercent: 25, widthPercent: 50 });
+    expect(timelineRange(0, 1000, 100, 900)).toEqual({ leftPercent: 0, widthPercent: 100 });
+  });
+
+  it("clamps fifteen-second seeks to the parsed match bounds", () => {
+    expect(seekCanonicalBySeconds(640, -15, 64, 100, 5000)).toBe(100);
+    expect(seekCanonicalBySeconds(4900, 15, 64, 100, 5000)).toBe(5000);
+    expect(seekCanonicalBySeconds(640, 15, 64, 100, 5000)).toBe(1600);
+  });
+
+  it("clamps adjacent round navigation without producing invalid indexes", () => {
+    expect(adjacentRoundIndex(0, -1, 9)).toBe(0);
+    expect(adjacentRoundIndex(8, 1, 9)).toBe(8);
+    expect(adjacentRoundIndex(4, -1, 9)).toBe(3);
+    expect(adjacentRoundIndex(0, 1, 0)).toBe(-1);
+  });
+
+  it("exposes the complete host speed scale", () => {
+    expect(HOST_SPEED_OPTIONS).toEqual([0.25, 0.5, 1, 2, 4, 8]);
   });
 });

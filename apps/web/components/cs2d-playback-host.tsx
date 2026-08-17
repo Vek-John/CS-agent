@@ -7,6 +7,15 @@ import {
   useRef,
   useState
 } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
+import {
+  Pause,
+  Play,
+  RotateCcw,
+  RotateCw,
+  SkipBack,
+  SkipForward
+} from "lucide-react";
 import type {
   CoachingSessionState,
   PlaybackBridgeEvent,
@@ -35,13 +44,17 @@ import {
 } from "../lib/cs2d-guided-session";
 import {
   acceptedPlaybackEvent,
+  adjacentRoundIndex,
+  clampCanonicalTick,
   cs2dHostConfig,
   playbackCommandMessage,
   playbackPositionLabel,
   reviewPositionAtTick,
-  reviewSegmentLabel,
   reviewSegmentTone,
-  timelinePercent
+  seekCanonicalBySeconds,
+  timelineRange,
+  timelinePercent,
+  HOST_SPEED_OPTIONS
 } from "../lib/cs2d-playback-host";
 
 type HostPhase = "BOOTING" | "WAITING_FOR_DEMO" | "READY" | "ERROR";
@@ -69,15 +82,23 @@ export function Cs2dPlaybackHost() {
   const [plan, setPlan] = useState<ReviewPlan>();
   const [session, setSession] = useState<CoachingSessionState>();
   const [analysisError, setAnalysisError] = useState<string>();
+  const timelineRailRef = useRef<HTMLDivElement>(null);
   const userTookOverRef = useRef(false);
   const [userTookOver, setUserTookOver] = useState(false);
+
+  const tickMin = replay?.startCanonicalTick ?? 0;
+  const tickMax = replay?.endCanonicalTick ?? Math.max(1, tickMin + 1);
+  const tick = clampCanonicalTick(playback?.canonicalTick ?? tickMin, tickMin, tickMax);
+  const currentRoundIndex = replay
+    ? clampCanonicalTick(playback?.roundIndex ?? 0, 0, Math.max(0, replay.rounds.length - 1))
+    : 0;
 
   const send = useCallback((command: PlaybackCommand) => {
     iframeRef.current?.contentWindow?.postMessage(playbackCommandMessage(command), config.origin);
   }, [config.origin]);
 
   const markUserTookOver = useCallback(() => {
-    send({ type: "setCamera", mode: "full" });
+    if (!userTookOverRef.current) send({ type: "setCamera", mode: "full" });
     userTookOverRef.current = true;
     setUserTookOver(true);
   }, [send]);
@@ -109,8 +130,48 @@ export function Cs2dPlaybackHost() {
   const seekFromTimeline = useCallback((canonicalTick: number) => {
     if (session) markUserTookOver();
     send({ type: "pause" });
+    send({
+      type: "seekCanonicalTick",
+      canonicalTick: clampCanonicalTick(canonicalTick, tickMin, tickMax)
+    });
+  }, [markUserTookOver, send, session, tickMax, tickMin]);
+
+  const seekBySeconds = useCallback((seconds: number) => {
+    if (!replay) return;
+    seekFromTimeline(seekCanonicalBySeconds(tick, seconds, replay.tickRate, tickMin, tickMax));
+  }, [replay, seekFromTimeline, tick, tickMax, tickMin]);
+
+  const canonicalTickFromPointer = useCallback((clientX: number): number | undefined => {
+    const rail = timelineRailRef.current;
+    if (!rail || !replay) return undefined;
+    const bounds = rail.getBoundingClientRect();
+    const ratio = bounds.width > 0
+      ? Math.min(1, Math.max(0, (clientX - bounds.left) / bounds.width))
+      : 0;
+    return clampCanonicalTick(tickMin + ratio * (tickMax - tickMin), tickMin, tickMax);
+  }, [replay, tickMax, tickMin]);
+
+  const onTimelinePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!replay || (event.target as HTMLElement).closest("button")) return;
+    const canonicalTick = canonicalTickFromPointer(event.clientX);
+    if (canonicalTick === undefined) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    if (session) markUserTookOver();
+    send({ type: "pause" });
     send({ type: "seekCanonicalTick", canonicalTick });
-  }, [markUserTookOver, send, session]);
+  }, [canonicalTickFromPointer, markUserTookOver, replay, send, session]);
+
+  const onTimelinePointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    const canonicalTick = canonicalTickFromPointer(event.clientX);
+    if (canonicalTick !== undefined) send({ type: "seekCanonicalTick", canonicalTick });
+  }, [canonicalTickFromPointer, send]);
+
+  const onTimelinePointerUp = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }, []);
 
   const resetAnalysis = useCallback(() => {
     planRef.current = undefined;
@@ -240,24 +301,24 @@ export function Cs2dPlaybackHost() {
     }
   }, [activePlan, session]);
 
-  const tickMin = replay?.startCanonicalTick ?? 0;
-  const tickMax = replay?.endCanonicalTick ?? Math.max(1, tickMin + 1);
-  const tick = Math.min(tickMax, Math.max(tickMin, playback?.canonicalTick ?? tickMin));
   const sessionProgress = activePlan && session
     ? `${Math.min(activePlan.segments.length, session.current_segment_index + 1)} / ${activePlan.segments.length}`
     : undefined;
   const positionLabel = playbackPositionLabel(playback, replay);
   const freeViewPosition = reviewPositionAtTick(playback, replay, activePlan);
   const timelineSegments = activePlan?.segments.map((planSegment) => {
-    const start = timelinePercent(planSegment.start_tick, tickMin, tickMax);
-    const end = timelinePercent(planSegment.end_tick, tickMin, tickMax);
-    return { planSegment, start, width: Math.max(0.2, end - start) };
+    const range = timelineRange(planSegment.start_tick, planSegment.end_tick, tickMin, tickMax);
+    return { planSegment, ...range };
   }) ?? [];
+  const timelineRounds = replay?.rounds.map((round) => ({
+    round,
+    ...timelineRange(round.startCanonicalTick, round.endCanonicalTick, tickMin, tickMax)
+  })) ?? [];
   const currentPercent = timelinePercent(tick, tickMin, tickMax);
-
-  const seekToSegment = (startTick: number) => {
-    seekFromTimeline(Math.min(tickMax, Math.max(tickMin, startTick)));
-  };
+  const currentRound = replay?.rounds[currentRoundIndex];
+  const currentRoundLabel = currentRound
+    ? currentRound.roundNumber === 0 ? "准备阶段" : `第 ${currentRound.roundNumber} 回合`
+    : "未开始";
 
   return (
     <main className="cs2d-host-shell">
@@ -396,18 +457,82 @@ export function Cs2dPlaybackHost() {
         <div className="cs2d-timeline-toolbar" aria-label="回放控制">
           <div className="cs2d-host-controls">
             <button
+              className="cs2d-host-icon-button"
+              type="button"
+              disabled={!replay}
+              title="后退 15 秒"
+              aria-label="后退 15 秒"
+              onClick={() => seekBySeconds(-15)}
+            >
+              <RotateCcw size={16} strokeWidth={2.1} aria-hidden="true" />
+              <span className="cs2d-control-count" aria-hidden="true">15</span>
+            </button>
+            <button
               className="cs2d-host-play"
               type="button"
               disabled={!replay}
+              title={playback?.playing ? "暂停" : "播放"}
+              aria-label={playback?.playing ? "暂停" : "播放"}
               onClick={() => issueUserCommand({ type: playback?.playing ? "pause" : "play" })}
             >
-              {playback?.playing ? "暂停" : "播放"}
+              {playback?.playing
+                ? <Pause size={17} strokeWidth={2.2} aria-hidden="true" />
+                : <Play size={17} strokeWidth={2.2} aria-hidden="true" />}
+              <span className="cs2d-visually-hidden">{playback?.playing ? "暂停" : "播放"}</span>
             </button>
-            {[1, 2, 4, 8].map((speed) => (
+            <button
+              className="cs2d-host-icon-button"
+              type="button"
+              disabled={!replay}
+              title="前进 15 秒"
+              aria-label="前进 15 秒"
+              onClick={() => seekBySeconds(15)}
+            >
+              <RotateCw size={16} strokeWidth={2.1} aria-hidden="true" />
+              <span className="cs2d-control-count" aria-hidden="true">15</span>
+            </button>
+          </div>
+
+          <div className="cs2d-round-controls" aria-label="回合导航">
+            <button
+              className="cs2d-host-icon-button"
+              type="button"
+              disabled={!replay || currentRoundIndex <= 0}
+              title="上一回合"
+              aria-label="上一回合"
+              onClick={() => issueUserCommand({
+                type: "selectRound",
+                roundIndex: adjacentRoundIndex(currentRoundIndex, -1, replay?.rounds.length ?? 0)
+              })}
+            >
+              <SkipBack size={16} strokeWidth={2.1} aria-hidden="true" />
+            </button>
+            <span className="cs2d-round-position" aria-live="polite">
+              {currentRound ? `${currentRoundLabel} / 共 ${replay?.roundCount ?? 0} 回合` : "回合 / 共 0 回合"}
+            </span>
+            <button
+              className="cs2d-host-icon-button"
+              type="button"
+              disabled={!replay || currentRoundIndex >= (replay?.rounds.length ?? 1) - 1}
+              title="下一回合"
+              aria-label="下一回合"
+              onClick={() => issueUserCommand({
+                type: "selectRound",
+                roundIndex: adjacentRoundIndex(currentRoundIndex, 1, replay?.rounds.length ?? 0)
+              })}
+            >
+              <SkipForward size={16} strokeWidth={2.1} aria-hidden="true" />
+            </button>
+          </div>
+
+          <div className="cs2d-speed-controls" role="group" aria-label="播放速度">
+            {HOST_SPEED_OPTIONS.map((speed) => (
               <button
                 key={speed}
                 type="button"
                 disabled={!replay}
+                title={`播放速度 ${speed} 倍`}
+                aria-label={`播放速度 ${speed} 倍`}
                 aria-pressed={playback?.speed === speed}
                 onClick={() => issueUserCommand({ type: "setSpeed", speed })}
               >
@@ -415,21 +540,6 @@ export function Cs2dPlaybackHost() {
               </button>
             ))}
           </div>
-
-          {replay ? (
-            <div className="cs2d-round-list" aria-label="选择回合">
-              {replay.rounds.map((round) => (
-                <button
-                  key={`${round.roundIndex}-${round.roundNumber}`}
-                  type="button"
-                  aria-pressed={playback?.roundIndex === round.roundIndex}
-                  onClick={() => issueUserCommand({ type: "selectRound", roundIndex: round.roundIndex })}
-                >
-                  {round.roundNumber === 0 ? "准备" : `R${round.roundNumber}`}
-                </button>
-              ))}
-            </div>
-          ) : null}
         </div>
 
         <div className="cs2d-timeline-heading">
@@ -437,34 +547,49 @@ export function Cs2dPlaybackHost() {
           <output>{replay ? `${Math.round(currentPercent)}% · ${positionLabel}` : "等待 Demo"}</output>
         </div>
 
-        <div className="cs2d-timeline-rail">
-          <div className="cs2d-timeline-segment-fills" aria-hidden="true">
-            {timelineSegments.map(({ planSegment, start, width }) => (
-              <span
-                key={planSegment.id}
-                className={`cs2d-timeline-segment-fill cs2d-timeline-segment-fill--${reviewSegmentTone(planSegment.mode)}`}
-                style={{ left: `${start}%`, width: `${width}%` }}
-              />
+        <div
+          ref={timelineRailRef}
+          className="cs2d-timeline-rail"
+          onPointerDown={onTimelinePointerDown}
+          onPointerMove={onTimelinePointerMove}
+          onPointerUp={onTimelinePointerUp}
+          onPointerCancel={onTimelinePointerUp}
+        >
+          <div className="cs2d-timeline-rounds" aria-label="选择回合">
+            {timelineRounds.map(({ round, leftPercent, widthPercent }) => (
+              <button
+                key={`${round.roundIndex}-${round.roundNumber}`}
+                className="cs2d-timeline-round-button"
+                type="button"
+                style={{ left: `${leftPercent}%`, width: `${widthPercent}%` }}
+                aria-pressed={currentRoundIndex === round.roundIndex}
+                aria-label={round.roundNumber === 0 ? "跳到准备阶段" : `跳到第 ${round.roundNumber} 回合`}
+                title={round.roundNumber === 0 ? "准备阶段" : `第 ${round.roundNumber} 回合`}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => issueUserCommand({ type: "selectRound", roundIndex: round.roundIndex })}
+              >
+                {round.roundNumber === 0 ? "准备" : `R${round.roundNumber}`}
+              </button>
             ))}
           </div>
 
-          <div className="cs2d-timeline-segment-buttons" aria-label="教练路线区间">
-            {timelineSegments.map(({ planSegment, start }) => {
-              const roundLabel = planSegment.round_number > 0 ? `第 ${planSegment.round_number} 回合` : "准备阶段";
-              const segmentLabel = reviewSegmentLabel(planSegment);
-              return (
-                <button
-                  key={planSegment.id}
-                  className={`cs2d-timeline-segment-button cs2d-timeline-segment-button--${reviewSegmentTone(planSegment.mode)}`}
-                  type="button"
-                  style={{ left: `clamp(0.7rem, ${start}%, calc(100% - 0.7rem))` }}
-                  title={`${segmentLabel} · ${roundLabel}`}
-                  aria-label={`跳到${segmentLabel}，${roundLabel}`}
-                  onClick={() => seekToSegment(planSegment.start_tick)}
-                />
-              );
+          <div className="cs2d-timeline-segment-fills" aria-hidden="true">
+            {timelineSegments.map(({ planSegment, leftPercent, widthPercent }) => {
+              const tone = reviewSegmentTone(planSegment.mode);
+              const active = tick >= planSegment.start_tick && tick < planSegment.end_tick;
+              return <span
+                key={planSegment.id}
+                className={`cs2d-timeline-segment-fill cs2d-timeline-segment-fill--${tone}${active ? " is-active" : ""}`}
+                style={{ left: `${leftPercent}%`, width: `${widthPercent}%` }}
+              />;
             })}
           </div>
+
+          <span
+            className="cs2d-timeline-playhead"
+            style={{ left: `${currentPercent}%` }}
+            aria-hidden="true"
+          />
 
           <input
             id="match-progress"

@@ -53,6 +53,8 @@ export function playbackCommandMessage(command: PlaybackCommand) {
   return commandEnvelope(command);
 }
 
+export const HOST_SPEED_OPTIONS = [0.25, 0.5, 1, 2, 4, 8] as const;
+
 export type ReviewSegmentTone = "coach" | "skip" | "neutral";
 
 export function reviewSegmentTone(
@@ -74,6 +76,57 @@ export function reviewSegmentLabel(segment: ReviewPlan["segments"][number]): str
 export function timelinePercent(value: number, min: number, max: number): number {
   if (![value, min, max].every(Number.isFinite) || max <= min) return 0;
   return Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
+}
+
+export interface TimelineRange {
+  leftPercent: number;
+  widthPercent: number;
+}
+
+export function timelineRange(
+  start: number,
+  end: number,
+  min: number,
+  max: number,
+): TimelineRange {
+  const leftPercent = timelinePercent(start, min, max);
+  const endPercent = timelinePercent(end, min, max);
+  return {
+    leftPercent: Math.min(leftPercent, endPercent),
+    widthPercent: Math.max(0, endPercent - leftPercent)
+  };
+}
+
+export function clampCanonicalTick(value: number, min: number, max: number): number {
+  if (![min, max].every(Number.isFinite)) return 0;
+  const lower = Math.min(min, max);
+  const upper = Math.max(min, max);
+  if (!Number.isFinite(value)) return lower;
+  return Math.min(upper, Math.max(lower, value));
+}
+
+export function seekCanonicalBySeconds(
+  currentTick: number,
+  seconds: number,
+  tickRate: number,
+  min: number,
+  max: number,
+): number {
+  const delta = Number.isFinite(seconds) && Number.isFinite(tickRate) && tickRate > 0
+    ? seconds * tickRate
+    : 0;
+  return clampCanonicalTick(currentTick + delta, min, max);
+}
+
+export function adjacentRoundIndex(
+  currentIndex: number,
+  delta: number,
+  roundCount: number,
+): number {
+  if (!Number.isInteger(roundCount) || roundCount <= 0) return -1;
+  const base = Number.isInteger(currentIndex) ? currentIndex : 0;
+  const step = Number.isFinite(delta) ? Math.trunc(delta) : 0;
+  return Math.min(roundCount - 1, Math.max(0, base + step));
 }
 
 
