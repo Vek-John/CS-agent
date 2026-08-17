@@ -28,8 +28,9 @@ DeepSeek 只润色已经存在的匿名决策侧事实、判断和建议；它�
 本地可选：
 
 ```bash
-cp apps/web/.env.local.example apps/web/.env.development.local
-# 只在未跟踪的 apps/web/.env.development.local 中填写 DEEPSEEK_API_KEY
+mkdir -p .local-data
+cp deepseek.env.example .local-data/deepseek.env
+# 只在 .local-data/deepseek.env 中填写 DEEPSEEK_API_KEY；pnpm dev 仅注入 Next 开发进程
 ```
 
 Cloudflare 配置：
@@ -39,7 +40,7 @@ pnpm exec wrangler secret put DEEPSEEK_API_KEY --config wrangler.jsonc
 # 可选普通变量：DEEPSEEK_MODEL=deepseek-v4-flash 或 deepseek-v4-pro
 ```
 
-任何 key 都不要写入 `wrangler.jsonc`、GitHub、日志、`NEXT_PUBLIC_*` 变量或生产构建会读取的 `.env.local`。本地 key 放在仅供 `next dev` 读取的 `.env.development.local`；Cloudflare 只使用 Worker Secret。Cloudflare 当前只部署 Next 教练壳和 `/api/coaching/narrate`；由于 cs2d 上游没有明确许可证，cs2d 源码/WASM/资产不进入 Cloudflare 构建，线上暂不提供 `.dem` 回放。
+任何 key 都不要写入 `wrangler.jsonc`、GitHub、日志、`NEXT_PUBLIC_*` 或任何标准 `.env*` 文件。OpenNext 会把 production/development/test 三套 `.env` 都序列化进构建，因此本地 key 只放在 `.local-data/deepseek.env`，由 `pnpm dev` 单独注入；`pnpm cloudflare:build` 会在构建前后阻止本地 secret 进入产物。Cloudflare 只使用 Worker Secret。Cloudflare 当前只部署 Next 教练壳和 `/api/coaching/narrate`；由于 cs2d 上游没有明确许可证，cs2d 源码/WASM/资产不进入 Cloudflare 构建，线上暂不提供 `.dem` 回放。
 
 ## 当前已经能做什么
 

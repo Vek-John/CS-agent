@@ -1,8 +1,8 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：2.1.0
-> 最后更新：2026-08-14
+> 版本：2.1.1
+> 最后更新：2026-08-17
 > 适用范围：浏览器首版至桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
 > 首版边界：[MVP_SCOPE.md](./MVP_SCOPE.md)
@@ -216,7 +216,7 @@ Worker 使用至少三档队列优先级：`interactive` 处理用户即将观�
 
 Host 模式只呈现 Next 教练壳的一套中文播放控制和一条整场进度条；canonical tick 只作为内部寻址坐标，不出现在用户文案。目标玩家选择后锁定，目标 HUD 与地图标签显示“你”，其余九人只展示事实而不可切换分析主体。普通播放、结果播放和自由查看使用固定地图几何中心；只有关键 cue 暂停可受控聚焦目标，且 reduced-motion 下立即切换。用户 seek、切回合、调速或手动播放后进入临时 `UserTakeover`：播放器/HUD/回合/侧栏跟随真实播放头，Session reducer 暂停消费；“返回教练路线”后再重发当前确定性 directive，不改写 `ReviewPlan`。
 
-DeepSeek 只改写已经存在的匿名决策侧事实、推断和建议。`/api/coaching/narrate` 不接收原始 Demo、稳定玩家 ID、路径、完整事件流或结果事实；Cloudflare 只配置 `DEEPSEEK_API_KEY` Secret。缺 key、超时、上游失败或输出校验失败时保留确定性中文讲解，不阻塞播放。当前自由追问仍未接入通用模型。
+DeepSeek 只改写已经存在的匿名决策侧事实、推断和建议。`/api/coaching/narrate` 不接收原始 Demo、稳定玩家 ID、路径、完整事件流或结果事实；Cloudflare 只配置 `DEEPSEEK_API_KEY` Worker Secret。OpenNext 会序列化 production/development/test 三套标准 `.env*`，因此 localhost key 只能放在忽略的 `.local-data/deepseek.env`，由根启动器只注入 Next dev 子进程；Cloudflare 构建前后均校验标准 env 文件及 `next-env.mjs` 不含非空 secret。缺 key、超时、上游失败或输出校验失败时保留确定性中文讲解，不阻塞播放。当前自由追问仍未接入通用模型。
 
 `ReviewSegment` 继续使用半开区间 `[start_tick, end_tick)` 并完整覆盖正式回合、冻结时间、回合判定后区间与回合间隙。cs2d 的 `Round 0` 刀局/初始化段不伪装成正式第 1 回合；`winner: null` 不被猜测。cue 只允许位于 live/decided 边界之前；GrenadePath 的 0.1 秒时间只作为近似，精确 canonical tick 优先取 Round、Frame 与 GameEvent。
 
@@ -1070,3 +1070,4 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 | 1.5.0 | 2026-08-13 | 固化单次全知解析、Observation 独立派生、空白白名单 `PlaybackFrameViewModel` 与统一 renderer 边界；将 Freezetime/PixiJS 迁移设为需经真实 Demo、未来泄漏和性能证据验证的隔离 PoC |
 | 2.0.0 | 2026-08-14 | 默认回放底座切换为固定版本 cs2d 浏览器 Worker/WASM＋renderer；地图始终显示当前 tick 全知事实，Observation 收敛为内部 LLM 证据；新增严格 iframe bridge、Replay→ReviewPlan Adapter、最多 8 个跨回合教学停顿、同图 outcome 播放与 localhost-only 权利边界 |
 | 2.1.0 | 2026-08-14 | Host 收敛为一套中文播放控制和自由 seek 时间轴；新增手动接管/恢复、目标玩家锁定与“你”、固定全图/关键 cue 聚焦、用户 UI 隐藏 tick；同次解析保留 Source place token 并用版本化中文 CS 报点驱动讲解 |
+| 2.1.1 | 2026-08-17 | 修正 OpenNext 会打包 development/test `.env` 的边界：localhost DeepSeek key 改为 `.local-data/deepseek.env` 进程级注入，并为 Cloudflare 构建增加 source＋bundle secret 阻断 |

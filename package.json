@@ -13,7 +13,7 @@
     "assets:valve-items": "node tools/fetch_valve_item_icons.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "check": "pnpm test && pnpm typecheck && pnpm build",
-    "cloudflare:build": "cd apps/web && ../../node_modules/.bin/opennextjs-cloudflare build -c ../../wrangler.jsonc --openNextConfigPath ../../open-next.config.ts",
+    "cloudflare:build": "node tools/assert-cloudflare-env-clean.mjs && (cd apps/web && ../../node_modules/.bin/opennextjs-cloudflare build -c ../../wrangler.jsonc --openNextConfigPath ../../open-next.config.ts) && node tools/assert-cloudflare-env-clean.mjs --bundle",
     "cloudflare:assets": "node tools/prepare_cloudflare_assets.mjs",
     "cloudflare:preview": "cd apps/web && ../../node_modules/.bin/opennextjs-cloudflare preview -c ../../wrangler.jsonc --openNextConfigPath ../../open-next.config.ts",
     "cloudflare:deploy": "pnpm cloudflare:build && pnpm cloudflare:assets && pnpm exec wrangler deploy apps/web/.open-next/worker.js --config wrangler.jsonc --assets apps/web/.open-next/cloudflare-assets",
