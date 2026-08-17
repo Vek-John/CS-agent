@@ -12,6 +12,7 @@ export type SessionAction =
   | { type: "START" }
   | { type: "TICK"; tick: number }
   | { type: "SEEK"; tick: number }
+  | { type: "RETURN_TO_NEAREST_CUE"; tick: number }
   | { type: "SKIP_SEGMENT" }
   | { type: "EXPAND_SKIP" }
   | { type: "REVEAL_OUTCOME" }
@@ -131,6 +132,30 @@ function consumeCurrentCue(
   return { ...state, consumed_cue_ids: [...state.consumed_cue_ids, cue.id] };
 }
 
+function nearestCueRoute(
+  plan: ReviewPlan,
+  tick: number
+): { cue: CoachCue; segmentIndex: number } | undefined {
+  const candidates = plan.cues.flatMap((cue, cueIndex) => {
+    const segmentIndex = plan.segments.findIndex((segment) =>
+      segment.id === cue.segment_id && segment.cue_ids.includes(cue.id)
+    );
+    return segmentIndex < 0 ? [] : [{ cue, cueIndex, segmentIndex }];
+  });
+
+  candidates.sort((left, right) => {
+    const distance = Math.abs(left.cue.decision_tick - tick) - Math.abs(right.cue.decision_tick - tick);
+    if (distance !== 0) return distance;
+    const leftIsAhead = left.cue.decision_tick >= tick;
+    const rightIsAhead = right.cue.decision_tick >= tick;
+    if (leftIsAhead !== rightIsAhead) return leftIsAhead ? -1 : 1;
+    return left.cue.decision_tick - right.cue.decision_tick || left.cueIndex - right.cueIndex;
+  });
+
+  const nearest = candidates[0];
+  return nearest ? { cue: nearest.cue, segmentIndex: nearest.segmentIndex } : undefined;
+}
+
 export function reduceCoachingSession(
   plan: ReviewPlan,
   state: CoachingSessionState,
@@ -241,6 +266,21 @@ export function reduceCoachingSession(
       return {
         ...state,
         current_tick: Math.max(segment.start_tick, Math.min(action.tick, upperBound))
+      };
+    }
+
+    case "RETURN_TO_NEAREST_CUE": {
+      const route = nearestCueRoute(plan, action.tick);
+      if (!route) return state;
+      const targetSegment = plan.segments[route.segmentIndex];
+      return {
+        ...state,
+        phase: "PLAYING",
+        current_segment_index: route.segmentIndex,
+        current_cue_id: route.cue.id,
+        current_tick: targetSegment.start_tick,
+        consumed_cue_ids: state.consumed_cue_ids.filter((cueId) => cueId !== route.cue.id),
+        revealed_cue_ids: state.revealed_cue_ids.filter((cueId) => cueId !== route.cue.id)
       };
     }
 

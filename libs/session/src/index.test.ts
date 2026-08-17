@@ -97,6 +97,44 @@ describe("CoachingSession deterministic safety kernel", () => {
     expect(state.current_segment_index).toBe(5);
   });
 
+  it("returns manual playback to the nearest coaching cue and replays its context", () => {
+    const firstCue = plan.cues[0];
+    const secondCue = plan.cues[1];
+    const firstSegmentIndex = plan.segments.findIndex((segment) => segment.id === firstCue.segment_id);
+    const secondSegmentIndex = plan.segments.findIndex((segment) => segment.id === secondCue.segment_id);
+    const firstSegment = plan.segments[firstSegmentIndex];
+    const secondSegment = plan.segments[secondSegmentIndex];
+    let state = reachFirstCue();
+
+    state = {
+      ...state,
+      consumed_cue_ids: [firstCue.id, secondCue.id],
+      revealed_cue_ids: [firstCue.id, secondCue.id]
+    };
+    state = reduceCoachingSession(plan, state, {
+      type: "RETURN_TO_NEAREST_CUE",
+      tick: secondCue.decision_tick - 1
+    });
+
+    expect(state).toMatchObject({
+      phase: "PLAYING",
+      current_segment_index: secondSegmentIndex,
+      current_cue_id: secondCue.id,
+      current_tick: secondSegment.start_tick
+    });
+    expect(state.consumed_cue_ids).toEqual([firstCue.id]);
+    expect(state.revealed_cue_ids).toEqual([firstCue.id]);
+
+    const midpoint = (firstCue.decision_tick + secondCue.decision_tick) / 2;
+    state = reduceCoachingSession(plan, state, {
+      type: "RETURN_TO_NEAREST_CUE",
+      tick: midpoint
+    });
+    expect(state.current_segment_index).toBe(secondSegmentIndex);
+    expect(state.current_tick).toBe(secondSegment.start_tick);
+    expect(state.current_tick).not.toBe(firstSegment.start_tick);
+  });
+
   it("unlocks a summary only after the entire path is consumed", () => {
     let state = createCoachingSession(plan);
     expect(() => buildSessionSummary(plan, state)).toThrow("stays locked");
