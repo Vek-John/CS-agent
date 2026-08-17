@@ -37,11 +37,14 @@ import {
   reduceCoachingSession,
   type SessionAction
 } from "@cs-coach/session";
-import { enrichReviewPlanWithNarration } from "../lib/coach-narration";
+import { enrichReviewPlanWithNarration } from "../../lib/coaching/coach-narration";
 import {
+  createGuidedSeekGate,
   guidedPlaybackDirective,
-  guidedTransitionKey
-} from "../lib/cs2d-guided-session";
+  guidedTransitionKey,
+  isGuidedSeekLanding,
+  type GuidedSeekGate
+} from "../../lib/coaching/cs2d-guided-session";
 import {
   acceptedPlaybackEvent,
   adjacentRoundIndex,
@@ -54,8 +57,9 @@ import {
   seekCanonicalBySeconds,
   timelineRange,
   timelinePercent,
-  HOST_SPEED_OPTIONS
-} from "../lib/cs2d-playback-host";
+  HOST_SPEED_OPTIONS,
+  hostCoachingCueSurface
+} from "../../lib/playback/cs2d-playback-host";
 
 type HostPhase = "BOOTING" | "WAITING_FOR_DEMO" | "READY" | "ERROR";
 
@@ -84,6 +88,8 @@ export function Cs2dPlaybackHost() {
   const [analysisError, setAnalysisError] = useState<string>();
   const timelineRailRef = useRef<HTMLDivElement>(null);
   const userTookOverRef = useRef(false);
+  const guidedSeekEpochRef = useRef(0);
+  const guidedSeekGateRef = useRef<GuidedSeekGate | undefined>(undefined);
   const [userTookOver, setUserTookOver] = useState(false);
 
   const tickMin = replay?.startCanonicalTick ?? 0;
@@ -97,16 +103,23 @@ export function Cs2dPlaybackHost() {
     iframeRef.current?.contentWindow?.postMessage(playbackCommandMessage(command), config.origin);
   }, [config.origin]);
 
+  const invalidateGuidedSeek = useCallback(() => {
+    guidedSeekEpochRef.current += 1;
+    guidedSeekGateRef.current = undefined;
+  }, []);
+
   const markUserTookOver = useCallback(() => {
+    invalidateGuidedSeek();
     if (!userTookOverRef.current) send({ type: "setCamera", mode: "full" });
     userTookOverRef.current = true;
     setUserTookOver(true);
-  }, [send]);
+  }, [invalidateGuidedSeek, send]);
 
   const clearUserTakeover = useCallback(() => {
+    invalidateGuidedSeek();
     userTookOverRef.current = false;
     setUserTookOver(false);
-  }, []);
+  }, [invalidateGuidedSeek]);
 
   const resumeGuidedRoute = useCallback(() => {
     const activePlan = planRef.current;
@@ -174,6 +187,7 @@ export function Cs2dPlaybackHost() {
   }, []);
 
   const resetAnalysis = useCallback(() => {
+    invalidateGuidedSeek();
     planRef.current = undefined;
     setSelected(undefined);
     setBundle(undefined);
@@ -182,7 +196,7 @@ export function Cs2dPlaybackHost() {
     setAnalysisError(undefined);
     userTookOverRef.current = false;
     setUserTookOver(false);
-  }, []);
+  }, [invalidateGuidedSeek]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>) => {
@@ -208,6 +222,7 @@ export function Cs2dPlaybackHost() {
         return;
       }
       if (payload.type === "ANALYSIS_FAILED") {
+        invalidateGuidedSeek();
         setAnalysisError(payload.message);
         setBundle(undefined);
         setPlan(undefined);
@@ -218,6 +233,7 @@ export function Cs2dPlaybackHost() {
         return;
       }
       if (payload.type === "ANALYSIS_READY") {
+        invalidateGuidedSeek();
         try {
           const nextBundle = deserializeCs2dAnalysisBundle(payload.bundleJson);
           if (nextBundle.selected_steam_id !== payload.selectedPlayerId) {
@@ -252,6 +268,15 @@ export function Cs2dPlaybackHost() {
         return;
       }
 
+      const pendingSeek = guidedSeekGateRef.current;
+      if (pendingSeek) {
+        if (pendingSeek.epoch !== guidedSeekEpochRef.current || !isGuidedSeekLanding(pendingSeek, payload.canonicalTick)) {
+          // A PLAYBACK_STATE emitted before the iframe applies our seek is
+          // still the old position. Keep it out of both the UI and reducer.
+          return;
+        }
+        guidedSeekGateRef.current = undefined;
+      }
       setPlayback(payload);
       if (userTookOverRef.current) return;
       const activePlan = planRef.current;
@@ -266,7 +291,7 @@ export function Cs2dPlaybackHost() {
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [config.origin, resetAnalysis]);
+  }, [config.origin, invalidateGuidedSeek, resetAnalysis]);
 
   const transition = useCallback((action: SessionAction) => {
     const activePlan = planRef.current;
@@ -279,19 +304,26 @@ export function Cs2dPlaybackHost() {
   useEffect(() => {
     const activePlan = planRef.current;
     if (!activePlan || !session || !playback || userTookOverRef.current) return;
-    const directive = guidedPlaybackDirective(activePlan, session);
+    const directive = guidedPlaybackDirective(activePlan, session, replay?.tickRate);
+    const seek = directive.commands.find((command): command is Extract<PlaybackCommand, { type: "seekCanonicalTick" }> => command.type === "seekCanonicalTick");
+    if (seek) {
+      const epoch = guidedSeekEpochRef.current + 1;
+      guidedSeekEpochRef.current = epoch;
+      guidedSeekGateRef.current = createGuidedSeekGate(epoch, seek.canonicalTick, replay?.tickRate);
+    }
     directive.commands.forEach(send);
     if (directive.automaticAction) {
       setSession((current) => current
         ? reduceCoachingSession(activePlan, current, directive.automaticAction!)
         : current);
     }
-  }, [playback !== undefined, send, transitionKey, userTookOver]);
+  }, [playback !== undefined, replay?.tickRate, send, transitionKey, userTookOver]);
 
   const activePlan = plan ?? bundle?.review_plan;
   const segment = activePlan && session ? getCurrentSegment(activePlan, session) : undefined;
   const cue = activePlan && session ? getCurrentCue(activePlan, session) : undefined;
   const cueRevealed = Boolean(cue && session?.revealed_cue_ids.includes(cue.id));
+  const coachingView = hostCoachingCueSurface(cue, session?.phase, cueRevealed);
   const summary = useMemo(() => {
     if (!activePlan || !session || !["WRAP_UP", "COMPLETED"].includes(session.phase)) return undefined;
     try {
@@ -385,49 +417,67 @@ export function Cs2dPlaybackHost() {
             </section>
           ) : null}
 
-          {session && !userTookOver && cue && session.phase === "PAUSED_FOR_COACHING" ? (
+          {session && !userTookOver && cue && cueRevealed && coachingView && session.phase === "PAUSED_FOR_COACHING" ? (
             <section className="cs2d-coach-cue" aria-live="polite">
-              <small>{cueRevealed ? "结果已播放" : "教练判断与理由"}</small>
-              <h3>{cue.title}</h3>
-              {!cueRevealed ? (
-                <>
+              <div className="cs2d-coach-cue-heading">
+                <small>第 {segment?.round_number ?? ""} 回合 · 处理看完了</small>
+                <h3>{cue.title}</h3>
+              </div>
+              <div className="cs2d-coaching-bands">
+                <section className="cs2d-coaching-band cs2d-coaching-band--situation">
+                  <div className="cs2d-coaching-band-heading">
+                    <strong>当前情况</strong>
+                    <small>决策前可知</small>
+                  </div>
                   <ul>
-                    {cue.facts
-                      .filter((fact) => cue.observable_fact_refs.includes(fact.id))
-                      .slice(0, 3)
-                      .map((fact) => <li key={fact.id}>{fact.text}</li>)}
+                    {coachingView.decisionFacts.map((fact) => <li key={fact.id}>{fact.text}</li>)}
                   </ul>
-                  <p>{cue.question}</p>
-                  {cue.advice[0] ? (
-                    <div className="cs2d-coach-action">
-                      <b>主动作</b>
-                      <p>{cue.advice[0].text}</p>
-                      <small>触发条件：{cue.advice[0].trigger}</small>
+                </section>
+                <section className="cs2d-coaching-band cs2d-coaching-band--outcome">
+                  <div className="cs2d-coaching-band-heading">
+                    <strong>你做了什么</strong>
+                    <small>已播放</small>
+                  </div>
+                  {coachingView.outcomeFacts.length ? (
+                    <ul>
+                      {coachingView.outcomeFacts.map((fact) => <li key={fact.id}>{fact.text}</li>)}
+                    </ul>
+                  ) : <p>这段处理没有可展示的结果事实。</p>}
+                </section>
+                <section className="cs2d-coaching-band cs2d-coaching-band--analysis">
+                  <div className="cs2d-coaching-band-heading">
+                    <strong>教练分析</strong>
+                    <small>直接建议</small>
+                  </div>
+                  <p>{coachingView.question}</p>
+                  {coachingView.advice ? (
+                    <div className="cs2d-coaching-advice">
+                      <strong>下一次这样做</strong>
+                      <p>{coachingView.advice.text}</p>
+                      <small>触发条件：{coachingView.advice.trigger}</small>
                     </div>
                   ) : null}
-                  <button className="cs2d-coach-primary" type="button" onClick={() => transition({ type: "REVEAL_OUTCOME" })}>看结果</button>
-                </>
-              ) : (
-                <div className="cs2d-coach-result-actions">
-                  <p>这波结果看完了。可以再看一遍，或者接着往下走。</p>
-                  <button type="button" onClick={() => transition({ type: "REPLAY_OUTCOME" })}>再看一遍</button>
-                  <button className="cs2d-coach-primary" type="button" onClick={() => transition({ type: "ADVANCE_SEGMENT" })}>继续下一段</button>
-                </div>
-              )}
+                </section>
+              </div>
+              <div className="cs2d-coach-result-actions">
+                <p>结果已看完。你可以再看一遍，或者接着往下走。</p>
+                <button type="button" onClick={() => transition({ type: "REPLAY_OUTCOME" })}>再看一遍</button>
+                <button className="cs2d-coach-primary" type="button" onClick={() => transition({ type: "ADVANCE_SEGMENT" })}>继续下一段</button>
+              </div>
             </section>
           ) : null}
 
           {session && !userTookOver && !cue && ["PLAYING", "SKIPPING"].includes(session.phase) ? (
             <section className="cs2d-coach-card" aria-live="polite">
               <small>{session.phase === "SKIPPING" ? "低价值片段" : "正在带看"}</small>
-              <p>{segment?.display_reason ?? "教练会在下一个关键决策前自动暂停。"}</p>
+              <p>{segment?.display_reason ?? "教练会先带你看完下一段关键处理，再回到决策点讲解。"}</p>
             </section>
           ) : null}
 
           {session && !userTookOver && cue && ["PLAYING", "REVEALING", "REPLAYING"].includes(session.phase) ? (
             <section className="cs2d-coach-card" aria-live="polite">
-              <small>{session.phase === "PLAYING" ? "接近讲解点" : "正在播放结果"}</small>
-              <p>{session.phase === "PLAYING" ? "到关键决策前会自动暂停并直接讲解。" : "跟住你这一波处理，看结果怎么落地。"}</p>
+              <small>{session.phase === "PLAYING" ? "正在先看完整处理" : session.phase === "REPLAYING" ? "正在重播完整处理" : "正在播放完整处理"}</small>
+              <p>{session.phase === "PLAYING" ? "先看一秒上下文和完整处理，播放结束后再回到决策点讲解。" : "跟住这段完整处理，结束后会回到问题发生前。"}</p>
             </section>
           ) : null}
 

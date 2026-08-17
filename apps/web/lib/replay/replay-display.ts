@@ -1,5 +1,5 @@
 import type { MatchEvent, MatchEventType, MatchTimeline, RoundTimeline } from "@cs-coach/contracts";
-import { formatItem } from "./item-display";
+import { formatItem } from "../assets/item-display";
 
 export const TRACK_WINDOW_SECONDS = 4;
 

@@ -1,17 +1,17 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：2.2.0
+> 版本：3.2.0
 > 最后更新：2026-08-17
-> 适用范围：浏览器首版至桌面端长期产品
+> 适用范围：Web 2D 到桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
-> 首版边界：[MVP_SCOPE.md](./MVP_SCOPE.md)
+> 当前产品范围：[MVP_SCOPE.md](./MVP_SCOPE.md)
 
 ## 0. 文档治理
 
 ### 0.1 维护责任
 
-本文是项目唯一要求持续维护的设计文档。PRD 和首版范围用于启动开发，完成后可以冻结或归档。
+本文是项目唯一要求持续维护的设计文档。PRD 和产品范围文档用于产品范围，完成后可以冻结或归档；它们不覆盖本文的架构契约。
 
 下列变化合并前必须更新本文，重大取舍同时新增 ADR：
 
@@ -24,7 +24,13 @@
 
 版本规则：Patch 用于澄清；Minor 用于兼容性扩展；Major 用于改变系统边界或不兼容契约。ADR 存放于 `/docs/adr/ADR-NNNN-title.md`，已接受的 ADR 不覆盖，使用后续 ADR 取代。
 
-### 0.2 架构审查问题
+### 0.2 长期契约与实现记录分离
+
+长期契约包括：事实模型、观察信息边界、教学决策与讲解的职责、`ReviewPlan`/`CoachingSession`/播放器协议、状态机、版本化和验证规则。实现可以替换，只要继续满足这些契约。
+
+以下内容不是长期架构事实，只能出现在“当前实现快照”、ADR 或代码文档中：具体上游 commit、localhost 端口、CSS 尺寸/颜色/镜头倍率、当前测试 Demo 的数量，以及迁移期间保留的旧 renderer 或某次迁移的规则实现。FastAPI、异步 Worker、PostgreSQL、Redis、对象存储、Parquet/DuckDB、SSE、LangGraph Checkpoint、桌面适配器和本地记忆属于长期运行基线；变化时必须通过架构变更或 ADR 处理，不能因为某个当前切片尚未接入就删除。LangGraph 是 CoachingRuntime 的长期编排边界，但不是 Parser、Renderer 或事实存储的替代品。
+
+### 0.3 架构审查问题
 
 任何重要变更必须能回答：
 
@@ -42,10 +48,12 @@
 
 ```text
 Demo
-  → 标准比赛时间轴
-  → 当时可知的信息与候选教学时刻
-  → 覆盖完整比赛的 ReviewPlan
-  → 播放器执行＋AI 教练主持
+  → 单次解析的 GroundTruth ReplayBundle
+  → 回合场景索引与 ObservableState
+  → Teaching Director 选择可教候选
+  → PlanCompiler 生成并校验 ReviewPlan
+  → Narrator 根据决策侧 CoachingPackage 构建讲解
+  → 播放器执行＋SessionOrchestrator 主持
   → 用户追问、回看与交互
   → 会后总结
   → 长期个人习惯记忆（后续）
@@ -54,11 +62,12 @@ Demo
 优先级从高到低：
 
 1. 时间轴和回放事实正确；
-2. 复盘会话连贯，关键时刻讲得清楚；
-3. 证据可追溯且不确定性诚实；
-4. 播放载体可从 Web 2D 演进到本地 CS2；
-5. 个人开发者可实现、测试和运维；
-6. 长期记忆、学习模型和规模扩展。
+2. Teaching Director 选择的教学时刻可解释且可复现；
+3. Narrator 的讲解只使用允许的决策侧证据；
+4. 复盘会话连贯，关键时刻讲得清楚；
+5. 播放载体可从 Web 2D 演进到本地 CS2；
+6. 个人开发者可实现、测试和运维；
+7. 长期记忆、学习模型和规模扩展。
 
 ## 2. 架构不变量
 
@@ -74,9 +83,9 @@ Demo
 
 分析层只面向标准时间轴、`PlaybackPort` 和 `AnnotationPort`。在线 2D、本地 CS2 Demo 或未来视频播放器都只是适配器，不能拥有独立的教学逻辑。
 
-### 2.4 决策前暂停，禁止未来泄漏
+### 2.4 完整处理先播放，结果结束后讲解
 
-讲解点区分 `decision_tick`、`reveal_tick` 和 `outcome_range`，并满足 `decision_tick <= outcome_start_tick < reveal_tick <= outcome_end_tick`。深度讲解片段默认从 `max(round.freeze_end_tick, decision_tick - tick_rate)` 开始播放约 1 秒上下文，但暂停点、事实可用时间与 outcome 边界保持不变。教练在决策点暂停后直接说明当时事实、判断、理由和一个可执行动作，不要求用户先作答；用户点击“看结果”后才从决策点播放到结果。在揭示动作发生之前，建议与问答只能读取 `decision_tick` 之前的 `ObservableState`；后续事件只用于结果播放与复盘解释。
+讲解点区分 `decision_tick`、`reveal_tick` 和 `outcome_range`，并满足 `decision_tick <= outcome_start_tick < reveal_tick <= outcome_end_tick`。播放器从决策点前约 1 秒进入片段，不在决策前暂停，也不要求用户先猜；它连续播放用户的真实选择与结果，到达 `outcome_end_tick` 后自动暂停并回到 `decision_tick`，再一次性展示当前情况、可验证 Outcome Fact 与一个可执行建议。在结果窗口完成前，任何用户可见讲解与问答都不得泄漏结果；决策侧判断始终只能读取 `decision_tick` 之前的 `ObservableState`。前置上下文和自动回看不得改变这些事实时间边界。
 
 ### 2.5 事实、推断、建议分层
 
@@ -85,23 +94,23 @@ Demo
 - `Advice`：在事实和推断基础上的替代选择；
 - `Evidence`：职业样本、规则或历史习惯依据。
 
-四者分别存储并引用稳定 ID。LLM 只能组织已提供内容，不能创造事实或样本。
+四者分别存储并引用稳定 ID。Teaching Director 只能返回候选 ID、主题、优先级和理由引用；Narrator 可以组织和构建讲解，但不能创造事实、样本、数值或引用。所有模型输出都必须经过 Schema、引用和时间边界校验。
 
 ### 2.6 回放全知显示与教练证据边界
 
 浏览器主地图始终显示 cs2d 在当前 canonical tick 的全知事实：双方位置、存活、装备、道具、C4、投掷物和事件不因会话阶段隐藏，也不向用户暴露“玩家已知 / 全知”模式切换。地图的职责是让用户看懂教练正在讲哪一段，不承担信息考试或 POV 模拟。
 
-教学判断仍必须遵守独立的 `ObservableState` 边界。`.dem` 只在浏览器内由 cs2d Worker/WASM 完整解析一次；`@cs-coach/cs2d-analysis-adapter` 从同一份结构化 Replay 派生所选玩家的 `MatchTimeline`、`ObservableState` 与 `ReviewPlan`，不得二次解析 Demo，也不得把全知敌人坐标送给决策前 LLM。地图显示全知不等于教练可以使用全知推理。
+教学判断仍必须遵守独立的 `ObservableState` 边界。`.dem` 只完整解析一次，Adapter 从同一份结构化 Replay 派生 `MatchTimeline`、场景索引和 `ObservableState`，再由 Teaching Director 与 PlanCompiler 生成 `ReviewPlan`，不得二次解析 Demo，也不得把全知敌人坐标送给决策前 Narrator。地图显示全知不等于教练可以使用全知推理。
 
-`ObservableState` 不是“可见圆”或 `observed: boolean`，也不是用户可见的第二套 renderer 输入。它是内部 LLM/规则证据白名单，由带时间、来源、空间精度、身份精度、置信度和过期规则的 `ObservationClaim` 组成：直视可以形成较精确位置；脚步、枪声和伤害方向通常只形成区域或方向信息；最后已知位置随时间衰减；队友看见不自动等于所选玩家知道。决策侧 `CoachingPackage` 只能引用该状态及其 claim/fact ID，结果事件只能在用户点击“看结果”并完成结果区间后进入结果解释。
+`ObservableState` 不是“可见圆”或 `observed: boolean`，也不是用户可见的第二套 renderer 输入。它是内部证据白名单，由带时间、来源、空间精度、身份精度、置信度和过期规则的 `ObservationClaim` 组成：直视可以形成较精确位置；脚步、枪声和伤害方向通常只形成区域或方向信息；最后已知位置随时间衰减；队友看见不自动等于所选玩家知道。Director 可以使用完整回合来判断教学价值，但其输出只能引用候选和证据 ID；Narrator 的决策侧 `CoachingPackage` 只能引用 decision tick 之前的 claim/fact。Outcome Fact 单独标记为 `OUTCOME`，不进入 observable refs 或决策侧模型输入，并且只在播放器确认完成结果区间后进入用户可见解释。
 
 ### 2.7 原始数据不可变，派生物版本化
 
 原始 Demo 按内容哈希寻址且不原地修改。解析器、地图、信息重建、局面检测、计划编排、职业检索、讲解模板、Prompt、模型和总结均独立版本化。
 
-### 2.8 先结构化数据与规则，后学习模型
+### 2.8 结构化事实优先，LLM 负责教学判断与表达
 
-职业行为首先进入可查询的局面数据库。学习模型只在黄金评测集、明确基线和回滚路径齐备后替换一个边界清楚的模块，不做不可解释的端到端决策黑箱。
+Parser、SceneIndex、ObservationBuilder 和 PlanCompiler 先提供可追溯的结构化事实。LLM 在受限 `TeachingPacket` 上判断教学价值，在受限 `CoachingPackage` 上构建讲解；它不能读取原始 Demo、任意数据库或直接控制播放器。学习排序器、视觉模型和端到端模型只能替换明确的 Director 子模块，并且必须有黄金集、版本、回滚和确定性校验。
 
 ### 2.9 个人记忆本地优先
 
@@ -115,7 +124,7 @@ Demo
 
 用户无需等待整场深度分析完成。上传结束后系统先完成整场快速索引，再优先准备开场观看窗口；前 2–3 回合达到 `READY` 即可启动会话，后续回合按播放顺序在后台持续分析。
 
-渐进式就绪不降低事实门槛：只有状态为 `READY` 的区间才能交给 Agent；用户已观看的讲解冻结版本，不被后台分析静默改写；完整比赛覆盖和跨回合习惯聚合最迟在进入会后总结前完成。
+渐进式就绪不降低事实门槛：只有状态为 `READY` 的区间才能交给 CoachingRuntime；用户已观看的讲解冻结版本，不被后台分析静默改写；完整比赛覆盖和跨回合习惯聚合最迟在进入会后总结前完成。
 
 ## 3. 系统上下文与演进
 
@@ -130,14 +139,17 @@ flowchart TB
     Desktop --> Store
 
     API --> DB[("PostgreSQL")]
-    API --> Agent["LangGraph 教练 Agent"]
-    Agent --> Tools["强类型领域工具"]
-    Tools --> Domain["时间轴 / 教学 / 计划引擎"]
+    API --> Runtime["Coaching Runtime\n模块化单体内的编排"]
+    Runtime --> Director["Teaching Director\n教学点选择"]
+    Runtime --> Narrator["Narrator\n结构化讲解生成"]
+    Runtime --> Tools["强类型领域工具"]
+    Tools --> Domain["时间轴 / 场景 / 观察 / 计划引擎"]
     Tools --> Playback["SessionOrchestrator\n播放命令安全内核"]
     Playback --> Web
     Playback --> Desktop
-    Agent --> LLM["LLM Adapter"]
-    Agent --> Checkpoint[("LangGraph Checkpoint")]
+    Director --> LLM["LLM Adapter"]
+    Narrator --> LLM
+    Runtime --> Checkpoint[("LangGraph PostgreSQL Checkpoint")]
     API --> Queue[("Redis 队列")]
     Queue --> Worker["分析 Worker"]
     Worker --> Parser["Demo Parser Adapter"]
@@ -155,7 +167,7 @@ flowchart TB
 
 ### 3.1 两种产品运行形态
 
-**Web 形态**：服务端预计算复盘计划；浏览器 2D 播放器按计划执行播放、暂停、跳过、回看和标注。它是首版，也是无游戏环境用户的长期入口。
+**Web 形态**：服务端预计算复盘计划；浏览器 2D 播放器按计划执行播放、暂停、跳过、回看和标注。它是当前运行基线，也是无游戏环境用户的长期入口。
 
 **桌面形态**：桌面伴侣打开用户本地 Demo，通过受支持的控制方式驱动 CS2 Demo 播放；AI 教练以侧边窗口或悬浮窗口呈现。桌面端复用同一 `ReviewPlan`、讲解协议、问答和总结逻辑。
 
@@ -170,14 +182,48 @@ flowchart TB
 - 桌面端拥有本地文件与游戏控制权限，是独立高信任组件，必须签名、自动更新且可撤销权限；
 - 本地习惯记忆不默认上传服务端。
 
+### 3.3 教学分析主链路
+
+这是长期架构的核心数据流。`GroundTruth ReplayBundle` 只产生一次；Renderer 使用全知事实，Director 使用回合教学包，Narrator 使用决策侧证据包，三者不能互换输入。
+
+```mermaid
+flowchart LR
+    Demo[".dem"] --> Parser["Parser Adapter\n单次解析"]
+    Parser --> Replay["GroundTruth ReplayBundle"]
+    Replay --> Renderer["统一 Playback Renderer\n全知当前 tick"]
+    Replay --> Index["SceneIndex\n回合 / 事件 / candidateId"]
+    Replay --> Obs["ObservationBuilder\n玩家当时可知信息"]
+    Replay --> Visual["VisualSceneSampler\n可选地图关键帧"]
+    Index --> DirectorPacket["TeachingPacket\n可含完整回合结果"]
+    Obs --> DirectorPacket
+    Visual --> DirectorPacket
+    DirectorPacket --> Director["Teaching Director LLM\n只返回候选与教学意图"]
+    Director --> Compiler["PlanCompiler\n覆盖 / tick / 引用 / 预算校验"]
+    Replay --> Compiler
+    Obs --> Compiler
+    Compiler --> Plan["ReviewPlan"]
+    Plan --> Evidence["CoachingEvidenceBuilder"]
+    Obs --> Evidence
+    Evidence --> Package["CoachingPackage\n仅决策侧证据"]
+    Package --> Narrator["Narrator LLM\n构建结构化讲解"]
+    Narrator --> Session["SessionOrchestrator"]
+    Session --> Renderer
+    Session --> Reveal["OutcomeCompletionGate\n播放至 outcome_end"]
+    Reveal --> Outcome["OutcomePackage\n结果窗口完成后解锁"]
+    Outcome --> Session
+    Session --> Summary["SummaryBuilder\n全场结束后"]
+```
+
+`DirectorPacket` 与 `CoachingPackage` 必须是两个不同的契约。Director 可以使用结果判断教学价值，但只能返回 `candidateId`、主题、优先级和引用；决策侧 Narrator 不能看到结果包或未到达 `decision_tick` 的事实。结果窗口完成后，Session 才能把已校验的决策侧讲解与独立 OutcomePackage 组合成用户可见复盘。模型可以更换，Renderer、PlanCompiler 和 SessionOrchestrator 的边界不能被模型绕过。
+
 ## 4. 技术基线
 
 ### 4.1 运行单元
 
 1. `web`：上传、在线 2D 回放、教练侧栏、问答和总结；
 2. `api`：资源、权限、会话控制、问答和 SSE；
-3. `agent-runtime`：运行于 API 进程内的 LangGraph 教练 Agent；规模扩大后可独立部署；
-4. `worker`：解析、特征、候选教学点、复盘计划、职业检索和讲解准备；
+3. `coaching-runtime`：运行于模块化单体内的 LangGraph CoachingRuntime，编排 Teaching Director、Narrator Adapter、PlanCompiler 和 SessionOrchestrator；
+4. `worker`：解析、场景索引、Observation、Director 调度、计划校验、职业检索和讲解准备；
 5. `desktop`（后续）：本地文件、CS2 播放控制、悬浮教练窗口和本地记忆；
 6. `corpus-cli`：职业语料导入与离线批处理，复用领域库。
 
@@ -188,8 +234,10 @@ flowchart TB
 | Web | Next.js、React、TypeScript | 上传、会话 UI 和总结 |
 | 2D 回放 | 固定版本 `zenojunior/cs2d` Vue/Canvas renderer | 浏览器内真实雷达、多楼层、10 人 HUD、投掷物、事件与时间轴；主仓库保存 patch，不复制整仓源码 |
 | API | Python 3.12、FastAPI、Pydantic v2 | 与数据分析生态一致 |
-| Agent 编排 | LangGraph Python `StateGraph` | 长时、有状态、可中断恢复的教练会话 |
-| Agent Checkpoint | LangGraph PostgreSQL Checkpointer | 保存会话编排快照，不保存 Demo 事实主数据 |
+| 教练运行时 | LangGraph Python `StateGraph`＋确定性领域节点 | 编排 Director、Narrator、问答、揭示、总结和恢复；不取代领域服务或播放器 |
+| Graph Checkpoint | LangGraph PostgreSQL Checkpointer | 只保存可恢复的编排状态和领域 ID，不保存 raw Replay 或事实主数据；存储实现可替换但不改变恢复语义 |
+| LLM 接口 | Provider-neutral JSON/Schema Adapter | Director 与 Narrator 是不同调用和不同数据包，可使用同一模型 |
+| LLM 可观测性 | LangSmith（可选） | 只用于调用追踪、成本和质量观测，不成为运行时依赖 |
 | Worker | Dramatiq + Redis | 异步、重试和资源隔离 |
 | Demo 解析 | 固定版本 `zenojunior/cs2d` Worker/WASM | `.dem` 在浏览器内解析一次；结构化 Replay 通过内部 Adapter 生成教练领域对象 |
 | 数据库 | PostgreSQL 16 + pgvector | 元数据、会话、职业检索 |
@@ -200,27 +248,27 @@ flowchart TB
 | 桌面端 | Tauri（候选，需 ADR 确认） | 小体积、系统窗口与 Rust 能力 |
 | 本地记忆 | SQLite + OS Keychain 派生密钥 | 可迁移、可导出、可删除 |
 
-整体采用“模块化单体＋异步分析流水线＋LangGraph 教练 Agent＋确定性播放器控制”。LangGraph 是会话认知与编排层，不取代 Demo 分析、业务数据库和播放器状态机。
+整体采用“模块化单体＋异步分析流水线＋LangGraph CoachingRuntime＋Teaching Director/Narrator＋确定性播放器控制”。LangGraph 编排有状态的教学会话；模型只产生受限结构化提案和讲解，SessionOrchestrator、PlanCompiler 与领域服务负责事实、时间和执行。
 
 Worker 使用至少三档队列优先级：`interactive` 处理用户即将观看的回合，`normal` 处理后续回合，`batch` 处理职业语料和非紧急重算。用户会话维护 3–5 回合的目标缓冲水位；水位下降时只提升未就绪相邻回合，不抢占已经开始的幂等任务。
 
-暂不采用：微服务、Kubernetes、独立向量数据库、全量 tick 入 PostgreSQL、LangChain 高层预制 Agent 作为产品主逻辑、LLM 任意 SQL/数据库权限、端到端模型直接控制产品。首期直接使用 LangGraph 底层 `StateGraph`，LangSmith 仅作为可选观测工具，不形成运行依赖。
+不把微服务、Kubernetes、独立向量数据库、全量 tick 入关系库、LLM 任意 SQL/数据库权限或端到端模型控制产品作为架构前提。LangGraph 是当前 CoachingRuntime 的编排基线，但 Graph 外的领域模块不依赖它；只有测量到瓶颈或出现明确能力收益时，才在不改变领域契约的前提下替换实现。
 
-### 4.3 当前可运行切片
+### 4.3 当前实现快照（非规范）
 
-当前纵向切片以 `localhost` 为运行目标：`pnpm cs2d:setup` 把 `zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec` 克隆到忽略的 `.local-data/upstream/cs2d`，应用可重放 patch，并在本机从已固定源码重建 parser WASM；`pnpm dev` 同时启动 cs2d `:5174` 与 Next 教练壳 `:3000`。上游仓库审查时没有明确 LICENSE，因此源码、WASM、地图、图标和构建产物不进入主仓库或 Cloudflare 部署；权利状态与固定 commit 记录在 `THIRD_PARTY_NOTICES.md` 和 ADR-0002。
+当前运行切片同时支持 localhost 与单 Worker Cloudflare 发布：本地使用固定的 cs2d Worker/WASM、iframe bridge 和 Next 教练壳，生产把同一 Viewer 构建挂在同源 `/cs2d/`。上游源码不进入主仓库；CI 从固定 revision 生成 Viewer/WASM/地图/图标构建物并放入 Cloudflare 资产目录，权利状态和可重放 patch 记录在 `THIRD_PARTY_NOTICES.md` 与 ADR-0002。
 
-用户在 cs2d iframe 中选择本地 `.dem`。文件只进入浏览器 File/Worker/WASM 管线，不经过 Next 上传 API，也不写入服务器。cs2d 一次解析后保留完整结构化 Replay，并直接驱动同一个全知 renderer：真实雷达、多楼层、双方 5 人紧凑 HUD、当前手持、库存道具、金钱、护甲/头盔、拆弹器/C4、投掷物、击杀/炸弹事件和当前播放位置之前的轨迹都按同一 canonical tick 更新。
+本地 Demo 只进入浏览器 File/Worker/WASM 管线，不经过 Next 上传 API。cs2d 一次解析后同时驱动全知 renderer 与 Adapter；raw Replay 不跨 iframe，教练壳只接收白名单分析包。
 
-用户只选择一次分析主体。iframe 内的 `@cs-coach/cs2d-analysis-adapter` 从该 Replay 派生所选玩家的 `MatchTimeline`、内部 `ObservableState` 与连续 `ReviewPlan`，序列化后的严格白名单 `Cs2dAnalysisBundle` 通过 `cs2d-playback-bridge.v1` 传给 Next；原始 Replay 不跨 iframe。Session reducer 自动消费 `FREEZE_TIME` 和低价值区间；深度讲解段从决策点前约 1 秒开始，在 `decision_tick` 暂停并直接讲解，“看结果”再推进同一张全知地图的时间。前置上下文不移动 decision、事实可用时间或 outcome 边界。当前全场最多安排 8 个教学暂停，并在候选多于预算时跨回合均匀取样；同类上下文进入 `HABIT_CHECK`。
+当前 Adapter 仍可用确定性规则生成兼容的候选 ReviewPlan，作为 Director 尚未完全接入时的回退；目标流程必须通过 SceneIndex、Teaching Director 和 PlanCompiler 生成正式 ReviewPlan。两条路径共享同一 Replay、canonical tick、Observation 和校验器。
 
-Host 模式只呈现 Next 教练壳的一套中文播放控制，以及位于控制栏下方的一条可自由 seek 的整场进度条；深度讲解/习惯复查、低价值和普通区间分别使用蓝、橙、灰表达，并提供可点击节点。canonical tick 只作为内部寻址坐标，不出现在用户文案。目标玩家选择后锁定，目标 HUD 与地图标签显示“你”，其余九人只展示事实而不可切换分析主体。普通播放和自由查看使用固定地图几何中心；关键 cue 暂停、结果播放、结果回看和结果结束后的暂停持续以 2.45 倍目标镜头聚焦，结果播放速度为 1 倍，且 reduced-motion 下立即切换。用户 seek、切回合、调速或手动播放后进入临时 `UserTakeover`：播放器/HUD/回合/侧栏跟随真实播放头，Session reducer 暂停消费；“返回教练路线”按当前播放位置选择最近 cue（等距时优先后一个），从该 cue 的前置上下文重新播放并重新启用其讲解，不改写 `ReviewPlan`。
+Host 只保留一套教练控制和一条整场时间轴；用户可自由接管，恢复时由 SessionOrchestrator 根据当前播放位置回到最近可讲 cue。具体布局、颜色、镜头倍率和端口属于实现记录，不是长期契约。
 
-DeepSeek 只改写已经存在的匿名决策侧事实、推断和建议。`/api/coaching/narrate` 不接收原始 Demo、稳定玩家 ID、路径、完整事件流或结果事实；Cloudflare 只配置 `DEEPSEEK_API_KEY` Worker Secret。OpenNext 会序列化 production/development/test 三套标准 `.env*`，因此 localhost key 只能放在忽略的 `.local-data/deepseek.env`，由根启动器只注入 Next dev 子进程；Cloudflare 构建前后均校验标准 env 文件及 `next-env.mjs` 不含非空 secret。缺 key、超时、上游失败或输出校验失败时保留确定性中文讲解，不阻塞播放。当前自由追问仍未接入通用模型。
+当前部署可以使用 DeepSeek 作为 LLM Provider；这是实现选择，不改变 Director 与 Narrator 的两个职责和两个输入契约。目标运行时同时支持 Teaching Director 的结构化教学决策与 Narrator 的结构化讲解生成，二者都必须经过 Provider-neutral Schema 校验。缺 key、超时、上游失败或输出校验失败时，保留确定性计划与模板讲解，不阻塞播放。密钥注入和 Cloudflare 构建规则记录在 README 与部署脚本，不在此重复实现细节。
 
 `ReviewSegment` 继续使用半开区间 `[start_tick, end_tick)` 并完整覆盖正式回合、冻结时间、回合判定后区间与回合间隙。cs2d 的 `Round 0` 刀局/初始化段不伪装成正式第 1 回合；`winner: null` 不被猜测。cue 只允许位于 live/decided 边界之前；GrenadePath 的 0.1 秒时间只作为近似，精确 canonical tick 优先取 Round、Frame 与 GameEvent。
 
-旧 Python `demoparser2` Adapter、Falcons/Spirit 首 tick 占位 `round_end` 修复、旧 PixiJS renderer 与合成 fixture 保留在 `/legacy`、`/pixi-poc` 和 worker 测试中，职责是迁移回归与故障对照，不再是默认产品数据流，也不得与 cs2d Replay 混合成一场会话。生产基线中的 FastAPI、队列、LangGraph、PostgreSQL、Redis 和对象存储尚未接入。
+旧 Python `demoparser2` Adapter、旧 PixiJS renderer 和合成 fixture 只保留为迁移回归与故障对照，不再是默认产品数据流，也不得与 cs2d Replay 混合成一场会话。当前 localhost 可以绕过部分服务端路径，但长期部署仍以 FastAPI、异步 Worker、PostgreSQL、Redis、对象存储、Parquet/DuckDB、SSE、LangGraph Checkpoint 和本地记忆为基线；这些基础设施不能因为当前切片尚未全部接入而从架构中删除。
 
 ## 5. 建议仓库结构
 
@@ -235,14 +283,14 @@ DeepSeek 只改写已经存在的匿名决策侧事实、推断和建议。`/api
 │   ├── contracts/                 # 跨端协议与生成类型
 │   ├── demo_domain/               # 标准时间轴、事件、Parser Adapter
 │   ├── map_semantics/             # 区域、路径、视线和显示坐标
+│   ├── scene_index/               # 回合、事件、关键帧与 candidateId
 │   ├── observation/               # 当时可知信息重建
-│   ├── teaching_signals/          # 候选教学时刻与习惯聚类
-│   ├── review_planner/            # 全场复盘路线编排
-│   ├── agent/                     # LangGraph 状态、节点、路由与工具绑定
+│   ├── teaching_director/         # Director 输入包、输出 Schema 与调用适配
+│   ├── plan_compiler/             # ReviewPlan 编译、覆盖与时间边界校验
+│   ├── coaching/                  # EvidenceBuilder、Narrator、问答与总结
 │   ├── session/                   # 确定性会话约束与命令校验
 │   ├── playback/                  # 播放器与标注端口
 │   ├── retrieval/                 # 职业局面过滤、排序和分布
-│   ├── coaching/                  # 讲解包、问答、总结
 │   ├── memory/                    # 本地优先个人记忆契约
 │   └── evaluation/                # 黄金集、指标和回归测试
 ├── tools/corpus/                  # 职业 Demo 语料管线
@@ -268,7 +316,7 @@ DeepSeek 只改写已经存在的匿名决策侧事实、推断和建议。`/api
 
 Parser Adapter 将解析器输出转换为稳定的 `MatchTimeline`：比赛、半场、回合、tick、玩家状态、事件和轨迹。玩家状态以 CS2 world 坐标保存，不在解析层转换为屏幕百分比；状态快照至少保留存活、位置、高度、视角、生命、护甲、头盔、金钱、当前手持物、库存/道具数量、拆弹器和 C4 携带。下游回放可以读取全知事实，但 Observation 必须另行推导观察者当时可知的信息。
 
-当前默认解析入口是固定版本 cs2d 的浏览器 Worker/WASM；其结构化 Replay 是 renderer 的全知事实来源。同一次解析还保留 Source engine 的 `m_szLastPlaceName` 字符串，作为玩家状态事实进入 Replay；不得为了中文报点二次解析 Demo。`@cs-coach/cs2d-analysis-adapter` 只依赖 Replay 的结构化端口，把 Round/Frame/GameEvent/GrenadePath 转成稳定的 `MatchTimeline`、warnings、内部 `ObservableState` 与 `ReviewPlan`，不导入上游实现、不重读 `.dem`、不猜测缺失 winner，也不把 raw Replay 序列化到教练壳。Python `demoparser2` Adapter、canonical tick 契约和 Falcons/Spirit 兼容修复保留为迁移回归与未来 server-side 备选，不再是 localhost 默认入口。
+当前默认解析入口是固定版本 cs2d 的浏览器 Worker/WASM；其结构化 Replay 是 renderer 的全知事实来源。同一次解析还保留 Source engine 的 `m_szLastPlaceName` 字符串，作为玩家状态事实进入 Replay；不得为了中文报点二次解析 Demo。Adapter 只依赖 Replay 的结构化端口，把 Round/Frame/GameEvent/GrenadePath 转成稳定的 `MatchTimeline`、warnings、SceneIndex 和 `ObservableState`。ReviewPlan 必须由 Teaching Director 与 PlanCompiler 生成；确定性规则计划只能作为兼容回退。不导入上游实现、不重读 `.dem`、不猜测缺失 winner，也不把 raw Replay 序列化到教练壳。旧 parser、canonical tick 兼容修复和 server-side 备选只属于迁移回归，不是默认数据流。
 
 Parser Adapter 还要规范化击杀、伤害、开火、换弹、投掷物、炸弹和解析器能够提供的声音发射事件。声音事件只能证明“某处发生了一个可能发声的动作”，不能直接证明某个玩家一定听到；字段不可得时输出带 parser/game 版本的 warning，绝不补造默认值。所有下游只依赖标准模型，不依赖解析器私有字段或 DataFrame 列名。
 
@@ -276,7 +324,7 @@ Parser Adapter 还要规范化击杀、伤害、开火、换弹、投掷物、�
 
 维护版本化的真实雷达资源清单、world→radar 仿射变换、楼层、点位多边形、区域层级、相邻关系、常见路径、掩体、简化视线和声音传播近似。`MatchTimeline` 永远保留 world X/Y/Z；只有渲染边界使用 `MapAssetManifest` 转换为雷达像素。固定锚点与固定 tick 截图必须做坐标回归，禁止靠 CSS 百分比手调位置。
 
-首版中文报点优先使用同一 player frame 的 Source engine place token，经版本化 `@cs-coach/map-semantics` 精确映射为玩家熟悉的 CS 报点；未知 token 保持未知，不做模糊匹配或坐标猜测。报点是可追溯事实的本地化，打法术语属于推断/建议层；二者不得混写成 parser 事实。
+中文报点优先使用同一 player frame 的 Source engine place token，经版本化 `@cs-coach/map-semantics` 精确映射为玩家熟悉的 CS 报点；未知 token 保持未知，不做模糊匹配或坐标猜测。报点是可追溯事实的本地化，打法术语属于推断/建议层；二者不得混写成 parser 事实。
 
 地图图片、武器/道具图标、坐标参数和区域配置必须锁定到地图/游戏构建版本，记录来源 URI、内容哈希、生成清单和权利状态。用户已确认 localhost 可以使用参考站点提供的 Valve 游戏雷达/游戏图标，也可以使用版本锁定的公开工具数据包或用户本机 CS2 安装；这些资产下载为本地缓存，不做运行时热链。该授权不包含第三方站点的 UI、布局、组件、品牌或自有图标，也不自动扩大为公开再分发许可。公开构建发布 Valve 资产前仍需单独复核。资产来源可替换，领域坐标和回放协议不随供应方变化。
 
@@ -294,50 +342,49 @@ Parser Adapter 还要规范化击杀、伤害、开火、换弹、投掷物、�
 - 敌方武器、道具、金钱等全知装备事实不会自动进入玩家视角；可见手持、已使用道具或经济推断分别标注来源与精度；
 - 任何 `decision_tick` 的查询只返回 `available_from_tick <= decision_tick` 的 claim，结果区间和未来事件不可回灌。
 
-`ObservableState` 当前只进入 TeachingSignals、DeepSeek 决策侧 `CoachingPackage` 与未来泄漏测试，不进入 cs2d renderer，也不作为用户可见模式。cs2d 地图始终渲染当前 tick 的全知 Replay；语音无法可靠获得时，教练证据不假装已知，规则继续输出来源、时间、置信度与 limitation。
+`ObservableState` 只进入 TeachingPacket、CoachingEvidenceBuilder、Narrator 的决策侧 `CoachingPackage` 与未来泄漏测试，不进入 cs2d renderer，也不作为用户可见模式。cs2d 地图始终渲染当前 tick 的全知 Replay；语音无法可靠获得时，教练证据不假装已知，系统继续输出来源、时间、置信度与 limitation。
 
-### 6.5 TeachingSignals
+### 6.5 SceneIndex 与候选场景
 
-检测具有选择空间和教学价值的候选时刻，例如重复 peek、优势处理、补枪关系、接触后生存、转点、回防、保枪和道具时机。输出结构化信号，不直接写自然语言长评。
+SceneIndex 把完整 Replay 按回合组织成可寻址场景和候选锚点，例如重复 peek、优势处理、补枪关系、接触后生存、转点、回防、保枪和道具时机。它只回答“哪些事实窗口可被模型引用”，不判断最终是否值得教学，也不写自然语言长评。
 
-同类信号在一场内聚成 `HabitCluster`，供后续 `HABIT_CHECK` 和会后总结使用。
+候选场景带有稳定 `candidateId`、事件/帧引用、决策窗口、结果窗口、可用的 ObservableState 引用和可选视觉 storyboard。它们是 Director 的输入边界，也是 PlanCompiler 的寻址边界。
 
-### 6.6 ReviewPlanner
+### 6.6 TeachingDirector 与 PlanCompiler
 
-把完整时间轴划分为连续的 `ReviewSegment`，并选择处理方式：
+Teaching Director 读取每回合或批量回合的 `TeachingPacket`，判断是否值得教学、选择 `candidateId`、主题、优先级、教学理由和置信度。Director 可以看到完整回合的结果来判断教学价值，但不得输出未经索引的 tick、事实、样本比例或播放器命令。
 
-- `SKIP`：明确跳过；
-- `BRIEF`：短摘要后推进；
-- `OBSERVE`：提示用户关注；
-- `DEEP_DIVE`：完整讲解；
-- `HABIT_CHECK`：针对已讲习惯再次提问。
+PlanCompiler 把 DirectorDecision、GroundTruth、ObservableState 和用户配置编译为连续的 `ReviewPlan`，并执行确定性校验：
 
-深讲排序综合影响、可教性、证据质量、新颖度、重复程度和总时长预算。计划生成必须满足：无空洞、无重叠、所有回合出现、关键暂停在决策前、同类长讲不过度重复。
+- 完整覆盖、半开区间和无重叠；
+- `decision_tick`、`reveal_tick`、outcome 区间合法且来自真实事实；
+- 每个 cue 的 facts、claims、advice 和 evidence 引用有效；
+- 深讲预算、同类去重、回合分布和用户配置满足约束；
+- Director 超时、拒答或输出无效时使用可追溯的确定性候选回退。
+
+PlanCompiler 最终划分 `SKIP`、`BRIEF`、`OBSERVE`、`DEEP_DIVE` 和 `HABIT_CHECK`，但“是否值得深讲”的主要判断来自 Director，而不是由播放器或 Narrator 临时决定。PlanCompiler 是模型与播放器之间不可绕过的硬边界。
 
 ### 6.7 SessionOrchestrator
 
-教练会话使用 LangGraph `StateGraph` 实现。它读取 `ReviewPlan`，维护当前 segment、cue、已讲习惯、用户追问、待执行教学动作和完成进度，并协调播放器、教练侧栏、标注、问答、用户接管与恢复。
+LangGraph `StateGraph` 是 CoachingRuntime 的有状态编排骨架。它读取 `ReviewPlan`，维护当前 segment、cue、已讲习惯、用户追问、待执行播放动作和完成进度，并协调播放器、教练侧栏、标注、问答、用户接管与恢复。Graph 节点调用 Teaching Director、Narrator、Question、Outcome 和 Summary Adapter，但不直接读取 raw Replay 或向播放器发任意命令。
 
-LangGraph 负责 Agent 层决策：当前内容展开还是缩短、是否回答追问、是否回放、是否对照职业案例、是否进入习惯复查，以及如何根据玩家水平调整表达。Graph 节点保持小而明确，主要包括：
+Graph 内的 `SessionOrchestrator` 节点仍是确定性的：它校验完整时间轴覆盖、允许的状态转移、目标 tick、播放器 ACK、未来信息边界和恢复位置。Director 只在计划生成阶段选择候选；Narrator 只在已校验的 CoachingPackage 上生成讲解。会话状态、业务事件和播放器确认状态分别保存；checkpoint 只能保存可恢复的编排状态和领域 ID，不能成为 Demo 事实、ReviewPlan 或 CoachingSession 的唯一来源。
 
-- `load_review_plan`：载入复盘骨架；
-- `present_segment`：主持当前区间；
-- `pause_before_decision`：请求在决策前暂停；
-- `explain_situation`：生成受证据约束的讲解；
-- `await_user`：中断并等待继续、追问或播放控制；
-- `answer_question`：调用当前局面工具回答；
-- `reveal_outcome` / `replay_segment`：播放并解释结果；
-- `habit_check`：复查已经讲过的问题；
-- `advance_segment`：按完整覆盖约束推进；
-- `wrap_up` / `propose_memory_update`：总结并提出记忆更新候选。
+典型节点包括：
 
-LangGraph checkpoint 保存可恢复的编排状态；Demo 事实、职业语料、`ReviewPlan` 和个人习惯仍以领域数据库为事实来源，不复制到 checkpoint 中。业务事件继续追加写入 `CoachingSession`，避免框架状态成为不可迁移的唯一数据。
+- `load_review_plan`：载入已校验的复盘计划；
+- `present_segment` / `advance_segment`：按覆盖约束推进；
+- `narrate_cue`：调用 Narrator 生成决策侧讲解；
+- `await_user` / `answer_question`：等待继续、追问或播放控制；
+- `reveal_outcome` / `replay_segment`：在授权后生成结果包并播放；
+- `habit_check`：复查已讲习惯；
+- `wrap_up` / `propose_memory_update`：总结并提出记忆候选。
 
 `SessionOrchestrator` 同时包含一层与 LLM 无关的确定性安全内核，负责校验完整时间轴覆盖、允许的状态转移、目标 tick、播放器 ACK、未来信息边界和恢复位置。LLM 可以提出教学动作，但不决定未经校验的下一个 tick，也不直接向播放器发送任意命令。
 
-#### 6.7.1 Agent 工具边界
+#### 6.7.1 CoachingRuntime 工具边界
 
-Agent 通过强类型领域工具访问系统能力，不获得数据库连接或任意 SQL 权限。首批工具包括：
+CoachingRuntime 通过强类型领域工具访问系统能力，不把数据库连接或任意 SQL 暴露给模型。首批工具包括：
 
 ```text
 get_current_scene(cue_id)
@@ -351,7 +398,7 @@ add_annotation(annotation)
 propose_memory_update(proposal)
 ```
 
-每个工具自动限定当前用户、Demo、session 和 cue，执行参数 Schema、权限、`decision_tick`、证据门槛和审计校验。读取工具只返回经过领域层验证的结构化数据；写入工具只能产生白名单命令或待确认提案。用户提供的“如果队友报了两个”等信息只进入当前会话条件上下文，不回写为 Demo 事实。
+每个工具自动限定当前用户、Demo、session 和 cue，执行参数 Schema、`decision_tick`、证据门槛和审计校验。读取工具只返回经过领域层验证的结构化数据；写入工具只能产生白名单命令或待确认提案。用户提供的“如果队友报了两个”等信息只进入当前会话条件上下文，不回写为 Demo 事实。
 
 ### 6.8 Playback
 
@@ -369,15 +416,15 @@ propose_memory_update(proposal)
 2. cs2d renderer 直接消费 Replay，并始终显示当前 canonical tick 的全知地图、10 人 HUD、投掷物、炸弹、掉落武器、效果、多楼层、缩放和平移；
 3. `@cs-coach/cs2d-analysis-adapter` 在 iframe 内从同一 Replay 派生严格白名单 `Cs2dAnalysisBundle`；它是分析端口，不是 renderer frame builder；
 4. Next 教练壳只通过 `cs2d-playback-bridge.v1` 接收摘要、选择、播放状态与 AnalysisBundle，并发送 `play/pause/seekCanonicalTick/selectRound/setSpeed/setCamera`；bridge 对 envelope 与 payload 使用精确字段校验；
-5. `SessionOrchestrator` 根据 `ReviewPlan` 控制同一个 cs2d 播放头，在 cue 前暂停、用户点击“看结果”后播放 outcome、必要时回看，再继续下一段。
+5. `SessionOrchestrator` 根据 `ReviewPlan` 控制同一个 cs2d 播放头，从 cue 前约 1 秒连续播放到 outcome end，自动回到 decision tick 讲解，必要时重播，再继续下一段。
 
 用户界面不提供 `PLAYER_KNOWLEDGE` renderer。`ObservableState` 是教练内部证据边界；renderer 不根据它隐藏敌人，教练也不得因为地图上显示全知事实而读取这些事实。当前投掷物只显示播放位置以前的轨迹，C4/HUD 只能读取 `t <= currentT` 的状态，禁止用数组首项或未来落点补值。
 
-旧 `/pixi-poc` 的 `PlaybackFrameViewModel`、Freezetime 审查与 `csgo-2d-demo-viewer` 参考结论保留为实验记录和回滚证据，不再是生产迁移方向；不得继续为默认产品扩展第二套 renderer。cs2d 上游没有明确许可证，故只做固定 commit 的 localhost source-reference，不把其源码、构建物或资产提交/发布。上游权利明确或选择可发布替代项时，必须新增 ADR。
+旧 `/pixi-poc` 的 `PlaybackFrameViewModel`、Freezetime 审查与 `csgo-2d-demo-viewer` 参考结论保留为实验记录和回滚证据，不再是生产迁移方向；不得继续为默认产品扩展第二套 renderer。cs2d 上游没有明确许可证，故只从固定 commit 生成忽略的本地/CI 构建物，当前 MVP 暂部署到同源 `/cs2d/`，不把源码提交进仓库；公开商业化或扩大再分发前必须解决权利或替换底座，并新增 ADR。
 
-首版 HUD 采用双方各 5 人紧凑卡片：深色姓名/金钱/道具层＋阵营色生命/护甲/手持层；死亡降低层级但保留事件上下文。朝向只用小箭头，不显示大面积实心朝向月牙。字段不可得时显示未知，不使用看似精确的默认值。
+Renderer 必须显示当前 canonical tick 的真实地图、双方玩家、装备、道具、事件和轨迹；字段不可得时显示未知，不使用看似精确的默认值。HUD、镜头、地图楼层和资产可以替换，但必须消费同一 PlaybackPort 和同一事实快照。
 
-Host 模式不复用 cs2d 的产品控制栏、设置面板或自动镜头 UI。地图 overview 是固定几何中心和固定缩放，不按玩家包围盒持续漂移；`setCamera(target)` 使用 2.45 倍缩放跟随分析主体，并贯穿 cue 暂停、结果播放、结果回看和结果结束后的暂停。进入普通路线、低价值段或自由查看时回到 `setCamera(full)`。
+Host 不复用上游产品的业务控制逻辑。普通播放和用户自由查看保持稳定全图；未揭示 cue 可以聚焦问题区域；结果播放仍使用同一全知 Renderer，只改变时间窗口，不切换用户可见视角。具体镜头倍率、布局和视觉样式属于前端实现，不是领域契约。
 
 ### 6.9 Annotation
 
@@ -391,11 +438,16 @@ Host 模式不复用 cs2d 的产品控制栏、设置面板或自动镜头 UI。
 
 ### 6.11 Coaching
 
-`CoachingPackage` 是 LLM 的唯一正式输入。决策前讲解只包含匿名 cue/fact/inference/advice 短 ID、决策前事实、既有推断/建议/限制和表达约束，不包含原始 Demo、完整事件流、用户或玩家身份、本机路径、结果事实或播放器控制。结果解释需要单独的 outcome-scoped package，且只能在用户已触发揭示后生成。
+Coaching 包分成两个不可互换的契约：
 
-LLM 负责：自然语言表达、根据玩家水平调整讲法、当前局面追问和总结组织。LLM 不负责：解析 tick、计算比分、选择暂停点、生成样本比例或改变事实、引用、置信度、建议结构和播放器控制。当前 Cloudflare 适配器使用 DeepSeek 的 JSON 输出能力；上游返回必须经过字段全集、匿名 ID 一一对应、长度与完成状态校验后才能替换 `title` 与首条 inference 的自然语言讲解。旧 `question` 字段仅同步保存同一段直接讲解以兼容现有契约，不得在 UI 中重新呈现为要求用户预测的门槛。
+- `TeachingPacket` 给 Director 使用，可以包含一个回合的完整结构化事实、结果、候选场景、ObservableState 摘要和可选视觉 storyboard；它不包含 raw Replay 或任意数据库权限；
+- `CoachingPackage` 给 Narrator 使用，只包含当前 cue 的匿名 facts、inferences、advice、evidence、decision-side claims、表达约束和限制，不包含结果事实、未到达 `decision_tick` 的事件、原始 Demo、稳定身份、路径或播放器控制。
 
-所有正式讲解先通过引用校验和禁止未来泄漏校验。模型失败时回退到结构化模板，不阻塞会话。
+Teaching Director 负责从 TeachingPacket 中选择 `candidateId`、教学主题、优先级、教学意图和引用；它不生成最终播放器命令。Narrator 负责根据 CoachingPackage 构建完整、具体的教练讲解，包括标题、局面解释、风险、替代动作和触发条件；它不能新增事实或引用。结果说明必须使用单独的 outcome-scoped package，并只能在播放器确认结果窗口完成后解锁。MVP 可以确定性组合已准备的决策侧讲解与 Outcome Fact，不要求额外模型调用。
+
+问答和总结可以复用 Narrator Adapter，但必须分别构建当前 cue 或已消费内容的最小输入包。模型供应商只属于实现层；每次调用都使用版本化 JSON Schema、Prompt、模型标识和输出校验。
+
+所有 DirectorDecision、Narration、QuestionAnswer 和 Summary 先通过字段全集、引用 ID、时间边界和禁止未来泄漏校验。模型失败时回退到确定性计划或结构化模板，不阻塞会话。
 
 ### 6.12 PersonalMemory（长期）
 
@@ -407,7 +459,7 @@ LLM 负责：自然语言表达、根据玩家水平调整讲法、当前局面�
 候选 → 已观察 → 反复出现 → 改善中 → 稳定改善 → 已解决 / 已归档
 ```
 
-单场检测不能直接写成永久习惯。达到最低跨场证据门槛后，由用户确认或系统以“候选”保存。新 Demo 的 Planner 可提高未解决习惯的复查优先级，但分析事实仍完全来自当前 Demo。
+单场检测不能直接写成永久习惯。达到最低跨场证据门槛后，由用户确认或系统以“候选”保存。新 Demo 的 Director 可以提高未解决习惯相关候选的复查优先级，但分析事实仍完全来自当前 Demo。
 
 浏览器无本地记忆时可不启用；桌面端默认加密保存在 SQLite。跨设备同步是独立、可选、端到端加密能力。
 
@@ -539,22 +591,53 @@ ObservationClaim
 
 空间估计按类型携带 point/sector/polygon、距离或半径范围以及随时间增长的不确定性。声音 claim 不得携带隐藏敌人的实时真值坐标；最后已知 claim 固定在最后确认点并增长年龄与不确定范围。`ObservableState` 的构建测试必须覆盖：视觉精确确认、脚步区域信息、最后已知衰减、队友信息不自动继承、未来事件拒绝。
 
-### 7.4 ReviewPlan
+### 7.4 TeachingPacket 与 DirectorDecision
+
+```text
+TeachingPacket
+  id, demo_id, round_number
+  timeline_version, scene_index_version, observation_version
+  candidate_scenes[]
+  round_facts[], outcome_refs[]
+  observable_state_refs[]
+  visual_storyboard_ref?
+  limitations[], generation_manifest
+
+CandidateScene
+  candidate_id
+  start_tick, decision_window_end_tick
+  event_refs[], frame_refs[]
+  observable_state_id
+  topic_hints[], available_evidence_refs[]
+
+DirectorDecision
+  packet_id, candidate_id?
+  teach: boolean
+  topic?, teaching_intent?
+  priority, confidence
+  reason_refs[], limitation_refs[]
+  director_version, model_manifest
+```
+
+`candidate_id` 是 Director 能选择的最小寻址单位。Director 可以拒绝整回合，也可以选择一个或多个候选，但不能凭空创造 tick、事实、样本比例或播放器命令。PlanCompiler 负责把有效的 DirectorDecision 编译成 ReviewPlan。
+
+### 7.5 ReviewPlan
 
 ```text
 ReviewPlan
   id, demo_id, player_id
   match_timeline_version
   observation_version
-  signal_version
-  planner_version
+  scene_index_version
+  director_version
+  compiler_version
   estimated_duration_seconds
   segments[]
   habit_clusters[]
   generation_manifest
 ```
 
-### 7.5 ReviewSegment
+### 7.6 ReviewSegment
 
 ```text
 ReviewSegment
@@ -569,7 +652,7 @@ ReviewSegment
 
 约束：按 tick 排序后完整分区；相邻区间边界统一；不允许未解释空洞。
 
-### 7.6 CoachCue
+### 7.7 CoachCue
 
 ```text
 CoachCue
@@ -585,11 +668,23 @@ CoachCue
   confidence, limitations[]
 ```
 
-强制时序为 `decision_tick <= outcome_start_tick < reveal_tick <= outcome_end_tick`。承载 cue 的 `ReviewSegment.start_tick` 默认取 `max(round.freeze_end_tick, decision_tick - tick_rate)`，提供约 1 秒可见上下文，但不改变任何事实授权时间。用户点击“看结果”是揭示授权边界：播放器从 `outcome_start_tick`（MVP 通常等于 `decision_tick`）开始展示决策到结果的过程；地图始终使用同一全知 renderer，outcome 文本事实只在窗口完成后标记为已消费。决策前 seek、问答与标注仍锁在观察者信息边界。
+强制时序为 `decision_tick <= outcome_start_tick < reveal_tick <= outcome_end_tick`。承载 cue 的 `ReviewSegment` 可以包含必要的前置上下文，但不改变任何事实授权时间。自动路线从前置上下文连续展示决策到结果，不在 `decision_tick` 停顿；播放器确认到达 `outcome_end_tick` 后才解锁 outcome 文本事实，并自动回到 `decision_tick` 展示复盘。地图始终使用同一全知 renderer。Outcome Fact 必须标记 `availability: OUTCOME` 且 `available_at_tick >= reveal_tick`，不得进入 `observable_fact_refs` 或决策侧模型输入。
 
-### 7.7 Playback 协议
+```text
+CoachingPackage
+  cue_id, session_id
+  decision_tick, observable_state_id
+  facts[], inferences[], advice[], evidence[]
+  allowed_claim_ids[], forbidden_refs[]
+  language_profile, player_context?
+  package_version, model_context_manifest
+```
 
-当前 localhost 的逐帧事实留在 cs2d iframe，不跨 bridge 复制 `Replay` 或自建 `PlaybackFrameViewModel`。控制面契约为：
+Narrator 只能读取 `CoachingPackage`；`forbidden_refs`、可用时间和引用集合由代码生成并在请求前后校验。结果讲解使用独立的 `OutcomePackage`，不得复用决策前包的对象引用。
+
+### 7.8 Playback 协议
+
+当前浏览器 Web 形态的逐帧事实留在 cs2d iframe，不跨 bridge 复制 `Replay` 或自建 `PlaybackFrameViewModel`。localhost 使用 `:5174`，Cloudflare 使用同源 `/cs2d/`；控制面契约为：
 
 ```text
 PlaybackEventEnvelope
@@ -613,15 +708,15 @@ PlaybackCommandEnvelope
     setCamera(full | target)
 ```
 
-`ANALYSIS_READY.bundleJson` 只能是 `serializeCs2dAnalysisBundle` 的白名单结果：`demo_id`、`selected_steam_id`、`match_timeline`、`review_plan`、`observation_evidence` 与版本/限制 metadata；raw Replay、二进制 Demo、上游私有状态或额外顶层字段必须拒绝。`ANALYSIS_READY` 与 `ANALYSIS_FAILED` 使用不同的 schema version，避免错误结果被误认为成功产物。父窗口同时校验 iframe source、localhost origin、channel、direction 与精确 payload shape。
+`ANALYSIS_READY.bundleJson` 只能是 `serializeCs2dAnalysisBundle` 的白名单结果：`demo_id`、`selected_steam_id`、`match_timeline`、`review_plan`、`observation_evidence` 与版本/限制 metadata；raw Replay、二进制 Demo、上游私有状态或额外顶层字段必须拒绝。`ANALYSIS_READY` 与 `ANALYSIS_FAILED` 使用不同的 schema version，避免错误结果被误认为成功产物。父窗口同时校验 iframe source、同源或明确的 localhost origin、channel、direction 与精确 payload shape。
 
-Session 只在 phase/segment/cue/reveal 状态变化时发送新的 playback directive，不随每个 `PLAYBACK_STATE` tick 重复 seek。冻结时间和确定性低价值段由 reducer 记录后自动跳过；`PLAYING` 使用 segment speed；`PAUSED_FOR_COACHING` pause 在 decision tick；`REVEALING/REPLAYING` 从 outcome start 以 1 倍速度和目标聚焦镜头播放至 outcome end，随后保持目标聚焦暂停。
+Session 只在 phase/segment/cue/result 状态变化时发送新的 playback directive，不随每个 `PLAYBACK_STATE` tick 重复 seek。冻结时间和确定性低价值段由 reducer 记录后自动跳过；`PLAYING` 与 `REPLAYING` 都从 `max(segment.start_tick, decision_tick - tickRate)` 的前置上下文开始，到结果事件后约 `tickRate` 的 `outcome_end_tick` 连续播放；若 canonical Demo 或合法 round 边界更早则截断并记录边界。到达 decision tick 后无停顿进入内部 `REVEALING` 阶段，以 1 倍速度和目标聚焦镜头连续播放至 outcome end；seek 落位确认前到达的旧 `PLAYBACK_STATE` 不得推进 UI 或 reducer。完成后进入 `PAUSED_FOR_COACHING`，保持目标聚焦并只 seek 一次回 `decision_tick`。`REPLAYING` 结束后同样回到 decision tick。
 
-外层单一整场时间轴始终可 seek，并以不同颜色展示教练重点、低价值和普通区间。手动命令把 UI 置为 `UserTakeover`，此时侧栏按 `PLAYBACK_STATE.canonicalTick` 使用半开区间定位实际回合和 `ReviewSegment`，隐藏原 cue 的结果按钮；恢复教练路线时按当前播放头选择最近 cue，等距时优先后一个，从目标 segment 的前置上下文开始，并从已消费/已揭示集合中移除该 cue 以重新讲解。该交互状态只属于前端协调层，不写回领域会话或分析产物。
+外层单一整场时间轴始终可 seek，并以不同颜色展示教练重点、低价值和普通区间。手动命令把 UI 置为 `UserTakeover`，此时侧栏按 `PLAYBACK_STATE.canonicalTick` 使用半开区间定位实际回合和 `ReviewSegment`，隐藏自动路线的复盘操作；恢复教练路线时按当前播放头选择最近 cue，等距时优先后一个，从目标 segment 的前置上下文开始，并从已消费/已揭示集合中移除该 cue 以重新讲解。该交互状态只属于前端协调层，不写回领域会话或分析产物。
 
 旧 `PlaybackFrameViewModel` 契约只服务 `/pixi-poc` 迁移回归，不是当前 Web 主入口协议。
 
-### 7.8 CoachingSession
+### 7.9 CoachingSession
 
 ```text
 CoachingSession
@@ -636,7 +731,7 @@ CoachingSession
 
 用户事件以追加日志保存：播放控制、展开跳过片段、追问、回看、反馈和补充语音/战术信息。会话快照可从事件重建。
 
-### 7.9 PersonalHabit
+### 7.10 PersonalHabit
 
 ```text
 PersonalHabit
@@ -654,12 +749,12 @@ PersonalHabit
 
 个人记忆引用可撤销的本地证据映射；服务端对象过期后不能造成记忆库无法打开。
 
-### 7.10 AgentState
+### 7.11 CoachingRuntimeState
 
-LangGraph 只保存会话编排所需的轻量状态和领域对象 ID：
+LangGraph Graph State 只保存会话编排所需的轻量状态和领域对象 ID：
 
 ```text
-AgentState
+CoachingRuntimeState
   session_id, review_plan_id
   current_segment_index, current_cue_id, current_tick
   coaching_mode, playback_state
@@ -671,9 +766,9 @@ AgentState
   error_and_retry_state?
 ```
 
-不得把原始 tick 流、完整轨迹、职业样本全集、长期个人记忆或数据库 ORM 对象放入 Graph State。Graph State 中的 ID 必须能通过领域服务重新解析；checkpoint 丢失时，应可从 `CoachingSession` 事件和播放器状态恢复到安全边界。
+不得把原始 tick 流、完整轨迹、职业样本全集、长期个人记忆或数据库 ORM 对象放入 Graph State。状态中的 ID 必须能通过领域服务重新解析；checkpoint 丢失时，应可从 `CoachingSession` 事件和播放器状态恢复到安全边界。
 
-### 7.11 ProgressiveReviewArtifact
+### 7.12 ProgressiveReviewArtifact
 
 复盘计划可以在分析期间增长，但已发布部分必须有明确状态和版本：
 
@@ -698,14 +793,14 @@ RoundArtifact
 ```
 
 - `DRAFT`：后台可重算，不得向用户展示；
-- `READY`：事实和基础讲解通过校验，可交给 Agent；
+- `READY`：事实和基础讲解通过校验，可交给 CoachingRuntime；
 - `CONSUMED`：用户已经开始观看，内容不再做破坏性修改；
 - `FROZEN`：该回合会话版本固定，只允许追加带版本的补充证据；
 - `FAILED`：保留错误码，可单回合重试或模板降级。
 
 `STARTABLE` 要求完整快速索引完成、开场窗口全部 `READY`、播放器资源可加载。`COMPLETE` 要求所有回合有明确处理方式并完成全场聚合。总结只能在 `COMPLETE` 后生成。
 
-### 7.12 VideoTeachingEvent
+### 7.13 VideoTeachingEvent
 
 ```text
 VideoTeachingEvent
@@ -740,18 +835,18 @@ stateDiagram-v2
     PREPARING --> READY
     READY --> INTRO
     INTRO --> PLAYING
-    PLAYING --> PAUSED_FOR_COACHING: 到达 cue
+    PLAYING --> REVEALING: 到达 decision_tick，不暂停
     PLAYING --> SKIPPING: 进入 skip
     PLAYING --> BUFFERING: 下一段尚未就绪
     BUFFERING --> PLAYING: 缓冲恢复
     BUFFERING --> PAUSED_FOR_COACHING: 用户追问已看内容
     SKIPPING --> PLAYING: 到达目标 tick
-    PAUSED_FOR_COACHING --> REVEALING: 用户继续
+    REVEALING --> PAUSED_FOR_COACHING: 到达 outcome_end，回到 decision_tick
     PAUSED_FOR_COACHING --> QUESTIONING: 用户追问
     QUESTIONING --> PAUSED_FOR_COACHING: 回答完成
-    REVEALING --> REPLAYING: 需要回看
+    PAUSED_FOR_COACHING --> REPLAYING: 再看一遍
     REPLAYING --> PAUSED_FOR_COACHING
-    REVEALING --> PLAYING: 讲解完成
+    PAUSED_FOR_COACHING --> PLAYING: 继续下一段
     PLAYING --> WRAP_UP: 最后一回合结束
     WRAP_UP --> COMPLETED
 ```
@@ -759,11 +854,11 @@ stateDiagram-v2
 原则：
 
 - 图的流程由 LangGraph 编排；所有播放命令和关键状态转移仍由确定性约束层校验；
-- LLM 只在允许的 Graph 分支内选择教学动作，不可绕过 `ReviewPlan` 覆盖约束；
+- Director、Narrator、问答和总结只在允许的 Graph 分支内调用，不可绕过 `ReviewPlan` 覆盖约束；
 - 用户可随时暂停或跳转，称为 `USER_CONTROLLED` 子状态；
 - 恢复时以播放器确认的 tick 为准，而不是仅信任服务端快照；
 - Web 断线可本地继续播放，但进入新讲解点前必须重新同步；
-- Agent 只能进入 `READY` 的 segment；缓冲耗尽时进入显式 `BUFFERING`，不得临时生成无证据讲解；
+- Graph 只能进入 `READY` 的 segment；缓冲耗尽时进入显式 `BUFFERING`，不得临时生成无证据讲解；
 - 桌面适配器漂移超过阈值时先暂停校准，不在错位画面上讲解。
 
 ## 9. 数据流
@@ -783,9 +878,16 @@ sequenceDiagram
     C->>A: 创建分析任务
     A->>W: 入队
     W->>S: 读取 Demo
-    W->>W: 快速扫描完整时间轴
-    W->>S: 保存回合索引与粗粒度轨迹
-    W->>W: 优先分析前 2–3 回合
+    W->>W: 单次解析生成 GroundTruth ReplayBundle
+    W->>W: 构建 MatchTimeline 与 SceneIndex
+    W->>W: 为目标玩家派生 ObservableState
+    W->>S: 保存回合索引、场景候选与粗粒度轨迹
+    W->>W: 组装 TeachingPacket
+    W->>W: Teaching Director 选择候选与教学意图
+    W->>W: PlanCompiler 校验并生成 ReviewPlan
+    W->>W: 按 cue 构建 CoachingPackage
+    W->>W: Narrator 生成结构化讲解包
+    W->>W: 优先准备前 2–3 回合
     W->>S: 发布 STARTABLE ReviewPlan
     W->>A: 标记可开始
     A-->>C: SSE 通知进入复盘
@@ -802,7 +904,7 @@ sequenceDiagram
 
 当前 cs2d Worker/WASM 在浏览器读取完整本地文件并生成一份 Replay，不把文件上传到 Next，也不为全知/教练证据重复解析。Host 解析 UI 只展示阶段和真实百分比，不暴露 parser tick；Replay 就绪后才允许选择分析主体。未来若接入 cs2d 的逐回合 `header_ready → index_ready → round_ready`，只允许增量发布同一 Replay 的索引/切片，不改变 canonical tick 或下游领域契约。
 
-“轻量整场扫描”和逐回合发布是同一次 Parser 事实产物的索引、切片与缓存，不是为全知/玩家视角分别解析 Demo。逐回合 `header_ready → index_ready → round_ready` 只改变可消费范围；任何已发布 round artifact 都引用同一个内容哈希、parser version、timeline version 和 canonical tick 空间。
+“轻量整场扫描”和逐回合发布是同一次 Parser 事实产物的索引、切片与缓存，不是为全知/玩家视角分别解析 Demo。逐回合 `header_ready → index_ready → round_ready` 只改变可消费范围；任何已发布 round artifact 都引用同一个内容哈希、parser version、timeline version 和 canonical tick 空间。Director、PlanCompiler 和 Narrator 只处理对应的结构化包，不重新读取 Demo。
 
 每个阶段幂等并写入版本清单。LLM 失败不回滚已完成的解析和计划，可重试讲解文本或使用模板。
 
@@ -822,11 +924,11 @@ priority = proximity_to_playhead
 
 ### 9.3 复盘阶段
 
-客户端加载轻量 session package 和分块轨迹。LangGraph 根据当前 segment 和用户交互选择教学动作，`SessionOrchestrator` 安全内核将动作转换成受限播放命令并在 cue 点暂停；用户追问时 Agent 只能通过领域工具取得当前 cue 和允许的上下文。Graph checkpoint 和业务会话事件分别持久化，均不能阻塞播放器基本控制。
+客户端加载轻量 session package 和分块轨迹。LangGraph 根据当前 segment 和用户交互路由 Graph 节点；`SessionOrchestrator` 安全内核将节点产生的动作转换成受限播放命令，从 cue 前置上下文连续播放到结果结束，再回到决策点暂停；用户追问时 Question Adapter 只能通过领域工具取得当前 cue 和允许的上下文。Graph checkpoint 和业务会话事件分别持久化，均不能阻塞播放器基本控制。
 
-地图在所有会话状态都显示当前 tick 的 cs2d 全知 Replay，不提供显式视角切换。信息授权发生在教练输入而非 renderer：`PLAYING` 与 `PAUSED_FOR_COACHING` 的文案/追问只能读 cue 绑定的 `ObservableState`；用户点击“看结果”后播放器在同一地图推进 outcome 区间，只有结果窗口完成后才允许结果 scoped 文案。进入下一个 cue 时重新绑定下一份内部 ObservableState。
+地图在所有会话状态都显示当前 tick 的 cs2d 全知 Replay，不提供显式视角切换。信息授权发生在教练输入而非 renderer：自动播放结果窗口时侧栏不显示判断、建议或 Outcome Fact；只有播放器确认到达 `outcome_end_tick` 后，Session 才允许同时展示决策侧 `ObservableState` 事实、独立 Outcome Fact 与教练建议。进入下一个 cue 时重新绑定下一份内部 ObservableState，并重新锁定该 cue 的结果事实。
 
-自动路线继续主持完整 Demo；用户主动操作时仅暂时交出播放头，不丢弃会话。自由查看侧栏显示实际回合与覆盖该位置的 segment，地图/HUD/事件均由同一播放头更新。用户可随时返回离当前播放位置最近的教练节点并从约 1 秒前置上下文重看；未接管时冻结时间直接自动消费、低价值段显式快进、关键 cue 暂停聚焦并直接讲解，结果播放与结束暂停维持同一聚焦镜头。
+自动路线继续主持完整 Demo；用户主动操作时仅暂时交出播放头，不丢弃会话。自由查看侧栏显示实际回合与覆盖该位置的 segment，地图/HUD/事件均由同一播放头更新。用户可随时返回离当前播放位置最近的教练节点并从约 1 秒前置上下文重看；未接管时冻结时间直接自动消费、低价值段显式快进、关键 cue 连续播放完整处理并在结束后回到决策点讲解，结果播放、重播和结束暂停维持同一聚焦镜头。
 
 ### 9.4 会后阶段
 
@@ -859,7 +961,10 @@ demo_sha256
 + parser_version
 + map_semantics_version
 + observation_version
-+ signal_or_planner_version
++ scene_index_version
++ director_version
++ compiler_version
++ narrator_version（讲解产物）
 + player_id（玩家相关产物）
 + round_number（回合分块）
 ```
@@ -878,25 +983,25 @@ demo_sha256
 
 Cache 主要加速重复上传、同场不同玩家和回看；不能消除首次新 Demo 的快速扫描成本。跨用户复用派生数据时仍须维持逻辑隔离、删除引用计数和隐私边界，不能因去重暴露“另一用户上传过该文件”。
 
-## 11. 职业行为学习路线
+## 11. 职业行为学习与 Director 演进
 
-### 阶段 A：数据库与规则基线
+### 阶段 A：结构化事实与 LLM Director 基线
 
-建立有来源、版本和质量标记的职业局面库；以硬过滤、手工权重和教练规则输出可解释案例。这是生产基线，不等待模型训练。
+建立有来源、版本和质量标记的职业局面库；Parser、SceneIndex、ObservationBuilder 和规则提取器负责产生可验证候选，Teaching Director 使用 `TeachingPacket` 判断哪些候选值得教学。PlanCompiler、证据引用和未来信息校验始终是硬边界，不能由模型替代。
 
-### 阶段 B：监督式排序
+### 阶段 B：Director 的监督式排序
 
-积累教练相似度标注和用户反馈后，训练局面 embedding 或 learning-to-rank，只替换相似案例排序。硬过滤、样本门槛和证据展示仍保留。
+积累教练标注、用户反馈和回合级选择后，训练候选排序或 learning-to-rank，只替换 Director 的候选优先级与去重策略。硬过滤、样本门槛、输入包白名单和可回滚的结构化输出仍保留。
 
-### 阶段 C：行为先验模型
+### 阶段 C：多模态与行为先验
 
-数据量足够后，学习条件行为分布 `P(action | observable_state, role, context)`，用于比较玩家选择与职业常见选择。它提供先验，不直接宣判对错。
+在地图语义和结构化事实稳定后，引入 `VisualSceneSampler` 或视觉模型帮助 Director 处理遮挡、道具落点、视角和讲解画面结构；视觉模型只能补充带来源的观察证据，不能成为事实主库。数据量足够后可学习条件行为分布 `P(action | observable_state, role, context)`，用于比较玩家选择与职业常见选择，不直接宣判唯一正确答案。
 
 ### 阶段 D：长期个性化
 
-结合本地习惯历史调整讲解顺序、复查间隔和难度。个性化层只做优先级与表达适配，不污染职业基线或当前场事实。
+结合本地习惯历史调整讲解顺序、复查间隔和难度。个性化层只影响优先级、示例选择和表达适配，不污染职业基线、当前场事实或 Observation 边界。
 
-强化学习不是近期核心路线。除非存在可靠环境、奖励定义、反事实评测和安全约束，否则不以“赢率奖励”训练一个声称给出最优动作的系统。
+强化学习不是架构前提。除非存在可靠环境、奖励定义、反事实评测和安全约束，否则不训练一个声称直接给出最优动作的端到端系统。
 
 ## 12. 问答与生成约束
 
@@ -906,9 +1011,9 @@ Cache 主要加速重复上传、同场不同玩家和回看；不能消除首�
 - 不得因为 Demo 记录了脚步、枪声或队友 spotted，就直接断言所选玩家确实听到、得到报点或知道敌人身份；
 - 所有数值、tick、人数、经济和样本量由代码计算；
 - LLM 输出引用 ID，服务端校验后才能显示为正式讲解；
-- 决策前 DeepSeek 请求使用当前会话内匿名短 ID，禁止携带 Demo/玩家身份、原始稳定 ID、结果事件、tick、路径或完整事件流；
+- 决策前 Director/Narrator 请求使用当前会话内匿名短 ID，禁止携带 Demo/玩家身份、原始稳定 ID、结果事件、tick、路径或完整事件流；
 - 引用缺失、矛盾或越过 `decision_tick` 时拒绝该句并模板降级；
-- 上游缺 key、超时、HTTP/JSON/完成状态失败、额外字段或 ID 不一致时返回 `DISABLED/FALLBACK`，保留模板且不把上游正文或密钥写入响应与日志；
+- LLM Provider 缺 key、超时、HTTP/JSON/完成状态失败、额外字段或 ID 不一致时返回 `DISABLED/FALLBACK`，保留模板且不把上游正文或密钥写入响应与日志；
 - 用户要求“再放一遍”等控制意图先映射到白名单命令，再由 Orchestrator 执行；
 - Prompt injection 内容不得从 Demo 元数据、昵称或职业语料进入系统指令。
 
@@ -926,7 +1031,7 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 
 - 时间轴覆盖率必须为 100%；
 - 区间不得重叠或出现未解释空洞；
-- 决策前暂停命中率；
+- 前置上下文、decision 与 outcome 终点定位准确率；
 - 教练对关键点选择、优先级和重复聚类的一致率；
 - 预计时长与实际完成时长偏差。
 
@@ -956,7 +1061,7 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 - 用户纠正率、删除率和错误记忆率；
 - 未授权上传次数必须为零。
 
-所有模型、规则和 Planner 版本上线前必须跑固定黄金集；关键指标退化则阻止发布。
+所有模型、规则、Director、PlanCompiler 和 Narrator 版本上线前必须跑固定黄金集；关键指标退化则阻止发布。
 
 ## 14. 安全、隐私与版权
 
@@ -967,7 +1072,7 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 - 匿名会话链接使用高熵令牌，数据库只存哈希；
 - 日志不得记录签名 URL、原始 Demo、完整身份或用户记忆；
 - 职业语料记录来源、赛事、许可/公开状态、导入时间和删除能力；
-- 雷达与其他游戏资产记录来源、构建版本、内容哈希和权利状态；公开发布前确认再分发边界，localhost 缓存不直接进入发布包；
+- 雷达与其他游戏资产记录来源、构建版本、内容哈希和权利状态；Cloudflare `/cs2d/` 只接收 CI 从固定上游生成的构建物，公开发布前仍必须确认再分发边界；本地缓存不直接进入发布包；
 - 对外展示以短片段、坐标和派生统计为主，不重新分发完整职业 Demo；
 - 桌面端只控制离线 Demo，不向实时比赛提供建议；
 - 发布桌面端前完成反作弊、游戏条款、代码签名和自动更新威胁评审。
@@ -1002,52 +1107,59 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 
 ## 17. 演进阶段与触发条件
 
-### 17.1 浏览器 2D 首版
+所有阶段共用同一套 `ReplayBundle`、Observation、TeachingPacket、ReviewPlan、CoachingPackage、PlaybackPort 和 LangGraph CoachingRuntime 契约。阶段推进只能增加实现能力或替换适配器，不能删除已经确立的事实存储、异步任务、缓存、会话恢复和本地记忆基础设施。
 
-模块化单体、单地图、规则局面、结构化职业检索、文字会话。目标是验证带看体验，而不是模型先进性。
+### 17.1 Web 2D 运行基线
 
-### 17.2 产品化
+以模块化单体、异步 Worker、真实地图回放、完整时间轴、结构化职业检索和 LangGraph 会话作为可持续运行基线。先确保单次解析、SceneIndex、Observation、全场覆盖、自由 seek、完整处理播放、自动回到决策点和结果事实解锁在真实 Demo 上稳定工作。
 
-在完成率、复用率和付费意愿成立后，增加账号、支付、更多地图、语音讲解、后台语料维护和队列扩容。每项能力独立评估，不捆绑重构。
+### 17.2 Director/Narrator 完整落地
 
-### 17.3 桌面伴侣
+将确定性候选回退逐步替换为受 Schema 约束的 Teaching Director；让 Narrator 根据 `CoachingPackage` 直接构建局面讲解、替代动作和触发条件。两者都保留模板降级、引用校验、版本缓存和会话恢复，不把模型调用变成播放器依赖。
 
-在 ReviewPlan 与会话协议稳定、用户明确需要原生 POV 后启动。先做离线 Demo 命令可行性原型，再做侧窗、同步、自动恢复和本地记忆。若游戏控制不稳定，仍可使用桌面侧窗＋同步 2D 回放，不污染核心架构。
+### 17.3 桌面播放器适配
 
-### 17.4 学习型检索与个性化
+在 ReviewPlan、PlaybackPort 和会话协议稳定，且用户明确需要原生 POV 后启动。先验证离线 Demo 控制和漂移校准，再接入侧窗、同步、自动恢复和本地记忆。若游戏控制不稳定，继续使用桌面侧窗＋同步 2D 回放，不改写分析内核。
 
-只有在以下条件同时满足时引入：足够授权语料、稳定 taxonomy、教练标注集、离线指标、线上反馈闭环、可解释降级和模型版本回滚。
+### 17.4 学习型、视觉增强与个性化
 
-### 17.5 服务拆分
+只有在授权语料、稳定 taxonomy、教练标注集、离线指标、线上反馈闭环和可回滚模型同时具备时，引入监督式 Director 排序、视觉场景采样、行为先验和长期个性化。学习模块只替换明确的 Director/检索子模块，不越过事实、观察和编译边界。
 
-仅当单体出现已测量瓶颈时拆分，例如职业批处理持续挤占用户任务、单模块需要独立 GPU、团队边界明确或数据库负载无法隔离。优先拆异步计算，不先拆同步会话控制。
+### 17.5 按瓶颈拆分
+
+仅当模块化单体出现已测量瓶颈时拆分，例如职业批处理持续挤占用户任务、单模块需要独立 GPU、团队边界明确或数据库负载无法隔离。优先拆异步计算，不先拆同步会话控制；拆分后仍复用领域契约、对象存储、队列和可恢复事件。
 
 ## 18. 当前架构决策
 
 | 决策 | 状态 | 结论 |
 |---|---|---|
 | 会话而非报告为核心产物 | Accepted | ReviewPlan + CoachingSession 是主对象 |
-| Web 首版播放器 | Accepted | 在线 2D，完整时间轴与显式跳过 |
+| Web 2D 播放入口 | Accepted | 在线 2D，完整时间轴与显式跳过 |
+| 关键片段教学时序 | Accepted | 从 decision 前约 1 秒连续播放至 outcome end，不在决策前打断；完成后自动回到 decision，一次性展示当前情况、Outcome Fact 与教练分析 |
 | Web 2D 地图 | Accepted | 固定版本 cs2d renderer；当前 tick 全知显示；紧凑 5+5 HUD；地图是教练证据画布而非独立产品 |
-| localhost cs2d Replay | Accepted | 浏览器 Worker/WASM 单次解析，raw Replay 留在 iframe；白名单 AnalysisBundle 进入教练壳 |
+| 浏览器 cs2d Replay | Accepted | localhost 使用 `:5174`、Cloudflare 使用同源 `/cs2d/`；浏览器 Worker/WASM 单次解析，raw Replay 留在 iframe；白名单 AnalysisBundle 进入教练壳 |
 | 全知比赛状态 | Accepted | 每 tick/变化点保留位置、朝向、生命护甲、当前手持、库存道具、经济和 C4 等解析器可得事实 |
 | 内部观察证据 | Accepted | `ObservationClaim` 仅约束规则/LLM 决策证据；不作为用户可见 renderer 模式，不用布尔可见性 |
-| 单次解析与分析派生 | Accepted | `.dem` 只生成一份 cs2d Replay；Adapter 从同一 Replay 派生 MatchTimeline/Observation/ReviewPlan，不二次解析 |
-| cs2d localhost 底座 | Accepted | 固定 `dbbe698…`＋可重放 patch；上游无明确 LICENSE，源码/WASM/资产不提交、不进入 Cloudflare |
-| Host 控制与接管 | Accepted | Next 只保留一套中文控制和一条彩色可 seek 整场时间轴；手动接管暂停 reducer，恢复到当前播放头最近 cue 的前置上下文；用户 UI 不显示 tick |
-| 地图镜头与目标主体 | Accepted | 普通状态固定全图中心；cue 暂停、结果与回看持续 2.45 倍聚焦；分析主体锁定且标为“你”，其他 HUD 不可切换 |
+| 单次解析与分析派生 | Accepted | `.dem` 只生成一份 GroundTruth ReplayBundle；Adapter 从同一 Replay 派生 MatchTimeline/SceneIndex/Observation，Director 与 PlanCompiler 生成 ReviewPlan，不二次解析 |
+| SceneIndex 与候选寻址 | Accepted | 规则/领域代码只生成可验证的 candidateId 和事实窗口，不替 Director 判断教学价值 |
+| Teaching Director | Accepted | LangGraph 节点调用结构化 LLM，从 TeachingPacket 选择教学候选、主题和优先级，不输出任意 tick 或播放器命令 |
+| PlanCompiler | Accepted | 确定性校验完整覆盖、时间边界、引用、预算、去重和 Director 回退结果 |
+| Narrator 与证据防火墙 | Accepted | Narrator 只读取 decision-side CoachingPackage；结果讲解使用独立 OutcomePackage，模型不能读取 raw Replay |
+| Web 2D cs2d 底座 | Accepted | 浏览器 Worker/WASM 单次解析与真实地图 renderer；具体 revision、可重放 patch 和权利状态记录在 ADR；源码不入仓库，MVP 由 CI 生成 `/cs2d/` 构建物随 Cloudflare 发布，权利解决前不扩大再分发 |
+| Host 控制与接管 | Implementation | 当前 Web Host 只保留一套中文控制和一条整场时间轴；手动接管暂停 Graph/Session，恢复到当前播放头最近 cue；用户 UI 不显示 tick |
+| 地图镜头与目标主体 | Accepted | Renderer 与 Session 共享播放头；普通状态保持稳定全图，未揭示 cue 可聚焦，结果只推进同一全知地图；分析主体锁定且标为“你” |
 | 中文报点事实 | Accepted | 同次 cs2d 解析保留 `m_szLastPlaceName`，由版本化精确词典本地化；未知不猜测，不二次解析 |
 | 自研 PixiJS renderer | Superseded | `/pixi-poc` 与旧 renderer 只保留回归；默认产品不再扩展第二套 renderer |
 | 桌面长期形态 | Proposed | 本地 CS2 Demo＋教练侧窗，通过 PlaybackPort 接入 |
 | 服务端架构 | Accepted | 模块化单体＋异步 Worker |
 | 分析启动策略 | Accepted | 完整快速索引后渐进式按回合分析，前 2–3 回合就绪即可开始 |
 | 回合缓存策略 | Accepted | 内容寻址、版本化、按回合分块，保持 3–5 回合目标水位 |
-| Agent 编排 | Accepted | 使用 LangGraph `StateGraph` 主持长期、有状态、可中断恢复的教练会话 |
-| Agent 与确定性底座边界 | Accepted | Agent 选择教学动作；领域服务计算事实；安全内核校验状态和播放命令 |
-| Agent 数据访问 | Accepted | 仅调用强类型领域工具，不授予 LLM 任意 SQL 或数据库连接 |
-| 职业行为路线 | Accepted | 数据库/规则先行，监督排序与行为先验后续 |
-| LLM 职责 | Accepted | 讲解和问答，不负责事实、计划或任意播放器控制 |
-| Cloudflare 讲解 Provider | Accepted | DeepSeek 仅润色匿名决策侧 CoachingPackage；`DEEPSEEK_API_KEY` 为 Worker Secret；严格校验并模板降级 |
+| CoachingRuntime 编排 | Accepted | 使用 LangGraph `StateGraph` 主持长期、有状态、可中断恢复的教练会话；Graph 不取代领域事实和播放器 |
+| Graph 与确定性底座边界 | Accepted | Graph 路由 Director/Narrator/问答/结果/总结；领域服务计算事实，PlanCompiler 与 SessionOrchestrator 校验状态和播放命令 |
+| 模型数据访问 | Accepted | Director/Narrator/Question 只通过强类型领域工具和白名单包访问数据，不授予 LLM 任意 SQL 或数据库连接 |
+| 职业行为路线 | Accepted | 结构化数据库/规则提供可追溯证据，Director 可使用其结果；监督排序与行为先验只替换明确子模块 |
+| LLM 职责 | Accepted | Director 决定教学候选与意图，Narrator 构建讲解，模型不解析原始 tick、不创造事实、不直接控制播放器 |
+| LLM Provider | Accepted | Director 与 Narrator 通过 Provider-neutral Adapter 调用；当前可使用 DeepSeek，必须严格 Schema 校验、引用校验和模板降级 |
 | 个人记忆 | Accepted | 本地优先、用户可控、只影响优先级 |
 | 视频弱标注 | Accepted | 仅作为已授权离线教学行为启动语料；无原 Demo 时只使用媒体时间，不产生精确 tick 或黄金集 |
 | 强化学习 | Deferred | 无可靠环境与奖励前不采用 |
@@ -1059,7 +1171,7 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 |---|---|---|
 | 0.1.0 | 2026-08-12 | 初版：证据型 Demo 分析与职业局面检索架构 |
 | 0.2.0 | 2026-08-12 | 将核心改为时间轴驱动的带看会话；新增复盘计划、播放器协议、桌面 CS2 适配与本地个人记忆架构 |
-| 0.3.0 | 2026-08-12 | 明确使用 LangGraph 作为教练 Agent 编排层；补充 Graph State、领域工具、checkpoint 和确定性执行边界 |
+| 0.3.0 | 2026-08-12 | 明确使用 LangGraph 作为 CoachingRuntime 编排层；补充 Graph State、领域工具、checkpoint 和确定性执行边界 |
 | 0.4.0 | 2026-08-12 | 增加快速索引、渐进式回合分析、优先队列、缓冲水位、产物冻结和分层缓存设计 |
 | 0.5.0 | 2026-08-12 | 记录 localhost 首个纵向切片与半开 tick 区间；增加已授权教学视频弱标注、VideoTeachingEvent 和显式 Demo 对齐边界；记录 demoparser2 单样本可行性 |
 | 1.0.0 | 2026-08-12 | 用真实雷达与 world 坐标取代百分比示意图；将全知逐时刻装备状态和多来源 ObservationClaim 设为正式契约；明确声音事实、可听推断、队友共享与未来信息边界 |
@@ -1073,3 +1185,6 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 | 2.1.1 | 2026-08-17 | 修正 OpenNext 会打包 development/test `.env` 的边界：localhost DeepSeek key 改为 `.local-data/deepseek.env` 进程级注入，并为 Cloudflare 构建增加 source＋bundle secret 阻断 |
 | 2.1.2 | 2026-08-17 | 收紧 Host 播放边界：自由查看和已揭示结果保持固定全图，只有未揭示 cue 聚焦；canonical seek 不落入目标之后的采样状态；分析失败使用独立 schema |
 | 2.2.0 | 2026-08-17 | 深度讲解增加冻结边界内约 1 秒前置上下文；Host 收敛为一条分色可自由 seek 的整场时间轴；恢复路线改为当前播放头最近 cue；结果、回看和结果结束暂停保持 2.45 倍目标聚焦，播放仍为 1 倍。 |
+| 3.0.0 | 2026-08-17 | 将目标架构整理为长期契约：以 GroundTruth ReplayBundle、SceneIndex、Observation、Teaching Director、PlanCompiler、Narrator 和 LangGraph CoachingRuntime 组成完整教学链路；明确模型职责与确定性边界；保留 Web、Worker、存储、队列、缓存、桌面适配和本地记忆基础设施，移除易变实现细节与旧阶段演进叙事。 |
+| 3.1.0 | 2026-08-17 | 将 Cloudflare 生产入口收敛为单 Worker：CI 从固定 cs2d commit 构建 `/cs2d/` Viewer，Host 使用同源 iframe；`.dem` 仍只在访问者浏览器内由 Worker/WASM 解析，补充上游构建物再分发权利待确认边界。 |
+| 3.2.0 | 2026-08-17 | 关键教学时序改为“先连续看完整处理与结果，再回到决策点统一复盘”；Outcome Fact 继续独立于决策侧证据，并只在 outcome 窗口完成后解锁。 |

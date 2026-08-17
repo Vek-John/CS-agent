@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { loadMirageManifest, worldToNormalized } from "@cs-coach/map-semantics";
-import { formatItem } from "../lib/item-display";
+import { formatItem } from "../../lib/assets/item-display";
 import {
   annotationPointToRadarPercent,
   annotationRadiusToRadarPercent
-} from "../lib/replay-annotations";
+} from "../../lib/replay/replay-annotations";
 
 describe("replay item display", () => {
   it("uses a friendly canonical name for USP-S", () => {

@@ -1,0 +1,31 @@
+diff --git a/apps/app/src/app/router.ts b/apps/app/src/app/router.ts
+--- a/apps/app/src/app/router.ts
++++ b/apps/app/src/app/router.ts
+@@ -43,6 +43,6 @@ const routes: RouteRecordRaw[] = [
+ ]
+ 
+ export default createRouter({
+-  history: createWebHistory(),
++  history: createWebHistory(import.meta.env.BASE_URL),
+   routes,
+ })
+diff --git a/apps/app/vite.config.ts b/apps/app/vite.config.ts
+--- a/apps/app/vite.config.ts
++++ b/apps/app/vite.config.ts
+@@ -34,6 +34,9 @@ function serveRepoReplays(): Plugin {
+   }
+ }
+ 
++const publicBase = process.env.CS2D_BASE_PATH || '/'
++
+ // App isolado do analisador de demo 2D (CS2 Demo Viewer), com porta própria.
+ export default defineConfig({
++  base: publicBase,
+   plugins: [
+@@ -52,5 +55,5 @@ export default defineConfig({
+         theme_color: '#0a0c12',
+         background_color: '#0a0c12',
+         display: 'standalone',
+-        start_url: '/',
++        start_url: publicBase,
+         icons: [

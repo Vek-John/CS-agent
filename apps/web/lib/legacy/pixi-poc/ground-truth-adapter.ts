@@ -4,7 +4,7 @@ import type {
   PlayerStateSample
 } from "@cs-coach/contracts";
 import { worldToNormalized } from "@cs-coach/map-semantics";
-import type { ReplayViewModel } from "../replay-bundle";
+import type { ReplayViewModel } from "../../replay/replay-bundle";
 import { radarYawFromWorldYaw, sampleGroundTruthStateAtTick } from "./playback-frame";
 import type {
   GroundTruthProjectileSample,

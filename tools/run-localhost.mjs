@@ -56,6 +56,7 @@ launch('cs2d', ['--filter', 'cs2-demo-viewer', 'dev', '--host', 'localhost', '--
 launch('coach', ['--filter', '@cs-coach/web', 'dev', '--hostname', 'localhost', '--port', '3000'], {
   env: {
     ...localCoachEnv,
+    NEXT_PUBLIC_DEPLOY_TARGET: 'localhost',
     NEXT_PUBLIC_CS2D_HOST_URL: 'http://localhost:5174/?host=1',
   },
 })

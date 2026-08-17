@@ -14,6 +14,57 @@ export interface GuidedPlaybackDirective {
   automaticAction?: SessionAction;
 }
 
+export interface GuidedSeekGate {
+  epoch: number;
+  targetTick: number;
+  minTick: number;
+  maxTick: number;
+}
+
+const DEFAULT_TICK_RATE = 64;
+
+/**
+ * A seek command and its first state event are asynchronous across the iframe.
+ * Allow a small frame/playback landing window, but never let the previous
+ * position jump the session past a decision or outcome boundary.
+ */
+export function createGuidedSeekGate(
+  epoch: number,
+  targetTick: number,
+  tickRate = DEFAULT_TICK_RATE
+): GuidedSeekGate {
+  const rate = Number.isFinite(tickRate) && tickRate > 0 ? tickRate : DEFAULT_TICK_RATE;
+  const frameSamplingWindow = Math.ceil(rate / 8);
+  const playbackWindow = Math.ceil(rate / 16);
+  const tolerance = Math.max(2, frameSamplingWindow + playbackWindow);
+  return {
+    epoch,
+    targetTick,
+    minTick: targetTick - tolerance,
+    maxTick: targetTick + tolerance
+  };
+}
+
+export function isGuidedSeekLanding(
+  gate: GuidedSeekGate,
+  canonicalTick: number
+): boolean {
+  return Number.isFinite(canonicalTick) &&
+    canonicalTick >= gate.minTick &&
+    canonicalTick <= gate.maxTick;
+}
+
+function preRollTick(
+  segment: NonNullable<ReturnType<typeof getCurrentSegment>>,
+  cue: NonNullable<ReturnType<typeof getCurrentCue>>,
+  tickRate: number
+): number {
+  const oneSecond = Number.isFinite(tickRate) && tickRate > 0
+    ? Math.round(tickRate)
+    : DEFAULT_TICK_RATE;
+  return Math.max(segment.start_tick, cue.decision_tick - oneSecond);
+}
+
 function boundedSpeed(speed: number): number {
   if (!Number.isFinite(speed)) return 1;
   return Math.max(0.25, Math.min(16, speed));
@@ -25,7 +76,8 @@ function boundedSpeed(speed: number): number {
  */
 export function guidedPlaybackDirective(
   plan: ReviewPlan,
-  state: CoachingSessionState
+  state: CoachingSessionState,
+  tickRate = DEFAULT_TICK_RATE
 ): GuidedPlaybackDirective {
   const segment = getCurrentSegment(plan, state);
   const cue = getCurrentCue(plan, state);
@@ -42,22 +94,31 @@ export function guidedPlaybackDirective(
   }
 
   if (state.phase === "PLAYING" && segment) {
+    const cue = getCurrentCue(plan, state);
     return {
       commands: [
         { type: "setCamera", mode: "full" },
         { type: "setSpeed", speed: boundedSpeed(segment.playback_speed) },
-        { type: "seekCanonicalTick", canonicalTick: state.current_tick },
+        {
+          type: "seekCanonicalTick",
+          canonicalTick: cue ? preRollTick(segment, cue, tickRate) : state.current_tick
+        },
         { type: "play" }
       ]
     };
   }
 
-  if ((state.phase === "REVEALING" || state.phase === "REPLAYING") && cue) {
+  if ((state.phase === "REVEALING" || state.phase === "REPLAYING") && cue && segment) {
     return {
       commands: [
         { type: "setCamera", mode: "target" },
         { type: "setSpeed", speed: 1 },
-        { type: "seekCanonicalTick", canonicalTick: cue.outcome_start_tick },
+        {
+          type: "seekCanonicalTick",
+          canonicalTick: state.phase === "REPLAYING"
+            ? preRollTick(segment, cue, tickRate)
+            : cue.outcome_start_tick
+        },
         { type: "play" }
       ]
     };

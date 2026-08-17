@@ -14,23 +14,23 @@ import type {
 import { normalizedToWorld, loadMirageManifest, worldToNormalized } from "@cs-coach/map-semantics";
 import { filterClaimsAtTick } from "@cs-coach/observation";
 import { sampleTrackAtTick } from "@cs-coach/demo-domain";
-import type { ReplayViewModel } from "../lib/replay-bundle";
-import { formatItem } from "../lib/item-display";
-import { sampleStateAtTick } from "../lib/replay-sampling";
+import type { ReplayViewModel } from "../../lib/replay/replay-bundle";
+import { formatItem } from "../../lib/assets/item-display";
+import { sampleStateAtTick } from "../../lib/replay/replay-sampling";
 import {
   annotationPointToRadarPercent,
   annotationRadiusToRadarPercent
-} from "../lib/replay-annotations";
+} from "../../lib/replay/replay-annotations";
 import {
   buildKnowledgeEvidenceOverlays,
   getRenderablePlayerClaims,
   type KnowledgeEvidenceOverlay
-} from "../lib/replay-knowledge";
+} from "../../lib/replay/replay-knowledge";
 import {
   formatMatchEvent,
   windowedTrackSamples
-} from "../lib/replay-display";
-import { formatGrenadeType, renderGrenadeTracksAtTick, type GrenadeTrackInput } from "../lib/replay-grenades";
+} from "../../lib/replay/replay-display";
+import { formatGrenadeType, renderGrenadeTracksAtTick, type GrenadeTrackInput } from "../../lib/replay/replay-grenades";
 import { PlayerRail } from "./player-rail";
 
 const mirageManifest = loadMirageManifest({

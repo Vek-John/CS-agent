@@ -3,7 +3,7 @@ import {
   narrateWithDeepSeek,
   parseNarrationRequest,
   type DeepSeekEnv
-} from "../../../../lib/deepseek-narration";
+} from "../../../../lib/coaching/deepseek-narration";
 
 export const dynamic = "force-dynamic";
 

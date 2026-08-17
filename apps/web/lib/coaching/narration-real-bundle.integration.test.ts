@@ -1,14 +1,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { POST } from "../app/api/coaching/narrate/route";
-import { adaptReplayBundle } from "./replay-bundle";
+import { POST } from "../../app/api/coaching/narrate/route";
+import { adaptReplayBundle } from "../replay/replay-bundle";
 import { buildNarrationPayload } from "./coach-narration";
 import { parseNarrationRequest } from "./deepseek-narration";
 
-const testDemoPath = fileURLToPath(new URL("../public/generated-data/test_demo.replay.json", import.meta.url));
+const testDemoPath = fileURLToPath(new URL("../../public/generated-data/test_demo.replay.json", import.meta.url));
 const falconsPath = fileURLToPath(new URL(
-  "../public/generated-data/uploads/4dedab6e-2645-4089-bfe6-a6858c68d344.replay.json",
+  "../../public/generated-data/uploads/4dedab6e-2645-4089-bfe6-a6858c68d344.replay.json",
   import.meta.url
 ));
 

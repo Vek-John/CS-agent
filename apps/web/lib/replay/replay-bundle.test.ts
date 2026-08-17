@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MatchTimeline } from "@cs-coach/contracts";
 import { adaptReplayBundle, loadReplayBundle, REPLAY_BUNDLE_URL } from "./replay-bundle";
-import { resetLocalGameAssetCatalogCacheForTests } from "./local-game-asset-catalog";
+import { resetLocalGameAssetCatalogCacheForTests } from "../assets/local-game-asset-catalog";
 
 const baseTimeline: MatchTimeline = {
   id: "timeline-real-test",
@@ -136,7 +136,7 @@ describe("ReplayBundle web adapter", () => {
   });
 
   it("loads the generated grenade tracks through the Web ReplayBundle boundary", () => {
-    const path = fileURLToPath(new URL("../public/generated-data/test_demo.replay.json", import.meta.url));
+    const path = fileURLToPath(new URL("../../public/generated-data/test_demo.replay.json", import.meta.url));
     const view = adaptReplayBundle(JSON.parse(readFileSync(path, "utf8")));
 
     expect(view.status).toBe("LOADED");

@@ -9,7 +9,10 @@ const PIN = 'dbbe698c9b9c91f9a14cecea92374b4114bf60ec'
 const REPOSITORY = 'https://github.com/zenojunior/cs2d.git'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const upstream = resolve(process.env.CS2D_UPSTREAM_DIR || resolve(root, '.local-data/upstream/cs2d'))
-const patch = resolve(root, 'tools/cs2d-host/patches/0001-cs2d-playback-host.patch')
+const patches = [
+  resolve(root, 'tools/cs2d-host/patches/0001-cs2d-playback-host.patch'),
+  resolve(root, 'tools/cs2d-host/patches/0002-cs2d-cloudflare-base.patch'),
+]
 const flags = new Set(process.argv.slice(2))
 
 function run(command, args, options = {}) {
@@ -39,19 +42,21 @@ const head = run('git', ['rev-parse', 'HEAD'], { cwd: upstream, capture: true })
 if (head !== PIN) {
   throw new Error(`cs2d commit mismatch: expected ${PIN}, received ${head || '<empty>'}`)
 }
-if (!existsSync(patch)) throw new Error(`Missing patch: ${patch}`)
+for (const patch of patches) {
+  if (!existsSync(patch)) throw new Error(`Missing patch: ${patch}`)
 
-const reverse = run('git', ['apply', '--reverse', '--check', patch], {
-  cwd: upstream,
-  capture: true,
-  allowFailure: true,
-})
-if (reverse.status === 0) {
-  process.stdout.write(`[cs2d-host] patch already applied at ${PIN.slice(0, 7)}\n`)
-} else {
+  const reverse = run('git', ['apply', '--reverse', '--check', patch], {
+    cwd: upstream,
+    capture: true,
+    allowFailure: true,
+  })
+  if (reverse.status === 0) {
+    process.stdout.write(`[cs2d-host] ${patch.split('/').at(-1)} already applied at ${PIN.slice(0, 7)}\n`)
+    continue
+  }
   run('git', ['apply', '--check', patch], { cwd: upstream })
   run('git', ['apply', patch], { cwd: upstream })
-  process.stdout.write(`[cs2d-host] applied patch at ${PIN.slice(0, 7)}\n`)
+  process.stdout.write(`[cs2d-host] applied ${patch.split('/').at(-1)} at ${PIN.slice(0, 7)}\n`)
 }
 
 if (flags.has('--install')) {

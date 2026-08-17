@@ -6,8 +6,8 @@ import type {
   PlayerStateSample,
   TeamSide
 } from "@cs-coach/contracts";
-import { formatItem } from "../lib/item-display";
-import { resolveItemPresentation } from "../lib/game-asset-display";
+import { formatItem } from "../../lib/assets/item-display";
+import { resolveItemPresentation } from "../../lib/assets/game-asset-display";
 
 export interface PlayerRailState {
   currentSide: TeamSide;

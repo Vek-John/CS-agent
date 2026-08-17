@@ -1,4 +1,4 @@
-import { RealReplayExperience } from "../../components/real-replay-experience";
+import { RealReplayExperience } from "../../components/legacy/real-replay-experience";
 
 export default function LegacyReplayPage() {
   return <RealReplayExperience />;

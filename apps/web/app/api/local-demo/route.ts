@@ -1,4 +1,4 @@
-import { createLocalDemoJob, MAX_LOCAL_DEMO_BYTES } from "../../../lib/local-demo-jobs";
+import { createLocalDemoJob, MAX_LOCAL_DEMO_BYTES } from "../../../lib/demo/local-demo-jobs";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;

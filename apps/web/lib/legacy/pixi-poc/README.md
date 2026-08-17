@@ -1,7 +1,7 @@
 # PixiJS replay PoC boundary
 
 This is an isolated, opt-in route at `/pixi-poc`. It does not replace the
-existing AI coaching canvas or `replay-viewer.tsx`.
+existing AI coaching canvas or the legacy `components/legacy/replay-viewer.tsx`.
 
 ## Upstream audit and scope
 
@@ -21,7 +21,7 @@ existing AI coaching canvas or `replay-viewer.tsx`.
   product UI, API, report, ML, database, heatmap, or proprietary asset is
   copied.
 - PixiJS is consumed from the pinned npm dependency `pixi.js@8.6.0`; see
-  [`THIRD_PARTY_NOTICES.md`](../../../../THIRD_PARTY_NOTICES.md).
+  [`THIRD_PARTY_NOTICES.md`](../../../../../THIRD_PARTY_NOTICES.md).
 
 ## Local data flow
 

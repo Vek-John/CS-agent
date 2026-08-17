@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { createSyntheticMirageTimeline } from "@cs-coach/demo-domain";
 import { createFixtureReviewPlan } from "@cs-coach/review-planner";
 import {
-  answerCurrentCueQuestion,
   buildSessionSummary,
   createCoachingSession,
   getCurrentCue,
@@ -65,31 +64,23 @@ describe("CoachingSession deterministic safety kernel", () => {
     expect(state.expanded_segment_ids).toContain("seg-r1-freeze");
   });
 
-  it("pauses before the decision and does not reveal outcome facts to questions", () => {
+  it("keeps outcome unrevealed at the decision boundary", () => {
     const state = reachFirstCue();
     const cue = getCurrentCue(plan, state);
 
-    expect(state.phase).toBe("PAUSED_FOR_COACHING");
+    expect(state.phase).toBe("REVEALING");
     expect(state.current_tick).toBe(cue?.decision_tick);
-
-    const answer = answerCurrentCueQuestion(plan, state, "为什么不继续打？");
-    expect(answer.citation_refs).not.toContain("fact-r2-outcome");
-    expect(answer.text).not.toContain("先被击杀");
+    expect(state.revealed_cue_ids).not.toContain(cue?.id);
   });
 
-  it("reveals the outcome after direct coaching without requiring a player answer", () => {
+  it("reveals the outcome only after continuous playback reaches its end", () => {
     let state = reachFirstCue();
-    const blocked = reduceCoachingSession(plan, state, { type: "ADVANCE_SEGMENT" });
-    expect(blocked).toEqual(state);
-
-    state = reduceCoachingSession(plan, state, { type: "REVEAL_OUTCOME" });
+    state = reduceCoachingSession(plan, state, { type: "TICK", tick: plan.cues[0].outcome_end_tick - 1 });
     expect(state.phase).toBe("REVEALING");
+    expect(state.revealed_cue_ids).not.toContain("cue-r2-overpeek");
+    state = reduceCoachingSession(plan, state, { type: "TICK", tick: plan.cues[0].outcome_end_tick });
+    expect(state.phase).toBe("PAUSED_FOR_COACHING");
     expect(state.current_tick).toBe(plan.cues[0].decision_tick);
-    expect(state.user_events.some((event) => event.type === "QUESTION_ASKED")).toBe(false);
-    const preReveal = reduceCoachingSession(plan, state, { type: "TICK", tick: plan.cues[0].reveal_tick });
-    expect(preReveal.phase).toBe("REVEALING");
-    expect(preReveal.revealed_cue_ids).not.toContain("cue-r2-overpeek");
-    state = reduceCoachingSession(plan, state, { type: "TICK", tick: 2700 });
     expect(state.revealed_cue_ids).toContain("cue-r2-overpeek");
 
     state = reduceCoachingSession(plan, state, { type: "ADVANCE_SEGMENT" });
@@ -147,11 +138,9 @@ describe("CoachingSession deterministic safety kernel", () => {
       if (state.phase === "SKIPPING") {
         state = reduceCoachingSession(plan, state, { type: "SKIP_SEGMENT" });
       } else if (state.phase === "PLAYING" && cue && !state.revealed_cue_ids.includes(cue.id)) {
-        state = reduceCoachingSession(plan, state, { type: "TICK", tick: cue.decision_tick });
+        state = reduceCoachingSession(plan, state, { type: "TICK", tick: cue.outcome_end_tick });
       } else if (state.phase === "PLAYING") {
         state = reduceCoachingSession(plan, state, { type: "ADVANCE_SEGMENT" });
-      } else if (state.phase === "PAUSED_FOR_COACHING" && cue && !state.revealed_cue_ids.includes(cue.id)) {
-        state = reduceCoachingSession(plan, state, { type: "REVEAL_OUTCOME" });
       } else if (state.phase === "REVEALING" && cue) {
         state = reduceCoachingSession(plan, state, { type: "TICK", tick: cue.outcome_end_tick });
       } else if (state.phase === "PAUSED_FOR_COACHING") {

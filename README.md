@@ -1,6 +1,6 @@
 # CS2 AI Demo Coach
 
-当前交付是一个可运行的 `localhost` 纵向 MVP：用户选择本地 `.dem`，cs2d 在浏览器内解析并显示真实 2D 回放；用户选择一名玩家后，AI 教练接管同一个播放头，自动跳过冻结/低价值片段，在决策前暂停并直接讲解，点击“看结果”后播放结果，可回看或继续，整场结束后再总结。
+当前交付是一个可运行的纵向 MVP：用户选择本地 `.dem`，cs2d 在浏览器内解析并显示真实 2D 回放；用户选择一名玩家后，AI 教练接管同一个播放头，自动跳过冻结/低价值片段，在决策前暂停并直接讲解，点击“看结果”后播放结果，可回看或继续，整场结束后再总结。localhost 使用 `3000 + 5174` 调试；Cloudflare 使用同一个 Worker，并把 Viewer 挂在 `/cs2d/`，访问者无需额外启动 Viewer 服务。
 
 长期架构唯一事实来源是 [ARCHITECTURE.md](./ARCHITECTURE.md)，本次底座决策见 [ADR-0002](./docs/adr/ADR-0002-adopt-cs2d-localhost-playback-substrate.md)。
 
@@ -40,7 +40,7 @@ pnpm exec wrangler secret put DEEPSEEK_API_KEY --config wrangler.jsonc
 # 可选普通变量：DEEPSEEK_MODEL=deepseek-v4-flash 或 deepseek-v4-pro
 ```
 
-任何 key 都不要写入 `wrangler.jsonc`、GitHub、日志、`NEXT_PUBLIC_*` 或任何标准 `.env*` 文件。OpenNext 会把 production/development/test 三套 `.env` 都序列化进构建，因此本地 key 只放在 `.local-data/deepseek.env`，由 `pnpm dev` 单独注入；`pnpm cloudflare:build` 会在构建前后阻止本地 secret 进入产物。Cloudflare 只使用 Worker Secret。Cloudflare 当前只部署 Next 教练壳和 `/api/coaching/narrate`；由于 cs2d 上游没有明确许可证，cs2d 源码/WASM/资产不进入 Cloudflare 构建，线上暂不提供 `.dem` 回放。
+任何 key 都不要写入 `wrangler.jsonc`、GitHub、日志、`NEXT_PUBLIC_*` 或任何标准 `.env*` 文件。OpenNext 会把 production/development/test 三套 `.env` 都序列化进构建，因此本地 key 只放在 `.local-data/deepseek.env`，由 `pnpm dev` 单独注入；`pnpm cloudflare:build` 会在构建前后阻止本地 secret 进入产物。Cloudflare 只使用 Worker Secret。生产构建会固定 commit、应用 host patch、构建 `/cs2d/` Viewer，再与 Next 教练壳和 `/api/coaching/narrate` 一起部署；`.dem` 仍只在访问者浏览器的 Viewer Worker/WASM 中解析，不上传到 Worker。
 
 ## 当前已经能做什么
 
@@ -68,6 +68,8 @@ pnpm typecheck
 pnpm build
 pnpm cs2d:typecheck
 pnpm --dir .local-data/upstream/cs2d --filter cs2-demo-viewer build
+pnpm cloudflare:build
+pnpm cloudflare:assets
 ```
 
 `test_demo.dem` 已通过真实浏览器链路：58 MB 本地解析、9 个正式回合、10 人选择、自动跳过、决策前暂停、同图结果播放与继续下一段。旧 Python worker 仍保留 Falcons/Spirit 首 tick 占位 `round_end` 的回归修复。
@@ -79,14 +81,20 @@ pnpm --dir .local-data/upstream/cs2d --filter cs2-demo-viewer build
 - cs2d 当前缺少可靠逐次 HurtEvent、ShotEvent shooter、完整声学遮挡、队内语音和战术上下文，因此建议以自身状态与可验证决策上下文为主；
 - 当前 deterministic signal 以选手参与的接触、生命变化、持包和投掷物为教学索引，已限制到 4–8 个停顿，但还没有职业样本检索、复杂站位/补枪模型或自由追问；
 - 一次选择玩家后若分析失败，当前通过重新载入 Demo 重试；会话进度还没有持久化；
-- cs2d 固定 commit `dbbe698c9b9c91f9a14cecea92374b4114bf60ec` 未发现明确 LICENSE，当前只作为 localhost source-reference；详见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
+- cs2d 固定 commit `dbbe698c9b9c91f9a14cecea92374b4114bf60ec` 未发现明确 LICENSE；Viewer 由 CI 从该 commit 生成并部署到 `/cs2d/`，公开再分发权利仍待上游明确，详见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
 
 ## 主要代码边界
 
-- `apps/web/components/cs2d-playback-host.tsx`：Next 教练壳与 Session 集成；
-- `apps/web/lib/cs2d-guided-session.ts`：Session → cs2d 播放命令的纯映射；
+- `apps/web/components/playback/cs2d-playback-host.tsx`：当前默认的 Next 教练壳与 Session 集成；
+- `apps/web/lib/coaching/`：教练讲解、DeepSeek 适配、教学会话和决策视角边界；
+- `apps/web/lib/replay/`：旧 `ReplayBundle` 的回放事实、采样、道具轨迹和标注辅助；
+- `apps/web/lib/playback/`：播放 bridge 与时间轴控制的纯映射；
+- `apps/web/lib/assets/`、`apps/web/lib/demo/`：素材展示/缓存与 localhost Demo 任务；
+- `apps/web/components/legacy/`、`apps/web/lib/legacy/`：`/legacy` 和 `/pixi-poc` 迁移回归代码，不进入默认产品链路；
 - `libs/cs2d-analysis-adapter`：结构化 Replay → MatchTimeline / Observation / ReviewPlan；
 - `libs/contracts/src/playback-bridge.ts`：严格 iframe bridge 契约；
 - `libs/session`：确定性会话 reducer、冻结时间自动消费与总结门禁；
 - `tools/cs2d-host/patches/0001-cs2d-playback-host.patch`：固定上游的最小 HUD/bridge/Adapter patch；
+- `tools/cs2d-host/patches/0002-cs2d-cloudflare-base.patch`：让生产 Viewer 使用 `/cs2d/` base 和同源 history；
+- `tools/build-cs2d-viewer.mjs`、`tools/prepare_cloudflare_assets.mjs`：构建并把 Viewer/WASM/地图/武器资源装入同一个 Cloudflare Worker；
 - `workers/analysis`、`/legacy`、`/pixi-poc`：迁移回归，不是默认产品数据流。

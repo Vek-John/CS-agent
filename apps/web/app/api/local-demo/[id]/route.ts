@@ -1,4 +1,4 @@
-import { getLocalDemoJob, startLocalDemoAnalysis } from "../../../../lib/local-demo-jobs";
+import { getLocalDemoJob, startLocalDemoAnalysis } from "../../../../lib/demo/local-demo-jobs";
 
 export const runtime = "nodejs";
 

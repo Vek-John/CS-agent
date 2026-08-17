@@ -1,14 +1,18 @@
 import {
   commandEnvelope,
   isPlaybackEventEnvelope,
+  type CoachCue,
+  type CoachingSessionPhase,
   type PlaybackCommand,
   type PlaybackEventEnvelope,
   type PlaybackStateEvent,
   type ReplayReadyEvent,
   type ReviewPlan
 } from "@cs-coach/contracts";
+import { buildCoachingCueView, type CoachingCueView } from "../coaching/cs2d-coaching-view";
 
 export const DEFAULT_CS2D_HOST_URL = "http://localhost:5174/?host=1";
+export const CLOUDFLARE_CS2D_HOST_PATH = "/cs2d/?host=1";
 
 export interface Cs2dHostConfig {
   url: string;
@@ -19,24 +23,59 @@ function isLoopbackHostname(hostname: string): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
 }
 
+function defaultParentOrigin(): string {
+  const configured = process.env.NEXT_PUBLIC_APP_ORIGIN?.trim();
+  if (configured) return configured;
+  if (typeof window !== "undefined" && window.location.origin) return window.location.origin;
+  return "http://localhost:3000";
+}
+
+function isRelativePath(value: string): boolean {
+  return value.startsWith("/") && !value.startsWith("//");
+}
+
+function isCloudflareViewerPath(pathname: string): boolean {
+  return pathname === "/cs2d" || pathname.startsWith("/cs2d/");
+}
+
 export function cs2dHostConfig(
   raw = process.env.NEXT_PUBLIC_CS2D_HOST_URL,
-  parentOrigin = process.env.NEXT_PUBLIC_APP_ORIGIN || "http://localhost:3000"
+  parentOrigin = defaultParentOrigin(),
+  deployTarget = process.env.NEXT_PUBLIC_DEPLOY_TARGET ?? process.env.DEPLOY_TARGET
 ): Cs2dHostConfig {
-  const parsed = new URL(raw?.trim() || DEFAULT_CS2D_HOST_URL);
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("cs2d host URL must use http or https.");
+  const target = deployTarget?.trim().toLowerCase() || "localhost";
+  const requested = raw?.trim() || (target === "cloudflare" ? CLOUDFLARE_CS2D_HOST_PATH : DEFAULT_CS2D_HOST_URL);
+  const relative = isRelativePath(requested);
+  let parent: URL;
+  try {
+    parent = new URL(parentOrigin);
+  } catch {
+    throw new Error("parent origin must use http or https.");
   }
-  if (!isLoopbackHostname(parsed.hostname)) {
-    throw new Error("cs2d host must remain on localhost until the upstream license is clarified.");
-  }
-  const parent = new URL(parentOrigin);
   if (parent.protocol !== "http:" && parent.protocol !== "https:") {
     throw new Error("parent origin must use http or https.");
   }
+  const parsed = new URL(requested, parent.origin);
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("cs2d host URL must use http or https.");
+  }
+
+  const sameOrigin = parsed.origin === parent.origin;
+  if (target === "cloudflare") {
+    if (!sameOrigin || !isCloudflareViewerPath(parsed.pathname)) {
+      throw new Error("Cloudflare cs2d host must be served from the same-origin /cs2d/ path.");
+    }
+  } else if (!isLoopbackHostname(parsed.hostname)) {
+    throw new Error("cs2d host must remain on localhost until the upstream license is clarified.");
+  }
+
   parsed.searchParams.set("host", "1");
-  parsed.searchParams.set("parentOrigin", parent.origin);
-  return { url: parsed.toString(), origin: parsed.origin };
+  // A cross-origin iframe needs an explicit allow-list origin. Same-origin
+  // Cloudflare embeds intentionally omit it so SSR and browser hydration use
+  // the same relative URL; the viewer falls back to document.referrer.
+  if (!sameOrigin) parsed.searchParams.set("parentOrigin", parent.origin);
+  const url = relative ? `${parsed.pathname}${parsed.search}${parsed.hash}` : parsed.toString();
+  return { url, origin: parsed.origin };
 }
 
 export function acceptedPlaybackEvent(input: {
@@ -51,6 +90,16 @@ export function acceptedPlaybackEvent(input: {
 
 export function playbackCommandMessage(command: PlaybackCommand) {
   return commandEnvelope(command);
+}
+
+/** Host-only gate: coaching evidence renders after the full outcome pass. */
+export function hostCoachingCueSurface(
+  cue: CoachCue | undefined,
+  phase: CoachingSessionPhase | undefined,
+  outcomeVisible: boolean
+): CoachingCueView | undefined {
+  if (!cue || phase !== "PAUSED_FOR_COACHING" || !outcomeVisible) return undefined;
+  return buildCoachingCueView(cue, outcomeVisible);
 }
 
 export const HOST_SPEED_OPTIONS = [0.25, 0.5, 1, 2, 4, 8] as const;

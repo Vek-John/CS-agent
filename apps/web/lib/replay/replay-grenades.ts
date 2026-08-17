@@ -1,6 +1,6 @@
 import type { MapAssetManifest, Point2D, WorldPoint } from "@cs-coach/contracts";
 import { worldToNormalized } from "@cs-coach/map-semantics";
-import { formatItem } from "./item-display";
+import { formatItem } from "../assets/item-display";
 
 export interface GrenadeTrackSample {
   tick: number;

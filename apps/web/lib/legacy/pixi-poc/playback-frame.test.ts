@@ -7,7 +7,7 @@ import type {
   PlayerStateSample
 } from "@cs-coach/contracts";
 import { loadMirageManifest, worldToNormalized } from "@cs-coach/map-semantics";
-import type { ReplayGrenadeTrack } from "../replay-bundle";
+import type { ReplayGrenadeTrack } from "../../replay/replay-bundle";
 import {
   buildKnowledgeFrame,
   buildOmniscientFrame,

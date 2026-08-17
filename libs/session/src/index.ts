@@ -132,6 +132,33 @@ function consumeCurrentCue(
   return { ...state, consumed_cue_ids: [...state.consumed_cue_ids, cue.id] };
 }
 
+function finishOutcome(
+  state: CoachingSessionState,
+  segment: ReviewSegment,
+  cue: CoachCue
+): CoachingSessionState {
+  const isFirstReveal =
+    state.phase !== "REPLAYING" && !state.revealed_cue_ids.includes(cue.id);
+  return {
+    ...state,
+    phase: "PAUSED_FOR_COACHING",
+    // Keep the map at the problem state while the coach explains the result.
+    current_tick: cue.decision_tick,
+    revealed_cue_ids:
+      isFirstReveal && !state.revealed_cue_ids.includes(cue.id)
+        ? [...state.revealed_cue_ids, cue.id]
+        : state.revealed_cue_ids,
+    user_events: [
+      ...state.user_events,
+      event(state, isFirstReveal ? "OUTCOME_REVEALED" : "OUTCOME_REPLAYED", {
+        segment_id: segment.id,
+        cue_id: cue.id,
+        at_tick: cue.outcome_end_tick
+      })
+    ]
+  };
+}
+
 function nearestCueRoute(
   plan: ReviewPlan,
   tick: number
@@ -216,34 +243,21 @@ export function reduceCoachingSession(
             current_tick: Math.max(cue.outcome_start_tick, action.tick)
           };
         }
-
-        const isFirstReveal = state.phase === "REVEALING";
-        return {
-          ...state,
-          phase: "PAUSED_FOR_COACHING",
-          current_tick: cue.outcome_end_tick,
-          revealed_cue_ids:
-            isFirstReveal && !state.revealed_cue_ids.includes(cue.id)
-              ? [...state.revealed_cue_ids, cue.id]
-              : state.revealed_cue_ids,
-          user_events: [
-            ...state.user_events,
-            event(state, isFirstReveal ? "OUTCOME_REVEALED" : "OUTCOME_REPLAYED", {
-              segment_id: segment.id,
-              cue_id: cue.id,
-              at_tick: cue.outcome_end_tick
-            })
-          ]
-        };
+        return finishOutcome(state, segment, cue);
       }
 
       if (state.phase === "PLAYING") {
         const cueNeedsReveal = cue && !state.revealed_cue_ids.includes(cue.id);
         if (cueNeedsReveal && action.tick >= cue.decision_tick) {
+          if (action.tick >= cue.outcome_end_tick) {
+            return finishOutcome(state, segment, cue);
+          }
           return {
             ...state,
-            phase: "PAUSED_FOR_COACHING",
-            current_tick: cue.decision_tick
+            // The decision boundary changes the playback treatment, not the
+            // user's viewing position. Continue through the real outcome.
+            phase: "REVEALING",
+            current_tick: Math.max(cue.outcome_start_tick, action.tick)
           };
         }
         if (action.tick >= segment.end_tick) {

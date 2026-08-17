@@ -27,10 +27,10 @@ import {
   type SessionAction
 } from "@cs-coach/session";
 import { ReplayViewer, type ReplayPerspective } from "./replay-viewer";
-import { createFixtureReplayView, type ReplayViewModel } from "../lib/replay-bundle";
-import { enrichReviewPlanWithNarration } from "../lib/coach-narration";
-import { canShowGroundTruthForPhase } from "../lib/review-perspective";
-import { sampleStateAtTick } from "../lib/replay-sampling";
+import { createFixtureReplayView, type ReplayViewModel } from "../../lib/replay/replay-bundle";
+import { enrichReviewPlanWithNarration } from "../../lib/coaching/coach-narration";
+import { canShowGroundTruthForPhase } from "../../lib/coaching/review-perspective";
+import { sampleStateAtTick } from "../../lib/replay/replay-sampling";
 
 const fixtureView = createFixtureReplayView();
 

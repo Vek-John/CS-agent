@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { createSyntheticMirageTimeline } from "@cs-coach/demo-domain";
+import { createFixtureReviewPlan } from "@cs-coach/review-planner";
 import { PLAYBACK_BRIDGE_CHANNEL, type ReviewPlan } from "@cs-coach/contracts";
 import {
   acceptedPlaybackEvent,
   adjacentRoundIndex,
   cs2dHostConfig,
   HOST_SPEED_OPTIONS,
+  hostCoachingCueSurface,
   playbackCommandMessage,
   playbackPositionLabel,
   reviewPositionAtTick,
@@ -28,6 +31,15 @@ const event = {
 } as const;
 
 describe("cs2d localhost host boundary", () => {
+  it("keeps the Host coaching bands locked until the full outcome is paused", () => {
+    const cue = createFixtureReviewPlan(createSyntheticMirageTimeline()).cues[0];
+
+    expect(hostCoachingCueSurface(cue, "REVEALING", false)).toBeUndefined();
+    expect(hostCoachingCueSurface(cue, "PAUSED_FOR_COACHING", false)).toBeUndefined();
+    expect(hostCoachingCueSurface(cue, "PAUSED_FOR_COACHING", true)?.outcomeFacts.map((fact) => fact.id))
+      .toEqual(["fact-r2-outcome"]);
+  });
+
   it("normalizes the host flag and origin", () => {
     expect(cs2dHostConfig("http://localhost:5174/path?x=1", "http://localhost:3000/review")).toEqual({
       url: "http://localhost:5174/path?x=1&host=1&parentOrigin=http%3A%2F%2Flocalhost%3A3000",
@@ -36,6 +48,31 @@ describe("cs2d localhost host boundary", () => {
     expect(() => cs2dHostConfig("file:///tmp/index.html")).toThrow(/http/);
     expect(() => cs2dHostConfig(undefined, "file:///tmp/parent.html")).toThrow(/parent origin/);
     expect(() => cs2dHostConfig("https://replay.example.com/")).toThrow(/localhost/);
+  });
+  it("uses the same-origin Cloudflare viewer path in production", () => {
+    expect(cs2dHostConfig(undefined, "https://coach.example.test/review", "cloudflare")).toEqual({
+      url: "/cs2d/?host=1",
+      origin: "https://coach.example.test"
+    });
+    expect(() => cs2dHostConfig("https://viewer.example.test/", "https://coach.example.test", "cloudflare"))
+      .toThrow(/same-origin/);
+  });
+  it("accepts Wrangler's runtime deploy target", () => {
+    const previousPublic = process.env.NEXT_PUBLIC_DEPLOY_TARGET;
+    const previousRuntime = process.env.DEPLOY_TARGET;
+    delete process.env.NEXT_PUBLIC_DEPLOY_TARGET;
+    process.env.DEPLOY_TARGET = "cloudflare";
+    try {
+      expect(cs2dHostConfig(undefined, "https://coach.example.test/review")).toEqual({
+        url: "/cs2d/?host=1",
+        origin: "https://coach.example.test"
+      });
+    } finally {
+      if (previousPublic === undefined) delete process.env.NEXT_PUBLIC_DEPLOY_TARGET;
+      else process.env.NEXT_PUBLIC_DEPLOY_TARGET = previousPublic;
+      if (previousRuntime === undefined) delete process.env.DEPLOY_TARGET;
+      else process.env.DEPLOY_TARGET = previousRuntime;
+    }
   });
   it("requires both iframe source and exact origin", () => {
     expect(acceptedPlaybackEvent({ data: event, eventOrigin: "http://localhost:5174", expectedOrigin: "http://localhost:5174", sourceMatches: true })).toEqual(event);

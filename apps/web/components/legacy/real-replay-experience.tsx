@@ -9,7 +9,7 @@ import {
   loadReplayBundle,
   type ReplayViewModel,
   REPLAY_BUNDLE_URL
-} from "../lib/replay-bundle";
+} from "../../lib/replay/replay-bundle";
 
 const deployTarget = process.env.NEXT_PUBLIC_DEPLOY_TARGET ?? "localhost";
 const isCloudflareRelease = deployTarget === "cloudflare";

@@ -6,21 +6,21 @@ import { loadMirageManifest } from "@cs-coach/map-semantics";
 import {
   loadReplayBundle,
   type ReplayViewModel
-} from "../lib/replay-bundle";
+} from "../../lib/replay/replay-bundle";
 import {
   toGroundTruthReplaySource,
   toKnowledgeFrameInput,
   toObservationBoundaryInput,
   type ObservationBoundaryInput
-} from "../lib/pixi-poc/ground-truth-adapter";
+} from "../../lib/legacy/pixi-poc/ground-truth-adapter";
 import {
   buildKnowledgeFrame,
   buildOmniscientFrame,
   type GroundTruthReplaySource,
   type PlaybackFrameViewModel,
   type PlaybackPerspective
-} from "../lib/pixi-poc/playback-frame";
-import { PixiPlaybackLayer } from "../lib/pixi-poc/pixi-playback-layer";
+} from "../../lib/legacy/pixi-poc/playback-frame";
+import { PixiPlaybackLayer } from "../../lib/legacy/pixi-poc/pixi-playback-layer";
 
 const manifest = loadMirageManifest({ raster_ref: "/generated-assets/maps/de_mirage.png" });
 

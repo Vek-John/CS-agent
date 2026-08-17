@@ -279,6 +279,7 @@ interface SignalCandidate {
   readonly state?: NormalizedState;
   readonly sourceRef: string;
   readonly utilityKind?: string;
+  readonly bombEventType?: Cs2dBombEvent["type"];
   readonly timingLimitation?: string;
 }
 
@@ -644,7 +645,7 @@ function collectCandidates(
     const roundStates = statesForRound(states, round);
     const sourceEvents = asArray(round.source.events);
     sourceEvents.forEach((event, eventIndex) => {
-      if (!isRecord(event) || !finiteTick(event.tick) || event.tick < round.freezeEndTick || event.tick >= round.decidedTick) return;
+      if (!isRecord(event) || !finiteTick(event.tick) || event.tick < round.freezeEndTick || event.tick > round.decidedTick) return;
       const ref = sourceRef(round, eventIndex);
       if (event.type === "shot") {
         sawShot = true;
@@ -683,7 +684,8 @@ function collectCandidates(
           decisionTick,
           revealTick: event.tick,
           state: stateAtOrBefore(roundStates, decisionTick),
-          sourceRef: ref
+          sourceRef: ref,
+          bombEventType: event.type
         });
       }
     });
@@ -736,7 +738,7 @@ function collectCandidates(
     for (let index = 1; index < roundStates.length; index += 1) {
       const previous = roundStates[index - 1];
       const current = roundStates[index];
-      if (current.roundNumber !== previous.roundNumber || current.sample.tick <= previous.sample.tick || current.sample.tick >= round.decidedTick || current.sample.health >= previous.sample.health) continue;
+      if (current.roundNumber !== previous.roundNumber || current.sample.tick <= previous.sample.tick || current.sample.tick > round.decidedTick || current.sample.health >= previous.sample.health) continue;
       const decisionTick = Math.max(round.freezeEndTick, previous.sample.tick);
       if (decisionTick >= current.sample.tick) continue;
       candidates.push({
@@ -778,7 +780,7 @@ function selectCandidates(
 
   for (const candidate of candidates) {
     const cursor = cursorByRound.get(candidate.round.number) ?? candidate.round.freezeEndTick;
-    if (candidate.decisionTick < cursor || candidate.revealTick <= candidate.decisionTick || candidate.revealTick >= candidate.round.decidedTick) continue;
+    if (candidate.decisionTick < cursor || candidate.revealTick <= candidate.decisionTick || candidate.revealTick > candidate.round.decidedTick) continue;
     if (preRollStartTick(candidate, tickRate) < cursor) {
       issue(
         warnings,
@@ -786,8 +788,12 @@ function selectCandidates(
       );
       continue;
     }
-    const outcomeEndTick = Math.min(candidate.round.decidedTick, Math.max(candidate.revealTick + 1, candidate.revealTick + outcomeSpan));
-    if (outcomeEndTick <= candidate.revealTick) continue;
+    const minimumOutcomeEndTick = candidate.revealTick + Math.max(1, Math.round(tickRate));
+    const outcomeEndTick = Math.min(candidate.round.endTick, Math.max(candidate.revealTick + 1, candidate.revealTick + outcomeSpan));
+    if (outcomeEndTick < minimumOutcomeEndTick) {
+      issue(warnings, `Teaching candidate ${candidate.sourceRef} was skipped because the legal round window does not retain one second after its event.`);
+      continue;
+    }
     accepted.push({
       ...candidate,
       habitKey: decisionHabitKey(candidate),
@@ -1009,7 +1015,34 @@ function stateFactText(state: NormalizedState): string {
     : "";
   const callout = stateCallout(state);
   const position = callout ? `你在${callout}` : "当前报点未知";
-  return `${position}：${hp} HP，${headArmor}，手持 ${weapon}，${utility}${economy}；这是决策前最近一帧。`;
+  return `${position}：${hp} HP，${headArmor}，手持 ${weapon}，${utility}${economy}。`;
+}
+
+function outcomeFactText(candidate: SelectedCandidate): string {
+  switch (candidate.kind) {
+    case "DEATH":
+      return "你随后继续这次接触，并在这次对枪中被击杀。";
+    case "KILL":
+      return "你随后在这次接触中完成击杀。";
+    case "HP_CHANGE":
+      return "你随后在这次接触中掉血。";
+    case "UTILITY": {
+      const utilityNames: Record<string, string> = {
+        smoke: "烟雾弹",
+        fire: "燃烧弹",
+        he: "手雷",
+        flash: "闪光弹",
+        decoy: "诱饵弹"
+      };
+      const utilityName = utilityNames[candidate.utilityKind ?? ""] ?? "道具";
+      return `你随后投出了这颗${utilityName}。`;
+    }
+    case "BOMB":
+      if (candidate.bombEventType === "bomb_planted") return "你随后完成下包。";
+      if (candidate.bombEventType === "bomb_defused") return "你随后完成拆包。";
+      if (candidate.bombEventType === "bomb_exploded") return "C4 随后爆炸。";
+      return "随后发生了一次 C4 事件。";
+  }
 }
 
 function buildCue(
@@ -1054,6 +1087,15 @@ function buildCue(
       limitations: [CS2D_LIMITATIONS.observationBoundary, CS2D_LIMITATIONS.frameSampling]
     });
   }
+
+  facts.push({
+    id: `f${counters.fact++}`,
+    text: outcomeFactText(candidate),
+    availability: "OUTCOME",
+    available_at_tick: candidate.revealTick,
+    source: "DEMO",
+    observed_by_player: true
+  });
 
   const callout = stateCallout(candidate.state);
   const text = cueText(candidate.habitKey, candidate.occurrenceIndex > 1, {
@@ -1205,8 +1247,8 @@ function buildPlanSegments(
         mode: candidate.occurrenceIndex > 1 ? "HABIT_CHECK" : "DEEP_DIVE",
         reason_code: candidate.occurrenceIndex > 1 ? "REPEATED_DECISION_PATTERN" : "COACH_DECISION_POINT",
         display_reason: candidate.occurrenceIndex > 1
-          ? "同样的处理又出现：先看决策前这一秒，再讲怎么打。"
-          : "先看你拉出去前这一秒：讲清该怎么做，再看结果。",
+          ? "同样的处理又出现：先把完整过程看完，再回头说怎么改。"
+          : "从拉出去前一秒看完整处理，结束后回头讲清怎么改。",
         playback_speed: 1,
         cue_ids: [built.cue.id],
         expandable: true
@@ -1223,11 +1265,12 @@ function buildPlanSegments(
         "普通低价值区间快速带过；完整保留到回合判定。"
       ));
     }
-    if (round.decidedTick < round.endTick) {
+    const postRoundStart = Math.max(round.decidedTick, cursor);
+    if (postRoundStart < round.endTick) {
       segments.push(lowValueSegment(
-        `seg-r${round.number}-post-${round.decidedTick}-${round.endTick}`,
+        `seg-r${round.number}-post-${postRoundStart}-${round.endTick}`,
         round.number,
-        round.decidedTick,
+        postRoundStart,
         round.endTick,
         "POST_ROUND",
         "回合胜负判定后的反应与过渡时间显式跳过。"

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 // The generator is intentionally executable ESM outside the TypeScript app.
 // @ts-expect-error the build utility has no separate declaration file
-import { normalizeMonochromeSvg, svgDimensions } from "../../../tools/fetch_valve_item_icons.mjs";
+import { normalizeMonochromeSvg, svgDimensions } from "../../../../tools/fetch_valve_item_icons.mjs";
 
 describe("Valve HUD SVG asset generator", () => {
   it("normalizes fixed paint to a safe currentColor silhouette", () => {

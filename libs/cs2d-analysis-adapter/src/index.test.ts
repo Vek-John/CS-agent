@@ -200,7 +200,9 @@ describe("cs2d analysis adapter", () => {
     const segment = bundle.review_plan.segments.find((candidate) => candidate.id === cue!.segment_id);
     expect(segment?.start_tick).toBe(64);
     expect(cue?.outcome_start_tick).toBe(64);
-    expect(cue?.facts.every((fact) => fact.available_at_tick <= cue.decision_tick)).toBe(true);
+    expect(cue?.facts
+      .filter((fact) => fact.availability === "DECISION")
+      .every((fact) => fact.available_at_tick <= cue.decision_tick)).toBe(true);
 
     let session = createCoachingSession(bundle.review_plan, "early-cue-session");
     session = reduceCoachingSession(bundle.review_plan, session, { type: "START" });
@@ -309,12 +311,20 @@ describe("cs2d analysis adapter", () => {
       expect(cue.decision_tick).toBeLessThan(cue.reveal_tick);
       expect(cue.outcome_start_tick).toBe(cue.decision_tick);
       expect(cue.outcome_start_tick).toBeLessThan(cue.reveal_tick);
+      const outcomeFacts = cue.facts.filter((fact) => fact.availability === "OUTCOME");
+      expect(outcomeFacts).toHaveLength(1);
+      for (const fact of outcomeFacts) {
+        expect(fact.available_at_tick).toBeGreaterThanOrEqual(cue.reveal_tick);
+        expect(cue.observable_fact_refs).not.toContain(fact.id);
+      }
       for (const fact of cue.facts) {
+        if (fact.availability === "DECISION") {
+          expect(fact.text).not.toMatch(/被击杀|死亡|结果|随后|最终/);
+        }
         if (cue.observable_fact_refs.includes(fact.id)) {
           expect(fact.availability).toBe("DECISION");
           expect(fact.available_at_tick).toBeLessThanOrEqual(cue.decision_tick);
         }
-        expect(fact.text).not.toMatch(/被击杀|死亡|结果|随后|最终/);
       }
       expect(cue.question).not.toMatch(/被击杀|死亡|结果|随后|最终/);
       expect(JSON.stringify({
@@ -326,6 +336,68 @@ describe("cs2d analysis adapter", () => {
       expect(cue.annotations.every((annotation) => annotation.coordinate_space === "WORLD")).toBe(true);
     }
     expect(bundle.observation_evidence.every((state) => state.at_tick <= (bundle.review_plan.cues.find((cue) => cue.observable_state_id === state.id)?.decision_tick ?? Number.MAX_SAFE_INTEGER))).toBe(true);
+  });
+
+  it("uses conservative outcome wording for each supported signal kind", () => {
+    const replay = replayFixture();
+    const sourceRound = replay.rounds[0];
+    const quietRound = {
+      ...sourceRound,
+      events: [],
+      grenadePaths: [],
+      frames: sourceRound.frames.map((frame) => ({
+        ...frame,
+        players: frame.players.map((current) => ({
+          ...current,
+          health: 100,
+          alive: true
+        }))
+      }))
+    };
+    const outcomeFactFor = (round: Cs2dReplay["rounds"][number]) => {
+      const bundle = buildCs2dAnalysisBundle({
+        replay: { ...replay, rounds: [round, replay.rounds[1]] },
+        selectedSteamId: "p-t1",
+        demoId: "outcome-fact-kind"
+      });
+      return bundle.review_plan.cues[0].facts.find(
+        (fact) => fact.availability === "OUTCOME"
+      );
+    };
+
+    const sourceKill = sourceRound.events.find((event) => event.type === "kill");
+    const sourceBomb = sourceRound.events.find((event) => event.type === "bomb_planted");
+    if (!sourceKill || !sourceBomb) throw new Error("Outcome fixture events are incomplete.");
+    const deathFact = outcomeFactFor({
+      ...quietRound,
+      events: [{ ...sourceKill, attackerSteamId: "p-ct1", victimSteamId: "p-t1" }]
+    });
+    const killFact = outcomeFactFor({
+      ...quietRound,
+      events: [{ ...sourceKill, attackerSteamId: "p-t1", victimSteamId: "p-ct1" }]
+    });
+    const bombFact = outcomeFactFor({ ...quietRound, events: [sourceBomb] });
+    const utilityFact = outcomeFactFor({
+      ...quietRound,
+      grenadePaths: sourceRound.grenadePaths
+    });
+    const hpFact = outcomeFactFor({
+      ...quietRound,
+      frames: sourceRound.frames.map((frame) => ({
+        ...frame,
+        players: frame.players.map((current) => ({
+          ...current,
+          health: frame.tick < 256 ? 100 : 70,
+          alive: true
+        }))
+      }))
+    });
+
+    expect(deathFact?.text).toBe("你随后继续这次接触，并在这次对枪中被击杀。");
+    expect(killFact?.text).toBe("你随后在这次接触中完成击杀。");
+    expect(hpFact?.text).toBe("你随后在这次接触中掉血。");
+    expect(utilityFact?.text).toBe("你随后投出了这颗烟雾弹。");
+    expect(bombFact?.text).toBe("你随后完成下包。");
   });
 
   it("keeps decision-side cue content unchanged when a later frame changes", () => {
@@ -425,6 +497,52 @@ describe("cs2d analysis adapter", () => {
       reason_code: "POST_ROUND",
       mode: "SKIP"
     }));
+  });
+
+  it("keeps one second of legal post-event context for a round-ending kill", () => {
+    const replay = replayFixture();
+    const endingKill = {
+      type: "kill" as const,
+      tick: 640,
+      t: 10,
+      attackerSteamId: "p-t1",
+      victimSteamId: "p-ct2",
+      assisterSteamId: null,
+      assistedFlash: false,
+      weapon: "AK-47",
+      headshot: false,
+      x: 500,
+      y: 300,
+      z: 64
+    };
+    const quietFrames = replay.rounds[0].frames.map((frame) => ({
+      ...frame,
+      players: frame.players.map((current) => ({ ...current, health: 100, alive: true }))
+    }));
+    const bundle = buildCs2dAnalysisBundle({
+      replay: {
+        ...replay,
+        rounds: [
+          { ...replay.rounds[0], frames: quietFrames, events: [endingKill], grenadePaths: [] },
+          replay.rounds[1]
+        ]
+      },
+      selectedSteamId: "p-t1",
+      demoId: "round-ending-kill"
+    });
+    const cue = bundle.review_plan.cues.find((candidate) => candidate.reveal_tick === endingKill.tick);
+
+    expect(cue).toBeDefined();
+    expect(cue!.outcome_end_tick).toBeGreaterThanOrEqual(endingKill.tick + replay.demoTickRate);
+    const cueSegment = bundle.review_plan.segments.find((segment) => segment.id === cue!.segment_id);
+    expect(cueSegment?.end_tick).toBe(cue!.outcome_end_tick);
+
+    const segments = [...bundle.review_plan.segments].sort((left, right) => left.start_tick - right.start_tick);
+    for (let index = 1; index < segments.length; index += 1) {
+      expect(segments[index - 1].end_tick).toBe(segments[index].start_tick);
+    }
+    const postRound = segments.find((segment) => segment.reason_code === "POST_ROUND");
+    expect(postRound === undefined || postRound.start_tick >= cue!.outcome_end_tick).toBe(true);
   });
 
   it("does not create teaching cues from reactions after the round is decided", () => {

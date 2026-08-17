@@ -31,16 +31,20 @@
 由于固定上游没有明确许可证：
 
 - 上游源码、WASM、地图、图标和构建产物不提交到本仓库；
-- 当前集成只用于 localhost source-reference；
-- Cloudflare 构建不包含 cs2d runtime，线上不能声称支持该 Demo 解析器；
-- 公开部署前必须获得明确授权、上游补充许可证，或替换为许可清晰的实现；
+- CI 从固定 commit 临时构建 Viewer，并将生成的 `/cs2d/` 运行时随同一个 Cloudflare Worker 发布；这是当前 MVP 的明确部署选择，不代表上游获得了 MIT 或其他再分发许可；
+- `.dem` 仍只在访问者浏览器的 Viewer Worker/WASM 中解析，Demo 二进制不上传 Cloudflare；
+- 公开商业化或扩大再分发前必须获得明确授权、上游补充许可证，或替换为许可清晰的实现；
 - `THIRD_PARTY_NOTICES.md` 持续记录 commit、审查日期与边界。
 
 ## 后果
 
 正向：立即获得真实地图、多楼层、10 人状态、装备、投掷物、炸弹、掉落武器、效果、时间轴与浏览器 Worker/WASM；工程集中在会话节奏和分析质量。
 
-代价：localhost 需要首次联网克隆/安装；上游 schema 变化必须通过固定 commit 和 Adapter 隔离；当前 Cloudflare 只承载教练壳与 DeepSeek route，不承载 cs2d 回放。
+代价：本地开发仍需要首次联网克隆/安装，Cloudflare CI 也需要构建固定上游；上游 schema 变化必须通过固定 commit 和 Adapter 隔离；权利状态在公开发布前必须解决。
+
+## 部署补充（2026-08-17）
+
+为满足“用户只打开一个网址即可在浏览器实时解析”的 MVP 体验，生产 Host 不再指向访问者的 `localhost:5174`。Vite 生产构建使用 `/cs2d/` base，Next Host 通过同源 iframe 加载 `/cs2d/?host=1`，Cloudflare 资产准备脚本把 Viewer 的 index、hashed JS/CSS、Worker/WASM、地图、武器和必要的根绝对资源一起放入同一个 Worker。localhost 仍保留 Next `:3000` 与 Vite `:5174` 双进程，便于热更新和调试。
 
 ## 验证
 

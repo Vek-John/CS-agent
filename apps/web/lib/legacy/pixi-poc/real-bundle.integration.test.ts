@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { loadMirageManifest } from "@cs-coach/map-semantics";
-import { adaptReplayBundle } from "../replay-bundle";
+import { adaptReplayBundle } from "../../replay/replay-bundle";
 import {
   toGroundTruthReplaySource,
   toKnowledgeFrameInput,
@@ -11,9 +11,9 @@ import {
 import { buildKnowledgeFrame, buildOmniscientFrame } from "./playback-frame";
 
 const manifest = loadMirageManifest({ raster_ref: "/generated-assets/maps/de_mirage.png" });
-const smallBundle = fileURLToPath(new URL("../../public/generated-data/test_demo.replay.json", import.meta.url));
+const smallBundle = fileURLToPath(new URL("../../../public/generated-data/test_demo.replay.json", import.meta.url));
 const largeBundle = fileURLToPath(new URL(
-  "../../public/generated-data/uploads/4dedab6e-2645-4089-bfe6-a6858c68d344.replay.json",
+  "../../../public/generated-data/uploads/4dedab6e-2645-4089-bfe6-a6858c68d344.replay.json",
   import.meta.url
 ));
 

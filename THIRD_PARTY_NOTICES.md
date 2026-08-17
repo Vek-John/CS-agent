@@ -51,22 +51,29 @@ renderer uses the project's existing version-pinned manifest:
 No csfreezetime or cs2replays radar image, game icon, brand, or proprietary
 asset is copied.
 
-## cs2d localhost source reference
+## cs2d source reference and Cloudflare build
 
 Repository: <https://github.com/zenojunior/cs2d>
 
 Pinned commit: `dbbe698c9b9c91f9a14cecea92374b4114bf60ec`
 
-The default localhost playback host clones that exact upstream commit into the ignored
-`.local-data/upstream/cs2d` directory and applies
-`tools/cs2d-host/patches/0001-cs2d-playback-host.patch`. The repository did
-not contain a `LICENSE`, package license, or other explicit grant when audited
-on 2026-08-14. Consequently the upstream source, WASM, maps, icons, and build
-outputs are not vendored into this repository and are not part of the Cloudflare
-deployment. The patch adds the compact 5+5 HUD, local host bridge, retention of
-the Source engine `m_szLastPlaceName` fact, and a link to the repository-owned
-`@cs-coach/cs2d-analysis-adapter`; raw Replay data remains inside the iframe.
-`pnpm cs2d:setup` builds the modified parser WASM locally instead of storing the
-generated binary in this repository. This is the accepted localhost source-reference substrate,
+The host clones that exact upstream commit into the ignored
+`.local-data/upstream/cs2d` directory and applies the ordered patches in
+`tools/cs2d-host/patches/`. The repository did not contain a `LICENSE`, package
+license, or other explicit grant when audited on 2026-08-14. Consequently the
+upstream source is not vendored into this repository. CI currently builds the
+pinned Viewer and places its generated `/cs2d/` runtime plus required map,
+weapon, and WASM assets in the Cloudflare release; this is an explicit
+temporary deployment decision, not a claim that the upstream is MIT or otherwise
+redistributable. Before public commercialization or wider redistribution, obtain
+permission, record a license, or replace the substrate.
+
+The patches add the compact 5+5 HUD, local host bridge, retention of the Source
+engine `m_szLastPlaceName` fact, a link to the repository-owned
+`@cs-coach/cs2d-analysis-adapter`, and the `/cs2d/` production base. Raw Replay
+data remains inside the iframe and `.dem` bytes stay in the user's browser.
+`pnpm cs2d:setup` can rebuild the modified parser WASM locally; CI uses the
+pinned generated parser artifact from the patch and builds the Viewer. This is
+the accepted browser source-reference substrate,
 but it is not approved for public redistribution until the upstream license is
 clarified or replaced.

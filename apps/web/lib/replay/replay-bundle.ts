@@ -11,7 +11,7 @@ import type {
 } from "@cs-coach/contracts";
 import { createSyntheticMirageTimeline } from "@cs-coach/demo-domain";
 import { createFixtureReviewPlan } from "@cs-coach/review-planner";
-import { loadLocalGameAssetCatalog } from "./local-game-asset-catalog";
+import { loadLocalGameAssetCatalog } from "../assets/local-game-asset-catalog";
 
 export const REPLAY_BUNDLE_URL = "/generated-data/test_demo.replay.json";
 
