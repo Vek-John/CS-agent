@@ -2031,9 +2031,7 @@ button:disabled {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 0.7rem;
-  background:
-    radial-gradient(circle at 20% -20%, rgba(10, 132, 255, 0.13), transparent 35rem),
-    #08090b;
+  background: #08090b;
 }
 .cs2d-host-header,
 .cs2d-host-timeline {
@@ -2053,7 +2051,7 @@ button:disabled {
   border-radius: 1rem;
 }
 .cs2d-host-eyebrow { margin: 0; color: var(--blue-bright); font-size: 0.56rem; font-weight: 750; letter-spacing: 0.16em; }
-.cs2d-host-header h1 { margin: 0.05rem 0 0; font-size: 1.05rem; letter-spacing: -0.025em; }
+.cs2d-host-header h1 { margin: 0.05rem 0 0; font-size: 1.05rem; letter-spacing: 0; }
 .cs2d-host-status { display: inline-flex; align-items: center; gap: 0.45rem; color: var(--text-secondary); font-size: 0.67rem; }
 .cs2d-host-status span { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0.8rem rgba(255,159,10,0.42); }
 .cs2d-host-status[data-phase="READY"] span { background: var(--green); box-shadow: 0 0 0.8rem rgba(48,209,88,0.42); }
@@ -2136,7 +2134,7 @@ button:disabled {
 .cs2d-coach-cue > small,
 .cs2d-coach-summary > small { color: var(--blue-bright); font-size: 0.56rem; font-weight: 720; letter-spacing: 0.09em; }
 .cs2d-coach-cue h3,
-.cs2d-coach-summary h3 { margin: 0.32rem 0 0; color: var(--text); font-size: 0.88rem; line-height: 1.36; letter-spacing: -0.015em; }
+.cs2d-coach-summary h3 { margin: 0.32rem 0 0; color: var(--text); font-size: 0.88rem; line-height: 1.36; letter-spacing: 0; }
 .cs2d-coach-cue > p,
 .cs2d-coach-summary p { margin: 0.58rem 0 0; color: var(--text-secondary); font-size: 0.67rem; line-height: 1.58; }
 .cs2d-coach-cue ul { margin: 0.7rem 0 0; padding: 0; display: grid; gap: 0.4rem; list-style: none; }
