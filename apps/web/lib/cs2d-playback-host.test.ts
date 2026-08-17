@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { PLAYBACK_BRIDGE_CHANNEL } from "@cs-coach/contracts";
+import { PLAYBACK_BRIDGE_CHANNEL, type ReviewPlan } from "@cs-coach/contracts";
 import {
   acceptedPlaybackEvent,
   cs2dHostConfig,
   playbackCommandMessage,
   playbackPositionLabel,
-  reviewPositionAtTick
+  reviewPositionAtTick,
+  reviewSegmentLabel,
+  reviewSegmentTone,
+  timelinePercent
 } from "./cs2d-playback-host";
 
 const event = {
@@ -91,5 +94,31 @@ describe("cs2d localhost host boundary", () => {
     const message = playbackCommandMessage({ type: "seekCanonicalTick", canonicalTick: 4096 });
     expect(message).toEqual({ channel: PLAYBACK_BRIDGE_CHANNEL, direction: "command", payload: { type: "seekCanonicalTick", canonicalTick: 4096 } });
     expect(JSON.stringify(message)).not.toMatch(/replay|frames|events/i);
+  });
+
+  it("maps ReviewPlan segments onto a bounded, player-facing timeline", () => {
+    const segment = {
+      id: "coach-1",
+      round_number: 3,
+      start_tick: 200,
+      end_tick: 300,
+      mode: "DEEP_DIVE",
+      reason_code: "COACH_DECISION_POINT",
+      display_reason: "关键接触前暂停",
+      playback_speed: 1,
+      cue_ids: ["cue-1"],
+      expandable: false
+    } satisfies ReviewPlan["segments"][number];
+
+    expect(reviewSegmentTone(segment.mode)).toBe("coach");
+    expect(reviewSegmentTone("HABIT_CHECK")).toBe("coach");
+    expect(reviewSegmentTone("SKIP")).toBe("skip");
+    expect(reviewSegmentTone("BRIEF")).toBe("neutral");
+    expect(reviewSegmentLabel(segment)).toBe("深入讲解");
+    expect(reviewSegmentLabel({ ...segment, mode: "SKIP" })).toBe("低价值片段");
+    expect(timelinePercent(250, 100, 500)).toBe(37.5);
+    expect(timelinePercent(-10, 0, 100)).toBe(0);
+    expect(timelinePercent(120, 0, 100)).toBe(100);
+    expect(timelinePercent(10, 10, 10)).toBe(0);
   });
 });

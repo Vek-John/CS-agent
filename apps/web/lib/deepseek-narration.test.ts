@@ -16,7 +16,7 @@ function sampleRequest(): NarrationRequest {
         facts: [
           {
             id: "f1",
-            text: "决策时玩家有 65 HP 和 80 甲，手持步枪。",
+            text: "决策时你在 B小，有 65 HP 和 80 甲，手持步枪。",
             availability: "DECISION",
             observed_by_player: true
           }
@@ -24,7 +24,7 @@ function sampleRequest(): NarrationRequest {
         inferences: [
           {
             id: "i1",
-            text: "可见事实支持先稳住交叉火力，而不是立即追击。",
+            text: "B小这次先架住首接触位，队友能跟上再拉。",
             confidence: 0.8,
             fact_refs: ["f1"]
           }
@@ -32,8 +32,8 @@ function sampleRequest(): NarrationRequest {
         advice: [
           {
             id: "a1",
-            text: "下一次优先保留可撤退路线。",
-            trigger: "当自身资源足够但信息不完整时",
+            text: "先预瞄，等队友能补枪再拉出去。",
+            trigger: "B小准备进入下一条枪线时",
             fact_refs: ["f1"],
             rule_id: "r1"
           }
@@ -55,7 +55,11 @@ function completion(content: string, finishReason = "stop", status = 200): Respo
 
 function successContent() {
   return JSON.stringify({
-    items: [{ cue_id: "c1", title: "保护 C4 / A1", explanation: "基于当前可见事实，保留撤退路线。" }]
+    items: [{
+      cue_id: "c1",
+      title: "B小先架枪",
+      explanation: "你现在先预瞄首接触位，队友能补枪再拉出去。"
+    }]
   });
 }
 
@@ -95,9 +99,13 @@ describe("DeepSeek narration provider", () => {
 
     expect(result).toEqual({
       status: "SUCCEEDED",
-      items: [{ cue_id: "c1", title: "保护 C4 / A1", explanation: "基于当前可见事实，保留撤退路线。" }],
+      items: [{
+        cue_id: "c1",
+        title: "B小先架枪",
+        explanation: "你现在先预瞄首接触位，队友能补枪再拉出去。"
+      }],
       model: "deepseek-v4-flash",
-      manifest: { model: "deepseek-v4-flash", prompt_version: "deepseek-cue-narration/1.1.0" }
+      manifest: { model: "deepseek-v4-flash", prompt_version: "deepseek-cue-narration/1.2.0" }
     });
     expect(seenUrl).toBe("https://api.deepseek.com/chat/completions");
     expect(seenInit?.method).toBe("POST");
@@ -118,8 +126,11 @@ describe("DeepSeek narration provider", () => {
     expect(body.response_format).toEqual({ type: "json_object" });
     expect(body.messages[0].content).toContain('top-level object must contain exactly one key named items');
     expect(body.messages[0].content).toContain('{"items":');
-    expect(body.messages[0].content).toContain("Retain supplied map callouts");
-    expect(body.messages[0].content).toContain("首接触、补枪、交叉火力");
+    expect(body.messages[0].content).toContain("experienced CS2 player or streamer");
+    expect(body.messages[0].content).toContain("short, concrete and conversational");
+    expect(body.messages[0].content).toContain("B小、警家、中路");
+    expect(body.messages[0].content).toContain("架枪、预瞄、拉出去、补枪、头甲、eco、磕枪、换位");
+    expect(body.messages[0].content).toContain("空间控制、资源关系、风险暴露");
     const userPayload = body.messages[1].content;
     expect(userPayload).toContain('"cue_id":"c1"');
     expect(userPayload).toContain('"id":"f1"');
@@ -162,7 +173,31 @@ describe("DeepSeek narration provider", () => {
     );
     expect(result.manifest).toEqual({
       model: "deepseek-v4-flash",
-      prompt_version: "deepseek-cue-narration/1.1.0"
+      prompt_version: "deepseek-cue-narration/1.2.0"
+    });
+  });
+
+  it("accepts supported C4 and A1 terms in concise player-style output", async () => {
+    const request = sampleRequest();
+    request.cues[0].facts[0].text = "决策时你在 A1，携带 C4，队友可以补枪。";
+    const content = JSON.stringify({
+      items: [{
+        cue_id: "c1",
+        title: "A1先架枪再带包走",
+        explanation: "你现在先在 A1 架住，队友能补枪再带 C4 往前走。"
+      }]
+    });
+    const result = await narrateWithDeepSeek(
+      request,
+      { DEEPSEEK_API_KEY: SECRET },
+      async () => completion(content)
+    );
+
+    expect(result.status).toBe("SUCCEEDED");
+    expect(result.items[0]).toEqual({
+      cue_id: "c1",
+      title: "A1先架枪再带包走",
+      explanation: "你现在先在 A1 架住，队友能补枪再带 C4 往前走。"
     });
   });
 

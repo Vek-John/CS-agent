@@ -6,7 +6,7 @@ const MAX_REQUEST_BYTES = 64 * 1024;
 const MAX_ID_LENGTH = 12;
 const MAX_TEXT_LENGTH = 1600;
 const MAX_TITLE_LENGTH = 120;
-export const DEEPSEEK_PROMPT_VERSION = "deepseek-cue-narration/1.1.0";
+export const DEEPSEEK_PROMPT_VERSION = "deepseek-cue-narration/1.2.0";
 const EXPLICIT_TICK_PATTERN = /(?:\bticks?\s*(?:[:=#-]|\s)\s*\d+\b|第\s*\d+\s*(?:tick|帧|刻)|(?:tick|帧|刻)\s*[:=#-]?\s*\d+)/i;
 const EXPLICIT_URL_PATTERN = /(?:https?:\/\/|file:\/\/|data:|mailto:)/i;
 const ABS_UNIX_PATH_PATTERN = /\/(?:Users|home|tmp|var|private|Volumes)\/[^\s"'，。；;）】)}]+/i;
@@ -243,7 +243,10 @@ function systemPrompt(): string {
     'Exact JSON shape example: {"items":[{"cue_id":"c1","title":"简短标题","explanation":"简短讲解"}]}.',
     "Use only the supplied decision-time facts, inferences, advice and limitations.",
     "Do not add players, identities, positions, ticks, outcomes, voice comms, paths, files, demos or citations.",
-    "Write natural Simplified Chinese for CS players. Retain supplied map callouts and prefer familiar terms such as 首接触、补枪、交叉火力、转点、回防 and 道具覆盖 only when the supplied material supports them.",
+    "Write natural Simplified Chinese and retain supplied map callouts.",
+    "Sound like an experienced CS2 player or streamer: keep it short, concrete and conversational; avoid academic or report-like wording.",
+    "State what the player should do now and why. Prefer supplied callouts such as B小、警家、中路 and familiar terms such as 架枪、预瞄、拉出去、补枪、头甲、eco、磕枪、换位 when the supplied material supports them.",
+    "Do not replace concrete actions with abstractions such as 空间控制、资源关系、风险暴露 or 决策窗口.",
     "Never invent a callout, teammate comm, enemy location, crossfire, trade setup, rotation or save condition that is not supplied.",
     "Speak directly: state the coaching judgment and its reason; do not ask the user to predict, choose, guess or answer first.",
     "Do not change the advice semantics; make the wording concise, direct and honest about uncertainty."

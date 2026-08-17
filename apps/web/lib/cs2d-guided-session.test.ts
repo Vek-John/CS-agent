@@ -28,7 +28,7 @@ describe("cs2d guided session synchronization", () => {
 
     state = reduceCoachingSession(plan, state, { type: "REVEAL_OUTCOME" });
     expect(guidedPlaybackDirective(plan, state).commands).toEqual([
-      { type: "setCamera", mode: "full" },
+      { type: "setCamera", mode: "target" },
       { type: "setSpeed", speed: 1 },
       { type: "seekCanonicalTick", canonicalTick: plan.cues[0].outcome_start_tick },
       { type: "play" }
@@ -40,9 +40,28 @@ describe("cs2d guided session synchronization", () => {
     });
     expect(state.phase).toBe("PAUSED_FOR_COACHING");
     expect(guidedPlaybackDirective(plan, state).commands).toEqual([
-      { type: "setCamera", mode: "full" },
+      { type: "setCamera", mode: "target" },
       { type: "pause" },
       { type: "seekCanonicalTick", canonicalTick: plan.cues[0].outcome_end_tick }
+    ]);
+  });
+
+  it("keeps a revealed cue focused while replaying it at normal speed", () => {
+    let state = reduceCoachingSession(plan, createCoachingSession(plan), { type: "START" });
+    state = reduceCoachingSession(plan, state, { type: "ADVANCE_SEGMENT" });
+    state = reduceCoachingSession(plan, state, { type: "TICK", tick: 2350 });
+    state = reduceCoachingSession(plan, state, { type: "REVEAL_OUTCOME" });
+    state = reduceCoachingSession(plan, state, {
+      type: "TICK",
+      tick: plan.cues[0].outcome_end_tick
+    });
+    state = reduceCoachingSession(plan, state, { type: "REPLAY_OUTCOME" });
+
+    expect(guidedPlaybackDirective(plan, state).commands).toEqual([
+      { type: "setCamera", mode: "target" },
+      { type: "setSpeed", speed: 1 },
+      { type: "seekCanonicalTick", canonicalTick: plan.cues[0].outcome_start_tick },
+      { type: "play" }
     ]);
   });
 

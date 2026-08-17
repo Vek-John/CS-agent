@@ -45,15 +45,16 @@ export const CS2D_SOURCE = {
   input_boundary: "WASM_WORKER_STRUCTURED_REPLAY_ONLY"
 } as const;
 
-export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.2.0" as const;
+export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.3.0" as const;
 export const CS2D_TIMELINE_VERSION = "zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec/timeline/1.0.0" as const;
 export const CS2D_OBSERVATION_VERSION = "cs2d-analysis-adapter/1.0.0/internal-observation" as const;
-export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.2.0/signals" as const;
-export const CS2D_PLANNER_VERSION = "cs2d-analysis-adapter/1.2.0/planner" as const;
+export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.3.0/signals" as const;
+export const CS2D_PLANNER_VERSION = "cs2d-analysis-adapter/1.3.0/planner" as const;
 
 /** MVP pacing target: a full match should feel coached, not interrupted. */
 const MAX_TEACHING_CUES = 8;
 const OUTCOME_WINDOW_SECONDS = 4;
+const COACHING_PRE_ROLL_SECONDS = 1;
 
 export const CS2D_LIMITATIONS = {
   frameSampling:
@@ -567,6 +568,11 @@ function decisionHabitKey(candidate: SignalCandidate): string {
   return `${context}.${phase}`;
 }
 
+function preRollStartTick(candidate: SignalCandidate, tickRate: number): number {
+  const preRollTicks = Math.max(1, Math.round(tickRate * COACHING_PRE_ROLL_SECONDS));
+  return Math.max(candidate.round.freezeEndTick, candidate.decisionTick - preRollTicks);
+}
+
 function collectStates(
   replay: Cs2dReplay,
   rounds: readonly NormalizedRound[],
@@ -773,6 +779,13 @@ function selectCandidates(
   for (const candidate of candidates) {
     const cursor = cursorByRound.get(candidate.round.number) ?? candidate.round.freezeEndTick;
     if (candidate.decisionTick < cursor || candidate.revealTick <= candidate.decisionTick || candidate.revealTick >= candidate.round.decidedTick) continue;
+    if (preRollStartTick(candidate, tickRate) < cursor) {
+      issue(
+        warnings,
+        `Teaching candidate ${candidate.sourceRef} was skipped because its ${COACHING_PRE_ROLL_SECONDS}-second pre-roll overlaps the prior outcome window.`
+      );
+      continue;
+    }
     const outcomeEndTick = Math.min(candidate.round.decidedTick, Math.max(candidate.revealTick + 1, candidate.revealTick + outcomeSpan));
     if (outcomeEndTick <= candidate.revealTick) continue;
     accepted.push({
@@ -894,7 +907,19 @@ function worldAnnotation(
   }];
 }
 
-function cueText(habitKey: string, isHabit: boolean, callout?: string): {
+function economyTerm(state: NormalizedState | undefined): "eco" | "半起" | undefined {
+  const source = state?.source;
+  if (!source || !finiteNumber(source.money) || !finiteNumber(source.equipValue)) return undefined;
+  if (source.equipValue < 1_800 && source.money < 2_500) return "eco";
+  if (source.equipValue < 3_500 && source.money < 3_000) return "半起";
+  return undefined;
+}
+
+function cueText(
+  habitKey: string,
+  isHabit: boolean,
+  contextInput: { callout?: string; state?: NormalizedState } = {}
+): {
   title: string;
   explanation: string;
   advice: string;
@@ -903,52 +928,55 @@ function cueText(habitKey: string, isHabit: boolean, callout?: string): {
   taxonomy: string;
 } {
   const context = habitKey.split(".")[0];
-  const where = callout ? `你在${callout}` : "你在这个位置";
+  const { callout, state } = contextInput;
+  const where = callout ? `你现在在${callout}` : "当前报点未知";
+  const economy = economyTerm(state);
+  const economyLead = economy === "eco" ? "这把是 eco，" : economy === "半起" ? "这把是半起，" : "";
   const base = context === "utility-readiness"
     ? {
-        title: "道具出手前先说清要封哪条枪线",
-        explanation: `教练判断：${where}准备出道具，先确认它要封哪条枪线、帮谁启动，以及出手后谁来接空间。`,
-        advice: "先报清这颗道具要封的位置；队友能同步再出手，避免烟闪落地时没人接空间。",
-        trigger: "手持道具并准备离开掩体或进入投掷动作时",
+        title: "道具先封枪线，队友跟上再拉出去",
+        explanation: `${where}，手里有道具。先用这颗道具封住要过的枪线，再让队友一起拉出去；不然道具落地也没人补枪。`,
+        advice: "先报清这颗道具封哪里；队友能跟上再出手，没铺好枪线就先别硬磕。",
+        trigger: "手持道具并准备拉出当前掩体时",
         ruleId: "utility-window"
       }
     : context === "low-health-survival"
       ? {
-          title: "低血量别抢首接触，留在第二枪线补枪",
-          explanation: `教练判断：${where}血量偏低，正面换血容错不够；优先留住补枪和交叉火力价值，不要主动吃首接触。`,
-          advice: "让高血量队友打首接触，你站第二枪线补枪；独自时只短探能立刻退回掩体的角度。",
-          trigger: "生命值较低且下一步可能进入正面接触时",
+          title: "低血量别第一个拉，站第二身位补枪",
+          explanation: `${where}，血量已经偏低。现在别第一个拉出去，先让高血量队友架枪，你跟第二身位补枪，打完还能马上换位。`,
+          advice: "让高血量队友打首接触；你跟着补枪，独自拿信息时只露一个能立刻收回的身位。",
+          trigger: "低血量准备进入下一条枪线时",
           ruleId: "low-health-second-contact"
         }
       : context === "rotation-safety"
         ? {
-            title: "切刀转点只跑已确认安全的路",
-            explanation: `教练判断：${where}切刀能提速，但遇到首接触就没有开枪窗口；只把刀用于已经确认安全的转点路段。`,
-            advice: "安全路段切刀提速；接近未知拐角前切回枪，准星先放到首接触位。",
-            trigger: "刀在手且即将进入未确认区域时",
+            title: "切刀转点前换回枪，预瞄再走",
+            explanation: `${where}，切刀只适合已经确认安全的路。前面还有未知角就先换回枪预瞄，别空手拉出去。`,
+            advice: "安全直路可以切刀提速；接近未知角前换回枪，先架住首接触位再走。",
+            trigger: "刀在手且准备走进未确认枪线时",
             ruleId: "rotation-weapon-ready"
           }
         : context === "bomb-carrier-safety"
           ? {
-              title: "带包别单走，先保证掉包后有人能回收",
-              explanation: `教练判断：${where}带着 C4，掉包位置会直接限制全队转点；这次推进要先保证队友能补枪、能回收。`,
-              advice: "带包不要单人进未知区；需要先探就交包，或者让队友先架住可回收枪线。",
-              trigger: "携带 C4 且准备脱离队友覆盖时",
+              title: "带包别单拉，先让队友架枪",
+              explanation: `${where}，你带着 C4。先让队友架住并能补枪再往前拉；一个人冲进未知区，掉包后全队连转点都难。`,
+              advice: "队友没跟上就别深拉；需要先探时交包，或者先让队友架住能回收的位置。",
+              trigger: "携带 C4 且准备离开队友补枪范围时",
               ruleId: "bomb-recoverability"
             }
           : context === "unarmored-contact"
             ? {
-                title: "无甲接触只露一个角，第一枪打完就能退",
-                explanation: `教练判断：${where}护甲不足，连续换血很亏；首接触前必须把准星、掩体和退路一次对齐。`,
-                advice: "准星先放在最可能的头线，只露能立刻回掩体的身位，不连续找第二个角。",
-                trigger: "护甲不足且准备离开掩体进入接触区时",
+                title: `${economy === "eco" ? "eco 局没头甲" : "头甲不够"}别硬磕，预瞄一个角就换位`,
+                explanation: `${where}，${economyLead}头甲不够，别直接拉出去和对面磕枪。先预瞄一个角，只拉一个身位，第一枪打完就回掩体换位。`,
+                advice: "只拉一个能马上收回的身位；打完就换位，没有队友补枪就先架住，别连续找第二个角。",
+                trigger: "头甲不足且准备拉出掩体时",
                 ruleId: "unarmored-contact-discipline"
               }
             : {
-                title: "首接触前把准星、补枪位和退路对齐",
-                explanation: `教练判断：${where}准备接触时，第一枪位置、队友补枪线和可退掩体要形成同一个动作，不能边走边临时找角度。`,
-                advice: "过未知角前停半拍，把准星放到首接触位；没有队友补枪或交叉火力，就先保留退路。",
-                trigger: "准备进入下一段未知枪线且退出条件尚未确认时",
+                title: `${economy ? `${economy}局` : "首接触前"}先架枪，预瞄好再拉出去`,
+                explanation: `${where}。${economyLead}先把准星预瞄到首接触位，队友能补枪再拉出去；没人补就架住或换位，别一个人硬磕枪。`,
+                advice: "先预瞄、停半拍；队友没补枪就留在掩体后架枪，或者换位再打。",
+                trigger: "准备进入下一条未知枪线时",
                 ruleId: "contact-preparation"
               };
 
@@ -963,12 +991,25 @@ function stateFactText(state: NormalizedState): string {
   const source = state.source;
   const weapon = safeText(source.weapon, "未知手持");
   const hp = finiteNumber(source.health) ? String(Math.max(0, source.health)) : "未知";
-  const armor = finiteNumber(source.armor) ? String(Math.max(0, source.armor)) : "未知";
-  const helmet = source.helmet === true ? "有头盔" : "无头盔";
-  const utilityCount = asArray(source.grenades).length;
+  const armor = finiteNumber(source.armor) ? Math.max(0, source.armor) : undefined;
+  const headArmor = armor === undefined
+    ? "头甲未知"
+    : armor <= 0
+      ? "没甲"
+      : source.helmet === true
+        ? `头甲齐全（${armor} 甲）`
+        : source.helmet === false
+          ? `有 ${armor} 甲、没头`
+          : `${armor} 甲、头盔未知`;
+  const utility = source.grenades === undefined
+    ? "道具数量未知"
+    : `有 ${asArray(source.grenades).length} 颗道具`;
+  const economy = finiteNumber(source.money) && finiteNumber(source.equipValue)
+    ? `，存款 $${Math.max(0, source.money)}、装备价值 $${Math.max(0, source.equipValue)}`
+    : "";
   const callout = stateCallout(state);
-  const position = callout ? `你在${callout}，` : "";
-  return `${position}${hp} HP、${armor} 甲（${helmet}），手持 ${weapon}，有 ${utilityCount} 颗道具；状态来自决策前采样。`;
+  const position = callout ? `你在${callout}` : "当前报点未知";
+  return `${position}：${hp} HP，${headArmor}，手持 ${weapon}，${utility}${economy}；这是决策前最近一帧。`;
 }
 
 function buildCue(
@@ -1015,7 +1056,10 @@ function buildCue(
   }
 
   const callout = stateCallout(candidate.state);
-  const text = cueText(candidate.habitKey, candidate.occurrenceIndex > 1, callout);
+  const text = cueText(candidate.habitKey, candidate.occurrenceIndex > 1, {
+    callout,
+    state: candidate.state
+  });
   const inferenceId = `i${counters.inference++}`;
   const adviceId = `a${counters.advice++}`;
   const evidenceId = `e${counters.evidence++}`;
@@ -1125,13 +1169,18 @@ function buildPlanSegments(
 
     const candidates = selectedByRound.get(round.number) ?? [];
     for (const candidate of candidates) {
-      if (candidate.decisionTick < cursor || candidate.outcomeEndTick <= candidate.decisionTick) continue;
-      if (cursor < candidate.decisionTick) {
+      const cueStartTick = preRollStartTick(candidate, timeline.tick_rate);
+      if (
+        candidate.decisionTick < cursor ||
+        cueStartTick < cursor ||
+        candidate.outcomeEndTick <= candidate.decisionTick
+      ) continue;
+      if (cursor < cueStartTick) {
         segments.push(lowValueSegment(
-          `seg-r${round.number}-skip-${cursor}-${candidate.decisionTick}`,
+          `seg-r${round.number}-skip-${cursor}-${cueStartTick}`,
           round.number,
           cursor,
-          candidate.decisionTick,
+          cueStartTick,
           "LOW_VALUE_FAST_FORWARD",
           "普通低价值区间快速带过；需要时可展开查看。"
         ));
@@ -1151,13 +1200,13 @@ function buildPlanSegments(
       segments.push({
         id: cueSegmentId,
         round_number: round.number,
-        start_tick: candidate.decisionTick,
+        start_tick: cueStartTick,
         end_tick: candidate.outcomeEndTick,
         mode: candidate.occurrenceIndex > 1 ? "HABIT_CHECK" : "DEEP_DIVE",
         reason_code: candidate.occurrenceIndex > 1 ? "REPEATED_DECISION_PATTERN" : "COACH_DECISION_POINT",
         display_reason: candidate.occurrenceIndex > 1
-          ? "相同决策模式再次出现：直接复盘判断，再播放结果。"
-          : "关键接触前暂停：直接说明当前判断与可执行理由。",
+          ? "同样的处理又出现：先看决策前这一秒，再讲怎么打。"
+          : "先看你拉出去前这一秒：讲清该怎么做，再看结果。",
         playback_speed: 1,
         cue_ids: [built.cue.id],
         expandable: true

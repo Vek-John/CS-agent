@@ -55,7 +55,7 @@ export function guidedPlaybackDirective(
   if ((state.phase === "REVEALING" || state.phase === "REPLAYING") && cue) {
     return {
       commands: [
-        { type: "setCamera", mode: "full" },
+        { type: "setCamera", mode: "target" },
         { type: "setSpeed", speed: 1 },
         { type: "seekCanonicalTick", canonicalTick: cue.outcome_start_tick },
         { type: "play" }
@@ -64,10 +64,9 @@ export function guidedPlaybackDirective(
   }
 
   if (state.phase === "PAUSED_FOR_COACHING") {
-    const cameraMode = cue && !state.revealed_cue_ids.includes(cue.id) ? "target" : "full";
     return {
       commands: [
-        { type: "setCamera", mode: cameraMode },
+        { type: "setCamera", mode: cue ? "target" : "full" },
         { type: "pause" },
         { type: "seekCanonicalTick", canonicalTick: state.current_tick }
       ]

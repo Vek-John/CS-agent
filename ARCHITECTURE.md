@@ -1,7 +1,7 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：2.1.2
+> 版本：2.2.0
 > 最后更新：2026-08-17
 > 适用范围：浏览器首版至桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
@@ -76,7 +76,7 @@ Demo
 
 ### 2.4 决策前暂停，禁止未来泄漏
 
-讲解点区分 `decision_tick`、`reveal_tick` 和 `outcome_range`，并满足 `decision_tick <= outcome_start_tick < reveal_tick <= outcome_end_tick`。教练在决策点暂停后直接说明当时事实、判断、理由和一个可执行动作，不要求用户先作答；用户点击“看结果”后才从决策点播放到结果，并可切换到全知结果视角。在揭示动作发生之前，建议与问答只能读取 `decision_tick` 之前的 `ObservableState`；后续事件只用于结果播放与复盘解释。
+讲解点区分 `decision_tick`、`reveal_tick` 和 `outcome_range`，并满足 `decision_tick <= outcome_start_tick < reveal_tick <= outcome_end_tick`。深度讲解片段默认从 `max(round.freeze_end_tick, decision_tick - tick_rate)` 开始播放约 1 秒上下文，但暂停点、事实可用时间与 outcome 边界保持不变。教练在决策点暂停后直接说明当时事实、判断、理由和一个可执行动作，不要求用户先作答；用户点击“看结果”后才从决策点播放到结果。在揭示动作发生之前，建议与问答只能读取 `decision_tick` 之前的 `ObservableState`；后续事件只用于结果播放与复盘解释。
 
 ### 2.5 事实、推断、建议分层
 
@@ -212,9 +212,9 @@ Worker 使用至少三档队列优先级：`interactive` 处理用户即将观�
 
 用户在 cs2d iframe 中选择本地 `.dem`。文件只进入浏览器 File/Worker/WASM 管线，不经过 Next 上传 API，也不写入服务器。cs2d 一次解析后保留完整结构化 Replay，并直接驱动同一个全知 renderer：真实雷达、多楼层、双方 5 人紧凑 HUD、当前手持、库存道具、金钱、护甲/头盔、拆弹器/C4、投掷物、击杀/炸弹事件和当前播放位置之前的轨迹都按同一 canonical tick 更新。
 
-用户只选择一次分析主体。iframe 内的 `@cs-coach/cs2d-analysis-adapter` 从该 Replay 派生所选玩家的 `MatchTimeline`、内部 `ObservableState` 与连续 `ReviewPlan`，序列化后的严格白名单 `Cs2dAnalysisBundle` 通过 `cs2d-playback-bridge.v1` 传给 Next；原始 Replay 不跨 iframe。Session reducer 自动消费 `FREEZE_TIME` 和低价值区间，在 `decision_tick` 暂停并直接讲解；“看结果”只推进同一张全知地图的时间，不切换显示模式。当前全场最多安排 8 个教学暂停，并在候选多于预算时跨回合均匀取样；同类上下文进入 `HABIT_CHECK`。
+用户只选择一次分析主体。iframe 内的 `@cs-coach/cs2d-analysis-adapter` 从该 Replay 派生所选玩家的 `MatchTimeline`、内部 `ObservableState` 与连续 `ReviewPlan`，序列化后的严格白名单 `Cs2dAnalysisBundle` 通过 `cs2d-playback-bridge.v1` 传给 Next；原始 Replay 不跨 iframe。Session reducer 自动消费 `FREEZE_TIME` 和低价值区间；深度讲解段从决策点前约 1 秒开始，在 `decision_tick` 暂停并直接讲解，“看结果”再推进同一张全知地图的时间。前置上下文不移动 decision、事实可用时间或 outcome 边界。当前全场最多安排 8 个教学暂停，并在候选多于预算时跨回合均匀取样；同类上下文进入 `HABIT_CHECK`。
 
-Host 模式只呈现 Next 教练壳的一套中文播放控制和一条整场进度条；canonical tick 只作为内部寻址坐标，不出现在用户文案。目标玩家选择后锁定，目标 HUD 与地图标签显示“你”，其余九人只展示事实而不可切换分析主体。普通播放、结果播放和自由查看使用固定地图几何中心；只有关键 cue 暂停可受控聚焦目标，且 reduced-motion 下立即切换。用户 seek、切回合、调速或手动播放后进入临时 `UserTakeover`：播放器/HUD/回合/侧栏跟随真实播放头，Session reducer 暂停消费；“返回教练路线”后再重发当前确定性 directive，不改写 `ReviewPlan`。
+Host 模式只呈现 Next 教练壳的一套中文播放控制，以及位于控制栏下方的一条可自由 seek 的整场进度条；深度讲解/习惯复查、低价值和普通区间分别使用蓝、橙、灰表达，并提供可点击节点。canonical tick 只作为内部寻址坐标，不出现在用户文案。目标玩家选择后锁定，目标 HUD 与地图标签显示“你”，其余九人只展示事实而不可切换分析主体。普通播放和自由查看使用固定地图几何中心；关键 cue 暂停、结果播放、结果回看和结果结束后的暂停持续以 2.45 倍目标镜头聚焦，结果播放速度为 1 倍，且 reduced-motion 下立即切换。用户 seek、切回合、调速或手动播放后进入临时 `UserTakeover`：播放器/HUD/回合/侧栏跟随真实播放头，Session reducer 暂停消费；“返回教练路线”按当前播放位置选择最近 cue（等距时优先后一个），从该 cue 的前置上下文重新播放并重新启用其讲解，不改写 `ReviewPlan`。
 
 DeepSeek 只改写已经存在的匿名决策侧事实、推断和建议。`/api/coaching/narrate` 不接收原始 Demo、稳定玩家 ID、路径、完整事件流或结果事实；Cloudflare 只配置 `DEEPSEEK_API_KEY` Worker Secret。OpenNext 会序列化 production/development/test 三套标准 `.env*`，因此 localhost key 只能放在忽略的 `.local-data/deepseek.env`，由根启动器只注入 Next dev 子进程；Cloudflare 构建前后均校验标准 env 文件及 `next-env.mjs` 不含非空 secret。缺 key、超时、上游失败或输出校验失败时保留确定性中文讲解，不阻塞播放。当前自由追问仍未接入通用模型。
 
@@ -377,7 +377,7 @@ propose_memory_update(proposal)
 
 首版 HUD 采用双方各 5 人紧凑卡片：深色姓名/金钱/道具层＋阵营色生命/护甲/手持层；死亡降低层级但保留事件上下文。朝向只用小箭头，不显示大面积实心朝向月牙。字段不可得时显示未知，不使用看似精确的默认值。
 
-Host 模式不复用 cs2d 的产品控制栏、设置面板或自动镜头 UI。地图 overview 是固定几何中心和固定缩放，不按玩家包围盒持续漂移；`setCamera(target)` 只供教练在 `PAUSED_FOR_COACHING` 聚焦问题点，离开 cue 立即回到 `setCamera(full)`。
+Host 模式不复用 cs2d 的产品控制栏、设置面板或自动镜头 UI。地图 overview 是固定几何中心和固定缩放，不按玩家包围盒持续漂移；`setCamera(target)` 使用 2.45 倍缩放跟随分析主体，并贯穿 cue 暂停、结果播放、结果回看和结果结束后的暂停。进入普通路线、低价值段或自由查看时回到 `setCamera(full)`。
 
 ### 6.9 Annotation
 
@@ -585,7 +585,7 @@ CoachCue
   confidence, limitations[]
 ```
 
-强制时序为 `decision_tick <= outcome_start_tick < reveal_tick <= outcome_end_tick`。用户点击“看结果”是揭示授权边界：播放器从 `outcome_start_tick`（MVP 通常等于 `decision_tick`）开始展示决策到结果的过程；此时允许并默认切到 `OMNISCIENT` 结果视角，但 outcome 文本事实只在窗口完成后标记为已消费。决策前 seek、问答与标注仍锁在观察者信息边界。
+强制时序为 `decision_tick <= outcome_start_tick < reveal_tick <= outcome_end_tick`。承载 cue 的 `ReviewSegment.start_tick` 默认取 `max(round.freeze_end_tick, decision_tick - tick_rate)`，提供约 1 秒可见上下文，但不改变任何事实授权时间。用户点击“看结果”是揭示授权边界：播放器从 `outcome_start_tick`（MVP 通常等于 `decision_tick`）开始展示决策到结果的过程；地图始终使用同一全知 renderer，outcome 文本事实只在窗口完成后标记为已消费。决策前 seek、问答与标注仍锁在观察者信息边界。
 
 ### 7.7 Playback 协议
 
@@ -615,9 +615,9 @@ PlaybackCommandEnvelope
 
 `ANALYSIS_READY.bundleJson` 只能是 `serializeCs2dAnalysisBundle` 的白名单结果：`demo_id`、`selected_steam_id`、`match_timeline`、`review_plan`、`observation_evidence` 与版本/限制 metadata；raw Replay、二进制 Demo、上游私有状态或额外顶层字段必须拒绝。`ANALYSIS_READY` 与 `ANALYSIS_FAILED` 使用不同的 schema version，避免错误结果被误认为成功产物。父窗口同时校验 iframe source、localhost origin、channel、direction 与精确 payload shape。
 
-Session 只在 phase/segment/cue/reveal 状态变化时发送新的 playback directive，不随每个 `PLAYBACK_STATE` tick 重复 seek。冻结时间和确定性低价值段由 reducer 记录后自动跳过；`PLAYING` 使用 segment speed；`PAUSED_FOR_COACHING` pause 在 decision tick；`REVEALING/REPLAYING` 从 outcome start 以 1× 播放至 outcome end。
+Session 只在 phase/segment/cue/reveal 状态变化时发送新的 playback directive，不随每个 `PLAYBACK_STATE` tick 重复 seek。冻结时间和确定性低价值段由 reducer 记录后自动跳过；`PLAYING` 使用 segment speed；`PAUSED_FOR_COACHING` pause 在 decision tick；`REVEALING/REPLAYING` 从 outcome start 以 1 倍速度和目标聚焦镜头播放至 outcome end，随后保持目标聚焦暂停。
 
-外层整场时间轴始终可 seek。手动命令把 UI 置为 `UserTakeover`，此时侧栏按 `PLAYBACK_STATE.canonicalTick` 使用半开区间定位实际回合和 `ReviewSegment`，隐藏原 cue 的结果按钮；恢复教练路线后，Session 状态机继续掌握播放头。该交互状态只属于前端协调层，不写回领域会话或分析产物。
+外层单一整场时间轴始终可 seek，并以不同颜色展示教练重点、低价值和普通区间。手动命令把 UI 置为 `UserTakeover`，此时侧栏按 `PLAYBACK_STATE.canonicalTick` 使用半开区间定位实际回合和 `ReviewSegment`，隐藏原 cue 的结果按钮；恢复教练路线时按当前播放头选择最近 cue，等距时优先后一个，从目标 segment 的前置上下文开始，并从已消费/已揭示集合中移除该 cue 以重新讲解。该交互状态只属于前端协调层，不写回领域会话或分析产物。
 
 旧 `PlaybackFrameViewModel` 契约只服务 `/pixi-poc` 迁移回归，不是当前 Web 主入口协议。
 
@@ -826,7 +826,7 @@ priority = proximity_to_playhead
 
 地图在所有会话状态都显示当前 tick 的 cs2d 全知 Replay，不提供显式视角切换。信息授权发生在教练输入而非 renderer：`PLAYING` 与 `PAUSED_FOR_COACHING` 的文案/追问只能读 cue 绑定的 `ObservableState`；用户点击“看结果”后播放器在同一地图推进 outcome 区间，只有结果窗口完成后才允许结果 scoped 文案。进入下一个 cue 时重新绑定下一份内部 ObservableState。
 
-自动路线继续主持完整 Demo；用户主动操作时仅暂时交出播放头，不丢弃会话。自由查看侧栏显示实际回合与覆盖该位置的 segment，地图/HUD/事件均由同一播放头更新。用户可随时返回当前教练节点；未接管时冻结时间直接自动消费、低价值段显式快进、关键 cue 暂停聚焦并直接讲解。
+自动路线继续主持完整 Demo；用户主动操作时仅暂时交出播放头，不丢弃会话。自由查看侧栏显示实际回合与覆盖该位置的 segment，地图/HUD/事件均由同一播放头更新。用户可随时返回离当前播放位置最近的教练节点并从约 1 秒前置上下文重看；未接管时冻结时间直接自动消费、低价值段显式快进、关键 cue 暂停聚焦并直接讲解，结果播放与结束暂停维持同一聚焦镜头。
 
 ### 9.4 会后阶段
 
@@ -1034,8 +1034,8 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 | 内部观察证据 | Accepted | `ObservationClaim` 仅约束规则/LLM 决策证据；不作为用户可见 renderer 模式，不用布尔可见性 |
 | 单次解析与分析派生 | Accepted | `.dem` 只生成一份 cs2d Replay；Adapter 从同一 Replay 派生 MatchTimeline/Observation/ReviewPlan，不二次解析 |
 | cs2d localhost 底座 | Accepted | 固定 `dbbe698…`＋可重放 patch；上游无明确 LICENSE，源码/WASM/资产不提交、不进入 Cloudflare |
-| Host 控制与接管 | Accepted | Next 只保留一套中文控制和整场时间轴；手动接管暂停 reducer，恢复后继续确定性教练路线；用户 UI 不显示 tick |
-| 地图镜头与目标主体 | Accepted | 普通状态固定全图中心，cue 暂停才聚焦；分析主体锁定且标为“你”，其他 HUD 不可切换 |
+| Host 控制与接管 | Accepted | Next 只保留一套中文控制和一条彩色可 seek 整场时间轴；手动接管暂停 reducer，恢复到当前播放头最近 cue 的前置上下文；用户 UI 不显示 tick |
+| 地图镜头与目标主体 | Accepted | 普通状态固定全图中心；cue 暂停、结果与回看持续 2.45 倍聚焦；分析主体锁定且标为“你”，其他 HUD 不可切换 |
 | 中文报点事实 | Accepted | 同次 cs2d 解析保留 `m_szLastPlaceName`，由版本化精确词典本地化；未知不猜测，不二次解析 |
 | 自研 PixiJS renderer | Superseded | `/pixi-poc` 与旧 renderer 只保留回归；默认产品不再扩展第二套 renderer |
 | 桌面长期形态 | Proposed | 本地 CS2 Demo＋教练侧窗，通过 PlaybackPort 接入 |
@@ -1072,3 +1072,4 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 | 2.1.0 | 2026-08-14 | Host 收敛为一套中文播放控制和自由 seek 时间轴；新增手动接管/恢复、目标玩家锁定与“你”、固定全图/关键 cue 聚焦、用户 UI 隐藏 tick；同次解析保留 Source place token 并用版本化中文 CS 报点驱动讲解 |
 | 2.1.1 | 2026-08-17 | 修正 OpenNext 会打包 development/test `.env` 的边界：localhost DeepSeek key 改为 `.local-data/deepseek.env` 进程级注入，并为 Cloudflare 构建增加 source＋bundle secret 阻断 |
 | 2.1.2 | 2026-08-17 | 收紧 Host 播放边界：自由查看和已揭示结果保持固定全图，只有未揭示 cue 聚焦；canonical seek 不落入目标之后的采样状态；分析失败使用独立 schema |
+| 2.2.0 | 2026-08-17 | 深度讲解增加冻结边界内约 1 秒前置上下文；Host 收敛为一条分色可自由 seek 的整场时间轴；恢复路线改为当前播放头最近 cue；结果、回看和结果结束暂停保持 2.45 倍目标聚焦，播放仍为 1 倍。 |

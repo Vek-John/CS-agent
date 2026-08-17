@@ -38,7 +38,10 @@ import {
   cs2dHostConfig,
   playbackCommandMessage,
   playbackPositionLabel,
-  reviewPositionAtTick
+  reviewPositionAtTick,
+  reviewSegmentLabel,
+  reviewSegmentTone,
+  timelinePercent
 } from "../lib/cs2d-playback-host";
 
 type HostPhase = "BOOTING" | "WAITING_FOR_DEMO" | "READY" | "ERROR";
@@ -79,10 +82,24 @@ export function Cs2dPlaybackHost() {
     setUserTookOver(true);
   }, [send]);
 
-  const resumeGuidedRoute = useCallback(() => {
+  const clearUserTakeover = useCallback(() => {
     userTookOverRef.current = false;
     setUserTookOver(false);
   }, []);
+
+  const resumeGuidedRoute = useCallback(() => {
+    const activePlan = planRef.current;
+    const currentTick = playback?.canonicalTick;
+    if (activePlan && currentTick !== undefined && Number.isFinite(currentTick)) {
+      setSession((current) => current
+        ? reduceCoachingSession(activePlan, current, {
+            type: "RETURN_TO_NEAREST_CUE",
+            tick: currentTick
+          })
+        : current);
+    }
+    clearUserTakeover();
+  }, [clearUserTakeover, playback?.canonicalTick]);
 
   const issueUserCommand = useCallback((command: PlaybackCommand) => {
     if (session) markUserTookOver();
@@ -193,9 +210,9 @@ export function Cs2dPlaybackHost() {
   const transition = useCallback((action: SessionAction) => {
     const activePlan = planRef.current;
     if (!activePlan) return;
-    resumeGuidedRoute();
+    clearUserTakeover();
     setSession((current) => current ? reduceCoachingSession(activePlan, current, action) : current);
-  }, [resumeGuidedRoute]);
+  }, [clearUserTakeover]);
 
   const transitionKey = session ? guidedTransitionKey(session) : "idle";
   useEffect(() => {
@@ -231,6 +248,16 @@ export function Cs2dPlaybackHost() {
     : undefined;
   const positionLabel = playbackPositionLabel(playback, replay);
   const freeViewPosition = reviewPositionAtTick(playback, replay, activePlan);
+  const timelineSegments = activePlan?.segments.map((planSegment) => {
+    const start = timelinePercent(planSegment.start_tick, tickMin, tickMax);
+    const end = timelinePercent(planSegment.end_tick, tickMin, tickMax);
+    return { planSegment, start, width: Math.max(0.2, end - start) };
+  }) ?? [];
+  const currentPercent = timelinePercent(tick, tickMin, tickMax);
+
+  const seekToSegment = (startTick: number) => {
+    seekFromTimeline(Math.min(tickMax, Math.max(tickMin, startTick)));
+  };
 
   return (
     <main className="cs2d-host-shell">
@@ -321,7 +348,7 @@ export function Cs2dPlaybackHost() {
                 </>
               ) : (
                 <div className="cs2d-coach-result-actions">
-                  <p>同一张地图已经推进到这次决策的结果区间。</p>
+                  <p>这波结果看完了。可以再看一遍，或者接着往下走。</p>
                   <button type="button" onClick={() => transition({ type: "REPLAY_OUTCOME" })}>再看一遍</button>
                   <button className="cs2d-coach-primary" type="button" onClick={() => transition({ type: "ADVANCE_SEGMENT" })}>继续下一段</button>
                 </div>
@@ -339,7 +366,7 @@ export function Cs2dPlaybackHost() {
           {session && !userTookOver && cue && ["PLAYING", "REVEALING", "REPLAYING"].includes(session.phase) ? (
             <section className="cs2d-coach-card" aria-live="polite">
               <small>{session.phase === "PLAYING" ? "接近讲解点" : "正在播放结果"}</small>
-              <p>{session.phase === "PLAYING" ? "到关键决策前会自动暂停并直接讲解。" : "只推进当前时间，不切换地图视角。"}</p>
+              <p>{session.phase === "PLAYING" ? "到关键决策前会自动暂停并直接讲解。" : "跟住你这一波处理，看结果怎么落地。"}</p>
             </section>
           ) : null}
 
@@ -362,39 +389,104 @@ export function Cs2dPlaybackHost() {
             </dl>
           ) : null}
 
-          <div className="cs2d-host-controls" aria-label="回放控制">
-            <button type="button" disabled={!replay} onClick={() => issueUserCommand({ type: playback?.playing ? "pause" : "play" })}>
+        </aside>
+      </section>
+
+      <footer className="cs2d-host-timeline">
+        <div className="cs2d-timeline-toolbar" aria-label="回放控制">
+          <div className="cs2d-host-controls">
+            <button
+              className="cs2d-host-play"
+              type="button"
+              disabled={!replay}
+              onClick={() => issueUserCommand({ type: playback?.playing ? "pause" : "play" })}
+            >
               {playback?.playing ? "暂停" : "播放"}
             </button>
             {[1, 2, 4, 8].map((speed) => (
-              <button key={speed} type="button" disabled={!replay} aria-pressed={playback?.speed === speed} onClick={() => issueUserCommand({ type: "setSpeed", speed })}>{speed}×</button>
+              <button
+                key={speed}
+                type="button"
+                disabled={!replay}
+                aria-pressed={playback?.speed === speed}
+                onClick={() => issueUserCommand({ type: "setSpeed", speed })}
+              >
+                {speed}×
+              </button>
             ))}
           </div>
 
           {replay ? (
             <div className="cs2d-round-list" aria-label="选择回合">
               {replay.rounds.map((round) => (
-                <button key={`${round.roundIndex}-${round.roundNumber}`} type="button" aria-pressed={playback?.roundIndex === round.roundIndex} onClick={() => issueUserCommand({ type: "selectRound", roundIndex: round.roundIndex })}>
+                <button
+                  key={`${round.roundIndex}-${round.roundNumber}`}
+                  type="button"
+                  aria-pressed={playback?.roundIndex === round.roundIndex}
+                  onClick={() => issueUserCommand({ type: "selectRound", roundIndex: round.roundIndex })}
+                >
                   {round.roundNumber === 0 ? "准备" : `R${round.roundNumber}`}
                 </button>
               ))}
             </div>
           ) : null}
-        </aside>
-      </section>
+        </div>
 
-      <footer className="cs2d-host-timeline">
-        <label htmlFor="match-progress">比赛进度</label>
-        <input
-          id="match-progress"
-          type="range"
-          min={tickMin}
-          max={tickMax}
-          value={tick}
-          disabled={!replay}
-          onInput={(event) => seekFromTimeline(Number(event.currentTarget.value))}
-        />
-        <output>{replay ? `${Math.max(0, Math.round(((tick - tickMin) / Math.max(1, tickMax - tickMin)) * 100))}%` : "—"}</output>
+        <div className="cs2d-timeline-heading">
+          <label htmlFor="match-progress">整场进度</label>
+          <output>{replay ? `${Math.round(currentPercent)}% · ${positionLabel}` : "等待 Demo"}</output>
+        </div>
+
+        <div className="cs2d-timeline-rail">
+          <div className="cs2d-timeline-segment-fills" aria-hidden="true">
+            {timelineSegments.map(({ planSegment, start, width }) => (
+              <span
+                key={planSegment.id}
+                className={`cs2d-timeline-segment-fill cs2d-timeline-segment-fill--${reviewSegmentTone(planSegment.mode)}`}
+                style={{ left: `${start}%`, width: `${width}%` }}
+              />
+            ))}
+          </div>
+
+          <div className="cs2d-timeline-segment-buttons" aria-label="教练路线区间">
+            {timelineSegments.map(({ planSegment, start }) => {
+              const roundLabel = planSegment.round_number > 0 ? `第 ${planSegment.round_number} 回合` : "准备阶段";
+              const segmentLabel = reviewSegmentLabel(planSegment);
+              return (
+                <button
+                  key={planSegment.id}
+                  className={`cs2d-timeline-segment-button cs2d-timeline-segment-button--${reviewSegmentTone(planSegment.mode)}`}
+                  type="button"
+                  style={{ left: `clamp(0.7rem, ${start}%, calc(100% - 0.7rem))` }}
+                  title={`${segmentLabel} · ${roundLabel}`}
+                  aria-label={`跳到${segmentLabel}，${roundLabel}`}
+                  onClick={() => seekToSegment(planSegment.start_tick)}
+                />
+              );
+            })}
+          </div>
+
+          <input
+            id="match-progress"
+            className="cs2d-timeline-range"
+            type="range"
+            min={tickMin}
+            max={tickMax}
+            value={tick}
+            disabled={!replay}
+            aria-label="整场比赛进度"
+            aria-valuetext={positionLabel}
+            onInput={(event) => seekFromTimeline(Number(event.currentTarget.value))}
+          />
+        </div>
+
+        {activePlan ? (
+          <div className="cs2d-timeline-legend" aria-label="教练路线图例">
+            <span><i className="is-coach" aria-hidden="true" />教练重点</span>
+            <span><i className="is-skip" aria-hidden="true" />低价值</span>
+            <span><i className="is-neutral" aria-hidden="true" />普通比赛</span>
+          </div>
+        ) : null}
       </footer>
     </main>
   );

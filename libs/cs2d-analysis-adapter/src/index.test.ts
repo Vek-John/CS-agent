@@ -173,8 +173,38 @@ describe("cs2d analysis adapter", () => {
     for (let index = 1; index < segments.length; index += 1) {
       expect(segments[index - 1].end_tick).toBe(segments[index].start_tick);
     }
+    for (const cue of bundle.review_plan.cues) {
+      const segment = bundle.review_plan.segments.find((candidate) => candidate.id === cue.segment_id);
+      const round = bundle.match_timeline.rounds.find((candidate) => candidate.round_number === segment?.round_number);
+      expect(segment).toBeDefined();
+      expect(round).toBeDefined();
+      expect(segment?.start_tick).toBe(Math.max(round!.freeze_end_tick, cue.decision_tick - 64));
+      expect(segment?.start_tick).toBeLessThanOrEqual(cue.decision_tick);
+    }
     expect(segments.some((segment) => segment.reason_code === "FREEZE_TIME")).toBe(true);
     expect(segments.some((segment) => segment.reason_code === "INTER_ROUND_GAP")).toBe(true);
+  });
+
+  it("clamps one second of pre-roll to the live boundary without moving decision evidence", () => {
+    const replay = replayFixture();
+    const events = replay.rounds[0].events.map((event, index) =>
+      index === 0 ? { ...event, tick: 80, t: 1.25 } : event
+    );
+    const bundle = buildCs2dAnalysisBundle({
+      replay: { ...replay, rounds: [{ ...replay.rounds[0], events }, replay.rounds[1]] },
+      selectedSteamId: "p-t1",
+      demoId: "early-live-cue"
+    });
+    const cue = bundle.review_plan.cues.find((candidate) => candidate.decision_tick === 64);
+    expect(cue).toBeDefined();
+    const segment = bundle.review_plan.segments.find((candidate) => candidate.id === cue!.segment_id);
+    expect(segment?.start_tick).toBe(64);
+    expect(cue?.outcome_start_tick).toBe(64);
+    expect(cue?.facts.every((fact) => fact.available_at_tick <= cue.decision_tick)).toBe(true);
+
+    let session = createCoachingSession(bundle.review_plan, "early-cue-session");
+    session = reduceCoachingSession(bundle.review_plan, session, { type: "START" });
+    expect(session).toMatchObject({ phase: "PLAYING", current_tick: 64 });
   });
 
   it("paces a full match to at most eight teaching stops and spreads them across the timeline", () => {
@@ -220,12 +250,48 @@ describe("cs2d analysis adapter", () => {
       demoId: "decision-context"
     });
     expect(bundle.review_plan.cues[0]).toMatchObject({
-      title: "连接：道具出手前先说清要封哪条枪线"
+      title: "连接：道具先封枪线，队友跟上再拉出去"
     });
-    expect(bundle.review_plan.cues[0].question).toContain("你在连接准备出道具");
+    expect(bundle.review_plan.cues[0].question).toContain("你现在在连接，手里有道具");
     expect(bundle.review_plan.cues[0].facts[0].text).toContain("你在连接");
     expect(bundle.review_plan.cues[0].facts[0].text).toContain("有 2 颗道具");
     expect(bundle.review_plan.cues[0].question).not.toMatch(/击杀|死亡|结果|随后|最终/);
+  });
+
+  it("uses concrete Mirage callouts and player-facing CS actions", () => {
+    const replay = replayFixture();
+    const frames = replay.rounds[0].frames.map((frame) => ({
+      ...frame,
+      players: frame.players.map((current) => frame.tick <= 160
+        ? {
+            ...current,
+            lastPlaceName: "Catwalk",
+            weapon: "AK-47",
+            money: 1_200,
+            equipValue: 1_500,
+            armor: 0,
+            helmet: false,
+            grenades: []
+          }
+        : current)
+    }));
+    const bundle = buildCs2dAnalysisBundle({
+      replay: { ...replay, rounds: [{ ...replay.rounds[0], frames }, replay.rounds[1]] },
+      selectedSteamId: "p-t1",
+      demoId: "player-language"
+    });
+    const cue = bundle.review_plan.cues[0];
+    const copy = JSON.stringify({ title: cue.title, question: cue.question, facts: cue.facts, advice: cue.advice });
+    expect(copy).toMatch(/B小/);
+    expect(copy).toMatch(/架住/);
+    expect(copy).toMatch(/预瞄/);
+    expect(copy).toMatch(/拉出去/);
+    expect(copy).toMatch(/补枪/);
+    expect(copy).toMatch(/头甲/);
+    expect(copy).toMatch(/eco/);
+    expect(copy).toMatch(/磕枪/);
+    expect(copy).toMatch(/换位/);
+    expect(copy).not.toMatch(/空间控制|资源关系|风险暴露|决策窗口|接空间/);
   });
 
   it("keeps freeze skips compatible with Session auto-consumption", () => {
@@ -260,6 +326,32 @@ describe("cs2d analysis adapter", () => {
       expect(cue.annotations.every((annotation) => annotation.coordinate_space === "WORLD")).toBe(true);
     }
     expect(bundle.observation_evidence.every((state) => state.at_tick <= (bundle.review_plan.cues.find((cue) => cue.observable_state_id === state.id)?.decision_tick ?? Number.MAX_SAFE_INTEGER))).toBe(true);
+  });
+
+  it("keeps decision-side cue content unchanged when a later frame changes", () => {
+    const replay = replayFixture();
+    const baseline = buildCs2dAnalysisBundle({ replay, selectedSteamId: "p-t1", demoId: "future-boundary" });
+    const futureFrame = {
+      tick: 600,
+      t: 9.375,
+      players: [{
+        ...state("p-t1", 600, 100, 9_999),
+        y: -9_999,
+        weapon: "Knife",
+        lastPlaceName: "CTSpawn"
+      }]
+    };
+    const changed = buildCs2dAnalysisBundle({
+      replay: {
+        ...replay,
+        rounds: [{ ...replay.rounds[0], frames: [...replay.rounds[0].frames, futureFrame] }, replay.rounds[1]]
+      },
+      selectedSteamId: "p-t1",
+      demoId: "future-boundary"
+    });
+
+    expect(changed.review_plan.cues[0]).toEqual(baseline.review_plan.cues[0]);
+    expect(changed.observation_evidence[0]).toEqual(baseline.observation_evidence[0]);
   });
 
   it("does not turn ShotEvent or aggregate damage into exact selected-player facts", () => {

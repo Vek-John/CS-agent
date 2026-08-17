@@ -53,6 +53,29 @@ export function playbackCommandMessage(command: PlaybackCommand) {
   return commandEnvelope(command);
 }
 
+export type ReviewSegmentTone = "coach" | "skip" | "neutral";
+
+export function reviewSegmentTone(
+  mode: ReviewPlan["segments"][number]["mode"]
+): ReviewSegmentTone {
+  if (mode === "SKIP") return "skip";
+  if (mode === "DEEP_DIVE" || mode === "HABIT_CHECK") return "coach";
+  return "neutral";
+}
+
+export function reviewSegmentLabel(segment: ReviewPlan["segments"][number]): string {
+  if (segment.mode === "DEEP_DIVE") return "深入讲解";
+  if (segment.mode === "HABIT_CHECK") return "习惯复查";
+  if (segment.mode === "SKIP") return "低价值片段";
+  if (segment.mode === "OBSERVE") return "观察片段";
+  return "普通比赛";
+}
+
+export function timelinePercent(value: number, min: number, max: number): number {
+  if (![value, min, max].every(Number.isFinite) || max <= min) return 0;
+  return Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
+}
+
 
 /**
  * Maps the compact bridge state to language a player can scan without exposing
