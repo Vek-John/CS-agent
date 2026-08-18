@@ -19,6 +19,13 @@ cs2d structured Replay port. The exported ONNX asset is recorded at
 `apps/web/public/generated-assets/models/cs-net/manifest.json` with its SHA,
 revision, temperature, and size.
 
+### ONNX Runtime Web
+
+Package: `onnxruntime-web@1.27.0` (including the WASM runtime and threaded-SIMD
+assets). License: MIT, Copyright (c) Microsoft Corporation. The browser Worker
+loads the package's `ort-wasm-simd-threaded.mjs/.wasm` assets; the model remains
+the separately pinned cs-net asset above. No ORT source is vendored.
+
 ### csfreezetime
 
 Repository: <https://github.com/benginN/csfreezetime>

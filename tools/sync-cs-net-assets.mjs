@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { cp, mkdir, readdir, rm } from "node:fs/promises";
+import { cp, mkdir, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const root = process.cwd();
@@ -15,9 +15,10 @@ const ortRoot = resolve(ortPnpmRoot, ortEntry, "node_modules/onnxruntime-web");
 
 await mkdir(destination, { recursive: true });
 await cp(source, destination, { recursive: true });
-if (process.env.CS2D_DEV_ASSETS === "1") {
-  await cp(resolve(ortRoot, "dist/ort-wasm-simd-threaded.wasm"), resolve(viewerPublic, "ort-wasm-simd-threaded.wasm"));
-} else {
-  await rm(resolve(viewerPublic, "ort-wasm-simd-threaded.wasm"), { force: true });
+// The dedicated cs2d Worker uses ORT's module loader and its threaded-SIMD
+// binary. Keep both files in dev and release viewers; the release asset scan
+// enforces the Worker Static Assets per-file limit.
+for (const asset of ["ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded.wasm"]) {
+  await cp(resolve(ortRoot, "dist", asset), resolve(viewerPublic, asset));
 }
-process.stdout.write(`[cs-net] synced verified model assets to ${destination}\n`);
+process.stdout.write(`[cs-net] synced verified model and ORT assets to ${destination}\n`);

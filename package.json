@@ -17,7 +17,7 @@
     "cloudflare:build": "NEXT_PUBLIC_DEPLOY_TARGET=cloudflare pnpm cs2d:build && NEXT_PUBLIC_DEPLOY_TARGET=cloudflare node tools/assert-cloudflare-env-clean.mjs && (cd apps/web && NEXT_PUBLIC_DEPLOY_TARGET=cloudflare ../../node_modules/.bin/opennextjs-cloudflare build -c ../../wrangler.jsonc --openNextConfigPath ../../open-next.config.ts) && NEXT_PUBLIC_DEPLOY_TARGET=cloudflare node tools/assert-cloudflare-env-clean.mjs --bundle",
     "cloudflare:assets": "node tools/prepare_cloudflare_assets.mjs",
     "cloudflare:preview": "cd apps/web && ../../node_modules/.bin/opennextjs-cloudflare preview -c ../../wrangler.jsonc --openNextConfigPath ../../open-next.config.ts",
-    "cloudflare:deploy": "pnpm cloudflare:build && pnpm cloudflare:assets && pnpm exec wrangler deploy apps/web/.open-next/worker.js --config wrangler.jsonc --assets apps/web/.open-next/cloudflare-assets",
+    "cloudflare:deploy": "pnpm cloudflare:build && pnpm cloudflare:assets && pnpm exec wrangler deploy tools/cloudflare-worker.mjs --config wrangler.jsonc --assets apps/web/.open-next/cloudflare-assets",
     "dev:web": "pnpm --filter @cs-coach/web dev",
     "cs2d:setup": "node tools/apply-cs2d-host-patch.mjs --clone --install --build-parser",
     "cs2d:patch": "node tools/apply-cs2d-host-patch.mjs --build-parser",

@@ -24,7 +24,8 @@ import type {
   PlayerSelectedEvent,
   ReplayReadyEvent,
   ReviewPlan,
-  AnalysisProgressEvent
+  AnalysisProgressEvent,
+  AnalysisTelemetryEvent
 } from "@cs-coach/contracts";
 import {
   deserializeCs2dAnalysisBundle,
@@ -78,7 +79,26 @@ const phaseText: Record<CoachingSessionState["phase"], string> = {
 export function Cs2dPlaybackHost() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const planRef = useRef<ReviewPlan | undefined>(undefined);
-  const config = useMemo(() => cs2dHostConfig(), []);
+  const [benchmarkQuery, setBenchmarkQuery] = useState("");
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    const query = new URLSearchParams(window.location.search);
+    const threads = query.get("csThreads");
+    const batch = query.get("csBatch");
+    if ((threads === "1" || threads === "2" || threads === "4") || (batch && /^\d+$/.test(batch))) {
+      const params = new URLSearchParams();
+      if (threads === "1" || threads === "2" || threads === "4") params.set("csThreads", threads);
+      if (batch && /^\d+$/.test(batch)) params.set("csBatch", batch);
+      setBenchmarkQuery(params.toString());
+    }
+  }, []);
+  const config = useMemo(() => {
+    const base = cs2dHostConfig();
+    if (!benchmarkQuery) return base;
+    const parsed = new URL(base.url, window.location.origin);
+    new URLSearchParams(benchmarkQuery).forEach((value, key) => parsed.searchParams.set(key, value));
+    return { ...base, url: base.url.startsWith("/") ? `${parsed.pathname}${parsed.search}${parsed.hash}` : parsed.toString() };
+  }, [benchmarkQuery]);
   const [phase, setPhase] = useState<HostPhase>("BOOTING");
   const [replay, setReplay] = useState<ReplayReadyEvent>();
   const [selected, setSelected] = useState<PlayerSelectedEvent>();
@@ -88,6 +108,9 @@ export function Cs2dPlaybackHost() {
   const [session, setSession] = useState<CoachingSessionState>();
   const [analysisError, setAnalysisError] = useState<string>();
   const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgressEvent>();
+  // Kept out of visible copy: telemetry is a validation/diagnostics boundary,
+  // not a player-facing performance control.
+  const [analysisTelemetry, setAnalysisTelemetry] = useState<AnalysisTelemetryEvent["telemetry"]>();
   const timelineRailRef = useRef<HTMLDivElement>(null);
   const userTookOverRef = useRef(false);
   const guidedSeekEpochRef = useRef(0);
@@ -197,6 +220,7 @@ export function Cs2dPlaybackHost() {
     setSession(undefined);
     setAnalysisError(undefined);
     setAnalysisProgress(undefined);
+    setAnalysisTelemetry(undefined);
     userTookOverRef.current = false;
     setUserTookOver(false);
   }, [invalidateGuidedSeek]);
@@ -229,6 +253,10 @@ export function Cs2dPlaybackHost() {
         setAnalysisProgress(payload);
         return;
       }
+      if (payload.type === "ANALYSIS_TELEMETRY") {
+        setAnalysisTelemetry(payload.telemetry);
+        return;
+      }
       if (payload.type === "ANALYSIS_FAILED") {
         invalidateGuidedSeek();
         setAnalysisError(payload.message);
@@ -254,6 +282,7 @@ export function Cs2dPlaybackHost() {
           setPlan(deterministicPlan);
           setAnalysisError(undefined);
           setAnalysisProgress(undefined);
+          setAnalysisTelemetry(undefined);
           userTookOverRef.current = false;
           setUserTookOver(false);
           setSession(reduceCoachingSession(
@@ -430,7 +459,7 @@ export function Cs2dPlaybackHost() {
             ref={iframeRef}
             src={config.url}
             title="cs2d 本地 Demo 回放"
-            allow="fullscreen"
+            allow="fullscreen; cross-origin-isolated"
             onLoad={() => setPhase((current) => current === "BOOTING" ? "WAITING_FOR_DEMO" : current)}
             onError={() => setPhase("ERROR")}
           />

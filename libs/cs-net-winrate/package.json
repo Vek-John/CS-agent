@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./runtime": "./src/runtime.ts"
+    "./runtime": "./src/runtime.ts",
+    "./runtime-config": "./src/runtime-config.ts"
   },
   "dependencies": {
     "onnxruntime-web": "^1.23.2"

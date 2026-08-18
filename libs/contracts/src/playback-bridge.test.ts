@@ -111,4 +111,33 @@ describe("cs2d playback bridge", () => {
     expect(isPlaybackEventEnvelope({ ...progress, payload: { ...progress.payload, replay: {} } })).toBe(false);
     expect(isPlaybackEventEnvelope({ ...progress, payload: { ...progress.payload, phase: "ready" } })).toBe(false);
   });
+
+  it("accepts bounded runtime telemetry without accepting raw model inputs", () => {
+    const telemetry = {
+      schemaVersion: "cs-net-runtime-telemetry.v1",
+      fetchMs: 1, sessionCreateMs: 2, warmupMs: 3, featureBuildMs: 4,
+      tensorPrepareMs: 5, inferenceMs: 6, serializationMs: 7, totalMs: 8,
+      sampleCount: 9, threadsRequested: "auto", threadsActual: 1,
+      threadsEvidence: "single_thread_fallback", batchSize: 8,
+      requestedBatchSize: 8, samplesPerSecond: 1, peakBatchBytes: 1024,
+      hardwareConcurrency: 8, crossOriginIsolated: false,
+      sharedArrayBuffer: false, wasmThreads: false, wasmSimd: true,
+      fallbackReason: "crossOriginIsolated=false"
+    } as const;
+    const event = {
+      channel: PLAYBACK_BRIDGE_CHANNEL,
+      direction: "event",
+      payload: {
+        type: "ANALYSIS_TELEMETRY",
+        schemaVersion: "cs2d-analysis-telemetry.v1",
+        selectedPlayerId: "p1",
+        telemetry
+      }
+    } as const;
+    expect(isPlaybackEventEnvelope(event)).toBe(true);
+    expect(isPlaybackEventEnvelope({
+      ...event,
+      payload: { ...event.payload, telemetry: { ...telemetry, rawReplay: {} } }
+    })).toBe(false);
+  });
 });

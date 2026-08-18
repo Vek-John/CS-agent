@@ -60,12 +60,44 @@ export interface AnalysisProgressEvent {
   total: number;
   detail: string;
 }
+export interface AnalysisTelemetry {
+  schemaVersion: "cs-net-runtime-telemetry.v1";
+  fetchMs: number;
+  sessionCreateMs: number;
+  warmupMs: number;
+  featureBuildMs: number;
+  tensorPrepareMs: number;
+  inferenceMs: number;
+  serializationMs: number;
+  totalMs: number;
+  sampleCount: number;
+  threadsRequested: "auto" | 1 | 2 | 4;
+  threadsActual: 1 | 2 | 4;
+  threadsEvidence: "wasm_threads_probe" | "single_thread_fallback" | "stable_default";
+  batchSize: number;
+  requestedBatchSize: number;
+  samplesPerSecond: number;
+  peakBatchBytes: number;
+  hardwareConcurrency: number;
+  crossOriginIsolated: boolean;
+  sharedArrayBuffer: boolean;
+  wasmThreads: boolean;
+  wasmSimd: boolean;
+  fallbackReason: string;
+}
+export interface AnalysisTelemetryEvent {
+  type: "ANALYSIS_TELEMETRY";
+  schemaVersion: "cs2d-analysis-telemetry.v1";
+  selectedPlayerId: string;
+  telemetry: AnalysisTelemetry;
+}
 export type PlaybackBridgeEvent =
   | ReplayReadyEvent
   | PlayerSelectedEvent
   | PlaybackStateEvent
   | AnalysisReadyEvent
   | AnalysisProgressEvent
+  | AnalysisTelemetryEvent
   | AnalysisFailedEvent;
 export type PlaybackCameraMode = "full" | "target";
 
@@ -108,6 +140,17 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boo
 }
 function isSide(value: unknown): value is "T" | "CT" {
   return value === "T" || value === "CT";
+}
+function isTelemetry(value: unknown): value is AnalysisTelemetry {
+  if (!isRecord(value)) return false;
+  const numeric = ["fetchMs", "sessionCreateMs", "warmupMs", "featureBuildMs", "tensorPrepareMs", "inferenceMs", "serializationMs", "totalMs", "sampleCount", "batchSize", "requestedBatchSize", "samplesPerSecond", "peakBatchBytes", "hardwareConcurrency"];
+  return exactKeys(value, ["schemaVersion", ...numeric, "threadsRequested", "threadsActual", "threadsEvidence", "crossOriginIsolated", "sharedArrayBuffer", "wasmThreads", "wasmSimd", "fallbackReason"]) &&
+    value.schemaVersion === "cs-net-runtime-telemetry.v1" && numeric.every((key) => finite(value[key]) && (value[key] as number) >= 0) &&
+    (value.threadsRequested === "auto" || value.threadsRequested === 1 || value.threadsRequested === 2 || value.threadsRequested === 4) &&
+    (value.threadsActual === 1 || value.threadsActual === 2 || value.threadsActual === 4) &&
+    (value.threadsEvidence === "wasm_threads_probe" || value.threadsEvidence === "single_thread_fallback" || value.threadsEvidence === "stable_default") &&
+    typeof value.crossOriginIsolated === "boolean" && typeof value.sharedArrayBuffer === "boolean" && typeof value.wasmThreads === "boolean" && typeof value.wasmSimd === "boolean" &&
+    typeof value.fallbackReason === "string" && value.fallbackReason.length <= 128;
 }
 function isPlayer(value: unknown): value is PlaybackPlayerSummary {
   return isRecord(value) && exactKeys(value, ["playerId", "displayName", "startSide"]) &&
@@ -152,6 +195,10 @@ function isEvent(value: unknown): value is PlaybackBridgeEvent {
       (value.phase === "downloading" || value.phase === "inference" || value.phase === "unavailable") &&
       finite(value.completed) && value.completed >= 0 && finite(value.total) && value.total >= 0 &&
       typeof value.detail === "string" && value.detail.length <= 256;
+  }
+  if (value.type === "ANALYSIS_TELEMETRY") {
+    return exactKeys(value, ["type", "schemaVersion", "selectedPlayerId", "telemetry"]) &&
+      value.schemaVersion === "cs2d-analysis-telemetry.v1" && nonEmpty(value.selectedPlayerId) && isTelemetry(value.telemetry);
   }
   return false;
 }

@@ -397,17 +397,54 @@ function stackSamples(samples: readonly CsNetModelInputs[]): CsNetModelInputs {
   return result;
 }
 
+function buildCsNetFeatureSample(round: CsNetRound, frame: CsNetFrame): CsNetFeatureSample {
+  const sorted = [...frame.players].sort((a, b) => (a.side === b.side ? 0 : a.side === "CT" ? -1 : 1)).slice(0, 10);
+  const normalizedFrame = { ...frame, players: sorted };
+  return {
+    roundNumber: round.number,
+    tick: frame.tick,
+    t: frame.t,
+    sideOrder: sorted.map((player) => player.steamId),
+    inputs: buildFeatureFromState(toModelState(round, normalizedFrame)),
+  };
+}
+
+function batchFromSamples(samples: readonly CsNetFeatureSample[]): CsNetModelBatch {
+  return { samples, inputs: stackSamples(samples.map((sample) => sample.inputs)) };
+}
+
 export function buildCsNetFeatureBatch(replay: CsNetReplay): CsNetModelBatch {
   if (replay.map !== CS_NET_MAP) throw new Error(`cs-net win-rate head currently supports ${CS_NET_MAP}; received ${replay.map}.`);
   const samples: CsNetFeatureSample[] = [];
   for (const round of replay.rounds) {
+    for (const frame of round.frames) samples.push(buildCsNetFeatureSample(round, frame));
+  }
+  if (samples.length === 0) throw new Error("cs-net replay contains no inference samples.");
+  return batchFromSamples(samples);
+}
+
+/**
+ * Stream feature batches without constructing one giant model tensor. The
+ * yielded sample order is the canonical round/frame order and is intentionally
+ * independent of the requested inference batch size.
+ */
+export function *buildCsNetFeatureBatches(
+  replay: CsNetReplay,
+  batchSize: number,
+): Generator<CsNetModelBatch> {
+  if (replay.map !== CS_NET_MAP) throw new Error(`cs-net win-rate head currently supports ${CS_NET_MAP}; received ${replay.map}.`);
+  const size = Math.max(1, Math.floor(batchSize));
+  let pending: CsNetFeatureSample[] = [];
+  for (const round of replay.rounds) {
     for (const frame of round.frames) {
-      const sorted = [...frame.players].sort((a, b) => (a.side === b.side ? 0 : a.side === "CT" ? -1 : 1)).slice(0, 10);
-      const normalizedFrame = { ...frame, players: sorted };
-      samples.push({ roundNumber: round.number, tick: frame.tick, t: frame.t, sideOrder: sorted.map((player) => player.steamId), inputs: buildFeatureFromState(toModelState(round, normalizedFrame)) });
+      pending.push(buildCsNetFeatureSample(round, frame));
+      if (pending.length >= size) {
+        yield batchFromSamples(pending);
+        pending = [];
+      }
     }
   }
-  return { samples, inputs: stackSamples(samples.map((sample) => sample.inputs)) };
+  if (pending.length > 0) yield batchFromSamples(pending);
 }
 
 export function flattenFeatureBatch(batch: CsNetModelBatch): Record<string, Float32Array | BigInt64Array | Uint8Array> {

@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "cs2-ai-demo-coach",
-  "main": ".open-next/worker.js",
+  "main": "tools/cloudflare-worker.mjs",
   "compatibility_date": "2026-08-13",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },

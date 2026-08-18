@@ -93,6 +93,8 @@ const required = [
   path.join(deployRoot, "generated-assets", "items", "catalog.json"),
   path.join(viewerDeployRoot, "index.html"),
   path.join(viewerDeployRoot, "assets"),
+  path.join(viewerDeployRoot, "ort-wasm-simd-threaded.mjs"),
+  path.join(viewerDeployRoot, "ort-wasm-simd-threaded.wasm"),
   path.join(viewerDeployRoot, "zstd.wasm"),
   path.join(deployRoot, "maps", "de_mirage_radar.png"),
   path.join(deployRoot, "weapons", "ak47.svg"),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCsNetFeatureBatch,
+  buildCsNetFeatureBatches,
   buildWinProbabilityTimeline,
   classifyEconomy,
   CS_NET_FEATURE_VERSION,
@@ -68,6 +69,15 @@ describe("cs-net win-rate contract", () => {
     expect(batch.inputs.mlp5_f[0][0][0]).toHaveLength(13);
     expect(batch.inputs.pad_mask[0][11]).toBe(true);
     expect(batch.samples[0].sideOrder.slice(0, 5)).toEqual(["p-0", "p-1", "p-2", "p-3", "p-4"]);
+  });
+
+  it("streams the same canonical sample and feature order at every batch size", () => {
+    const replay = replayFixture();
+    const full = buildCsNetFeatureBatch(replay);
+    const chunks = [...buildCsNetFeatureBatches(replay, 2)];
+    expect(chunks.flatMap((chunk) => chunk.samples)).toEqual(full.samples);
+    expect(chunks.flatMap((chunk) => chunk.inputs.mlp1_f)).toEqual(full.inputs.mlp1_f);
+    expect(chunks.flatMap((chunk) => chunk.inputs.dead_mask)).toEqual(full.inputs.dead_mask);
   });
 
   it("keeps both team economy classes independent and model metadata fixed", () => {

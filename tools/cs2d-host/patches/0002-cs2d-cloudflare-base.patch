@@ -11,22 +11,42 @@ index 63f12e1..73ae749 100644
    routes,
  })
 diff --git a/apps/app/vite.config.ts b/apps/app/vite.config.ts
-index c8bac84..b0fb3e3 100644
+index c8bac84..9e2c163 100644
 --- a/apps/app/vite.config.ts
 +++ b/apps/app/vite.config.ts
-@@ -30,8 +30,11 @@ function serveRepoReplays(): Plugin {
+@@ -30,9 +30,31 @@ function serveRepoReplays(): Plugin {
    }
  }
  
++function crossOriginIsolationHeaders(): Plugin {
++  const apply = (_request: unknown, response: { setHeader: (key: string, value: string) => void }, next: () => void) => {
++    response.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
++    response.setHeader('Cross-Origin-Embedder-Policy', 'require-corp')
++    response.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
++    next()
++  }
++  return {
++    name: 'cs-coach-cross-origin-isolation',
++    configureServer(server) {
++      server.middlewares.use(apply)
++    },
++    configurePreviewServer(server) {
++      server.middlewares.use(apply)
++    },
++  }
++}
++
 +const publicBase = process.env.CS2D_BASE_PATH || '/'
 +
  // App isolado do analisador de demo 2D (CS2 Demo Viewer), com porta própria.
  export default defineConfig({
 +  base: publicBase,
    plugins: [
++    crossOriginIsolationHeaders(),
      serveRepoReplays(),
      vue(),
-@@ -47,7 +50,7 @@ export default defineConfig({
+     tailwindcss(),
+@@ -47,7 +69,7 @@ export default defineConfig({
          theme_color: '#0a0c12',
          background_color: '#0a0c12',
          display: 'standalone',
@@ -35,7 +55,7 @@ index c8bac84..b0fb3e3 100644
          icons: [
            { src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' },
            { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
-@@ -65,7 +68,9 @@ export default defineConfig({
+@@ -65,7 +87,9 @@ export default defineConfig({
          // so the app works fully offline after the first visit.
          globPatterns: ['**/*.{js,css,html,svg,png,webp,jpg,ico,json,wasm}'],
          // Largest asset is a ~1.2MB preview replay; bump the cap to fit it.
