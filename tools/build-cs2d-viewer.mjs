@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 const root = process.cwd();
 const upstream = resolve(process.env.CS2D_UPSTREAM_DIR || resolve(root, ".local-data/upstream/cs2d"));
 const patcher = resolve(root, "tools/apply-cs2d-host-patch.mjs");
+const modelSync = resolve(root, "tools/sync-cs-net-assets.mjs");
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -22,6 +23,7 @@ function run(command, args, options = {}) {
 
 const patchArgs = ["--clone"];
 if (!existsSync(resolve(upstream, "node_modules"))) patchArgs.push("--install");
+run(process.execPath, [modelSync]);
 run(process.execPath, [patcher, ...patchArgs]);
 
 run("pnpm", ["--dir", upstream, "--filter", "cs2-demo-viewer", "build"], {

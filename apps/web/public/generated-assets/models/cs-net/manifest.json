@@ -1,0 +1,17 @@
+{
+  "schema_version": "cs-net-winrate-asset/1.0.0",
+  "provider": "CS_NET",
+  "source_commit": "e15acc3fda3de21f25fe12a5ca31722381f40162",
+  "checkpoint_sha256": "23a8c07280542644d0609a4ab072c03f96001a95f50211d424248bfe4620c92d",
+  "model_source_sha256": "fb40c6be85e55fb9ac1fa46a8619d18ebe66382d3d51df8f5d9fdc44542e77d6",
+  "config_sha256": "c4e745d44fd2f8787b9724f8d64e03266ec77f7ce1dc550b71c502bf3c1ba056",
+  "tokenizer_sha256": "2c01ac2e2a04fbc149efbc19149934573b1e7fd35de257fc102e77942d42da57",
+  "revision": "csmodelv3-win-space-only-int8-2026-08-18",
+  "asset": "win-rate.int8.onnx",
+  "sha256": "3916d0db3df65b8ff0406769e52f8e21f19911dc753b4fc497f5c88cdf371ef8",
+  "bytes": 10302780,
+  "quantization": "INT8_WEIGHT_ONLY",
+  "temperature": 1.0613423585891724,
+  "feature_builder_sha256": "f9f50fd955690236d7de9d944d81b8f53444be17b710c89212dba91bb5115bd1",
+  "license": "MIT"
+}

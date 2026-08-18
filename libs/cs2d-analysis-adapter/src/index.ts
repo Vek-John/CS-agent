@@ -14,7 +14,9 @@ import type {
   ReviewPlan,
   ReviewSegment,
   RoundTimeline,
-  TeamSide
+  TeamSide,
+  OutcomeImpact,
+  WinProbabilityTimelineV1
 } from "@cs-coach/contracts";
 import type {
   ObservableState,
@@ -207,6 +209,8 @@ export interface Cs2dAnalysisInput {
   readonly selectedSteamId: string;
   /** Stable local/demo identifier; it is not sent to the narration provider. */
   readonly demoId: string;
+  /** Optional full-match model output. The adapter stays usable when the model is unavailable. */
+  readonly winProbabilityTimeline?: WinProbabilityTimelineV1;
 }
 
 export interface Cs2dExcludedRound {
@@ -242,6 +246,10 @@ export interface Cs2dAnalysisBundle {
   readonly review_plan: ReviewPlan;
   /** Internal evidence component; Session/renderer must not treat it as omniscient state. */
   readonly observation_evidence: readonly ObservableState[];
+  /** Full-match signal; it is not an ObservableClaim and is never sent to narration. */
+  readonly win_probability_timeline: WinProbabilityTimelineV1;
+  /** Outcome explanation package, unlocked by Session only after the outcome window. */
+  readonly outcome_impacts: readonly OutcomeImpact[];
   readonly metadata: Cs2dAnalysisMetadata;
 }
 
@@ -771,7 +779,8 @@ function collectCandidates(
 function selectCandidates(
   candidates: readonly SignalCandidate[],
   tickRate: number,
-  warnings: string[]
+  warnings: string[],
+  winProbability?: WinProbabilityTimelineV1
 ): SelectedCandidate[] {
   type WindowedCandidate = SignalCandidate & { outcomeEndTick: number };
   const accepted: WindowedCandidate[] = [];
@@ -803,6 +812,21 @@ function selectCandidates(
   }
 
   const priority: Record<SignalKind, number> = { DEATH: 0, HP_CHANGE: 1, KILL: 2, BOMB: 3, UTILITY: 4 };
+  const directorScore = (candidate: WindowedCandidate): number => {
+    let score = 5 - priority[candidate.kind];
+    if (winProbability?.status !== "AVAILABLE") return score;
+    const swings = winProbability.swings.filter((swing) => Math.abs(swing.tick - candidate.revealTick) <= Math.max(1, Math.round(tickRate / 2)));
+    const negativeSwing = swings.filter((swing) => swing.delta < 0).sort((left, right) => left.delta - right.delta)[0];
+    if (negativeSwing) score += Math.min(6, Math.round(Math.abs(negativeSwing.delta) * 10));
+    const economy = winProbability.rounds.find((round) => round.roundNumber === candidate.round.number)?.economy;
+    if (candidate.kind === "DEATH" && economy) {
+      const selectedSide = candidate.state?.sample.side === "T" ? economy.t : economy.ct;
+      if (selectedSide === "ECO") score -= 2;
+      if (selectedSide === "FORCE") score += 1;
+      if (selectedSide === "FULL") score += 2;
+    }
+    return score;
+  };
   const byRound = new Map<number, WindowedCandidate[]>();
   for (const candidate of accepted) {
     const group = byRound.get(candidate.round.number) ?? [];
@@ -812,6 +836,7 @@ function selectCandidates(
 
   const representativePerRound = [...byRound.values()]
     .map((group) => [...group].sort((left, right) =>
+      directorScore(right) - directorScore(left) ||
       priority[left.kind] - priority[right.kind] ||
       left.decisionTick - right.decisionTick ||
       left.sourceRef.localeCompare(right.sourceRef)
@@ -832,6 +857,7 @@ function selectCandidates(
     const remaining = accepted
       .filter((candidate) => !chosenRefs.has(candidate.sourceRef))
       .sort((left, right) =>
+        directorScore(right) - directorScore(left) ||
         priority[left.kind] - priority[right.kind] ||
         left.decisionTick - right.decisionTick ||
         left.sourceRef.localeCompare(right.sourceRef)
@@ -1404,6 +1430,83 @@ function buildTimeline(
   return timeline;
 }
 
+function unavailableWinProbabilityTimeline(tickRate: number, reason: string): WinProbabilityTimelineV1 {
+  return {
+    version: "win-probability-timeline.v1",
+    status: "UNAVAILABLE",
+    model: {
+      provider: "CS_NET",
+      revision: "csmodelv3-win-space-only-int8-2026-08-18",
+      assetUrl: "/models/cs-net/win-rate.int8.onnx",
+      assetSha256: "3916d0db3df65b8ff0406769e52f8e21f19911dc753b4fc497f5c88cdf371ef8",
+      assetBytes: 10302780,
+      quantization: "INT8",
+      temperature: 1.0613423585891724,
+      sourceCommit: "e15acc3fda3de21f25fe12a5ca31722381f40162",
+      featureVersion: "cs-net-space-only-features/1.0.0"
+    },
+    tickRate,
+    rounds: [],
+    swings: [],
+    limitations: ["Model unavailable; deterministic Director fallback remains active."],
+    unavailableReason: reason.slice(0, 240)
+  };
+}
+
+function impactText(before: number, after: number, selectedDeath: boolean): string {
+  const beforePct = Math.round(before * 100);
+  const afterPct = Math.round(after * 100);
+  const points = Math.round(Math.abs(after - before) * 100);
+  if (selectedDeath && after < before) {
+    return `你这次处理后，我方胜率从 ${beforePct}% 掉到 ${afterPct}%，少了 ${points} 个百分点；这里先小身位 peek 拿信息，再决定要不要拉。`;
+  }
+  if (after < before) return `这段处理后，我方胜率从 ${beforePct}% 掉到 ${afterPct}%，少了 ${points} 个百分点；先小身位 peek 拿信息，再决定要不要拉。`;
+  if (after > before) return `这段处理后，我方胜率从 ${beforePct}% 抬到 ${afterPct}%，多拿到 ${points} 个百分点；接下来继续保留补枪位置。`;
+  return `这段处理前后我方胜率都在 ${beforePct}% 左右，先把信息拿全再接下一步。`;
+}
+
+function buildOutcomeImpacts(
+  cues: readonly CoachCue[],
+  timeline: WinProbabilityTimelineV1,
+  matchTimeline: MatchTimeline,
+  selectedPlayerId: string
+): OutcomeImpact[] {
+  if (timeline.status !== "AVAILABLE") return [];
+  return cues.map((cue) => {
+    const round = timeline.rounds.find((candidate) => cue.reveal_tick >= candidate.startTick && cue.reveal_tick <= candidate.endTick) ?? timeline.rounds.find((candidate) => candidate.roundNumber === matchTimeline.rounds.find((r) => cue.segment_id.includes(`r${r.round_number}`))?.round_number);
+    const samples = [...(round?.samples ?? [])].filter((sample) => sample.tick <= cue.outcome_end_tick);
+    const beforeSample = samples.filter((sample) => sample.tick <= cue.decision_tick).at(-1) ?? samples[0];
+    const afterSample = samples.at(-1) ?? beforeSample;
+    const swings = timeline.swings.filter((swing) => swing.tick >= cue.reveal_tick && swing.tick <= cue.outcome_end_tick + timeline.tickRate);
+    const selectedDeathSwing = swings.find((swing) => swing.selectedPlayerDeath);
+    const meaningfulSwing = selectedDeathSwing ?? [...swings].sort((a, b) => a.delta - b.delta)[0];
+    const before = meaningfulSwing?.before ?? beforeSample?.probability ?? 0.5;
+    const after = meaningfulSwing?.after ?? afterSample?.probability ?? before;
+    const outcomeEvents = (matchTimeline.match_events ?? []).filter((event) => event.tick >= cue.reveal_tick && event.tick <= cue.outcome_end_tick);
+    const sameTickEvents = outcomeEvents.filter((event) => event.tick === meaningfulSwing?.tick).length;
+    const selectedDeath = Boolean(selectedDeathSwing || outcomeEvents.some((event) => event.event_type === "PLAYER_DEATH" && event.target_player_id === selectedPlayerId));
+    const deathEvents = outcomeEvents.filter((event) => event.event_type === "PLAYER_DEATH");
+    const bombEvents = outcomeEvents.filter((event) => ["BOMB_PLANT", "BOMB_DEFUSE"].includes(event.event_type));
+    const deathAndBombOverlap = deathEvents.some((death) => bombEvents.some((bomb) => Math.abs(death.tick - bomb.tick) <= timeline.tickRate));
+    const concurrent = sameTickEvents > 1 || deathEvents.length > 1 || deathAndBombOverlap;
+    const attribution: OutcomeImpact["attribution"] = concurrent ? "CONCURRENT_EVENTS" : selectedDeath ? "SELECTED_PLAYER_DEATH" : meaningfulSwing ? "MODEL_SWING" : "ROUND_CONTEXT";
+    const confidence: OutcomeImpact["confidence"] = concurrent ? "LOW" : selectedDeath ? "HIGH" : meaningfulSwing ? "MEDIUM" : "LOW";
+    const delta = after - before;
+    return {
+      cueId: cue.id,
+      beforeProbability: before,
+      afterProbability: after,
+      delta,
+      percentagePoints: Math.round(delta * 100),
+      relativeChange: Math.abs(before) > 1e-6 ? delta / before : null,
+      attribution,
+      confidence,
+      text: impactText(before, after, selectedDeath && !concurrent),
+      limitations: concurrent ? ["多个结果事件在同一窗口内发生，文案只描述处理后变化，不把胜率变化归因给单一动作。"] : ["模型曲线是全场分析信号，不等同于玩家当时可见的信息。"]
+    } satisfies OutcomeImpact;
+  });
+}
+
 function failedBundle(input: Cs2dAnalysisInput, metadata: Cs2dAnalysisMetadata, timeline: MatchTimeline): Cs2dAnalysisBundle {
   const failedPlan: ReviewPlan = {
     id: `plan-${input.demoId}-${input.selectedSteamId}`,
@@ -1435,7 +1538,16 @@ function failedBundle(input: Cs2dAnalysisInput, metadata: Cs2dAnalysisMetadata, 
       limitations: [...metadata.limitations]
     }
   };
-  return { demo_id: input.demoId, selected_steam_id: input.selectedSteamId, match_timeline: timeline, review_plan: failedPlan, observation_evidence: [], metadata };
+  return {
+    demo_id: input.demoId,
+    selected_steam_id: input.selectedSteamId,
+    match_timeline: timeline,
+    review_plan: failedPlan,
+    observation_evidence: [],
+    win_probability_timeline: input.winProbabilityTimeline ?? unavailableWinProbabilityTimeline(timeline.tick_rate, "Replay 没有收到模型结果。"),
+    outcome_impacts: [],
+    metadata
+  };
 }
 
 /** Build a deterministic Session/DeepSeek-ready analysis bundle from one WASM Replay. */
@@ -1510,7 +1622,8 @@ export function buildCs2dAnalysisBundle(input: Cs2dAnalysisInput): Cs2dAnalysisB
   const tickRate = finiteNumber(replay.demoTickRate) && replay.demoTickRate > 0 ? replay.demoTickRate : 64;
   const states = collectStates(replay, rounds, input.selectedSteamId, warnings);
   const candidates = collectCandidates(replay, rounds, states, input.selectedSteamId, tickRate, warnings);
-  const selected = selectCandidates(candidates, tickRate, warnings);
+  const winProbabilityTimeline = input.winProbabilityTimeline ?? unavailableWinProbabilityTimeline(tickRate, "模型尚未在 cs2d Worker 中完成推理。");
+  const selected = selectCandidates(candidates, tickRate, warnings, winProbabilityTimeline);
   const provisionalTimeline = buildTimeline(replay, rounds, input.selectedSteamId, states, warnings);
   const timeline: MatchTimeline = { ...provisionalTimeline, demo_id: input.demoId };
   const counters: Counters = { fact: 1, inference: 1, advice: 1, evidence: 1, cue: 1 };
@@ -1561,12 +1674,15 @@ export function buildCs2dAnalysisBundle(input: Cs2dAnalysisInput): Cs2dAnalysisB
   };
 
   assertValidReviewPlan(timeline, plan);
+  const outcomeImpacts = buildOutcomeImpacts(built.cues, winProbabilityTimeline, timeline, input.selectedSteamId);
   return {
     demo_id: input.demoId,
     selected_steam_id: input.selectedSteamId,
     match_timeline: timeline,
     review_plan: plan,
     observation_evidence: observationEvidence,
+    win_probability_timeline: winProbabilityTimeline,
+    outcome_impacts: outcomeImpacts,
     metadata
   };
 }
@@ -1577,6 +1693,8 @@ const BUNDLE_KEYS = [
   "match_timeline",
   "review_plan",
   "observation_evidence",
+  "win_probability_timeline",
+  "outcome_impacts",
   "metadata"
 ] as const;
 
@@ -1599,6 +1717,7 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
     !isRecord(plan) || !Array.isArray(plan.segments) || !Array.isArray(plan.cues) ||
     !isRecord(timeline) || !Array.isArray(timeline.rounds) ||
     !Array.isArray(value.observation_evidence) || !isRecord(metadata)
+    || !isRecord(value.win_probability_timeline) || !Array.isArray(value.outcome_impacts)
   ) {
     throw new Error("cs2d analysis bundle has an invalid structural shape.");
   }
@@ -1611,6 +1730,15 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
     bundle.selected_steam_id !== bundle.review_plan.player_id
   ) {
     throw new Error("cs2d analysis bundle identifiers do not match.");
+  }
+  if (
+    bundle.win_probability_timeline.version !== "win-probability-timeline.v1" ||
+    (bundle.win_probability_timeline.status !== "AVAILABLE" && bundle.win_probability_timeline.status !== "UNAVAILABLE") ||
+    !Array.isArray(bundle.win_probability_timeline.rounds) ||
+    !Array.isArray(bundle.win_probability_timeline.swings) ||
+    bundle.outcome_impacts.some((impact) => !isRecord(impact) || typeof impact.cueId !== "string")
+  ) {
+    throw new Error("cs2d win-probability contract is invalid.");
   }
   if (
     bundle.metadata.adapter_version !== CS2D_ADAPTER_VERSION ||
@@ -1665,6 +1793,8 @@ export function serializeCs2dAnalysisBundle(bundle: Cs2dAnalysisBundle): string 
     match_timeline: bundle.match_timeline,
     review_plan: bundle.review_plan,
     observation_evidence: bundle.observation_evidence,
+    win_probability_timeline: bundle.win_probability_timeline,
+    outcome_impacts: bundle.outcome_impacts,
     metadata: bundle.metadata
   };
   assertValidBundle(whitelisted);

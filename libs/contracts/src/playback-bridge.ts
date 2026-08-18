@@ -51,11 +51,21 @@ export interface AnalysisFailedEvent {
   selectedPlayerId: string;
   message: string;
 }
+export interface AnalysisProgressEvent {
+  type: "ANALYSIS_PROGRESS";
+  schemaVersion: "cs2d-analysis-progress.v1";
+  selectedPlayerId: string;
+  phase: "downloading" | "inference" | "unavailable";
+  completed: number;
+  total: number;
+  detail: string;
+}
 export type PlaybackBridgeEvent =
   | ReplayReadyEvent
   | PlayerSelectedEvent
   | PlaybackStateEvent
   | AnalysisReadyEvent
+  | AnalysisProgressEvent
   | AnalysisFailedEvent;
 export type PlaybackCameraMode = "full" | "target";
 
@@ -135,6 +145,13 @@ function isEvent(value: unknown): value is PlaybackBridgeEvent {
     return exactKeys(value, ["type", "schemaVersion", "selectedPlayerId", "message"]) &&
       value.schemaVersion === "cs2d-analysis-failed.v1" && nonEmpty(value.selectedPlayerId) &&
       nonEmpty(value.message) && value.message.length <= 512;
+  }
+  if (value.type === "ANALYSIS_PROGRESS") {
+    return exactKeys(value, ["type", "schemaVersion", "selectedPlayerId", "phase", "completed", "total", "detail"]) &&
+      value.schemaVersion === "cs2d-analysis-progress.v1" && nonEmpty(value.selectedPlayerId) &&
+      (value.phase === "downloading" || value.phase === "inference" || value.phase === "unavailable") &&
+      finite(value.completed) && value.completed >= 0 && finite(value.total) && value.total >= 0 &&
+      typeof value.detail === "string" && value.detail.length <= 256;
   }
   return false;
 }

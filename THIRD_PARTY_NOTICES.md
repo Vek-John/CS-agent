@@ -5,6 +5,20 @@ does not grant rights to map or game assets.
 
 ## MIT code references
 
+### cs-net
+
+Repository: local pinned checkout `/Users/vekel/编程/CS-agent/.local-data/upstream/cs-net`
+
+Audited commit: `e15acc3fda3de21f25fe12a5ca31722381f40162`
+
+License: MIT. The integration uses the upstream win-rate model contract and
+checkpoint as a separately recorded asset. It does not import `demoparser2`,
+copy the upstream parser, or copy the upstream source tree into the product.
+The repository-owned TypeScript feature adapter consumes only the pinned
+cs2d structured Replay port. The exported ONNX asset is recorded at
+`apps/web/public/generated-assets/models/cs-net/manifest.json` with its SHA,
+revision, temperature, and size.
+
 ### csfreezetime
 
 Repository: <https://github.com/benginN/csfreezetime>

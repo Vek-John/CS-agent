@@ -7,6 +7,7 @@ import {
   serializeCs2dAnalysisBundle
 } from "./index";
 import { createCoachingSession, reduceCoachingSession } from "@cs-coach/session";
+import type { WinProbabilityTimelineV1 } from "@cs-coach/contracts";
 
 function player(steamId: string, side: "T" | "CT", index: number) {
   return {
@@ -157,6 +158,70 @@ describe("cs2d analysis adapter", () => {
     expect(new Set(plans.map((plan) => plan.player_id)).size).toBe(10);
     expect(plans.every((plan) => plan.generation_manifest.analysis_subject_selection === "EXPLICIT_PLAYER")).toBe(true);
     expect(plans[0].cues.length).toBeGreaterThan(plans[1].cues.length);
+  });
+
+  it("keeps OutcomeImpact signed and gated to the parsed cue window", () => {
+    const replay = replayFixture();
+    const baseline = buildCs2dAnalysisBundle({ replay, selectedSteamId: "p-t1", demoId: "impact-fixture" });
+    const cue = baseline.review_plan.cues[0];
+    const timeline: WinProbabilityTimelineV1 = {
+      version: "win-probability-timeline.v1",
+      status: "AVAILABLE",
+      model: {
+        provider: "CS_NET",
+        revision: "fixture",
+        assetUrl: "/models/cs-net/win-rate.int8.onnx",
+        assetSha256: "a".repeat(64),
+        assetBytes: 1,
+        quantization: "INT8",
+        temperature: 1.0613423585891724,
+        sourceCommit: "fixture",
+        featureVersion: "fixture"
+      },
+      tickRate: 64,
+      rounds: [{
+        roundNumber: 1,
+        startTick: 0,
+        endTick: 760,
+        winner: "T",
+        economy: { ct: "FULL", t: "FORCE", ctValue: 20_000, tValue: 12_500 },
+        samples: [
+          { tick: cue.decision_tick, probability: 0.62, roundNumber: 1, side: "CT", source: "CS_NET" },
+          { tick: cue.reveal_tick, probability: 0.31, roundNumber: 1, side: "CT", source: "CS_NET" }
+        ]
+      }],
+      swings: [{
+        id: "fixture-swing",
+        tick: cue.reveal_tick,
+        before: 0.62,
+        after: 0.31,
+        delta: -0.31,
+        direction: "DOWN",
+        cause: "PLAYER_DEATH",
+        selectedPlayerDeath: true,
+        victimSide: "T",
+        economy: "FORCE"
+      }],
+      limitations: []
+    };
+    const bundle = buildCs2dAnalysisBundle({
+      replay,
+      selectedSteamId: "p-t1",
+      demoId: "impact-fixture",
+      winProbabilityTimeline: timeline
+    });
+    const impact = bundle.outcome_impacts.find((candidate) => candidate.cueId === cue.id);
+    expect(impact).toMatchObject({
+      beforeProbability: 0.62,
+      afterProbability: 0.31,
+      delta: -0.31,
+      percentagePoints: -31,
+      attribution: "SELECTED_PLAYER_DEATH",
+      confidence: "HIGH"
+    });
+    expect(impact?.text).toContain("少了 31 个百分点");
+    expect(impact?.text).toContain("你这次处理后");
+    expect(impact?.relativeChange).toBeCloseTo(-0.5);
   });
 
   it("uses canonical Round ticks and produces continuous, non-overlapping coverage", () => {

@@ -1,0 +1,13 @@
+{
+  "name": "@cs-coach/cs-net-winrate",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./runtime": "./src/runtime.ts"
+  },
+  "dependencies": {
+    "onnxruntime-web": "^1.23.2"
+  }
+}

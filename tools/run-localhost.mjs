@@ -6,6 +6,7 @@ import { parseEnv } from 'node:util'
 const root = process.cwd()
 const upstream = resolve(process.env.CS2D_UPSTREAM_DIR || resolve(root, '.local-data/upstream/cs2d'))
 const patcher = resolve(root, 'tools/apply-cs2d-host-patch.mjs')
+const modelSync = resolve(root, 'tools/sync-cs-net-assets.mjs')
 const localCoachEnvPath = resolve(root, '.local-data/deepseek.env')
 
 let localCoachEnv = {}
@@ -17,6 +18,8 @@ if (existsSync(localCoachEnvPath)) {
   }
 }
 
+const modelResult = spawnSync(process.execPath, [modelSync], { cwd: root, stdio: 'inherit', env: { ...process.env, CS2D_DEV_ASSETS: '1' } })
+if (modelResult.status !== 0) process.exit(modelResult.status ?? 1)
 const patchResult = spawnSync(process.execPath, [patcher], { cwd: root, stdio: 'inherit' })
 if (patchResult.status !== 0) process.exit(patchResult.status ?? 1)
 if (!existsSync(resolve(upstream, 'node_modules'))) {

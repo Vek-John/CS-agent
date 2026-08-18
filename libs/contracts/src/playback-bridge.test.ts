@@ -92,4 +92,23 @@ describe("cs2d playback bridge", () => {
       }
     })).toBe(false);
   });
+
+  it("accepts real model progress phases without allowing Replay payloads", () => {
+    const progress = {
+      channel: PLAYBACK_BRIDGE_CHANNEL,
+      direction: "event",
+      payload: {
+        type: "ANALYSIS_PROGRESS",
+        schemaVersion: "cs2d-analysis-progress.v1",
+        selectedPlayerId: "p1",
+        phase: "inference",
+        completed: 42,
+        total: 128,
+        detail: "42/128"
+      }
+    } as const;
+    expect(isPlaybackEventEnvelope(progress)).toBe(true);
+    expect(isPlaybackEventEnvelope({ ...progress, payload: { ...progress.payload, replay: {} } })).toBe(false);
+    expect(isPlaybackEventEnvelope({ ...progress, payload: { ...progress.payload, phase: "ready" } })).toBe(false);
+  });
 });

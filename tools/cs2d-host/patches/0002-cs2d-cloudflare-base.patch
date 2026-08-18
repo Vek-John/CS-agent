@@ -1,4 +1,5 @@
 diff --git a/apps/app/src/app/router.ts b/apps/app/src/app/router.ts
+index 63f12e1..73ae749 100644
 --- a/apps/app/src/app/router.ts
 +++ b/apps/app/src/app/router.ts
 @@ -43,6 +43,6 @@ const routes: RouteRecordRaw[] = [
@@ -10,9 +11,10 @@ diff --git a/apps/app/src/app/router.ts b/apps/app/src/app/router.ts
    routes,
  })
 diff --git a/apps/app/vite.config.ts b/apps/app/vite.config.ts
+index c8bac84..b0fb3e3 100644
 --- a/apps/app/vite.config.ts
 +++ b/apps/app/vite.config.ts
-@@ -34,6 +34,9 @@ function serveRepoReplays(): Plugin {
+@@ -30,8 +30,11 @@ function serveRepoReplays(): Plugin {
    }
  }
  
@@ -22,10 +24,25 @@ diff --git a/apps/app/vite.config.ts b/apps/app/vite.config.ts
  export default defineConfig({
 +  base: publicBase,
    plugins: [
-@@ -52,5 +55,5 @@ export default defineConfig({
+     serveRepoReplays(),
+     vue(),
+@@ -47,7 +50,7 @@ export default defineConfig({
          theme_color: '#0a0c12',
          background_color: '#0a0c12',
          display: 'standalone',
 -        start_url: '/',
 +        start_url: publicBase,
          icons: [
+           { src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' },
+           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+@@ -65,7 +68,9 @@ export default defineConfig({
+         // so the app works fully offline after the first visit.
+         globPatterns: ['**/*.{js,css,html,svg,png,webp,jpg,ico,json,wasm}'],
+         // Largest asset is a ~1.2MB preview replay; bump the cap to fit it.
+-        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
++        // The local ONNX Runtime WASM fallback is ~13.5MB and must remain
++        // precached with the offline viewer shell.
++        maximumFileSizeToCacheInBytes: 16 * 1024 * 1024,
+         // The app is an SPA: serve index.html for navigations while offline.
+         navigateFallback: 'index.html',
+         cleanupOutdatedCaches: true,

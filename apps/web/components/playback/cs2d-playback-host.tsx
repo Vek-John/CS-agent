@@ -23,7 +23,8 @@ import type {
   PlaybackStateEvent,
   PlayerSelectedEvent,
   ReplayReadyEvent,
-  ReviewPlan
+  ReviewPlan,
+  AnalysisProgressEvent
 } from "@cs-coach/contracts";
 import {
   deserializeCs2dAnalysisBundle,
@@ -86,6 +87,7 @@ export function Cs2dPlaybackHost() {
   const [plan, setPlan] = useState<ReviewPlan>();
   const [session, setSession] = useState<CoachingSessionState>();
   const [analysisError, setAnalysisError] = useState<string>();
+  const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgressEvent>();
   const timelineRailRef = useRef<HTMLDivElement>(null);
   const userTookOverRef = useRef(false);
   const guidedSeekEpochRef = useRef(0);
@@ -194,6 +196,7 @@ export function Cs2dPlaybackHost() {
     setPlan(undefined);
     setSession(undefined);
     setAnalysisError(undefined);
+    setAnalysisProgress(undefined);
     userTookOverRef.current = false;
     setUserTookOver(false);
   }, [invalidateGuidedSeek]);
@@ -219,11 +222,17 @@ export function Cs2dPlaybackHost() {
       if (payload.type === "PLAYER_SELECTED") {
         setSelected(payload);
         setAnalysisError(undefined);
+        setAnalysisProgress(undefined);
+        return;
+      }
+      if (payload.type === "ANALYSIS_PROGRESS") {
+        setAnalysisProgress(payload);
         return;
       }
       if (payload.type === "ANALYSIS_FAILED") {
         invalidateGuidedSeek();
         setAnalysisError(payload.message);
+        setAnalysisProgress(undefined);
         setBundle(undefined);
         setPlan(undefined);
         setSession(undefined);
@@ -244,6 +253,7 @@ export function Cs2dPlaybackHost() {
           setBundle(nextBundle);
           setPlan(deterministicPlan);
           setAnalysisError(undefined);
+          setAnalysisProgress(undefined);
           userTookOverRef.current = false;
           setUserTookOver(false);
           setSession(reduceCoachingSession(
@@ -324,6 +334,7 @@ export function Cs2dPlaybackHost() {
   const cue = activePlan && session ? getCurrentCue(activePlan, session) : undefined;
   const cueRevealed = Boolean(cue && session?.revealed_cue_ids.includes(cue.id));
   const coachingView = hostCoachingCueSurface(cue, session?.phase, cueRevealed);
+  const outcomeImpact = cue && bundle?.outcome_impacts.find((impact) => impact.cueId === cue.id);
   const summary = useMemo(() => {
     if (!activePlan || !session || !["WRAP_UP", "COMPLETED"].includes(session.phase)) return undefined;
     try {
@@ -351,6 +362,54 @@ export function Cs2dPlaybackHost() {
   const currentRoundLabel = currentRound
     ? currentRound.roundNumber === 0 ? "准备阶段" : `第 ${currentRound.roundNumber} 回合`
     : "未开始";
+  const winRateTimeline = bundle?.win_probability_timeline;
+  const winRateCurve = useMemo(() => {
+    if (!winRateTimeline || winRateTimeline.status !== "AVAILABLE") return undefined;
+    const economyLabel = (value: (typeof winRateTimeline.rounds)[number]["economy"]["ct"]): string => {
+      if (value === "PISTOL") return "手枪局";
+      if (value === "ECO") return "ECO";
+      if (value === "FORCE") return "强起";
+      if (value === "FULL") return "长枪局";
+      return "经济未知";
+    };
+    const selectedPlayerId = selected?.playerId;
+    const stateTrack = bundle?.match_timeline.player_state_tracks ?? [];
+    const sideAt = (sampleTick: number): "CT" | "T" => {
+      let side: "CT" | "T" = selected?.side ?? "T";
+      for (const state of stateTrack) {
+        if (state.player_id !== selectedPlayerId || state.tick > sampleTick) continue;
+        side = state.side;
+      }
+      return side;
+    };
+    const raw = winRateTimeline.rounds.flatMap((round) => [
+      ...round.samples,
+      ...(round.terminal ? [{ tick: round.terminal.tick, probability: round.terminal.probability, roundNumber: round.roundNumber, side: "CT" as const, source: "CS_NET" as const }] : [])
+    ]).sort((left, right) => left.tick - right.tick);
+    const points = raw.map((sample) => {
+      const probability = sideAt(sample.tick) === "CT" ? sample.probability : 1 - sample.probability;
+      return { ...sample, probability, x: timelinePercent(sample.tick, tickMin, tickMax), y: 100 - probability * 100 };
+    });
+    const rounds = winRateTimeline.rounds.map((round) => ({
+      ...round,
+      range: timelineRange(round.startTick, round.endTick, tickMin, tickMax),
+      label: `第 ${round.roundNumber} 回合 · CT ${economyLabel(round.economy.ct)} · T ${economyLabel(round.economy.t)}`
+    }));
+    const swings = winRateTimeline.swings.map((swing) => ({
+      ...swing,
+      x: timelinePercent(swing.tick, tickMin, tickMax),
+      y: 100 - (sideAt(swing.tick) === "CT" ? swing.after : 1 - swing.after) * 100
+    }));
+    return { points, rounds, swings };
+  }, [bundle, selected, tickMax, tickMin, winRateTimeline]);
+  const analysisProgressText = analysisProgress?.phase === "downloading"
+    ? "正在下载胜率模型"
+    : analysisProgress?.phase === "inference"
+      ? "正在计算整场胜率"
+      : analysisProgress?.phase === "unavailable"
+        ? "胜率模型不可用，已使用基础教练路线"
+        : undefined;
+  const currentWinPoint = winRateCurve?.points.filter((point) => point.tick <= tick).at(-1);
 
   return (
     <main className="cs2d-host-shell">
@@ -417,6 +476,13 @@ export function Cs2dPlaybackHost() {
             </section>
           ) : null}
 
+          {!session && selected && analysisProgress ? (
+            <section className={`cs2d-coach-card ${analysisProgress.phase === "unavailable" ? "cs2d-coach-card--muted" : ""}`} role="status" aria-live="polite">
+              <small>{analysisProgressText}</small>
+              <p>{analysisProgress.detail || (analysisProgress.total > 0 ? `${Math.round((analysisProgress.completed / analysisProgress.total) * 100)}%` : "模型在本机 Worker 中运行，不上传 Demo。")}</p>
+            </section>
+          ) : null}
+
           {session && !userTookOver && cue && cueRevealed && coachingView && session.phase === "PAUSED_FOR_COACHING" ? (
             <section className="cs2d-coach-cue" aria-live="polite">
               <div className="cs2d-coach-cue-heading">
@@ -450,6 +516,13 @@ export function Cs2dPlaybackHost() {
                     <small>直接建议</small>
                   </div>
                   <p>{coachingView.question}</p>
+                  {outcomeImpact ? (
+                    <div className="cs2d-coaching-impact">
+                      <small>胜率信号</small>
+                      <p>{outcomeImpact.text}</p>
+                      {outcomeImpact.confidence === "LOW" ? <span>多事件同时发生，只描述这段处理后的变化。</span> : null}
+                    </div>
+                  ) : null}
                   {coachingView.advice ? (
                     <div className="cs2d-coaching-advice">
                       <strong>下一次这样做</strong>
@@ -661,6 +734,60 @@ export function Cs2dPlaybackHost() {
             <span><i className="is-skip" aria-hidden="true" />低价值</span>
             <span><i className="is-neutral" aria-hidden="true" />普通比赛</span>
           </div>
+        ) : null}
+
+        {winRateTimeline?.status === "UNAVAILABLE" ? (
+          <div className="cs2d-winrate-unavailable" role="status">
+            <strong>整场胜率暂不可用</strong>
+            <span>{winRateTimeline.unavailableReason ?? "模型资源未就绪；回放和基础教练路线仍可继续。"}</span>
+          </div>
+        ) : winRateCurve ? (
+          <section className="cs2d-winrate-panel" aria-label="整场胜率曲线">
+            <div className="cs2d-winrate-heading">
+              <div><strong>你方胜率</strong><span>整场信号 · 当前回合：{currentRoundLabel}</span></div>
+              <output>{Math.round(100 - (currentWinPoint?.y ?? 50))}%</output>
+            </div>
+            <div className="cs2d-winrate-chart">
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="整场胜率曲线，包含播放头之后的完整比赛信号">
+                <line x1="0" x2="100" y1="50" y2="50" className="cs2d-winrate-midline" />
+                {timelineRounds.slice(1).map((round) => <line key={`curve-round-${round.round.roundIndex}`} x1={round.leftPercent} x2={round.leftPercent} y1="0" y2="100" className="cs2d-winrate-roundline" />)}
+                {winRateCurve.swings.filter((swing) => Math.abs(swing.delta) >= 0.12).map((swing) => <line key={swing.id} x1={swing.x} x2={swing.x} y1={Math.max(0, swing.y - 9)} y2={Math.min(100, swing.y + 9)} className={`cs2d-winrate-swing cs2d-winrate-swing--${swing.direction.toLowerCase()}`} />)}
+                <polyline points={winRateCurve.points.map((point) => `${point.x},${point.y}`).join(" ")} className="cs2d-winrate-line" />
+                <line x1={currentPercent} x2={currentPercent} y1="0" y2="100" className="cs2d-winrate-playhead" />
+              </svg>
+              <div className="cs2d-winrate-hotspots" aria-label="胜率曲线详情">
+                {winRateCurve.rounds.map((round) => (
+                  <span
+                    key={`curve-round-hotspot-${round.roundNumber}`}
+                    className="cs2d-winrate-hotspot cs2d-winrate-hotspot--round"
+                    style={{ left: `${round.range.leftPercent}%`, width: `${round.range.widthPercent}%` }}
+                    role="img"
+                    tabIndex={0}
+                    aria-label={round.label}
+                    title={round.label}
+                  />
+                ))}
+                {winRateCurve.swings.filter((swing) => Math.abs(swing.delta) >= 0.12).map((swing) => {
+                  const direction = swing.delta < 0 ? "下降" : "上升";
+                  const points = Math.round(Math.abs(swing.delta) * 100);
+                  const label = `胜率${direction} ${points} 个百分点${swing.cause === "PLAYER_DEATH" ? " · 死亡摆动" : " · 回合结果"}`;
+                  return (
+                    <span
+                      key={`curve-swing-hotspot-${swing.id}`}
+                      className={`cs2d-winrate-hotspot cs2d-winrate-hotspot--swing cs2d-winrate-swing--${swing.direction.toLowerCase()}`}
+                      style={{ left: `${swing.x}%`, top: `${swing.y}%` }}
+                      role="img"
+                      tabIndex={0}
+                      aria-label={label}
+                      title={label}
+                    />
+                  );
+                })}
+              </div>
+              <div className="cs2d-winrate-axis" aria-hidden="true"><span>100%</span><span>50%</span><span>0%</span></div>
+            </div>
+            <div className="cs2d-winrate-note">完整曲线常显；模型信号不等于当时玩家可见信息。橙色竖线表示明显摆动，回合边界与上方进度条共用横坐标。</div>
+          </section>
         ) : null}
       </footer>
     </main>

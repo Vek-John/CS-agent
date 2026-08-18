@@ -2178,6 +2178,10 @@ button:disabled {
 .cs2d-coach-primary { width: 100%; border-color: rgba(100,170,255,0.52); background: #0a74df; color: #fff; }
 .cs2d-coach-result-actions { display: grid; grid-template-columns: 1fr 1.2fr; gap: 0.38rem; }
 .cs2d-coach-result-actions p { grid-column: 1 / -1; margin: 0.6rem 0 0; color: var(--text-secondary); font-size: 0.66rem; line-height: 1.52; }
+.cs2d-coaching-impact { margin-top: 0.55rem; padding: 0.55rem 0.6rem; border: 0.0625rem solid rgba(103,211,145,0.22); border-radius: 0.55rem; background: rgba(48,209,88,0.06); }
+.cs2d-coaching-impact small { color: #8ce9a2; font-size: 0.57rem; }
+.cs2d-coaching-impact p { margin: 0.2rem 0 0; color: #d7f7df; font-size: 0.66rem; line-height: 1.5; }
+.cs2d-coaching-impact span { display: block; margin-top: 0.25rem; color: var(--text-tertiary); font-size: 0.54rem; }
 .cs2d-coach-result-actions .cs2d-coach-primary { width: auto; }
 .cs2d-coach-summary { border-color: rgba(48,209,88,0.25); background: linear-gradient(145deg, rgba(48,209,88,0.085), rgba(255,255,255,0.025) 58%); }
 .cs2d-coach-summary > small { color: #8ce9a2; }
@@ -2302,6 +2306,48 @@ button:disabled {
 .cs2d-timeline-legend i { width: 0.7rem; height: 0.34rem; border-radius: 0.1rem; background: #8e8e93; }
 .cs2d-timeline-legend .is-coach { background: var(--blue); }
 .cs2d-timeline-legend .is-skip { background: var(--orange); }
+.cs2d-winrate-panel,
+.cs2d-winrate-unavailable {
+  margin-top: 0.2rem;
+  padding: 0.62rem 0.68rem 0.55rem;
+  border: 0.0625rem solid rgba(255,255,255,0.1);
+  border-radius: 0.68rem;
+  background: rgba(255,255,255,0.025);
+}
+.cs2d-winrate-unavailable { display: grid; gap: 0.2rem; color: var(--text-secondary); font-size: 0.62rem; }
+.cs2d-winrate-unavailable strong { color: #ffb85c; font-size: 0.68rem; }
+.cs2d-winrate-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.cs2d-winrate-heading > div { display: flex; align-items: baseline; gap: 0.55rem; min-width: 0; }
+.cs2d-winrate-heading strong { color: var(--text); font-size: 0.68rem; }
+.cs2d-winrate-heading span { overflow: hidden; color: var(--text-tertiary); font-size: 0.56rem; text-overflow: ellipsis; white-space: nowrap; }
+.cs2d-winrate-heading output { color: #67d391; font: 700 0.68rem/1 ui-monospace, monospace; }
+.cs2d-winrate-chart { position: relative; height: 3.2rem; margin-top: 0.38rem; padding-right: 1.6rem; }
+.cs2d-winrate-chart svg { width: 100%; height: 100%; overflow: visible; }
+.cs2d-winrate-hotspots { position: absolute; inset: 0 1.6rem 0 0; pointer-events: none; }
+.cs2d-winrate-hotspot { position: absolute; display: block; pointer-events: auto; outline: none; }
+.cs2d-winrate-hotspot--round { top: 0; bottom: 0; border-radius: 0.18rem; opacity: 0; transition: background-color 140ms ease, opacity 140ms ease; }
+.cs2d-winrate-hotspot--round:hover,
+.cs2d-winrate-hotspot--round:focus-visible { background: rgba(255,255,255,0.08); box-shadow: inset 0 0 0 0.0625rem rgba(255,255,255,0.16); opacity: 1; }
+.cs2d-winrate-hotspot--swing { width: 0.58rem; height: 0.58rem; transform: translate(-50%, -50%); border: 0.1rem solid currentColor; border-radius: 0.14rem; background: rgba(15,17,20,0.86); opacity: 0; transition: transform 120ms var(--ease-out), opacity 140ms ease; }
+.cs2d-winrate-hotspot--swing:hover,
+.cs2d-winrate-hotspot--swing:focus-visible { transform: translate(-50%, -50%) scale(1.25); opacity: 1; }
+.cs2d-winrate-midline { stroke: rgba(255,255,255,0.2); stroke-dasharray: 1.2 1.2; stroke-width: 0.7; vector-effect: non-scaling-stroke; }
+.cs2d-winrate-roundline { stroke: rgba(255,255,255,0.12); stroke-width: 0.7; vector-effect: non-scaling-stroke; }
+.cs2d-winrate-line { fill: none; stroke: #67d391; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; vector-effect: non-scaling-stroke; }
+.cs2d-winrate-playhead { stroke: rgba(255,255,255,0.86); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.cs2d-winrate-swing { stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+.cs2d-winrate-swing--down { stroke: #ff9f0a; }
+.cs2d-winrate-swing--up { stroke: #30d158; }
+.cs2d-winrate-axis { position: absolute; top: -0.05rem; right: 0; bottom: -0.05rem; display: flex; flex-direction: column; justify-content: space-between; color: var(--text-tertiary); font: 500 0.48rem/1 ui-monospace, monospace; }
+.cs2d-winrate-note { margin-top: 0.28rem; color: var(--text-tertiary); font-size: 0.52rem; line-height: 1.35; }
+@media (prefers-reduced-motion: reduce) {
+  .cs2d-winrate-line { transition: none; }
+  .cs2d-winrate-hotspot { transition: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .cs2d-winrate-panel,
+  .cs2d-winrate-unavailable { background: #111317; }
+}
 .cs2d-visually-hidden { position: absolute; width: 0.0625rem; height: 0.0625rem; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 @media (hover: hover) and (pointer: fine) {
   .cs2d-host-icon-button:hover:not(:disabled),

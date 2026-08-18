@@ -522,6 +522,8 @@ Cs2dAnalysisBundle
   match_timeline
   review_plan
   observation_evidence[]     # INTERNAL_LLM_EVIDENCE_ONLY
+  win_probability_timeline   # FULL_MATCH signal; not ObservableClaim
+  outcome_impacts[]          # outcome-scoped, unlocked after playback gate
   metadata
     adapter/source commit/input boundary
     canonical tick range
@@ -530,6 +532,14 @@ Cs2dAnalysisBundle
 ```
 
 Adapter 输入是固定 commit 的结构化 Replay 端口，输出不包含 frames、grenadePaths、raw Replay 或二进制 Demo。序列化和反序列化都重新执行顶层白名单、ReviewPlan、ObservableState、版本 pin、selected-player 绑定与 future-boundary 校验。旧 `replay-bundle.v1` 只供 `/legacy` 和 Python 回归测试，不进入当前 cs2d 会话。
+
+### 7.1.2 WinProbabilityTimelineV1 与 OutcomeImpact
+
+`WinProbabilityTimelineV1` 是来自固定 cs-net win-rate head 的整场分析信号。它覆盖所有正式回合和播放头之后的时间，和唯一整场时间轴共用 canonical tick 横坐标；Host 不按当前 tick、cue 或决策/结果边界裁剪它。曲线可以显示回合边界、50% 中线、死亡/明显摆动和双方独立的 `PISTOL`、`ECO`、`FORCE`、`FULL`、`UNKNOWN` 经济分类，但不冒充 `ObservableState`，也不改变决策侧未来信息边界。换边时由当前选手在 Replay 中的回合状态派生“你方胜率”。
+
+cs-net 的特征适配器只读取同一份 cs2d 结构化 Replay：31 个 token（10 名玩家、C4、20 个投掷物），模型在 cs2d iframe 的独立 Web Worker 中以 ONNX Runtime Web/WASM fallback 执行。模型 revision、checkpoint/config/tokenizer/feature-builder SHA、temperature、量化类型、资产 SHA 和大小必须记录在 `WinProbabilityModelManifest`；当前发布资产为固定 INT8 weight-only ONNX，单文件低于 Cloudflare Worker Static Assets 25 MiB 限额。下载与分块推理必须报告真实进度；模型失败只产生 `UNAVAILABLE`，继续使用确定性 Director/ReviewPlan 回退，不阻塞基础回放。浏览器可以按 revision/SHA 缓存模型，但不把 raw Replay、`.dem` 或模型输入发给 Next/LLM。
+
+Teaching Director 可以综合所选玩家死亡、负向胜率摆动与该回合经济语境来排序候选；ECO 中预期较低的死亡不应自动获得与 FULL 相同的归因权重，FORCE 反映投入风险，UNKNOWN 维持保守回退。`OutcomeImpact` 只引用已完成结果窗口内的前后曲线点和已验证事件，记录百分点、相对变化、归因置信度和并发事件限制；Session 只有在播放器连续播放到 outcome end 并自动回到 decision 一次后才把它与 Outcome Fact 合并到用户可见复盘。LLM 仍只接收短 ID、decision-side facts/inferences/advice；模型曲线不是 LLM 的 ObservableClaim。
 
 ### 7.2 MapAssetManifest 与 GameAssetCatalog
 
@@ -1160,6 +1170,8 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 | 职业行为路线 | Accepted | 结构化数据库/规则提供可追溯证据，Director 可使用其结果；监督排序与行为先验只替换明确子模块 |
 | LLM 职责 | Accepted | Director 决定教学候选与意图，Narrator 构建讲解，模型不解析原始 tick、不创造事实、不直接控制播放器 |
 | LLM Provider | Accepted | Director 与 Narrator 通过 Provider-neutral Adapter 调用；当前可使用 DeepSeek，必须严格 Schema 校验、引用校验和模板降级 |
+| 全场胜率模型 | Accepted | 固定 cs-net win-rate head 经独立 feature adapter 接入 cs2d iframe Worker；`WinProbabilityTimelineV1` 全场常显并与唯一时间轴共用横坐标；模型不可用时显式 `UNAVAILABLE`，不阻塞回放 |
+| OutcomeImpact | Accepted | 结果窗口完成后才解锁前后胜率、百分点和保守归因；并发死亡/下包降低归因，不把全知曲线当 Observation |
 | 个人记忆 | Accepted | 本地优先、用户可控、只影响优先级 |
 | 视频弱标注 | Accepted | 仅作为已授权离线教学行为启动语料；无原 Demo 时只使用媒体时间，不产生精确 tick 或黄金集 |
 | 强化学习 | Deferred | 无可靠环境与奖励前不采用 |
@@ -1188,3 +1200,4 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 | 3.0.0 | 2026-08-17 | 将目标架构整理为长期契约：以 GroundTruth ReplayBundle、SceneIndex、Observation、Teaching Director、PlanCompiler、Narrator 和 LangGraph CoachingRuntime 组成完整教学链路；明确模型职责与确定性边界；保留 Web、Worker、存储、队列、缓存、桌面适配和本地记忆基础设施，移除易变实现细节与旧阶段演进叙事。 |
 | 3.1.0 | 2026-08-17 | 将 Cloudflare 生产入口收敛为单 Worker：CI 从固定 cs2d commit 构建 `/cs2d/` Viewer，Host 使用同源 iframe；`.dem` 仍只在访问者浏览器内由 Worker/WASM 解析，补充上游构建物再分发权利待确认边界。 |
 | 3.2.0 | 2026-08-17 | 关键教学时序改为“先连续看完整处理与结果，再回到决策点统一复盘”；Outcome Fact 继续独立于决策侧证据，并只在 outcome 窗口完成后解锁。 |
+| 3.3.0 | 2026-08-18 | 接入固定 cs-net win-rate head 的真实 ONNX/INT8 资产和 iframe Worker 推理；新增全场常显 `WinProbabilityTimelineV1`、经济分类、Director 摆动排序与结果窗口 gated `OutcomeImpact`；模型/下载失败显式降级，不改变单次 cs2d Replay 与 Observation 边界。 |
