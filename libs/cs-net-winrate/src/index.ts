@@ -201,7 +201,7 @@ export interface WinProbabilityTimelineV1 {
     assetUrl: string;
     assetSha256: string;
     assetBytes: number;
-    quantization: "INT8" | "FP32";
+    quantization: "INT8" | "FP16" | "FP32";
     temperature: number;
     sourceCommit: string;
     featureVersion: string;

@@ -85,10 +85,12 @@ export function Cs2dPlaybackHost() {
     const query = new URLSearchParams(window.location.search);
     const threads = query.get("csThreads");
     const batch = query.get("csBatch");
-    if ((threads === "1" || threads === "2" || threads === "4") || (batch && /^\d+$/.test(batch))) {
+    const provider = query.get("csProvider");
+    if ((threads === "1" || threads === "2" || threads === "4") || (batch && /^\d+$/.test(batch)) || provider === "wasm-int8" || provider === "wasm-fp32" || provider === "webgpu-fp16") {
       const params = new URLSearchParams();
       if (threads === "1" || threads === "2" || threads === "4") params.set("csThreads", threads);
       if (batch && /^\d+$/.test(batch)) params.set("csBatch", batch);
+      if (provider === "wasm-int8" || provider === "wasm-fp32" || provider === "webgpu-fp16") params.set("csProvider", provider);
       setBenchmarkQuery(params.toString());
     }
   }, []);

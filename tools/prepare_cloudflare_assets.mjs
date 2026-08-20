@@ -61,6 +61,19 @@ async function countFilesAndBytes(root) {
   return { files, bytes };
 }
 
+async function removeLocalOnlyWebGpuAssets(root) {
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const target = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      await removeLocalOnlyWebGpuAssets(target);
+      continue;
+    }
+    if (/^ort-wasm-simd-threaded\.(jsep|asyncify)|^ort-wasm-simd-threaded-.*\.asyncify\.wasm$/.test(entry.name)) {
+      await rm(target, { force: true });
+    }
+  }
+}
+
 await rm(deployRoot, { recursive: true, force: true });
 await copyReleaseAssets(sourceRoot, deployRoot);
 
@@ -68,6 +81,7 @@ if (!(await pathExists(viewerSourceRoot))) {
   throw new Error(`Missing cs2d viewer build: ${path.relative(workspaceRoot, viewerSourceRoot)}. Run pnpm cs2d:build first.`);
 }
 await copyReleaseAssets(viewerSourceRoot, viewerDeployRoot);
+await removeLocalOnlyWebGpuAssets(viewerDeployRoot);
 
 // The upstream viewer still has a few public absolute URLs (for example
 // `/maps/...` and `/weapons/...`). Keep these small compatibility sidecars at

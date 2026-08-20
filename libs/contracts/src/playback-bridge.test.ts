@@ -140,4 +140,42 @@ describe("cs2d playback bridge", () => {
       payload: { ...event.payload, telemetry: { ...telemetry, rawReplay: {} } }
     })).toBe(false);
   });
+
+  it("accepts WebGPU FP16 telemetry with explicit unknown purity", () => {
+    const telemetry = {
+      schemaVersion: "cs-net-webgpu-telemetry.v1",
+      providerRequested: "webgpu-fp16",
+      providerActual: "webgpu-fp16",
+      precision: "FP16",
+      modelSha256: "94ef9a19ff5e3d2e122e57fd0fb2a79c670f14746d79399c1352ab9b25742f63",
+      onnxruntimeVersion: "1.27.0",
+      fetchMs: 1, sessionCreateMs: 2, warmupMs: 3, featureBuildMs: 4,
+      tensorUploadMs: 5, gpuInferenceMs: 6, outputReadbackMs: 7,
+      serializationMs: 8, totalMs: 9, sampleCount: 10, batchSize: 16,
+      samplesPerSecond: 1, modelBytes: 20, inputBytes: 21, outputBytes: 22,
+      estimatedPeakGpuBytes: 23,
+      capability: {
+        navigatorGpu: true, workerNavigatorGpu: true, adapterAvailable: true,
+        deviceAvailable: true, shaderF16: true, adapterInfo: "adapter",
+        deviceInfo: "device", deviceFeatures: ["shader-f16"],
+      },
+      ortSessionCreated: true, profileKernelCount: 1, profileKernelMs: 0.5,
+      fallbackDetection: "UNKNOWN", fallbackReason: "",
+    } as const;
+    const event = {
+      channel: PLAYBACK_BRIDGE_CHANNEL,
+      direction: "event",
+      payload: {
+        type: "ANALYSIS_TELEMETRY",
+        schemaVersion: "cs2d-analysis-telemetry.v1",
+        selectedPlayerId: "p1",
+        telemetry,
+      },
+    } as const;
+    expect(isPlaybackEventEnvelope(event)).toBe(true);
+    expect(isPlaybackEventEnvelope({
+      ...event,
+      payload: { ...event.payload, telemetry: { ...telemetry, fallbackDetection: "not-proven" } },
+    })).toBe(false);
+  });
 });

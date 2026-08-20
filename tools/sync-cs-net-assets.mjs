@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { cp, mkdir, readdir } from "node:fs/promises";
+import { cp, mkdir, readdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const root = process.cwd();
@@ -20,5 +20,17 @@ await cp(source, destination, { recursive: true });
 // enforces the Worker Static Assets per-file limit.
 for (const asset of ["ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded.wasm"]) {
   await cp(resolve(ortRoot, "dist", asset), resolve(viewerPublic, asset));
+}
+// FP32/FP16 and the asyncify WebGPU runtime are local benchmark artifacts. Keep
+// the normal release build deterministic and INT8-only.
+for (const asset of [
+  "models/cs-net/win-rate.fp32.onnx",
+  "models/cs-net/win-rate.fp16.onnx",
+  "ort-wasm-simd-threaded.jsep.mjs",
+  "ort-wasm-simd-threaded.jsep.wasm",
+  "ort-wasm-simd-threaded.asyncify.mjs",
+  "ort-wasm-simd-threaded.asyncify.wasm",
+]) {
+  await rm(resolve(viewerPublic, asset), { force: true });
 }
 process.stdout.write(`[cs-net] synced verified model and ORT assets to ${destination}\n`);

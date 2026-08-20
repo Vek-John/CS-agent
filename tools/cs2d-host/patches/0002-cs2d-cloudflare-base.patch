@@ -11,7 +11,7 @@ index 63f12e1..73ae749 100644
    routes,
  })
 diff --git a/apps/app/vite.config.ts b/apps/app/vite.config.ts
-index c8bac84..9e2c163 100644
+index c8bac84..aba7e43 100644
 --- a/apps/app/vite.config.ts
 +++ b/apps/app/vite.config.ts
 @@ -30,9 +30,31 @@ function serveRepoReplays(): Plugin {
@@ -55,9 +55,14 @@ index c8bac84..9e2c163 100644
          icons: [
            { src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' },
            { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
-@@ -65,7 +87,9 @@ export default defineConfig({
+@@ -64,8 +86,14 @@ export default defineConfig({
+         // Precache everything (app shell, wasm, maps, weapons, preview replays)
          // so the app works fully offline after the first visit.
          globPatterns: ['**/*.{js,css,html,svg,png,webp,jpg,ico,json,wasm}'],
++        // WebGPU FP16/asyncify files are local-only experiment assets. They are
++        // fetched explicitly by the benchmark and must not fail or bloat the
++        // offline INT8 shell precache.
++        globIgnores: ['**/ort-wasm-simd-threaded.asyncify*.wasm', '**/ort-wasm-simd-threaded.jsep*.wasm'],
          // Largest asset is a ~1.2MB preview replay; bump the cap to fit it.
 -        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
 +        // The local ONNX Runtime WASM fallback is ~13.5MB and must remain

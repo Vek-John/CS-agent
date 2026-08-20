@@ -66,6 +66,7 @@ export interface WinRateRuntimeOptions {
   threads?: RuntimeThreadRequest;
   batchSize?: number;
   maxBatchBytes?: number;
+  model?: Partial<WinProbabilityTimelineV1["model"]>;
   onProgress?: (progress: WinRateRuntimeProgress) => void;
   onTelemetry?: (telemetry: WinRateRuntimeTelemetry) => void;
 }
@@ -362,7 +363,7 @@ export async function runWinRateInference(
   }
   if (samples.length !== expectedSamples || logits.length !== expectedSamples) throw new Error(`CS_NET_SAMPLE_COUNT_MISMATCH:${samples.length}:${expectedSamples}`);
 
-  const timeline = buildWinProbabilityTimeline({ replay, selectedPlayerId: options.selectedPlayerId, samples, logits });
+  const timeline = buildWinProbabilityTimeline({ replay, selectedPlayerId: options.selectedPlayerId, samples, logits, model: options.model });
   const serializationStarted = now();
   JSON.stringify(timeline);
   const serializationMs = now() - serializationStarted;

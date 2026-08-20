@@ -60,7 +60,7 @@ export interface AnalysisProgressEvent {
   total: number;
   detail: string;
 }
-export interface AnalysisTelemetry {
+export interface AnalysisWasmTelemetry {
   schemaVersion: "cs-net-runtime-telemetry.v1";
   fetchMs: number;
   sessionCreateMs: number;
@@ -85,6 +85,46 @@ export interface AnalysisTelemetry {
   wasmSimd: boolean;
   fallbackReason: string;
 }
+export interface AnalysisWebGpuTelemetry {
+  schemaVersion: "cs-net-webgpu-telemetry.v1";
+  providerRequested: "webgpu-fp16";
+  providerActual: "webgpu-fp16" | "wasm-int8";
+  precision: "FP16";
+  modelSha256: string;
+  onnxruntimeVersion: string;
+  fetchMs: number;
+  sessionCreateMs: number;
+  warmupMs: number;
+  featureBuildMs: number;
+  tensorUploadMs: number;
+  gpuInferenceMs: number;
+  outputReadbackMs: number;
+  serializationMs: number;
+  totalMs: number;
+  sampleCount: number;
+  batchSize: number;
+  samplesPerSecond: number;
+  modelBytes: number;
+  inputBytes: number;
+  outputBytes: number;
+  estimatedPeakGpuBytes: number;
+  capability: {
+    navigatorGpu: boolean;
+    workerNavigatorGpu: boolean;
+    adapterAvailable: boolean;
+    deviceAvailable: boolean;
+    shaderF16: boolean;
+    adapterInfo: string;
+    deviceInfo: string;
+    deviceFeatures: readonly string[];
+  };
+  ortSessionCreated: boolean;
+  profileKernelCount: number;
+  profileKernelMs: number;
+  fallbackDetection: "PROVEN" | "UNKNOWN" | "FAILED";
+  fallbackReason: string;
+}
+export type AnalysisTelemetry = AnalysisWasmTelemetry | AnalysisWebGpuTelemetry;
 export interface AnalysisTelemetryEvent {
   type: "ANALYSIS_TELEMETRY";
   schemaVersion: "cs2d-analysis-telemetry.v1";
@@ -143,14 +183,30 @@ function isSide(value: unknown): value is "T" | "CT" {
 }
 function isTelemetry(value: unknown): value is AnalysisTelemetry {
   if (!isRecord(value)) return false;
-  const numeric = ["fetchMs", "sessionCreateMs", "warmupMs", "featureBuildMs", "tensorPrepareMs", "inferenceMs", "serializationMs", "totalMs", "sampleCount", "batchSize", "requestedBatchSize", "samplesPerSecond", "peakBatchBytes", "hardwareConcurrency"];
-  return exactKeys(value, ["schemaVersion", ...numeric, "threadsRequested", "threadsActual", "threadsEvidence", "crossOriginIsolated", "sharedArrayBuffer", "wasmThreads", "wasmSimd", "fallbackReason"]) &&
-    value.schemaVersion === "cs-net-runtime-telemetry.v1" && numeric.every((key) => finite(value[key]) && (value[key] as number) >= 0) &&
-    (value.threadsRequested === "auto" || value.threadsRequested === 1 || value.threadsRequested === 2 || value.threadsRequested === 4) &&
-    (value.threadsActual === 1 || value.threadsActual === 2 || value.threadsActual === 4) &&
-    (value.threadsEvidence === "wasm_threads_probe" || value.threadsEvidence === "single_thread_fallback" || value.threadsEvidence === "stable_default") &&
-    typeof value.crossOriginIsolated === "boolean" && typeof value.sharedArrayBuffer === "boolean" && typeof value.wasmThreads === "boolean" && typeof value.wasmSimd === "boolean" &&
-    typeof value.fallbackReason === "string" && value.fallbackReason.length <= 128;
+  if (value.schemaVersion === "cs-net-runtime-telemetry.v1") {
+    const numeric = ["fetchMs", "sessionCreateMs", "warmupMs", "featureBuildMs", "tensorPrepareMs", "inferenceMs", "serializationMs", "totalMs", "sampleCount", "batchSize", "requestedBatchSize", "samplesPerSecond", "peakBatchBytes", "hardwareConcurrency"];
+    return exactKeys(value, ["schemaVersion", ...numeric, "threadsRequested", "threadsActual", "threadsEvidence", "crossOriginIsolated", "sharedArrayBuffer", "wasmThreads", "wasmSimd", "fallbackReason"]) &&
+      numeric.every((key) => finite(value[key]) && (value[key] as number) >= 0) &&
+      (value.threadsRequested === "auto" || value.threadsRequested === 1 || value.threadsRequested === 2 || value.threadsRequested === 4) &&
+      (value.threadsActual === 1 || value.threadsActual === 2 || value.threadsActual === 4) &&
+      (value.threadsEvidence === "wasm_threads_probe" || value.threadsEvidence === "single_thread_fallback" || value.threadsEvidence === "stable_default") &&
+      typeof value.crossOriginIsolated === "boolean" && typeof value.sharedArrayBuffer === "boolean" && typeof value.wasmThreads === "boolean" && typeof value.wasmSimd === "boolean" &&
+      typeof value.fallbackReason === "string" && value.fallbackReason.length <= 128;
+  }
+  if (value.schemaVersion === "cs-net-webgpu-telemetry.v1") {
+    const numeric = ["fetchMs", "sessionCreateMs", "warmupMs", "featureBuildMs", "tensorUploadMs", "gpuInferenceMs", "outputReadbackMs", "serializationMs", "totalMs", "sampleCount", "batchSize", "samplesPerSecond", "modelBytes", "inputBytes", "outputBytes", "estimatedPeakGpuBytes", "profileKernelCount", "profileKernelMs"];
+    const capability = value.capability;
+    return exactKeys(value, ["schemaVersion", "providerRequested", "providerActual", "precision", "modelSha256", "onnxruntimeVersion", ...numeric, "capability", "ortSessionCreated", "fallbackDetection", "fallbackReason"]) &&
+      numeric.every((key) => finite(value[key]) && (value[key] as number) >= 0) &&
+      value.providerRequested === "webgpu-fp16" && (value.providerActual === "webgpu-fp16" || value.providerActual === "wasm-int8") && value.precision === "FP16" &&
+      typeof value.modelSha256 === "string" && value.modelSha256.length <= 128 && typeof value.onnxruntimeVersion === "string" && value.onnxruntimeVersion.length <= 64 &&
+      isRecord(capability) && exactKeys(capability, ["navigatorGpu", "workerNavigatorGpu", "adapterAvailable", "deviceAvailable", "shaderF16", "adapterInfo", "deviceInfo", "deviceFeatures"]) &&
+      typeof capability.navigatorGpu === "boolean" && typeof capability.workerNavigatorGpu === "boolean" && typeof capability.adapterAvailable === "boolean" && typeof capability.deviceAvailable === "boolean" && typeof capability.shaderF16 === "boolean" &&
+      typeof capability.adapterInfo === "string" && capability.adapterInfo.length <= 256 && typeof capability.deviceInfo === "string" && capability.deviceInfo.length <= 256 &&
+      Array.isArray(capability.deviceFeatures) && capability.deviceFeatures.every((item) => typeof item === "string" && item.length <= 64) &&
+      typeof value.ortSessionCreated === "boolean" && (value.fallbackDetection === "PROVEN" || value.fallbackDetection === "UNKNOWN" || value.fallbackDetection === "FAILED") && typeof value.fallbackReason === "string" && value.fallbackReason.length <= 240;
+  }
+  return false;
 }
 function isPlayer(value: unknown): value is PlaybackPlayerSummary {
   return isRecord(value) && exactKeys(value, ["playerId", "displayName", "startSide"]) &&
