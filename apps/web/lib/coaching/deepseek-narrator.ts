@@ -1,4 +1,5 @@
 import type { NarrationBundle, NarrationResult } from "@cs-coach/contracts";
+import { playerFacingFocusProblem } from "@cs-coach/review-planner";
 import type { AnonymousNarrationRequest } from "./narrator-contract";
 
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
@@ -7,7 +8,7 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_REQUEST_BYTES = 48 * 1024;
 const MAX_TEXT_LENGTH = 1600;
 const ALLOWED_MODELS = new Set(["deepseek-v4-flash", "deepseek-v4-pro"]);
-export const DEEPSEEK_NARRATOR_PROMPT_VERSION = "deepseek-narration-bundle/1.0.0";
+export const DEEPSEEK_NARRATOR_PROMPT_VERSION = "deepseek-narration-bundle/1.1.0";
 
 export interface DeepSeekNarratorEnv {
   DEEPSEEK_API_KEY?: string;
@@ -216,7 +217,7 @@ function fallbackBundle(request: AnonymousNarrationRequest): NarrationBundle {
     primaryFocusCode: request.coachingPackage.primaryFocusCode,
     currentSituation: { text: situation, refs: [decision[0]] },
     playerAction: { text: actionText, refs: [action[0]] },
-    coreIssue: { text: `重点是 ${request.coachingPackage.primaryFocusCode}，回到决策时的事实和动作。`, refs: [...decision.slice(0, 1), ...action.slice(0, 1)] },
+    coreIssue: { text: playerFacingFocusProblem(request.coachingPackage.primaryFocusCode), refs: [...decision.slice(0, 1), ...action.slice(0, 1)] },
     betterPlay: { text: adviceText, refs: [...advice.slice(0, 1), ...evidence.slice(0, 1)] },
     outcomeImpact: { text: outcomeText, refs: [...outcomes] }
   };
@@ -244,7 +245,9 @@ function systemPrompt(): string {
     "The bundle must contain exactly cueId, candidateId, primaryFocusCode, currentSituation, playerAction, coreIssue, betterPlay, outcomeImpact.",
     "Echo cueId=c1, candidateId=k1, and primaryFocusCode exactly; use only supplied anonymous refs.",
     "currentSituation cites decision refs only; playerAction cites action refs only; coreIssue cites decision/action refs; betterPlay must cite an advice ref and may cite decision/action/advice/evidence refs; outcomeImpact cites outcome/measurement refs only.",
-    "Use a concise, direct Simplified Chinese CS player voice when the supplied material supports it; prefer架枪、预瞄、小身位 peek、补枪、eco、强起 and similar concrete terms.",
+    "Every field is one short sentence. Use concise, direct Simplified Chinese CS player language; prefer架枪、预瞄、小身位 peek、补枪、eco、强起 and similar concrete terms.",
+    "Never print primaryFocusCode or any uppercase taxonomy token in prose. coreIssue must say what the action risks or causes; betterPlay must give one immediately executable adjustment.",
+    "Do not mention a win-rate percentage when the supplied impact is absent or rounds to zero percentage points.",
     "Do not invent a crosshair placement, callout, teammate intent, enemy position, or setup that was not supplied.",
     "Do not emit segment, order, route, tick, frame, player identity, raw replay, or new refs. Do not introduce a new coaching taxonomy or advice semantic."
   ].join(" ");

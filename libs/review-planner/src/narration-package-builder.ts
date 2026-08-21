@@ -132,6 +132,11 @@ export function buildOutcomeImpactForCue(cue: CoachCue, candidateSet: CandidateS
   const summary = candidate.resultSummary;
   const before = summary.winProbabilityBefore ?? meaningful?.before ?? (beforeSample ? selectedProbability(side, beforeSample.probability) : 0.5);
   const after = summary.winProbabilityAfter ?? meaningful?.after ?? (afterSample ? selectedProbability(side, afterSample.probability) : before);
+  const delta = Math.round((after - before) * 1_000_000) / 1_000_000;
+  const points = Math.round(Math.abs(delta) * 100);
+  // A displayed "0 percentage points" is noise, not coaching evidence. Keep
+  // the full curve visible, but omit cue-level impact prose at this precision.
+  if (points === 0) return undefined;
   const events = (matchTimeline.match_events ?? []).filter((event) => event.tick >= cue.reveal_tick && event.tick <= cue.outcome_end_tick);
   const deaths = events.filter((event) => event.event_type === "PLAYER_DEATH");
   const bombs = events.filter((event) => ["BOMB_PLANT", "BOMB_DEFUSE"].includes(event.event_type));
@@ -139,8 +144,6 @@ export function buildOutcomeImpactForCue(cue: CoachCue, candidateSet: CandidateS
   const selectedDeath = summary.selectedPlayerDeath || Boolean(meaningful?.swing.selectedPlayerDeath) || deaths.some((event) => event.target_player_id === selectedPlayerId);
   const attribution: OutcomeImpact["attribution"] = concurrent ? "CONCURRENT_EVENTS" : selectedDeath ? "SELECTED_PLAYER_DEATH" : meaningful ? "MODEL_SWING" : "ROUND_CONTEXT";
   const confidence: OutcomeImpact["confidence"] = concurrent ? "LOW" : selectedDeath ? "HIGH" : meaningful ? "MEDIUM" : "LOW";
-  const delta = Math.round((after - before) * 1_000_000) / 1_000_000;
-  const points = Math.round(Math.abs(delta) * 100);
   const text = selectedDeath && delta < 0
     ? `你这次处理后，我方胜率从 ${Math.round(before * 100)}% 掉到 ${Math.round(after * 100)}%，少了 ${points} 个百分点。`
     : delta < 0

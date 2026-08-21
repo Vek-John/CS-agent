@@ -844,12 +844,17 @@ function stateFactText(state: NormalizedState): string {
 }
 
 function actionFactText(candidate: RawSignalCandidate): string {
+  const callout = stateCallout(candidate.state);
+  const place = callout ? `在${callout}` : "在这里";
   switch (candidate.kind) {
-    case "DEATH": return "你在这段窗口内继续处理当前接触。";
-    case "KILL": return "你在这段窗口内完成了一次主动接触。";
-    case "BOMB": return "你在这段窗口内执行了目标点相关操作。";
-    case "UTILITY": return `你在这段窗口内使用了${candidate.utilityKind ?? "道具"}。`;
-    case "HP_CHANGE": return "你在这段窗口内继续暴露在交火中。";
+    case "DEATH": return `你${place}继续接了这波对枪。`;
+    case "KILL": return `你${place}主动接了这波对枪。`;
+    case "BOMB":
+      if (candidate.bombEventType === "bomb_planted") return `你${place}直接开始下包。`;
+      if (candidate.bombEventType === "bomb_defused") return `你${place}直接开始拆包。`;
+      return `你${place}继续处理 C4。`;
+    case "UTILITY": return `你${place}使用了${candidate.utilityKind ?? "道具"}。`;
+    case "HP_CHANGE": return `你${place}继续留在这条枪线里。`;
   }
 }
 

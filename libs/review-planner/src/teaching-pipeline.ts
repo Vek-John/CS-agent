@@ -25,6 +25,7 @@ import type {
 import { DIRECTOR_FOCUS_CODES_BY_SIGNAL } from "@cs-coach/contracts";
 import { assertValidReviewPlan } from "./index";
 import { buildDeterministicAdvice } from "./coaching-package-builder";
+import { playerFacingFocusProblem } from "./coaching-language";
 
 const DEFAULT_MAX_CUES = 8;
 const DEFAULT_COMPILER_VERSION = "review-planner/compiler/1.0.0";
@@ -736,7 +737,7 @@ export function deterministicNarrationBundle(
     primaryFocusCode: packageInput.primaryFocusCode,
     currentSituation: { text: first, refs: decisionRefs, limitations: [...packageInput.limitations] },
     playerAction: { text: action, refs: actionRefs, limitations: [...packageInput.limitations] },
-    coreIssue: { text: `重点是 ${packageInput.primaryFocusCode}：${first}`, refs: unique([...decisionRefs, ...actionRefs]), limitations: [...packageInput.limitations] },
+    coreIssue: { text: playerFacingFocusProblem(packageInput.primaryFocusCode), refs: unique([...decisionRefs, ...actionRefs]), limitations: [...packageInput.limitations] },
     betterPlay: { text: advice, refs: unique([...adviceRefs, ...evidenceRefs, ...decisionRefs]), limitations: [...packageInput.limitations] },
     outcomeImpact: { text: outcomeText, refs: outcomeRefs, limitations: [...outcome.limitations] }
   };

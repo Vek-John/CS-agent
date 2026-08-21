@@ -190,4 +190,38 @@ describe("CandidateSet-backed narration package builder", () => {
     expect(impacts.find((impact) => impact?.cueId === finalOrder[1].id)?.beforeProbability).toBe(0.7);
     expect(impacts.find((impact) => impact?.cueId === finalOrder[1].id)?.afterProbability).toBe(0.4);
   });
+
+  it("omits cue-level win-rate prose when the rounded change is zero", () => {
+    const flat = {
+      ...candidate(),
+      resultSummary: {
+        ...candidate().resultSummary,
+        winProbabilityBefore: 0.944,
+        winProbabilityAfter: 0.9444,
+        winProbabilityDelta: 0.0004,
+        winProbabilityPercentagePoints: 0
+      }
+    } satisfies TeachingCandidate;
+    const set = assembleCandidateSet({
+      id: "candidate-set-flat-impact",
+      version: "fixture-candidate/1",
+      demoId: timeline.demo_id,
+      playerId: timeline.selected_player_id,
+      candidates: [flat],
+      materials: [impactMaterial(flat)],
+      generationManifest: manifest
+    });
+    const cue = compiledCue(set);
+    const winTimeline: WinProbabilityTimelineV1 = {
+      version: "win-probability-timeline.v1",
+      status: "AVAILABLE",
+      model: { provider: "CS_NET", revision: "fixture", assetUrl: "fixture", assetSha256: "a".repeat(64), assetBytes: 1, quantization: "INT8", temperature: 1, sourceCommit: "fixture", featureVersion: "fixture" },
+      tickRate: 64,
+      rounds: [],
+      swings: [],
+      limitations: []
+    };
+
+    expect(buildOutcomeImpactForCue(cue, set, winTimeline, timeline, timeline.selected_player_id)).toBeUndefined();
+  });
 });

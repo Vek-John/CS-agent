@@ -11,14 +11,24 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   ArrowLeftRight,
   ArrowUpDown,
+  Bomb,
+  CircleDollarSign,
+  Crosshair,
+  Heart,
+  Lightbulb,
+  MapPin,
+  PackageOpen,
   Pause,
   Play,
   RotateCcw,
   RotateCw,
+  Shield,
   SkipBack,
-  SkipForward
+  SkipForward,
+  TriangleAlert
 } from "lucide-react";
 import type {
+  GameAssetCatalog,
   CoachingSessionState,
   PlaybackBridgeEvent,
   PlaybackCommand,
@@ -55,6 +65,13 @@ import {
   isGuidedSeekLanding,
   type GuidedSeekGate
 } from "../../lib/coaching/cs2d-guided-session";
+import {
+  buildThreeStageCoachingView,
+  playerStateAtOrBefore,
+  type CoachingStatusChip
+} from "../../lib/coaching/cs2d-coaching-view";
+import { resolveItemPresentation } from "../../lib/assets/game-asset-display";
+import { loadLocalGameAssetCatalog } from "../../lib/assets/local-game-asset-catalog";
 import {
   acceptedPlaybackEvent,
   analysisEventMatchesSelectedPlayer,
@@ -95,6 +112,25 @@ const WIN_RATE_VERTICAL_ZOOM_MIN = 0.75;
 const WIN_RATE_VERTICAL_ZOOM_MAX = 2.5;
 const WIN_RATE_VERTICAL_ZOOM_STEP = 0.25;
 const WIN_RATE_BASE_CHART_HEIGHT_REM = 3.2;
+
+function CoachingStatusGlyph({ chip, catalog }: { chip: CoachingStatusChip; catalog?: GameAssetCatalog }) {
+  if (chip.kind === "weapon" && chip.item) {
+    const presentation = resolveItemPresentation(catalog, chip.item);
+    if (presentation.iconRef) return <img src={presentation.iconRef} alt="" aria-hidden="true" />;
+  }
+  if (chip.kind === "location") return <MapPin aria-hidden="true" />;
+  if (chip.kind === "health") return <Heart aria-hidden="true" />;
+  if (chip.kind === "armor") return <Shield aria-hidden="true" />;
+  if (chip.kind === "utility") return <PackageOpen aria-hidden="true" />;
+  if (chip.kind === "money") return <CircleDollarSign aria-hidden="true" />;
+  if (chip.kind === "objective") return <Bomb aria-hidden="true" />;
+  return <Crosshair aria-hidden="true" />;
+}
+
+function coachingStatusText(chip: CoachingStatusChip, catalog?: GameAssetCatalog): string {
+  if (chip.kind !== "weapon" || !chip.item) return chip.text;
+  return resolveItemPresentation(catalog, chip.item).label;
+}
 
 export interface Cs2dPlaybackHostProps {
   /** Optional test/provider override; production builds it from ANALYSIS_READY. */
@@ -167,6 +203,15 @@ export function Cs2dPlaybackHost({
   const [timelineHorizontalZoom, setTimelineHorizontalZoom] = useState(1);
   const [winRateVerticalZoom, setWinRateVerticalZoom] = useState(1);
   const [timelinePanning, setTimelinePanning] = useState(false);
+  const [gameAssetCatalog, setGameAssetCatalog] = useState<GameAssetCatalog>();
+
+  useEffect(() => {
+    let active = true;
+    void loadLocalGameAssetCatalog().then((catalog) => {
+      if (active) setGameAssetCatalog(catalog);
+    });
+    return () => { active = false; };
+  }, []);
 
   const invalidateGeneration = useCallback(() => {
     generationRef.current += 1;
@@ -607,6 +652,21 @@ export function Cs2dPlaybackHost({
   const coachingView = hostCoachingCueSurface(cue, session?.phase, session?.outcome_completion, cue ? narrationByCue[cue.id] : undefined);
   const presentableNarration = coachingView?.narration;
   const outcomeImpact = cue && bundle?.outcome_impacts.find((impact) => impact.cueId === cue.id);
+  const candidateMaterial = cue?.candidate_id
+    ? bundle?.candidate_set.materials.find((material) => material.candidateId === cue.candidate_id)
+    : undefined;
+  const decisionPlayerState = cue && selected
+    ? playerStateAtOrBefore(bundle?.match_timeline.player_state_tracks ?? [], selected.playerId, cue.decision_tick)
+    : undefined;
+  const threeStageCoaching = presentableNarration && coachingView
+    ? buildThreeStageCoachingView({
+        narration: presentableNarration,
+        decisionState: decisionPlayerState,
+        callout: candidateMaterial?.callout,
+        outcomeFacts: coachingView.outcomeFacts,
+        outcomeImpact
+      })
+    : undefined;
   const summary = useMemo(() => {
     if (!activePlan || !session || !["WRAP_UP", "COMPLETED"].includes(session.phase)) return undefined;
     try {
@@ -762,7 +822,7 @@ export function Cs2dPlaybackHost({
             </section>
           ) : null}
 
-          {session && !userTookOver && cue && cueRevealed && coachingView && presentableNarration && session.phase === "PAUSED_FOR_COACHING" ? (
+          {session && !userTookOver && cue && cueRevealed && coachingView && presentableNarration && threeStageCoaching && session.phase === "PAUSED_FOR_COACHING" ? (
             <section className="cs2d-coach-cue" aria-live="polite">
               <div className="cs2d-coach-cue-heading">
                 <small>第 {segment?.round_number ?? ""} 回合 · 处理看完了</small>
@@ -771,49 +831,42 @@ export function Cs2dPlaybackHost({
               <div className="cs2d-coaching-bands">
                 <section className="cs2d-coaching-band cs2d-coaching-band--situation">
                   <div className="cs2d-coaching-band-heading">
-                    <strong>当前情况</strong>
-                    <small>决策前可知</small>
+                    <span className="cs2d-coaching-band-icon"><Crosshair aria-hidden="true" /></span>
+                    <strong>当前状态</strong>
                   </div>
-                  <p>{presentableNarration.currentSituation.text}</p>
+                  {threeStageCoaching.currentState.chips.length > 0 ? (
+                    <ul className="cs2d-coaching-status-list">
+                      {threeStageCoaching.currentState.chips.map((chip, index) => (
+                        <li key={`${chip.kind}-${index}`}>
+                          <CoachingStatusGlyph chip={chip} catalog={gameAssetCatalog} />
+                          <span>{coachingStatusText(chip, gameAssetCatalog)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : <p>{threeStageCoaching.currentState.fallbackText}</p>}
                 </section>
-                <section className="cs2d-coaching-band cs2d-coaching-band--action">
+                <section className="cs2d-coaching-band cs2d-coaching-band--problem">
                   <div className="cs2d-coaching-band-heading">
-                    <strong>你做了什么</strong>
-                    <small>已播放</small>
+                    <span className="cs2d-coaching-band-icon"><TriangleAlert aria-hidden="true" /></span>
+                    <strong>这样做的问题</strong>
                   </div>
-                  <p>{presentableNarration.playerAction.text}</p>
-                </section>
-                <section className="cs2d-coaching-band cs2d-coaching-band--analysis">
-                  <div className="cs2d-coaching-band-heading">
-                    <strong>核心问题</strong>
-                    <small>这次为什么危险</small>
-                  </div>
-                  <p>{presentableNarration.coreIssue.text}</p>
-                </section>
-                <section className="cs2d-coaching-band cs2d-coaching-band--better">
-                  <div className="cs2d-coaching-band-heading">
-                    <strong>更好的处理</strong>
-                    <small>下一次这样做</small>
-                  </div>
-                  <p>{presentableNarration.betterPlay.text}</p>
-                </section>
-                <section className="cs2d-coaching-band cs2d-coaching-band--outcome">
-                  <div className="cs2d-coaching-band-heading">
-                    <strong>结果影响</strong>
-                    <small>结果窗口已完成</small>
-                  </div>
-                  <p>{presentableNarration.outcomeImpact.text}</p>
-                  {outcomeImpact ? (
-                    <div className="cs2d-coaching-impact">
-                      <small>胜率信号</small>
-                      <p>{outcomeImpact.text}</p>
-                      {outcomeImpact.confidence === "LOW" ? <span>多事件同时发生，只描述这段处理后的变化。</span> : null}
+                  <p>{threeStageCoaching.problem.text}</p>
+                  {threeStageCoaching.problem.consequences.length > 0 ? (
+                    <div className="cs2d-coaching-consequence">
+                      <TriangleAlert aria-hidden="true" />
+                      <span>{threeStageCoaching.problem.consequences.join(" ")}</span>
                     </div>
                   ) : null}
                 </section>
+                <section className="cs2d-coaching-band cs2d-coaching-band--better">
+                  <div className="cs2d-coaching-band-heading">
+                    <span className="cs2d-coaching-band-icon"><Lightbulb aria-hidden="true" /></span>
+                    <strong>可以怎么改进</strong>
+                  </div>
+                  <p>{threeStageCoaching.improvement.text}</p>
+                </section>
               </div>
               <div className="cs2d-coach-result-actions">
-                <p>结果已看完。你可以再看一遍，或者接着往下走。</p>
                 <button type="button" onClick={() => transition({ type: "REPLAY_OUTCOME" })}>再看一遍</button>
                 <button className="cs2d-coach-primary" type="button" onClick={() => transition({ type: "ADVANCE_SEGMENT" })}>继续下一段</button>
               </div>

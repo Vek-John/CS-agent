@@ -76,6 +76,7 @@ describe("DeepSeek five-field narrator provider", () => {
     expect(body.thinking).toEqual({ type: "disabled" });
     expect(body.response_format).toEqual({ type: "json_object" });
     expect(body.messages[0].content).toContain("架枪、预瞄、小身位 peek、补枪、eco、强起");
+    expect(body.messages[0].content).toContain("Never print primaryFocusCode");
     expect(body.messages[1].content).not.toMatch(/tick|frame|segment|route|order/i);
   });
 
@@ -85,6 +86,7 @@ describe("DeepSeek five-field narrator provider", () => {
     const result = await narrateWithDeepSeek(request, {}, vi.fn());
     expect(result.status).toBe("FALLBACK");
     expect(result.manifest.reason).toBe("MISSING_API_KEY");
+    expect(result.bundle.coreIssue.text).not.toContain(FOCUS);
     expect(result.bundle.outcomeImpact.refs).toEqual(["o1"]);
     expect(result.bundle.outcomeImpact.text).toContain("这次接触后你被击杀");
   });

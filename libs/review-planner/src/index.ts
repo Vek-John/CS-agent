@@ -553,3 +553,4 @@ export * from "./teaching-pipeline";
 export * from "./candidate-generator";
 export * from "./coaching-package-builder";
 export * from "./narration-package-builder";
+export * from "./coaching-language";

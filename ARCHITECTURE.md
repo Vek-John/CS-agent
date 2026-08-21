@@ -1,7 +1,7 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：3.4.0
+> 版本：3.4.1
 > 最后更新：2026-08-21
 > 适用范围：Web 2D 到桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
@@ -86,7 +86,7 @@ Demo
 
 ### 2.4 完整处理先播放，结果结束后讲解
 
-讲解点区分 `decision_tick`、`reveal_tick` 和 `outcome_range`，并满足 `decision_tick <= outcome_start_tick < reveal_tick <= outcome_end_tick`。播放器从决策点前约 1 秒进入片段，不在决策前暂停，也不要求用户先猜；它连续播放用户的真实选择与结果，到达 `outcome_end_tick` 后自动暂停并回到 `decision_tick`，再一次性展示当前情况、可验证动作与 Outcome Fact、核心问题、替代处理和结果影响。在结果窗口完成前，任何用户可见讲解与问答都不得泄漏结果；决策侧判断始终只能读取 `decision_tick` 之前的 `ObservableState`。前置上下文和自动回看不得改变这些事实时间边界。
+讲解点区分 `decision_tick`、`reveal_tick` 和 `outcome_range`，并满足 `decision_tick <= outcome_start_tick < reveal_tick <= outcome_end_tick`。播放器从决策点前约 1 秒进入片段，不在决策前暂停，也不要求用户先猜；它连续播放用户的真实选择与结果，到达 `outcome_end_tick` 后自动暂停并回到 `decision_tick`，再一次性展示三段式复盘：`当前状态`、`这样做的问题（动作、风险与结果）`、`可以怎么改进`。内部仍保留可验证动作、核心问题、替代处理和结果影响的独立引用字段，不因 UI 合并而串线。在结果窗口完成前，任何用户可见讲解与问答都不得泄漏结果；决策侧判断始终只能读取 `decision_tick` 之前的 `ObservableState`。前置上下文和自动回看不得改变这些事实时间边界。
 
 `OutcomeCompletionGate` 是**呈现授权**，不是后台计算授权。最终 Narrator 可以在用户播放前读取严格分离、已校验的 `CoachingPackage` 与 `OutcomePackage`，提前生成密封的 `NarrationBundle`；该 bundle 在 gate 完成前只能处于 `PREPARED`，Host、问答、总结和可见事件不得读取其正文。播放器确认到达 `outcome_end_tick` 后，Session 才把对应 bundle 标记为 `PRESENTABLE`。字段级引用防火墙仍保证当前情况和建议不以结果倒推玩家当时的认知。
 
@@ -467,6 +467,8 @@ Teaching Director 负责从 CandidateSet 中选择 `candidateId`、唯一主要�
 
 Narrator 可以在后台提前读取两份包并返回 `PREPARED` 的密封 bundle；OutcomeCompletionGate 只负责把它从 `PREPARED` 转为 `PRESENTABLE`。这个门控不裁剪全场常显胜率曲线，也不阻止后台计算；它只禁止应用在用户看完结果前展示、问答引用或总结消费完整讲解。模型失败时返回带 reason/manifest 的确定性五字段 bundle，不得无痕保留旧文案。
 
+用户可见教练卡不逐项展示五个内部字段。Presenter 将 `currentSituation` 投影为带位置、生命、护甲、手持、道具、C4 和经济图标的 `当前状态`；将 `playerAction + coreIssue + outcomeImpact` 合并为 `这样做的问题`；将 `betterPlay` 投影为 `可以怎么改进`。内部 `primary_focus_code`、Schema 名和大写 taxonomy token 永不进入玩家文案。胜率曲线仍完整常显，但 cue 级胜率变化四舍五入后不足 1 个百分点时不生成或展示影响文案，禁止出现“上升/下降 0 个百分点”。
+
 问答和总结可以复用 Narrator Adapter，但必须分别构建当前 cue 或已消费内容的最小输入包。模型供应商只属于实现层；每次调用都使用版本化 JSON Schema、Prompt、模型标识和输出校验。
 
 所有 DirectorDecisionSet、NarrationBundle、QuestionAnswer 和 Summary 先通过字段全集、引用 ID、package namespace、时间边界和禁止未来泄漏校验。普通回合不触发 Director/Narrator；模型失败时回退到确定性决策或结构化五字段模板，不阻塞基础回放。
@@ -763,6 +765,8 @@ NarrationBundle
 
 Narrator 只能读取当前 cue 的两份包；`forbidden_refs`、package namespace、可用时间和引用集合由代码生成并在请求前后校验。输出 schema 不包含 segment、顺序、tick 或播放器字段，且 `primary_focus_code` 必须原样回显。OutcomePackage 不得复用 CoachingPackage 的对象引用；bundle 的 `state` 由确定性运行时设置，模型无权输出或修改。
 
+`NarrationBundle` 的五字段是证据防火墙，不是五张用户卡。播放器侧只允许通过确定性的 `ThreeStageCoachingView` 投影展示三段；该投影可以合并文案，但不能改变、补造或跨 namespace 搬运 refs。结构化玩家状态优先用图标/短标签展示，字段不可得时省略而不是堆叠“未知”。
+
 ### 7.8 Playback 协议
 
 当前浏览器 Web 形态的逐帧事实留在 cs2d iframe，不跨 bridge 复制 `Replay` 或自建 `PlaybackFrameViewModel`。localhost 使用 `:5174`，Cloudflare 使用同源 `/cs2d/`；控制面契约为：
@@ -1022,7 +1026,7 @@ priority = proximity_to_playhead
 
 客户端加载轻量 session package 和分块轨迹。LangGraph 根据当前 segment 和用户交互路由 Graph 节点；`SessionOrchestrator` 安全内核将节点产生的动作转换成受限播放命令，从 cue 前置上下文连续播放到结果结束，再回到决策点暂停；用户追问时 Question Adapter 只能通过领域工具取得当前 cue 和允许的上下文。Graph checkpoint 和业务会话事件分别持久化，均不能阻塞播放器基本控制。
 
-地图在所有会话状态都显示当前 tick 的 cs2d 全知 Replay，不提供显式视角切换。信息授权发生在包引用和呈现 gate，而非 renderer：自动播放结果窗口时侧栏不显示密封 NarrationBundle 的任何分析字段；只有播放器确认到达 `outcome_end_tick` 后，Session 才把该 bundle 标记为 PRESENTABLE，并同时展示决策局面、实际动作、核心问题、替代处理和独立结果影响。进入下一个 cue 时重新绑定下一份内部 ObservableState 与密封 bundle；全场胜率曲线仍可始终显示，不受该文字 gate 裁剪。
+地图在所有会话状态都显示当前 tick 的 cs2d 全知 Replay，不提供显式视角切换。信息授权发生在包引用和呈现 gate，而非 renderer：自动播放结果窗口时侧栏不显示密封 NarrationBundle 的任何分析字段；只有播放器确认到达 `outcome_end_tick` 后，Session 才把该 bundle 标记为 PRESENTABLE，并把五字段证据投影为“当前状态 / 这样做的问题 / 可以怎么改进”三段。进入下一个 cue 时重新绑定下一份内部 ObservableState 与密封 bundle；全场胜率曲线仍可始终显示，不受该文字 gate 裁剪。
 
 自动路线继续主持完整 Demo；用户主动操作时仅暂时交出播放头，不丢弃会话。自由查看侧栏显示实际回合与覆盖该位置的 segment，地图/HUD/事件均由同一播放头更新。用户可随时返回离当前播放位置最近的教练节点并从约 1 秒前置上下文重看；未接管时冻结时间直接自动消费、低价值段显式快进、关键 cue 连续播放完整处理并在结束后回到决策点讲解，结果播放、重播和结束暂停维持同一聚焦镜头。
 
@@ -1233,7 +1237,7 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 |---|---|---|
 | 会话而非报告为核心产物 | Accepted | ReviewPlan + CoachingSession 是主对象 |
 | Web 2D 播放入口 | Accepted | 在线 2D，完整时间轴与显式跳过 |
-| 关键片段教学时序 | Accepted | 从 decision 前约 1 秒连续播放至 outcome end，不在决策前打断；完成后自动回到 decision，一次性展示当前情况、Outcome Fact 与教练分析 |
+| 关键片段教学时序 | Accepted | 从 decision 前约 1 秒连续播放至 outcome end，不在决策前打断；完成后自动回到 decision，以“当前状态 / 这样做的问题 / 可以怎么改进”三段式讲解 |
 | Web 2D 地图 | Accepted | 固定版本 cs2d renderer；当前 tick 全知显示；紧凑 5+5 HUD；地图是教练证据画布而非独立产品 |
 | 浏览器 cs2d Replay | Accepted | localhost 使用 `:5174`、Cloudflare 使用同源 `/cs2d/`；浏览器 Worker/WASM 单次解析，raw Replay 留在 iframe；白名单 AnalysisBundle 进入教练壳 |
 | 全知比赛状态 | Accepted | 每 tick/变化点保留位置、朝向、生命护甲、当前手持、库存道具、经济和 C4 等解析器可得事实 |
@@ -1292,3 +1296,4 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 | 3.2.0 | 2026-08-17 | 关键教学时序改为“先连续看完整处理与结果，再回到决策点统一复盘”；Outcome Fact 继续独立于决策侧证据，并只在 outcome 窗口完成后解锁。 |
 | 3.3.0 | 2026-08-18 | 接入固定 cs-net win-rate head 的真实 ONNX/INT8 资产和 iframe Worker 推理；新增全场常显 `WinProbabilityTimelineV1`、经济分类、Director 摆动排序与结果窗口 gated `OutcomeImpact`；模型/下载失败显式降级，不改变单次 cs2d Replay 与 Observation 边界。 |
 | 3.4.0 | 2026-08-21 | 固化 Deterministic CandidateGenerator → DirectorDecisionSet → PlanCompiler → 双包 Narrator 纵向链路；整场 CandidateSet 与 route 在会话前冻结，前两个候选讲解就绪即可开始；OutcomePackage 可后台参与密封讲解生成，但完整 NarrationBundle 只有 outcome_end 后可呈现，后台不得重排已发布路线。 |
+| 3.4.1 | 2026-08-21 | 保留 NarrationBundle 五字段证据边界，将玩家可见讲解收敛为“当前状态 / 这样做的问题 / 可以怎么改进”三段投影；内部 taxonomy 不进 UI，零百分点 cue 影响不展示。 |

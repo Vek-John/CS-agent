@@ -483,6 +483,30 @@ Wrangler 打包报告生成 bundle 中存在重复 `radar_position` 对象键；
 
 部署前曾直接访问生产 `/cs2d/` 的 Edge profile 可能仍由旧 PWA Service Worker/CacheStorage 返回不带隔离头的缓存导航，普通强制刷新不能保证立即退出旧控制器；这不是 Cloudflare Access 权限。首次访问和新网络响应已修复，旧 profile 需要关闭仍打开的 `/cs2d/` 页面并清除此站点的离线缓存或重启浏览器。后续应在嵌入 host 模式禁用上游 PWA 注册，避免 Viewer 基础设施与主产品共享 Service Worker 生命周期。
 
+### 4.21 2026-08-21：五字段证据收敛为三段式玩家讲解
+
+**触发**
+
+真实侧栏把 `currentSituation/playerAction/coreIssue/betterPlay/outcomeImpact` 五个内部字段逐张展示，造成卡片过长；确定性回退还把 `OBJECTIVE_TIMING` 等内部 taxonomy 直接显示给玩家，并重复展示 OutcomeImpact 与“胜率信号”。当概率变化小于一个显示百分点时，界面会出现“94% 到 94%，上升 0 个百分点”。
+
+**决定**
+
+保留 NarrationBundle 五字段及各自 refs，避免破坏 decision/action/outcome namespace 防火墙；新增唯一的 `ThreeStageCoachingView` 玩家投影：结构化状态用位置、HP、护甲、官方物品、道具、C4 和经济图标短标签展示；`playerAction + coreIssue + 有意义的 outcome` 合并为“这样做的问题”；`betterPlay` 单独成为“可以怎么改进”。Presenter 和 deterministic fallback 共用玩家语言映射，内部 focus code 永不进入 UI。`buildOutcomeImpactForCue` 在绝对变化四舍五入不足 1 个百分点时返回无 cue 影响，完整胜率曲线仍保留。DeepSeek Narrator prompt 升到 1.1.0，要求单句、具体 CS 术语、禁止 taxonomy 文案和零百分点。
+
+`emil-design-eng` 与 `apple-design` 的影响是删掉重复层级而不是增加装饰：五张带状卡收敛为三张，状态改为可扫读 chip，问题与后果在同一卡内建立因果，按钮保留即时按压反馈，不为频繁讲解卡增加入场动画；继续支持 reduced motion/transparency。
+
+**落点**
+
+`apps/web/lib/coaching/cs2d-coaching-view.ts`、`apps/web/components/playback/cs2d-playback-host.tsx`、`apps/web/app/globals.css`、`libs/review-planner/src/coaching-language.ts`、Narrator fallback/prompt、cs2d action fact 文案和 OutcomeImpact builder；ARCHITECTURE 3.4.1。
+
+**验证**
+
+全量 Vitest：39 files、258 passed、1 skipped；`pnpm typecheck`、Next production build、`pnpm cs2d:typecheck`、cs2d production build 与 `git diff --check` 通过。定向测试覆盖旧 taxonomy 文案的人话降级、结构化状态 chip、最后决策状态选择、零百分点隐藏和有意义胜率保留。本地临时预览页使用最终 class/资产完成视觉检查，确认三段层级、Valve C4 图标、两行状态 chip 和双按钮在窄侧栏内可读；预览路由随后删除，未进入项目。
+
+**限制 / 下一步**
+
+本次未在浏览器重新上传真实 Demo；动态状态来自既有 MatchTimeline 契约和单元夹具，下一次实际 Demo 复盘应抽查三类 cue（死亡、C4、道具）是否都能生成准确短句。NarrationBundle 仍是五字段内部契约，后续不要为了 UI 数量再次复制一套 LLM Schema。
+
 ## 5. 常用问题排查表
 
 | 现象 | 首先检查 | 常见根因 | 不要做什么 |
