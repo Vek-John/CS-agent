@@ -439,6 +439,28 @@ S1 的 generation controller 需要接入冻结的 CandidateSet、Director、Pla
 
 应用内 Browser 可以加载 `http://localhost:3000` 的 Host，但当前保存权限明确拒绝 `http://localhost:5174`，因此 iframe 无法用于自动上传、截图和 console 验收；没有伪造这些浏览器结果。服务 controller 已清理 3000/5174/9333。下一次可视化验收需先允许 Browser 访问 5174，再上传 `test_demo.dem`；这不影响上述真实 parser/领域链路证据。
 
+### 4.19 2026-08-21：私有仓库推送与 Cloudflare 生产发布
+
+**触发**
+
+完成 WebGPU FP16 batch16 默认路径与确定性候选 → Director → Compiler → Narrator → OutcomeCompletionGate 纵向链路后，需要确认 GitHub 与生产 Worker 使用同一份已验证代码，同时不把 DeepSeek key 写入 Git、bundle 或浏览器变量。
+
+**决定**
+
+以提交 `5a28c8c` 作为本次运行时发布源，推送到私有仓库 `Vek-John/CS-agent` 的 `main`，再通过仓库唯一的 `cloudflare:deploy` 脚本完成 cs2d、OpenNext、静态资产和 Worker 的连续构建发布。DeepSeek 凭据只保留为 Cloudflare Secret；部署后用公开端点状态、隔离响应头、模型清单和无效请求契约做轻量 smoke，不上传真实 Demo 或调用付费模型。
+
+**落点**
+
+GitHub `main`、Cloudflare Worker `cs2-ai-demo-coach`，生产地址 `https://cs2-ai-demo-coach.vekel-hord.workers.dev`；Worker 版本 `e7b8c5bc-b5ac-4d90-a416-3487bd4208a2`。
+
+**验证**
+
+发布前全量 Vitest 为 38 files、253 passed、1 skipped，`pnpm typecheck` 与暂存区 secret scan 通过。Cloudflare build 的 source/bundle secret check 通过，准备 359 个静态资产（183,485,984 bytes），上传 45 个新增或变更资产并成功部署。线上 `/`、`/cs2d/`、`/models/cs-net/win-rate.fp16.manifest.json` 均返回 HTTP 200；根页面包含 COOP `same-origin`、COEP `require-corp`、CORP `cross-origin`；`POST /api/coaching/direct` 的空对象返回预期 HTTP 400。Cloudflare Secret 列表包含 `DEEPSEEK_API_KEY`，未读取或输出其值；GitHub 本地与远端 SHA 一致。
+
+**限制 / 下一步**
+
+Wrangler 打包报告生成 bundle 中存在重复 `radar_position` 对象键；本次编译与线上 smoke 未受影响，但应在下一轮修改相应 Adapter 时消除，避免前一个字段被后一个字段覆盖。此次只做结构与静态资产 smoke，没有在线上传完整 Demo 或消耗 DeepSeek API；真实生产 Demo 的浏览器端到端表现仍需下一次有界验收。
+
 ## 5. 常用问题排查表
 
 | 现象 | 首先检查 | 常见根因 | 不要做什么 |
