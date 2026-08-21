@@ -89,6 +89,30 @@ describe("DeepSeek Director provider packet", () => {
     expect(context.request.candidates[0].allowed_focus_codes).toContain("SURVIVE_THE_NEXT_CONTACT");
   });
 
+  it("states the exact selected response shape so the provider does not echo the request", async () => {
+    const context = buildDirectorProviderRequestContext(candidateSet(1));
+    let requestBody: { messages?: Array<{ content?: string }> } | undefined;
+    const result = await directWithDeepSeek(context.request, { DEEPSEEK_API_KEY: "secret" }, async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return completion(JSON.stringify({
+        selected: [{
+          candidate_id: "c1",
+          priority: 1,
+          primary_focus_code: "SURVIVE_THE_NEXT_CONTACT",
+          selection_reason: "有明确的死亡结果和可验证证据。",
+          reason_refs: ["r1"],
+          evidence_refs: ["e1"],
+          confidence: 0.8
+        }]
+      }));
+    });
+
+    expect(result.status).toBe("SUCCEEDED");
+    expect(requestBody?.messages?.[0]?.content).toContain("do not use a selections key");
+    expect(requestBody?.messages?.[0]?.content).toContain("priority, primary_focus_code, selection_reason, reason_refs, evidence_refs, confidence");
+    expect(requestBody?.messages?.[0]?.content).toContain("Do not echo candidate_set_id");
+  });
+
   it("returns deterministic fallback with a reason for missing key and invalid provider schema", async () => {
     const context = buildDirectorProviderRequestContext(candidateSet(1));
     await expect(directWithDeepSeek(context.request, {}, vi.fn())).resolves.toMatchObject({ status: "FALLBACK", reason: "MISSING_API_KEY" });

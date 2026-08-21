@@ -17,7 +17,7 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_CANDIDATES = 32;
 const MAX_REQUEST_BYTES = 48 * 1024;
 const ALLOWED_MODELS = new Set(["deepseek-v4-flash", "deepseek-v4-pro"]);
-export const DEEPSEEK_DIRECTOR_PROMPT_VERSION = "deepseek-teaching-director/1.0.0";
+export const DEEPSEEK_DIRECTOR_PROMPT_VERSION = "deepseek-teaching-director/1.0.1";
 
 export interface DirectorProviderCandidate {
   candidate_id: string;
@@ -263,6 +263,9 @@ function systemPrompt(): string {
     "You are a provider-neutral CS2 Teaching Director.",
     "Return JSON only with exactly one top-level key selected.",
     "Select only supplied candidate aliases; never create candidates or refs.",
+    "Do not echo candidate_set_id, candidate_set_version, candidate_set_hash, candidates, or max_selected in the response; do not use a selections key.",
+    "The selected value must be an array of objects, and every object must contain exactly candidate_id, priority, primary_focus_code, selection_reason, reason_refs, evidence_refs, confidence.",
+    "Shape example: {selected:[{candidate_id:'c1',priority:1,primary_focus_code:'SURVIVE_THE_NEXT_CONTACT',selection_reason:'...',reason_refs:['r1'],evidence_refs:['e1'],confidence:0.8}]}. reason_refs and evidence_refs must be arrays of supplied aliases.",
     "Each selection has exactly one primary_focus_code.",
     "Do not emit ticks, frames, segments, order, route, player identity, or final coaching prose.",
     "Keep selection_reason concise and grounded in supplied refs."
