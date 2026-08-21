@@ -523,11 +523,33 @@ Wrangler 打包报告生成 bundle 中存在重复 `radar_position` 对象键；
 
 **验证**
 
-修复前线上最小请求连续 3 次均为 `UPSTREAM_SCHEMA`。修复后使用本地授权 Secret 直连同一 DeepSeek 模型，响应仍为 HTTP 200/`stop`，且 `currentSituation/playerAction/coreIssue/betterPlay/outcomeImpact` 五项均为包含 `text`、`refs` 的对象；定向 Vitest 12 项、typecheck 通过。待新 Worker 发布后再运行同一线上最小请求，要求状态为 `SUCCEEDED`。
+修复前线上最小请求连续 3 次均为 `UPSTREAM_SCHEMA`。修复后使用本地授权 Secret 直连同一 DeepSeek 模型，响应仍为 HTTP 200/`stop`，且 `currentSituation/playerAction/coreIssue/betterPlay/outcomeImpact` 五项均为包含 `text`、`refs` 的对象；定向 Vitest 12 项、typecheck 通过。Worker `3a09fb7d-1760-41c8-8354-bde7c8817f50` 发布后，线上同一请求连续 2 次返回 `SUCCEEDED/DEEPSEEK`，prompt 版本为 `1.1.1`。
 
 **限制 / 下一步**
 
 真实 Demo 的完整复盘仍需抽查一条死亡 cue 和一条道具/C4 cue，确认模型在多事实、多引用时保持命名空间正确；模型再次输出非法结构时仍会可追溯降级为确定性模板，不阻塞回放。
+
+### 4.23 2026-08-21：Cloudflare Director 回显请求包并使用错误顶层键
+
+**触发**
+
+生产 `/api/coaching/direct` 同样连续返回 `HTTP 200 / FALLBACK / UPSTREAM_SCHEMA`。脱敏上游响应显示模型回显了完整 `candidate_set_*` 和 `candidates`，并使用 `selections` 顶层键，缺少 `priority`、`reason_refs`、`evidence_refs` 和 `confidence`。
+
+**决定**
+
+保留 Director 的严格 `selected[]` 校验；prompt 明确禁止回显输入包和 `selections`，并给出完整单项输出骨架及匿名引用数组。Director prompt 版本升级到 `deepseek-teaching-director/1.0.1`，非法响应继续走确定性候选回退。
+
+**落点**
+
+`apps/web/lib/coaching/deepseek-director.ts`、`deepseek-director.test.ts`；候选、DirectorDecisionSet 和 PlanCompiler 契约不变。
+
+**验证**
+
+修复前最小 Director 请求连续 2 次为 `UPSTREAM_SCHEMA`；修复后同模型直连探针返回 `selected`，每项字段集合完整且类型正确，定向测试 17 项与 typecheck 通过。Worker `8d28ba61-df7c-49b5-a8ec-a153228bc327` 发布后，同一线上请求返回 `SUCCEEDED/DEEPSEEK`，prompt 版本为 `1.0.1`；Narrator 同时返回 `SUCCEEDED/DEEPSEEK`，首页和 `/cs2d/` 仍为 200。
+
+**限制 / 下一步**
+
+模型供应商仍可能在复杂候选包上产生非法引用，服务端会拒绝并记录可追溯 fallback reason；后续应在真实 Demo 复盘中抽查多候选排序和重复习惯覆盖，而不是放宽校验。
 
 ## 5. 常用问题排查表
 
