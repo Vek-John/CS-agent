@@ -156,10 +156,11 @@ describe("cs2d playback bridge", () => {
       estimatedPeakGpuBytes: 23,
       capability: {
         navigatorGpu: true, workerNavigatorGpu: true, adapterAvailable: true,
-        deviceAvailable: true, shaderF16: true, adapterInfo: "adapter",
-        deviceInfo: "device", deviceFeatures: ["shader-f16"],
+        deviceAvailable: false, shaderF16: true, adapterInfo: "adapter",
+        deviceInfo: "managed-by-ort", deviceFeatures: ["shader-f16"],
       },
       ortSessionCreated: true, profileKernelCount: 1, profileKernelMs: 0.5,
+      ortWarningCount: 1, ortWarnings: ["Some nodes were not assigned to the preferred execution providers"],
       fallbackDetection: "UNKNOWN", fallbackReason: "",
     } as const;
     const event = {
@@ -177,5 +178,28 @@ describe("cs2d playback bridge", () => {
       ...event,
       payload: { ...event.payload, telemetry: { ...telemetry, fallbackDetection: "not-proven" } },
     })).toBe(false);
+    expect(isPlaybackEventEnvelope({
+      ...event,
+      payload: {
+        ...event.payload,
+        telemetry: {
+          ...telemetry,
+          fallbackDetection: "KNOWN_CPU_SHAPE_OPS_FROM_ORT_WARNING",
+          fallbackReason: "Some nodes were not assigned to the preferred execution providers",
+        },
+      },
+    })).toBe(true);
+    expect(isPlaybackEventEnvelope({
+      ...event,
+      payload: {
+        ...event.payload,
+        telemetry: {
+          ...telemetry,
+          providerActual: "unavailable",
+          fallbackDetection: "FAILED",
+          fallbackReason: "WEBGPU_TIMEOUT:WEBGPU_TIMEOUT:deadline exceeded",
+        },
+      },
+    })).toBe(true);
   });
 });

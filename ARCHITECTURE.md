@@ -1,8 +1,8 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：3.2.0
-> 最后更新：2026-08-17
+> 版本：3.4.0
+> 最后更新：2026-08-21
 > 适用范围：Web 2D 到桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
 > 当前产品范围：[MVP_SCOPE.md](./MVP_SCOPE.md)
@@ -50,9 +50,10 @@
 Demo
   → 单次解析的 GroundTruth ReplayBundle
   → 回合场景索引与 ObservableState
-  → Teaching Director 选择可教候选
+  → Deterministic CandidateGenerator 产生 CandidateSet
+  → Teaching Director 从 CandidateSet 选择教学候选
   → PlanCompiler 生成并校验 ReviewPlan
-  → Narrator 根据决策侧 CoachingPackage 构建讲解
+  → Narrator 根据分离的 CoachingPackage 与 OutcomePackage 构建密封讲解
   → 播放器执行＋SessionOrchestrator 主持
   → 用户追问、回看与交互
   → 会后总结
@@ -85,7 +86,9 @@ Demo
 
 ### 2.4 完整处理先播放，结果结束后讲解
 
-讲解点区分 `decision_tick`、`reveal_tick` 和 `outcome_range`，并满足 `decision_tick <= outcome_start_tick < reveal_tick <= outcome_end_tick`。播放器从决策点前约 1 秒进入片段，不在决策前暂停，也不要求用户先猜；它连续播放用户的真实选择与结果，到达 `outcome_end_tick` 后自动暂停并回到 `decision_tick`，再一次性展示当前情况、可验证 Outcome Fact 与一个可执行建议。在结果窗口完成前，任何用户可见讲解与问答都不得泄漏结果；决策侧判断始终只能读取 `decision_tick` 之前的 `ObservableState`。前置上下文和自动回看不得改变这些事实时间边界。
+讲解点区分 `decision_tick`、`reveal_tick` 和 `outcome_range`，并满足 `decision_tick <= outcome_start_tick < reveal_tick <= outcome_end_tick`。播放器从决策点前约 1 秒进入片段，不在决策前暂停，也不要求用户先猜；它连续播放用户的真实选择与结果，到达 `outcome_end_tick` 后自动暂停并回到 `decision_tick`，再一次性展示当前情况、可验证动作与 Outcome Fact、核心问题、替代处理和结果影响。在结果窗口完成前，任何用户可见讲解与问答都不得泄漏结果；决策侧判断始终只能读取 `decision_tick` 之前的 `ObservableState`。前置上下文和自动回看不得改变这些事实时间边界。
+
+`OutcomeCompletionGate` 是**呈现授权**，不是后台计算授权。最终 Narrator 可以在用户播放前读取严格分离、已校验的 `CoachingPackage` 与 `OutcomePackage`，提前生成密封的 `NarrationBundle`；该 bundle 在 gate 完成前只能处于 `PREPARED`，Host、问答、总结和可见事件不得读取其正文。播放器确认到达 `outcome_end_tick` 后，Session 才把对应 bundle 标记为 `PRESENTABLE`。字段级引用防火墙仍保证当前情况和建议不以结果倒推玩家当时的认知。
 
 ### 2.5 事实、推断、建议分层
 
@@ -94,15 +97,15 @@ Demo
 - `Advice`：在事实和推断基础上的替代选择；
 - `Evidence`：职业样本、规则或历史习惯依据。
 
-四者分别存储并引用稳定 ID。Teaching Director 只能返回候选 ID、主题、优先级和理由引用；Narrator 可以组织和构建讲解，但不能创造事实、样本、数值或引用。所有模型输出都必须经过 Schema、引用和时间边界校验。
+四者分别存储并引用稳定 ID。CandidateGenerator 只提名可验证窗口；Teaching Director 只能返回候选 ID、一个主要教学重点、优先级和理由引用；Narrator 可以组织和构建讲解，但不能创造事实、样本、数值、建议语义或引用。所有模型输出都必须经过 Schema、引用和时间边界校验。
 
 ### 2.6 回放全知显示与教练证据边界
 
 浏览器主地图始终显示 cs2d 在当前 canonical tick 的全知事实：双方位置、存活、装备、道具、C4、投掷物和事件不因会话阶段隐藏，也不向用户暴露“玩家已知 / 全知”模式切换。地图的职责是让用户看懂教练正在讲哪一段，不承担信息考试或 POV 模拟。
 
-教学判断仍必须遵守独立的 `ObservableState` 边界。`.dem` 只完整解析一次，Adapter 从同一份结构化 Replay 派生 `MatchTimeline`、场景索引和 `ObservableState`，再由 Teaching Director 与 PlanCompiler 生成 `ReviewPlan`，不得二次解析 Demo，也不得把全知敌人坐标送给决策前 Narrator。地图显示全知不等于教练可以使用全知推理。
+教学判断仍必须遵守独立的 `ObservableState` 边界。`.dem` 只完整解析一次，Adapter 从同一份结构化 Replay 派生 `MatchTimeline`、场景索引和 `ObservableState`，再由 CandidateGenerator、Teaching Director 与 PlanCompiler 生成冻结的 `ReviewPlan`，不得二次解析 Demo，也不得把全知敌人坐标送入 decision_context 或建议字段。地图显示全知不等于教练可以使用全知推理。
 
-`ObservableState` 不是“可见圆”或 `observed: boolean`，也不是用户可见的第二套 renderer 输入。它是内部证据白名单，由带时间、来源、空间精度、身份精度、置信度和过期规则的 `ObservationClaim` 组成：直视可以形成较精确位置；脚步、枪声和伤害方向通常只形成区域或方向信息；最后已知位置随时间衰减；队友看见不自动等于所选玩家知道。Director 可以使用完整回合来判断教学价值，但其输出只能引用候选和证据 ID；Narrator 的决策侧 `CoachingPackage` 只能引用 decision tick 之前的 claim/fact。Outcome Fact 单独标记为 `OUTCOME`，不进入 observable refs 或决策侧模型输入，并且只在播放器确认完成结果区间后进入用户可见解释。
+`ObservableState` 不是“可见圆”或 `observed: boolean`，也不是用户可见的第二套 renderer 输入。它是内部证据白名单，由带时间、来源、空间精度、身份精度、置信度和过期规则的 `ObservationClaim` 组成：直视可以形成较精确位置；脚步、枪声和伤害方向通常只形成区域或方向信息；最后已知位置随时间衰减；队友看见不自动等于所选玩家知道。Director 可以使用完整回合来判断教学价值，但其输出只能引用候选和证据 ID；Narrator 的 `CoachingPackage.decision_context` 只能引用 decision tick 之前的 claim/fact。Outcome Fact 单独标记为 `OUTCOME`，不进入 observable refs 或 decision_context；它只进入独立 OutcomePackage，并且只在播放器确认完成结果区间后进入用户可见解释。
 
 ### 2.7 原始数据不可变，派生物版本化
 
@@ -110,7 +113,7 @@ Demo
 
 ### 2.8 结构化事实优先，LLM 负责教学判断与表达
 
-Parser、SceneIndex、ObservationBuilder 和 PlanCompiler 先提供可追溯的结构化事实。LLM 在受限 `TeachingPacket` 上判断教学价值，在受限 `CoachingPackage` 上构建讲解；它不能读取原始 Demo、任意数据库或直接控制播放器。学习排序器、视觉模型和端到端模型只能替换明确的 Director 子模块，并且必须有黄金集、版本、回滚和确定性校验。
+Parser、SceneIndex、ObservationBuilder、CandidateGenerator 和 PlanCompiler 先提供可追溯的结构化事实与执行计划。Director LLM 在受限候选摘要上判断教学价值；Narrator LLM 只对 PlanCompiler 已锁定的候选和主要重点，在分离的 `CoachingPackage`/`OutcomePackage` 上构建结构化讲解。模型不能读取原始 Demo、任意数据库或直接控制播放器。学习排序器、视觉模型和端到端模型只能替换明确的 Director 子模块，并且必须有黄金集、版本、回滚和确定性校验。
 
 ### 2.9 个人记忆本地优先
 
@@ -122,9 +125,9 @@ Parser、SceneIndex、ObservationBuilder 和 PlanCompiler 先提供可追溯的�
 
 ### 2.11 渐进式就绪
 
-用户无需等待整场深度分析完成。上传结束后系统先完成整场快速索引，再优先准备开场观看窗口；前 2–3 回合达到 `READY` 即可启动会话，后续回合按播放顺序在后台持续分析。
+用户无需等待整场讲解全部完成。上传结束后系统先完成整场快速索引和廉价 CandidateSet，再由 Director 与 PlanCompiler 一次性冻结整场路线；前 `min(2, cue_count)` 个候选的 NarrationBundle 达到 `READY` 或可追溯 `FALLBACK` 即可启动会话，后续候选按播放顺序在后台持续准备。
 
-渐进式就绪不降低事实门槛：只有状态为 `READY` 的区间才能交给 CoachingRuntime；用户已观看的讲解冻结版本，不被后台分析静默改写；完整比赛覆盖和跨回合习惯聚合最迟在进入会后总结前完成。
+渐进式就绪不降低事实门槛：CandidateSet 未完整索引时不能调用 Director；ReviewPlan 未经 PlanCompiler 校验和冻结时不能启动。后台只允许为未消费 cue 补充 narration，不得重排、增删或改写 segment、cue、canonical tick、主要教学重点和引用集合；用户开始观看的 cue 立即冻结。缓冲追上准备头时停在自然 segment 边界，进入显式 `BUFFERING`，优先准备下一个 cue 后自动恢复。未知或失败区间不得被当成低价值 `SKIP`。
 
 ## 3. 系统上下文与演进
 
@@ -184,37 +187,47 @@ flowchart TB
 
 ### 3.3 教学分析主链路
 
-这是长期架构的核心数据流。`GroundTruth ReplayBundle` 只产生一次；Renderer 使用全知事实，Director 使用回合教学包，Narrator 使用决策侧证据包，三者不能互换输入。
+这是长期架构的核心数据流。`GroundTruth ReplayBundle` 只产生一次；Renderer 使用全知事实，CandidateGenerator 使用结构化事实与整场信号，Director 只使用候选摘要，Narrator 使用 PlanCompiler 锁定候选的两份分离证据包；这些输入不能互换。
 
 ```mermaid
 flowchart LR
     Demo[".dem"] --> Parser["Parser Adapter\n单次解析"]
     Parser --> Replay["GroundTruth ReplayBundle"]
     Replay --> Renderer["统一 Playback Renderer\n全知当前 tick"]
-    Replay --> Index["SceneIndex\n回合 / 事件 / candidateId"]
+    Replay --> Index["SceneIndex\n回合 / 事件 / 事实窗口"]
     Replay --> Obs["ObservationBuilder\n玩家当时可知信息"]
     Replay --> Visual["VisualSceneSampler\n可选地图关键帧"]
-    Index --> DirectorPacket["TeachingPacket\n可含完整回合结果"]
-    Obs --> DirectorPacket
+    Index --> Candidate["Deterministic CandidateGenerator\n廉价全场提名"]
+    Obs --> Candidate
+    Replay --> Signal["全场胜率 / 经济 / 死亡信号\n只计算一次"]
+    Signal --> Candidate
+    Candidate --> CandidateSet["CandidateSet\n稳定 candidateId / 窗口 / refs"]
+    CandidateSet --> DirectorPacket["DirectorPacket\n匿名紧凑候选摘要"]
     Visual --> DirectorPacket
     DirectorPacket --> Director["Teaching Director LLM\n只返回候选与教学意图"]
-    Director --> Compiler["PlanCompiler\n覆盖 / tick / 引用 / 预算校验"]
+    Director --> Decisions["DirectorDecisionSet\n候选 / 唯一重点 / 优先级"]
+    Decisions --> Compiler["PlanCompiler\n覆盖 / tick / 引用 / 预算校验"]
+    CandidateSet --> Compiler
     Replay --> Compiler
     Obs --> Compiler
-    Compiler --> Plan["ReviewPlan"]
-    Plan --> Evidence["CoachingEvidenceBuilder"]
+    Compiler --> Plan["ReviewPlan\n整场路线冻结"]
+    Plan --> Evidence["NarrationPackageBuilder"]
+    CandidateSet --> Evidence
     Obs --> Evidence
-    Evidence --> Package["CoachingPackage\n仅决策侧证据"]
-    Package --> Narrator["Narrator LLM\n构建结构化讲解"]
-    Narrator --> Session["SessionOrchestrator"]
+    Evidence --> CoachingPackage["CoachingPackage\n决策局面 / 实际动作 / Advice"]
+    Evidence --> OutcomePackage["OutcomePackage\n结果事实 / 胜率影响"]
+    CoachingPackage --> Narrator["Narrator LLM\n构建五字段讲解"]
+    OutcomePackage --> Narrator
+    Narrator --> Sealed["NarrationBundle\nPREPARED / 密封"]
+    Sealed --> Session["SessionOrchestrator"]
     Session --> Renderer
     Session --> Reveal["OutcomeCompletionGate\n播放至 outcome_end"]
-    Reveal --> Outcome["OutcomePackage\n结果窗口完成后解锁"]
-    Outcome --> Session
+    Reveal --> Presentable["NarrationBundle\nPRESENTABLE"]
+    Presentable --> Session
     Session --> Summary["SummaryBuilder\n全场结束后"]
 ```
 
-`DirectorPacket` 与 `CoachingPackage` 必须是两个不同的契约。Director 可以使用结果判断教学价值，但只能返回 `candidateId`、主题、优先级和引用；决策侧 Narrator 不能看到结果包或未到达 `decision_tick` 的事实。结果窗口完成后，Session 才能把已校验的决策侧讲解与独立 OutcomePackage 组合成用户可见复盘。模型可以更换，Renderer、PlanCompiler 和 SessionOrchestrator 的边界不能被模型绕过。
+`CandidateSet`、`DirectorPacket`、`CoachingPackage` 和 `OutcomePackage` 是四个不同契约。Director 可以使用结果信号判断教学价值，但只能返回已存在的 `candidateId`、唯一主要重点、优先级和引用；PlanCompiler 不信任 Director 的顺序或 tick。Narrator 可以提前同时读取严格分离的 Coaching/Outcome 包，但每个输出字段只能引用其允许集合；完整 `NarrationBundle` 在 OutcomeCompletionGate 完成前保持密封。模型可以更换，CandidateGenerator、PlanCompiler、Renderer 和 SessionOrchestrator 的深模块接口不能被模型绕过。
 
 ## 4. 技术基线
 
@@ -250,7 +263,7 @@ flowchart LR
 
 整体采用“模块化单体＋异步分析流水线＋LangGraph CoachingRuntime＋Teaching Director/Narrator＋确定性播放器控制”。LangGraph 编排有状态的教学会话；模型只产生受限结构化提案和讲解，SessionOrchestrator、PlanCompiler 与领域服务负责事实、时间和执行。
 
-Worker 使用至少三档队列优先级：`interactive` 处理用户即将观看的回合，`normal` 处理后续回合，`batch` 处理职业语料和非紧急重算。用户会话维护 3–5 回合的目标缓冲水位；水位下降时只提升未就绪相邻回合，不抢占已经开始的幂等任务。
+Worker 使用至少三档队列优先级：`interactive` 处理 frozen route 上即将观看的 cue，`normal` 处理后续候选讲解，`batch` 处理职业语料和非紧急重算。用户会话优先维持下一个 cue 的 narration 水位；水位下降时只提升未就绪候选，不为普通回合启动深度 LLM 任务，也不抢占已经开始的幂等任务。
 
 不把微服务、Kubernetes、独立向量数据库、全量 tick 入关系库、LLM 任意 SQL/数据库权限或端到端模型控制产品作为架构前提。LangGraph 是当前 CoachingRuntime 的编排基线，但 Graph 外的领域模块不依赖它；只有测量到瓶颈或出现明确能力收益时，才在不改变领域契约的前提下替换实现。
 
@@ -342,27 +355,31 @@ Parser Adapter 还要规范化击杀、伤害、开火、换弹、投掷物、�
 - 敌方武器、道具、金钱等全知装备事实不会自动进入玩家视角；可见手持、已使用道具或经济推断分别标注来源与精度；
 - 任何 `decision_tick` 的查询只返回 `available_from_tick <= decision_tick` 的 claim，结果区间和未来事件不可回灌。
 
-`ObservableState` 只进入 TeachingPacket、CoachingEvidenceBuilder、Narrator 的决策侧 `CoachingPackage` 与未来泄漏测试，不进入 cs2d renderer，也不作为用户可见模式。cs2d 地图始终渲染当前 tick 的全知 Replay；语音无法可靠获得时，教练证据不假装已知，系统继续输出来源、时间、置信度与 limitation。
+`ObservableState` 只进入 CandidateGenerator/Director 的证据摘要、NarrationPackageBuilder 的 decision_context 与未来泄漏测试，不进入 OutcomePackage、cs2d renderer，也不作为用户可见模式。cs2d 地图始终渲染当前 tick 的全知 Replay；语音无法可靠获得时，教练证据不假装已知，系统继续输出来源、时间、置信度与 limitation。
 
-### 6.5 SceneIndex 与候选场景
+### 6.5 SceneIndex 与 Deterministic CandidateGenerator
 
-SceneIndex 把完整 Replay 按回合组织成可寻址场景和候选锚点，例如重复 peek、优势处理、补枪关系、接触后生存、转点、回防、保枪和道具时机。它只回答“哪些事实窗口可被模型引用”，不判断最终是否值得教学，也不写自然语言长评。
+SceneIndex 把完整 Replay 按回合组织成可寻址事实窗口；它不产生教学结论。Deterministic CandidateGenerator 在这个索引之上，结合所选玩家、全场一次性胜率/经济/死亡信号和 ObservableState，提名重复 peek、优势处理、无补枪接触、接触后生存、转点、回防、保枪和道具时机等候选，输出完整 `CandidateSet`。
 
-候选场景带有稳定 `candidateId`、事件/帧引用、决策窗口、结果窗口、可用的 ObservableState 引用和可选视觉 storyboard。它们是 Director 的输入边界，也是 PlanCompiler 的寻址边界。
+候选带稳定 `candidateId`、来源信号、事件/帧引用、约一秒 pre-roll、decision/reveal/outcome 窗口、决策事实与 claim 引用、实际动作引用、结果引用、胜率/经济信号、缺失字段、限制和确定性初始分数。CandidateGenerator 只回答“哪些可验证窗口可能值得教”，不决定最终教学数量、主要问题或文案。相同输入和版本必须产生相同、按 `decision_tick → candidateId` 排序的 CandidateSet；`UNKNOWN` 或生成失败不能成为低价值 `SKIP` 的依据。
+
+CandidateSet 在调用 Director 前必须完整索引。为了大 Demo，Generator 在拥有 Replay 的 iframe/Worker 内消费 RoundChunk 或紧凑事实索引；不得把整份 Replay 复制到控制面、LLM 或新的 AI Worker。跨 seam 只传候选摘要与引用。
 
 ### 6.6 TeachingDirector 与 PlanCompiler
 
-Teaching Director 读取每回合或批量回合的 `TeachingPacket`，判断是否值得教学、选择 `candidateId`、主题、优先级、教学理由和置信度。Director 可以看到完整回合的结果来判断教学价值，但不得输出未经索引的 tick、事实、样本比例或播放器命令。
+Teaching Director 读取由 CandidateSet 投影出的匿名紧凑 `DirectorPacket`，判断是否值得教学，输出 `DirectorDecisionSet`。每个被选 candidate 必须恰好锁定一个 `primary_focus_code`，并带优先级、选择理由、候选内的 reason/evidence refs 和置信度。Director 可以看到完整结果信号来判断教学价值，但不得输出未经索引的 candidate、tick、事实、样本比例、最终教练文案或播放器命令。
 
-PlanCompiler 把 DirectorDecision、GroundTruth、ObservableState 和用户配置编译为连续的 `ReviewPlan`，并执行确定性校验：
+PlanCompiler 把 CandidateSet、DirectorDecisionSet、GroundTruth、ObservableState 和用户配置编译为连续的 `ReviewPlan`，并执行确定性校验：
 
 - 完整覆盖、半开区间和无重叠；
 - `decision_tick`、`reveal_tick`、outcome 区间合法且来自真实事实；
 - 每个 cue 的 facts、claims、advice 和 evidence 引用有效；
 - 深讲预算、同类去重、回合分布和用户配置满足约束；
-- Director 超时、拒答或输出无效时使用可追溯的确定性候选回退。
+- Director 只能引用 CandidateSet 内的候选和 refs，重复/未知候选、多重点或额外字段必须拒绝；
+- Director 超时、拒答或输出无效时使用带 reason、版本和 manifest 的确定性回退；
+- 编译后的 route fingerprint、segment/cue 顺序、tick、candidate 绑定和主要重点在会话启动前冻结。
 
-PlanCompiler 最终划分 `SKIP`、`BRIEF`、`OBSERVE`、`DEEP_DIVE` 和 `HABIT_CHECK`，但“是否值得深讲”的主要判断来自 Director，而不是由播放器或 Narrator 临时决定。PlanCompiler 是模型与播放器之间不可绕过的硬边界。
+PlanCompiler 最终划分 `SKIP`、`BRIEF`、`OBSERVE`、`DEEP_DIVE` 和 `HABIT_CHECK`，但“是否值得深讲”的主要判断来自 Director，而不是由播放器或 Narrator 临时决定。没有候选的普通回合只保留完整覆盖，不产生 Director/Narrator job；索引为 UNKNOWN 的区间只能 `BRIEF/OBSERVE/BUFFERING` 或显式失败，不能自动标为低价值。PlanCompiler 是模型与播放器之间不可绕过的硬边界；“CompiledReviewPlan”只表示通过该模块校验并冻结的现有 `ReviewPlan`，不是另一份平行计划对象。
 
 ### 6.7 SessionOrchestrator
 
@@ -374,7 +391,7 @@ Graph 内的 `SessionOrchestrator` 节点仍是确定性的：它校验完整时
 
 - `load_review_plan`：载入已校验的复盘计划；
 - `present_segment` / `advance_segment`：按覆盖约束推进；
-- `narrate_cue`：调用 Narrator 生成决策侧讲解；
+- `prepare_narration`：按 frozen route 顺序为选中 cue 构建两份包并生成密封 NarrationBundle；
 - `await_user` / `answer_question`：等待继续、追问或播放控制；
 - `reveal_outcome` / `replay_segment`：在授权后生成结果包并播放；
 - `habit_check`：复查已讲习惯；
@@ -438,16 +455,21 @@ Host 不复用上游产品的业务控制逻辑。普通播放和用户自由查
 
 ### 6.11 Coaching
 
-Coaching 包分成两个不可互换的契约：
+Coaching 分析使用三类不可互换的契约：
 
-- `TeachingPacket` 给 Director 使用，可以包含一个回合的完整结构化事实、结果、候选场景、ObservableState 摘要和可选视觉 storyboard；它不包含 raw Replay 或任意数据库权限；
-- `CoachingPackage` 给 Narrator 使用，只包含当前 cue 的匿名 facts、inferences、advice、evidence、decision-side claims、表达约束和限制，不包含结果事实、未到达 `decision_tick` 的事件、原始 Demo、稳定身份、路径或播放器控制。
+- `DirectorPacket` 给 Director 使用，是 CandidateSet 的匿名紧凑投影，可以包含完整结果信号、候选 refs 和可选视觉 storyboard；它不包含 raw Replay、稳定身份、任意 tick 输出权限或数据库权限；
+- `CoachingPackage` 给 Narrator 使用，内部明确分成 `decision_context` 与 `player_action`。前者只含 decision tick 前的匿名 facts/claims/inferences/Advice/Evidence；后者只含 Demo 可证明的实际动作 refs，动作不是 ObservableClaim，也不能倒灌为玩家当时已知信息；
+- `OutcomePackage` 给同一次 Narrator 调用使用，只含当前候选的 outcome facts、死亡/击杀/掉血 refs、`WinProbabilityImpact`、measurement refs、并发混杂和限制；它与 CoachingPackage 不共享可变对象或 ref namespace。
 
-Teaching Director 负责从 TeachingPacket 中选择 `candidateId`、教学主题、优先级、教学意图和引用；它不生成最终播放器命令。Narrator 负责根据 CoachingPackage 构建完整、具体的教练讲解，包括标题、局面解释、风险、替代动作和触发条件；它不能新增事实或引用。结果说明必须使用单独的 outcome-scoped package，并只能在播放器确认结果窗口完成后解锁。MVP 可以确定性组合已准备的决策侧讲解与 Outcome Fact，不要求额外模型调用。
+Teaching Director 负责从 CandidateSet 中选择 `candidateId`、唯一主要重点、优先级和引用；它不生成最终播放器命令或教练文案。PlanCompiler 锁定路线和重点后，Narrator 才能根据两份包构建 `NarrationBundle`，至少包含 `currentSituation`、`playerAction`、`coreIssue`、`betterPlay` 和 `outcomeImpact`。Narrator 不能新增事实、引用、建议语义、候选或重点，也不能修改顺序、segment 或任何 tick。
+
+字段级引用规则是强制接口：`currentSituation` 只引用 decision facts/claims；`playerAction` 只引用 action refs；`coreIssue` 必须回显 Director 的 `primary_focus_code`，只引用 decision/action 证据，不能只靠结果倒推；`betterPlay` 至少引用一个已有 Advice，不能引用 OutcomePackage；`outcomeImpact` 至少引用一个 outcome fact 或 WinProbabilityImpact，并且只能引用 OutcomePackage。缺失材料以 limitation 表达，不能让模型补造。
+
+Narrator 可以在后台提前读取两份包并返回 `PREPARED` 的密封 bundle；OutcomeCompletionGate 只负责把它从 `PREPARED` 转为 `PRESENTABLE`。这个门控不裁剪全场常显胜率曲线，也不阻止后台计算；它只禁止应用在用户看完结果前展示、问答引用或总结消费完整讲解。模型失败时返回带 reason/manifest 的确定性五字段 bundle，不得无痕保留旧文案。
 
 问答和总结可以复用 Narrator Adapter，但必须分别构建当前 cue 或已消费内容的最小输入包。模型供应商只属于实现层；每次调用都使用版本化 JSON Schema、Prompt、模型标识和输出校验。
 
-所有 DirectorDecision、Narration、QuestionAnswer 和 Summary 先通过字段全集、引用 ID、时间边界和禁止未来泄漏校验。模型失败时回退到确定性计划或结构化模板，不阻塞会话。
+所有 DirectorDecisionSet、NarrationBundle、QuestionAnswer 和 Summary 先通过字段全集、引用 ID、package namespace、时间边界和禁止未来泄漏校验。普通回合不触发 Director/Narrator；模型失败时回退到确定性决策或结构化五字段模板，不阻塞基础回放。
 
 ### 6.12 PersonalMemory（长期）
 
@@ -537,7 +559,7 @@ Adapter 输入是固定 commit 的结构化 Replay 端口，输出不包含 fram
 
 `WinProbabilityTimelineV1` 是来自固定 cs-net win-rate head 的整场分析信号。它覆盖所有正式回合和播放头之后的时间，和唯一整场时间轴共用 canonical tick 横坐标；Host 不按当前 tick、cue 或决策/结果边界裁剪它。曲线可以显示回合边界、50% 中线、死亡/明显摆动和双方独立的 `PISTOL`、`ECO`、`FORCE`、`FULL`、`UNKNOWN` 经济分类，但不冒充 `ObservableState`，也不改变决策侧未来信息边界。换边时由当前选手在 Replay 中的回合状态派生“你方胜率”。
 
-cs-net 的特征适配器只读取同一份 cs2d 结构化 Replay：31 个 token（10 名玩家、C4、20 个投掷物），模型在 cs2d iframe 的独立 Web Worker 中以 ONNX Runtime Web/WASM fallback 执行。模型 revision、checkpoint/config/tokenizer/feature-builder SHA、temperature、量化类型、资产 SHA 和大小必须记录在 `WinProbabilityModelManifest`；当前发布资产为固定 INT8 weight-only ONNX，单文件低于 Cloudflare Worker Static Assets 25 MiB 限额。下载与分块推理必须报告真实进度；模型失败只产生 `UNAVAILABLE`，继续使用确定性 Director/ReviewPlan 回退，不阻塞基础回放。浏览器可以按 revision/SHA 缓存模型，但不把 raw Replay、`.dem` 或模型输入发给 Next/LLM。
+cs-net 的特征适配器只读取同一份 cs2d 结构化 Replay：31 个 token（10 名玩家、C4、20 个投掷物），模型在 cs2d iframe 的独立 Web Worker 中以 ONNX Runtime Web/WebGPU FP16 为默认、INT8 WASM 为失败回退执行。模型 revision、checkpoint/config/tokenizer/feature-builder SHA、temperature、量化类型、资产 SHA 和大小必须记录在 `WinProbabilityModelManifest`；发布资产同时包含固定 INT8 weight-only ONNX 与 19.45 MB 的 FP16 ONNX，均低于 Cloudflare Worker Static Assets 25 MiB 单文件限额。下载与分块推理必须报告真实进度；模型失败只产生 `UNAVAILABLE`，继续使用确定性 Director/ReviewPlan 回退，不阻塞基础回放。浏览器可以按 revision/SHA 缓存模型，但不把 raw Replay、`.dem` 或模型输入发给 Next/LLM。
 
 Runtime 的长期契约是“能力证明后才启用优化”：只有顶层文档和 `/cs2d/` iframe 同时满足 `crossOriginIsolated`、`SharedArrayBuffer` 与共享 WASM memory probe，才允许显式的 2/4-thread candidate；否则 Worker 以单线程运行并在结构化 telemetry 中记录 fallback reason。`ort.env.wasm.proxy` 固定为 `false`，线程数和 SIMD 资产在该 Worker 第一次 ORT backend/session 初始化前设置。切换线程 candidate 必须终止并重建 Worker/session，session cache key 至少包含 model URL、revision、SIMD 和 resolved thread count；`auto` 使用已完成的同输入浏览器矩阵测得的稳定候选（当前基线为 4 threads × batch 16），不把设置值冒充实测线程数；无隔离能力时始终回退到单线程。
 
@@ -545,9 +567,13 @@ Runtime 的长期契约是“能力证明后才启用优化”：只有顶层文
 
 `cs-net-runtime-telemetry.v1` 分开记录 `fetch/sessionCreate/warmup/featureBuild/tensorPrepare/inference/serialization/total`、sample count、requested/resolved threads、batch、peak bytes、samples/s 和 capability evidence。warmup 只运行可释放的首样本副本，不进入正式 logits、sample count 或 total progress。生产模型/ORT mjs/wasm、iframe、Worker 和静态资产都必须经 COOP/COEP/CORP 覆盖；Cloudflare 用生成 Worker 外壳统一补响应头，localhost 的 Next 与 Vite 两侧各自补头，并保留单线程回退以应对第三方资源被 `require-corp` 阻断。
 
-WebGPU + FP16 只属于隔离性能实验：它独立导入 `onnxruntime-web/webgpu`，只允许内部 `csProvider=webgpu-fp16` 查询分支，默认 provider 永远是 INT8 WASM `auto → 4 threads × batch 16`。实验必须在 Worker 首个 session 前创建并记录 `navigator.gpu`、adapter、device、`shader-f16`、ORT WebGPU session 和 `env.webgpu.profiling.ondata`；session 只配置 WebGPU EP。若无法完成节点级无 CPU/WASM fallback 证明，`fallbackDetection` 必须为 `UNKNOWN`；session 创建失败则为 `FAILED`，不得把失败当成可测性能。WebGPU provider、batch 或模型切换都要重建 Worker/session；失败确定性回退同一 Replay 的 INT8 WASM，并发送结构化失败 telemetry，不改变 `WinProbabilityTimelineV1`、Director 或 OutcomeImpact。FP16 与 ORT 匹配的 asyncify WASM 资产是 local-only 实验，不进入默认 Cloudflare 资产；只有 FP32-WASM parity、关键 cue 稳定、无 fallback、warm 性能相对既有 86.882 秒 inference 达到至少 1.3×，才另行评估默认切换。用户 UI 不显示 provider、batch、GPU 或性能调参。
+WebGPU + FP16 是 CS2D 分析的默认 provider 请求，Worker 归一化为 `provider=webgpu-fp16`、`batchSize=16`；页面路由也显式携带这两个默认值，`csProvider`/`csBatch` 只保留给内部 benchmark/debug 查询。它独立导入 `onnxruntime-web/webgpu`，session 只配置 WebGPU EP，并在 Worker 首个 session 前记录 `navigator.gpu`、adapter、ORT 自管 device、`shader-f16`、ORT WebGPU session 和可选的 `env.webgpu.profiling.ondata`。WebGPU/ORT/session/推理的明确 `FAILURE` 才发送 `providerActual=unavailable` 的失败 telemetry 后，使用同一 Replay、同一 selected player、同一 batch 的 INT8 WASM；`TIMEOUT`、`AbortError`、取消和 request superseded 必须直接发送 unavailable/error 并结束，绝不调用 `wasmRun`。旧请求无论哪一类都不得回写新请求的 timeline、进度或 telemetry。
 
-本轮真实 Edge 验收采用独立 GUI/远程调试设计：Edge `151.0.4129.93`、macOS `26.5.2 (25F84)`、Apple M1 Metal；主页面、`/cs2d` iframe 和 Worker 均报告 `crossOriginIsolated=true`、`SharedArrayBuffer`、adapter/device 与 `shader-f16` 可用。实际仅配置 WebGPU EP 的 ORT `1.27.0` session 在 test_demo 的 FP16 batch16 创建阶段失败（`Failed to wait for the operation:3`），并报告部分 shape 节点未分配给首选 EP；结构化 telemetry 标记 `ortSessionCreated=false`、`fallbackDetection=FAILED`，同 Replay 回退 INT8。没有有效 WebGPU 性能矩阵或纯度结论，也没有达到 1.3× 的证据；继续保持默认 provider。证据在 `.local-data/acceptance-csnet-webgpu-fp16/edge-capability.json`、`edge-gpu.png` 和 `continuation-batch16-v3/edge-webgpu-benchmark.json`。
+WebGPU provider、batch 或模型切换都要重建 Worker/session；不把 session 创建成功称为 pure WebGPU。若 ORT 报告 shape 节点由 CPU 分配，`fallbackDetection` 必须保留 `KNOWN_CPU_SHAPE_OPS_FROM_ORT_WARNING`；没有节点级证据时使用 `UNKNOWN`。FP16 模型与匹配的 asyncify WASM 资产随 viewer 发布并按需加载，旧 JSEP runtime 不发布；资产缺失、浏览器能力不足或 session/推理明确失败时按失败路径回退 INT8。该回退不改变 `WinProbabilityTimelineV1`、Director 或 OutcomeImpact，用户 UI 仍不显示 provider、batch、GPU 或性能调参。
+
+本轮真实 Edge 验收采用独立远程调试设计：Edge `151.0.4129.93`、macOS `26.5.2 (25F84)`、Apple M1 Metal；主页面、`/cs2d` iframe 和 Worker 均报告 `crossOriginIsolated=true`、`SharedArrayBuffer`、adapter 与 `shader-f16` 可用。修复后的 adapter-only 路径只设置 `ort.env.webgpu.adapter`，不注入应用创建的 `GPUDevice`；ORT `1.27.0` 自己管理 device，session 只配置 WebGPU EP。test_demo 真实解析得到 9 回合、7,239 个 canonical samples，FP16 batch16 成功输出完整 timeline；batch16 cold 为 `16.69858s`，已有三个有效 warm 为 `15.39264s`、`16.885485s`、`17.024465s`，median `16.885485s`（约 `428.7 samples/s`，相对 INT8 `86.882s` 约 `5.15×`）。batch32 warm 为 `20.075405s`，不优于 batch16；batch8/64 在本轮独立 Edge target 的验收时限内未产生 telemetry，因此不伪造数字。当前默认候选固定为 batch16；内部 benchmark 仍可显式覆盖。
+
+ORT 明确报告 `Some nodes were not assigned to the preferred execution providers ... ORT explicitly assigns shape related ops to CPU to improve perf.`，结构化 telemetry 记录 `fallbackDetection=KNOWN_CPU_SHAPE_OPS_FROM_ORT_WARNING`、`ortWarningCount=2`；`profileKernelCount=0` 仅表示没有可用 kernel profile，不覆盖该已知 CPU shape fallback。因此结果不能称为 pure WebGPU。`profile=true` 仍可建 session，但 profiling 是可选证据；失败或能力不足时保持分离的 INT8 WASM 回退。FP16 模型为 `19,452,396` bytes，匹配的 asyncify WASM 为 `24,254,953` bytes，旧 JSEP WASM `26,827,543` bytes 超过 Cloudflare Worker Static Assets 的单文件限制并被排除。证据在 `.local-data/acceptance-csnet-webgpu-fp16/adapter-only-batch16-three-run-v2/edge-webgpu-benchmark.json`、`adapter-only-batch32-warm/edge-webgpu-benchmark.json`、`adapter-only-director-outcome-parity.json` 与 `benchmark-summary.json`。
 
 Teaching Director 可以综合所选玩家死亡、负向胜率摆动与该回合经济语境来排序候选；ECO 中预期较低的死亡不应自动获得与 FULL 相同的归因权重，FORCE 反映投入风险，UNKNOWN 维持保守回退。`OutcomeImpact` 只引用已完成结果窗口内的前后曲线点和已验证事件，记录百分点、相对变化、归因置信度和并发事件限制；Session 只有在播放器连续播放到 outcome end 并自动回到 decision 一次后才把它与 Outcome Fact 合并到用户可见复盘。LLM 仍只接收短 ID、decision-side facts/inferences/advice；模型曲线不是 LLM 的 ObservableClaim。
 
@@ -611,35 +637,40 @@ ObservationClaim
 
 空间估计按类型携带 point/sector/polygon、距离或半径范围以及随时间增长的不确定性。声音 claim 不得携带隐藏敌人的实时真值坐标；最后已知 claim 固定在最后确认点并增长年龄与不确定范围。`ObservableState` 的构建测试必须覆盖：视觉精确确认、脚步区域信息、最后已知衰减、队友信息不自动继承、未来事件拒绝。
 
-### 7.4 TeachingPacket 与 DirectorDecision
+### 7.4 CandidateSet 与 DirectorDecisionSet
 
 ```text
-TeachingPacket
-  id, demo_id, round_number
-  timeline_version, scene_index_version, observation_version
-  candidate_scenes[]
-  round_facts[], outcome_refs[]
-  observable_state_refs[]
-  visual_storyboard_ref?
+CandidateSet
+  id, schema_version, content_hash
+  demo_id, player_id
+  timeline_version, scene_index_version, observation_version, signal_version
+  index_status: COMPLETE | FAILED
+  candidates[]                        # decision_tick → candidate_id 稳定排序
   limitations[], generation_manifest
 
-CandidateScene
-  candidate_id
-  start_tick, decision_window_end_tick
-  event_refs[], frame_refs[]
-  observable_state_id
-  topic_hints[], available_evidence_refs[]
+Candidate
+  candidate_id, round_number
+  signal_kind, signal_refs[]
+  pre_roll_start_tick, decision_tick, reveal_tick, outcome_end_tick
+  decision_fact_refs[], observable_claim_refs[]
+  action_refs[], outcome_refs[]
+  win_probability_signal_refs[], economy_signal_refs[]
+  deterministic_score
+  missing_fields[], limitations[]
 
-DirectorDecision
-  packet_id, candidate_id?
-  teach: boolean
-  topic?, teaching_intent?
-  priority, confidence
-  reason_refs[], limitation_refs[]
-  director_version, model_manifest
+DirectorDecisionSet
+  id, candidate_set_id, candidate_set_hash
+  status: SUCCEEDED | FALLBACK | DISABLED
+  decisions[]
+    candidate_id, priority
+    primary_focus_code                 # 恰好一个
+    selection_reason
+    reason_refs[], evidence_refs[]
+    confidence
+  director_version, model_manifest, fallback_reason?
 ```
 
-`candidate_id` 是 Director 能选择的最小寻址单位。Director 可以拒绝整回合，也可以选择一个或多个候选，但不能凭空创造 tick、事实、样本比例或播放器命令。PlanCompiler 负责把有效的 DirectorDecision 编译成 ReviewPlan。
+`candidate_id` 是 Director 能选择的最小寻址单位。Director 可以拒绝候选或选择多个候选，但不能凭空创造 candidate、ref、tick、事实、重点、样本比例或播放器命令；DecisionSet 不携带执行顺序，PlanCompiler 按 canonical tick 编译。任何未知/重复 candidate、越界 ref、额外字段或多重点都使模型结果整体无效，并进入带原因的确定性回退。
 
 ### 7.5 ReviewPlan
 
@@ -649,8 +680,11 @@ ReviewPlan
   match_timeline_version
   observation_version
   scene_index_version
+  candidate_set_id, candidate_set_hash
+  director_decision_set_id
   director_version
   compiler_version
+  route_fingerprint
   estimated_duration_seconds
   segments[]
   habit_clusters[]
@@ -677,6 +711,7 @@ ReviewSegment
 ```text
 CoachCue
   id, segment_id, cue_type
+  candidate_id, primary_focus_code
   decision_tick
   reveal_tick
   outcome_start_tick, outcome_end_tick
@@ -692,15 +727,41 @@ CoachCue
 
 ```text
 CoachingPackage
-  cue_id, session_id
-  decision_tick, observable_state_id
-  facts[], inferences[], advice[], evidence[]
-  allowed_claim_ids[], forbidden_refs[]
+  cue_id, candidate_id, primary_focus_code
+  decision_context
+    facts[], claims[], inferences[]
+  player_action
+    action_facts[]                     # 不是 ObservableClaim
+  advice[], evidence[]
+  allowed_decision_refs[], allowed_action_refs[]
+  forbidden_refs[]
   language_profile, player_context?
   package_version, model_context_manifest
+
+OutcomePackage
+  cue_id, candidate_id
+  outcome_facts[]
+  win_probability_impact?
+  allowed_outcome_refs[]
+  measurement_refs[], confounders[], limitations[]
+  package_version, model_context_manifest
+
+NarrationField
+  text, refs[]
+  confidence?, limitations[]
+
+NarrationBundle
+  cue_id, candidate_id, primary_focus_code
+  state: PREPARED | PRESENTABLE
+  current_situation: NarrationField
+  player_action: NarrationField
+  core_issue: NarrationField
+  better_play: NarrationField
+  outcome_impact: NarrationField
+  narrator_version, model_manifest, fallback_reason?
 ```
 
-Narrator 只能读取 `CoachingPackage`；`forbidden_refs`、可用时间和引用集合由代码生成并在请求前后校验。结果讲解使用独立的 `OutcomePackage`，不得复用决策前包的对象引用。
+Narrator 只能读取当前 cue 的两份包；`forbidden_refs`、package namespace、可用时间和引用集合由代码生成并在请求前后校验。输出 schema 不包含 segment、顺序、tick 或播放器字段，且 `primary_focus_code` 必须原样回显。OutcomePackage 不得复用 CoachingPackage 的对象引用；bundle 的 `state` 由确定性运行时设置，模型无权输出或修改。
 
 ### 7.8 Playback 协议
 
@@ -790,15 +851,29 @@ CoachingRuntimeState
 
 ### 7.12 ProgressiveReviewArtifact
 
-复盘计划可以在分析期间增长，但已发布部分必须有明确状态和版本：
+复盘计划只能在会话启动前增长。CandidateSet 完整、DirectorDecisionSet 校验并由 PlanCompiler 生成整场 route 后，route 立即冻结；之后的渐进式工作只补 NarrationBundle，不再增长或重排 ReviewPlan。准备状态使用独立轻量契约：
 
 ```text
 ReviewPlan
-  status: BUILDING | STARTABLE | COMPLETE | FAILED
+  status: BUILDING | COMPLETE | FAILED
   available_until_round
   target_buffer_rounds
   full_match_index_ready
   global_aggregation_ready
+  route_fingerprint
+
+ReviewPreparationState
+  review_plan_id, route_fingerprint
+  status: BUILDING | STARTABLE | COMPLETE | FAILED
+  candidate_index_status: BUILDING | COMPLETE | FAILED
+  route_frozen: boolean
+  startable: boolean
+  narration_status[]
+    cue_id, candidate_id, primary_focus_code
+    status: PENDING | READY | FALLBACK | CONSUMED | FROZEN
+    artifact_version, fallback_reason?
+  ready_prefix_count, target_ready_count
+  next_required_cue_id?
 
 RoundArtifact
   demo_id, player_id, round_number
@@ -818,7 +893,7 @@ RoundArtifact
 - `FROZEN`：该回合会话版本固定，只允许追加带版本的补充证据；
 - `FAILED`：保留错误码，可单回合重试或模板降级。
 
-`STARTABLE` 要求完整快速索引完成、开场窗口全部 `READY`、播放器资源可加载。`COMPLETE` 要求所有回合有明确处理方式并完成全场聚合。总结只能在 `COMPLETE` 后生成。
+`ReviewPlan.status=COMPLETE` 只表示 PlanCompiler 已经给整场每个区间分配处理方式并冻结 route，不表示自然语言讲解全部生成。`ReviewPreparationState.status=STARTABLE` 要求 CandidateSet 完整、Director/Compiler 完成、整场 route frozen、前 `min(2, cue_count)` 个 narration 为 `READY/FALLBACK` 且播放器资源可加载；其 `COMPLETE` 才要求所有选中 cue 都有 `READY/FALLBACK` narration，并完成全场聚合。后台合并只能把同一 `cue_id + candidate_id + primary_focus_code + route_fingerprint` 的 `PENDING` 更新为 `READY/FALLBACK`；任何针对 `CONSUMED/FROZEN` cue 或改变绑定/顺序/重点的更新都拒绝。总结只能在 preparation `COMPLETE` 后生成。
 
 ### 7.13 VideoTeachingEvent
 
@@ -900,23 +975,24 @@ sequenceDiagram
     W->>S: 读取 Demo
     W->>W: 单次解析生成 GroundTruth ReplayBundle
     W->>W: 构建 MatchTimeline 与 SceneIndex
+    W->>W: 整场胜率只推理一次
+    W->>W: CandidateGenerator 完成全场 CandidateSet
     W->>W: 为目标玩家派生 ObservableState
-    W->>S: 保存回合索引、场景候选与粗粒度轨迹
-    W->>W: 组装 TeachingPacket
-    W->>W: Teaching Director 选择候选与教学意图
-    W->>W: PlanCompiler 校验并生成 ReviewPlan
-    W->>W: 按 cue 构建 CoachingPackage
-    W->>W: Narrator 生成结构化讲解包
-    W->>W: 优先准备前 2–3 回合
+    W->>S: 保存回合索引、CandidateSet 与粗粒度轨迹
+    W->>W: 组装匿名 DirectorPacket
+    W->>W: Teaching Director 返回 DirectorDecisionSet
+    W->>W: PlanCompiler 校验并冻结整场 ReviewPlan
+    W->>W: 按选中 cue 构建 CoachingPackage + OutcomePackage
+    W->>W: Narrator 优先准备前两个密封 NarrationBundle
     W->>S: 发布 STARTABLE ReviewPlan
     W->>A: 标记可开始
     A-->>C: SSE 通知进入复盘
     par 用户开始观看
         C->>A: 创建 CoachingSession
     and Worker 保持领先
-        W->>W: 按播放顺序深度分析后续回合
-        W->>W: 检测信号、职业检索、讲解准备
-        W->>S: 逐回合发布 READY Artifact
+        W->>W: 按 frozen route 顺序准备剩余 NarrationBundle
+        W->>W: 可选职业检索与讲解准备
+        W->>S: 只更新未消费 cue 的 narration readiness
     end
     W->>W: 完成全场习惯聚合与覆盖校验
     W->>S: 标记 ReviewPlan COMPLETE
@@ -926,11 +1002,11 @@ sequenceDiagram
 
 “轻量整场扫描”和逐回合发布是同一次 Parser 事实产物的索引、切片与缓存，不是为全知/玩家视角分别解析 Demo。逐回合 `header_ready → index_ready → round_ready` 只改变可消费范围；任何已发布 round artifact 都引用同一个内容哈希、parser version、timeline version 和 canonical tick 空间。Director、PlanCompiler 和 Narrator 只处理对应的结构化包，不重新读取 Demo。
 
-每个阶段幂等并写入版本清单。LLM 失败不回滚已完成的解析和计划，可重试讲解文本或使用模板。
+每个阶段幂等并写入版本清单。LLM 失败不回滚已完成的解析、CandidateSet 或 frozen route；Director 失败使用确定性 DecisionSet，Narrator 失败使用结构化五字段 fallback。普通/candidate-less 回合不建立 LLM job。
 
 ### 9.2 调度与缓冲
 
-会话启动时默认要求前 2–3 回合就绪，之后维持 3–5 回合领先量。调度器根据 `current_round`、用户播放速度和每回合预计观看时间动态计算优先级：
+会话启动时默认要求前 `min(2, cue_count)` 个候选讲解就绪，之后优先维持下一个候选而不是按普通回合维持深度分析。调度器根据 `current_cue`、用户播放速度和到下个自然边界的预计时间动态计算优先级：
 
 ```text
 priority = proximity_to_playhead
@@ -940,13 +1016,13 @@ priority = proximity_to_playhead
          - optional_evidence_cost
 ```
 
-当缓冲下降时，依次降级：延后额外职业案例、使用已验证模板讲解、暂停非交互批处理；不得跳过事实校验。若仍追上后台，界面显示真实准备状态，允许回看或追问已看内容。
+当缓冲下降时，依次降级：延后额外职业案例、使用已验证结构化模板讲解、暂停非交互批处理；不得跳过事实校验。若仍追上后台，Session 在下一个 segment 的自然边界进入 `BUFFERING`，保持当前画面和基础播放控制，优先准备该 cue，达到 `READY/FALLBACK` 后自动恢复；不得把未就绪或 UNKNOWN 区间临时改成 SKIP。
 
 ### 9.3 复盘阶段
 
 客户端加载轻量 session package 和分块轨迹。LangGraph 根据当前 segment 和用户交互路由 Graph 节点；`SessionOrchestrator` 安全内核将节点产生的动作转换成受限播放命令，从 cue 前置上下文连续播放到结果结束，再回到决策点暂停；用户追问时 Question Adapter 只能通过领域工具取得当前 cue 和允许的上下文。Graph checkpoint 和业务会话事件分别持久化，均不能阻塞播放器基本控制。
 
-地图在所有会话状态都显示当前 tick 的 cs2d 全知 Replay，不提供显式视角切换。信息授权发生在教练输入而非 renderer：自动播放结果窗口时侧栏不显示判断、建议或 Outcome Fact；只有播放器确认到达 `outcome_end_tick` 后，Session 才允许同时展示决策侧 `ObservableState` 事实、独立 Outcome Fact 与教练建议。进入下一个 cue 时重新绑定下一份内部 ObservableState，并重新锁定该 cue 的结果事实。
+地图在所有会话状态都显示当前 tick 的 cs2d 全知 Replay，不提供显式视角切换。信息授权发生在包引用和呈现 gate，而非 renderer：自动播放结果窗口时侧栏不显示密封 NarrationBundle 的任何分析字段；只有播放器确认到达 `outcome_end_tick` 后，Session 才把该 bundle 标记为 PRESENTABLE，并同时展示决策局面、实际动作、核心问题、替代处理和独立结果影响。进入下一个 cue 时重新绑定下一份内部 ObservableState 与密封 bundle；全场胜率曲线仍可始终显示，不受该文字 gate 裁剪。
 
 自动路线继续主持完整 Demo；用户主动操作时仅暂时交出播放头，不丢弃会话。自由查看侧栏显示实际回合与覆盖该位置的 segment，地图/HUD/事件均由同一播放头更新。用户可随时返回离当前播放位置最近的教练节点并从约 1 秒前置上下文重看；未接管时冻结时间直接自动消费、低价值段显式快进、关键 cue 连续播放完整处理并在结束后回到决策点讲解，结果播放、重播和结束暂停维持同一聚焦镜头。
 
@@ -982,8 +1058,10 @@ demo_sha256
 + map_semantics_version
 + observation_version
 + scene_index_version
++ candidate_generator_version
 + director_version
 + compiler_version
++ narration_package_version
 + narrator_version（讲解产物）
 + player_id（玩家相关产物）
 + round_number（回合分块）
@@ -1007,7 +1085,7 @@ Cache 主要加速重复上传、同场不同玩家和回看；不能消除首�
 
 ### 阶段 A：结构化事实与 LLM Director 基线
 
-建立有来源、版本和质量标记的职业局面库；Parser、SceneIndex、ObservationBuilder 和规则提取器负责产生可验证候选，Teaching Director 使用 `TeachingPacket` 判断哪些候选值得教学。PlanCompiler、证据引用和未来信息校验始终是硬边界，不能由模型替代。
+建立有来源、版本和质量标记的职业局面库；Parser、SceneIndex、ObservationBuilder 和 CandidateGenerator 负责产生完整可验证 CandidateSet，Teaching Director 使用匿名 `DirectorPacket` 判断哪些候选值得教学。PlanCompiler、package namespace、证据引用和未来信息校验始终是硬边界，不能由模型替代。
 
 ### 阶段 B：Director 的监督式排序
 
@@ -1031,8 +1109,8 @@ Cache 主要加速重复上传、同场不同玩家和回看；不能消除首�
 - 不得因为 Demo 记录了脚步、枪声或队友 spotted，就直接断言所选玩家确实听到、得到报点或知道敌人身份；
 - 所有数值、tick、人数、经济和样本量由代码计算；
 - LLM 输出引用 ID，服务端校验后才能显示为正式讲解；
-- 决策前 Director/Narrator 请求使用当前会话内匿名短 ID，禁止携带 Demo/玩家身份、原始稳定 ID、结果事件、tick、路径或完整事件流；
-- 引用缺失、矛盾或越过 `decision_tick` 时拒绝该句并模板降级；
+- Director/Narrator 请求使用当前会话内匿名短 ID，禁止携带 Demo/玩家身份、原始稳定 ID、原始 tick、路径或完整事件流；Director 可读取候选的结果信号，Narrator 只能读取当前候选的结构化 OutcomePackage；
+- `currentSituation/betterPlay` 引用缺失、矛盾、越过 `decision_tick` 或指向 OutcomePackage 时拒绝该字段并结构化降级；`outcomeImpact` 若缺少 outcome ref 同样拒绝；
 - LLM Provider 缺 key、超时、HTTP/JSON/完成状态失败、额外字段或 ID 不一致时返回 `DISABLED/FALLBACK`，保留模板且不把上游正文或密钥写入响应与日志；
 - 用户要求“再放一遍”等控制意图先映射到白名单命令，再由 Orchestrator 执行；
 - Prompt injection 内容不得从 Demo 元数据、昵称或职业语料进入系统指令。
@@ -1103,7 +1181,7 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 - 原始文件哈希去重，派生结果按版本缓存；
 - 轨迹按回合分块，客户端按需加载；
 - 交互队列优先于普通与批处理队列，按会话水位提升相邻回合优先级；
-- 目标为前 2–3 回合就绪即可启动并保持 3–5 回合领先；具体数值由基准测试校准；
+- 目标为完整 CandidateSet/frozen route 后，前两个候选讲解就绪即可启动；持续优先准备下一个候选，具体并发与批次由基准测试校准；
 - `CONSUMED/FROZEN` 产物不可原地覆盖，新分析只能生成新版本；
 - SSE 断开不取消分析；会话事件批量、异步写入；
 - LLM 设置每场 token 与调用预算，模板降级必须可用；
@@ -1127,7 +1205,7 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 
 ## 17. 演进阶段与触发条件
 
-所有阶段共用同一套 `ReplayBundle`、Observation、TeachingPacket、ReviewPlan、CoachingPackage、PlaybackPort 和 LangGraph CoachingRuntime 契约。阶段推进只能增加实现能力或替换适配器，不能删除已经确立的事实存储、异步任务、缓存、会话恢复和本地记忆基础设施。
+所有阶段共用同一套 `ReplayBundle`、Observation、CandidateSet、DirectorDecisionSet、ReviewPlan、CoachingPackage、OutcomePackage、NarrationBundle、PlaybackPort 和 LangGraph CoachingRuntime 契约。阶段推进只能增加实现能力或替换适配器，不能删除已经确立的事实存储、异步任务、缓存、会话恢复和本地记忆基础设施。
 
 ### 17.1 Web 2D 运行基线
 
@@ -1135,7 +1213,7 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 
 ### 17.2 Director/Narrator 完整落地
 
-将确定性候选回退逐步替换为受 Schema 约束的 Teaching Director；让 Narrator 根据 `CoachingPackage` 直接构建局面讲解、替代动作和触发条件。两者都保留模板降级、引用校验、版本缓存和会话恢复，不把模型调用变成播放器依赖。
+保留 Deterministic CandidateGenerator，以受 Schema 约束的 Teaching Director 替换其后的启发式最终选点；让 Narrator 根据严格分离的 `CoachingPackage + OutcomePackage` 构建五字段密封讲解。两者都保留结构化回退、字段级引用校验、版本缓存、route freeze 和会话恢复，不把模型调用变成播放器依赖。
 
 ### 17.3 桌面播放器适配
 
@@ -1160,11 +1238,12 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 | 浏览器 cs2d Replay | Accepted | localhost 使用 `:5174`、Cloudflare 使用同源 `/cs2d/`；浏览器 Worker/WASM 单次解析，raw Replay 留在 iframe；白名单 AnalysisBundle 进入教练壳 |
 | 全知比赛状态 | Accepted | 每 tick/变化点保留位置、朝向、生命护甲、当前手持、库存道具、经济和 C4 等解析器可得事实 |
 | 内部观察证据 | Accepted | `ObservationClaim` 仅约束规则/LLM 决策证据；不作为用户可见 renderer 模式，不用布尔可见性 |
-| 单次解析与分析派生 | Accepted | `.dem` 只生成一份 GroundTruth ReplayBundle；Adapter 从同一 Replay 派生 MatchTimeline/SceneIndex/Observation，Director 与 PlanCompiler 生成 ReviewPlan，不二次解析 |
-| SceneIndex 与候选寻址 | Accepted | 规则/领域代码只生成可验证的 candidateId 和事实窗口，不替 Director 判断教学价值 |
-| Teaching Director | Accepted | LangGraph 节点调用结构化 LLM，从 TeachingPacket 选择教学候选、主题和优先级，不输出任意 tick 或播放器命令 |
-| PlanCompiler | Accepted | 确定性校验完整覆盖、时间边界、引用、预算、去重和 Director 回退结果 |
-| Narrator 与证据防火墙 | Accepted | Narrator 只读取 decision-side CoachingPackage；结果讲解使用独立 OutcomePackage，模型不能读取 raw Replay |
+| 单次解析与分析派生 | Accepted | `.dem` 只生成一份 GroundTruth ReplayBundle；Adapter 从同一 Replay 派生 MatchTimeline/SceneIndex/Observation，整场胜率只推理一次，不二次解析或向控制面复制 raw Replay |
+| CandidateGenerator 与候选寻址 | Accepted | 确定性深模块从事实/Observation/信号产生完整、稳定排序的 CandidateSet；只提名可验证窗口，不替 Director 判断教学价值 |
+| Teaching Director | Accepted | 结构化 LLM 只从匿名 CandidateSet 摘要选择已有 candidate、唯一主要重点和优先级，不输出 tick、事实、文案或播放器命令 |
+| PlanCompiler | Accepted | 确定性校验 Candidate/Decision 引用、完整覆盖、时间边界、预算和去重；会话前冻结 route，非法 Director 输出走可追溯回退 |
+| Narrator 与证据防火墙 | Accepted | Narrator 可提前读取严格分离的 CoachingPackage＋OutcomePackage，输出带字段级 refs 的五字段密封 NarrationBundle；不能改 route/focus/Advice |
+| OutcomeCompletionGate | Accepted | Gate 只把密封 NarrationBundle 从 PREPARED 变为 PRESENTABLE；必须确认播放到 outcome_end，且不裁剪全场常显胜率曲线 |
 | Web 2D cs2d 底座 | Accepted | 浏览器 Worker/WASM 单次解析与真实地图 renderer；具体 revision、可重放 patch 和权利状态记录在 ADR；源码不入仓库，MVP 由 CI 生成 `/cs2d/` 构建物随 Cloudflare 发布，权利解决前不扩大再分发 |
 | Host 控制与接管 | Implementation | 当前 Web Host 只保留一套中文控制和一条整场时间轴；手动接管暂停 Graph/Session，恢复到当前播放头最近 cue；用户 UI 不显示 tick |
 | 地图镜头与目标主体 | Accepted | Renderer 与 Session 共享播放头；普通状态保持稳定全图，未揭示 cue 可聚焦，结果只推进同一全知地图；分析主体锁定且标为“你” |
@@ -1172,16 +1251,17 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 | 自研 PixiJS renderer | Superseded | `/pixi-poc` 与旧 renderer 只保留回归；默认产品不再扩展第二套 renderer |
 | 桌面长期形态 | Proposed | 本地 CS2 Demo＋教练侧窗，通过 PlaybackPort 接入 |
 | 服务端架构 | Accepted | 模块化单体＋异步 Worker |
-| 分析启动策略 | Accepted | 完整快速索引后渐进式按回合分析，前 2–3 回合就绪即可开始 |
-| 回合缓存策略 | Accepted | 内容寻址、版本化、按回合分块，保持 3–5 回合目标水位 |
+| 分析启动策略 | Accepted | 完整 CandidateSet 与 frozen route 先完成；前两个候选 narration READY/FALLBACK 后开始，余下按路线顺序准备 |
+| 讲解缓冲与冻结 | Accepted | 后台只能补未消费 cue 的 narration；追上准备头时在自然边界 BUFFERING，CONSUMED/FROZEN route/focus 不可改写 |
+| 回合缓存策略 | Accepted | 内容寻址、版本化、按回合/候选分块；bulk Replay 留在所属 iframe/Worker，只跨 seam 传摘要与引用 |
 | CoachingRuntime 编排 | Accepted | 使用 LangGraph `StateGraph` 主持长期、有状态、可中断恢复的教练会话；Graph 不取代领域事实和播放器 |
 | Graph 与确定性底座边界 | Accepted | Graph 路由 Director/Narrator/问答/结果/总结；领域服务计算事实，PlanCompiler 与 SessionOrchestrator 校验状态和播放命令 |
 | 模型数据访问 | Accepted | Director/Narrator/Question 只通过强类型领域工具和白名单包访问数据，不授予 LLM 任意 SQL 或数据库连接 |
 | 职业行为路线 | Accepted | 结构化数据库/规则提供可追溯证据，Director 可使用其结果；监督排序与行为先验只替换明确子模块 |
-| LLM 职责 | Accepted | Director 决定教学候选与意图，Narrator 构建讲解，模型不解析原始 tick、不创造事实、不直接控制播放器 |
+| LLM 职责 | Accepted | Director 选择候选与唯一重点，Narrator 在该重点内完成具体分析；模型不解析原始 tick、不创造事实/建议语义、不直接控制播放器 |
 | LLM Provider | Accepted | Director 与 Narrator 通过 Provider-neutral Adapter 调用；当前可使用 DeepSeek，必须严格 Schema 校验、引用校验和模板降级 |
 | 全场胜率模型 | Accepted | 固定 cs-net win-rate head 经独立 feature adapter 接入 cs2d iframe Worker；`WinProbabilityTimelineV1` 全场常显并与唯一时间轴共用横坐标；模型不可用时显式 `UNAVAILABLE`，不阻塞回放 |
-| OutcomeImpact | Accepted | 结果窗口完成后才解锁前后胜率、百分点和保守归因；并发死亡/下包降低归因，不把全知曲线当 Observation |
+| OutcomeImpact | Accepted | 完整曲线始终可见；结构化影响可提前进入 OutcomePackage，但只有结果播放后才能呈现文案；并发死亡/下包降低归因，不把全知曲线当 Observation |
 | 个人记忆 | Accepted | 本地优先、用户可控、只影响优先级 |
 | 视频弱标注 | Accepted | 仅作为已授权离线教学行为启动语料；无原 Demo 时只使用媒体时间，不产生精确 tick 或黄金集 |
 | 强化学习 | Deferred | 无可靠环境与奖励前不采用 |
@@ -1211,3 +1291,4 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 | 3.1.0 | 2026-08-17 | 将 Cloudflare 生产入口收敛为单 Worker：CI 从固定 cs2d commit 构建 `/cs2d/` Viewer，Host 使用同源 iframe；`.dem` 仍只在访问者浏览器内由 Worker/WASM 解析，补充上游构建物再分发权利待确认边界。 |
 | 3.2.0 | 2026-08-17 | 关键教学时序改为“先连续看完整处理与结果，再回到决策点统一复盘”；Outcome Fact 继续独立于决策侧证据，并只在 outcome 窗口完成后解锁。 |
 | 3.3.0 | 2026-08-18 | 接入固定 cs-net win-rate head 的真实 ONNX/INT8 资产和 iframe Worker 推理；新增全场常显 `WinProbabilityTimelineV1`、经济分类、Director 摆动排序与结果窗口 gated `OutcomeImpact`；模型/下载失败显式降级，不改变单次 cs2d Replay 与 Observation 边界。 |
+| 3.4.0 | 2026-08-21 | 固化 Deterministic CandidateGenerator → DirectorDecisionSet → PlanCompiler → 双包 Narrator 纵向链路；整场 CandidateSet 与 route 在会话前冻结，前两个候选讲解就绪即可开始；OutcomePackage 可后台参与密封讲解生成，但完整 NarrationBundle 只有 outcome_end 后可呈现，后台不得重排已发布路线。 |

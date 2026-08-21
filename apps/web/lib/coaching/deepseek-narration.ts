@@ -1,3 +1,4 @@
+/** @deprecated Legacy decision-only report adapter; /api/coaching/narrate uses deepseek-narrator.ts. */
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DEFAULT_MODEL = "deepseek-v4-flash";
 const REQUEST_TIMEOUT_MS = 15_000;

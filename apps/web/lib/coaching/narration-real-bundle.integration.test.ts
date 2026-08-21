@@ -1,61 +1,57 @@
-import { existsSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST } from "../../app/api/coaching/narrate/route";
-import { adaptReplayBundle } from "../replay/replay-bundle";
-import { buildNarrationPayload } from "./coach-narration";
-import { parseNarrationRequest } from "./deepseek-narration";
+import { parseNarrationRequest } from "./deepseek-narrator";
 
-const testDemoPath = fileURLToPath(new URL("../../public/generated-data/test_demo.replay.json", import.meta.url));
-const falconsPath = fileURLToPath(new URL(
-  "../../public/generated-data/uploads/4dedab6e-2645-4089-bfe6-a6858c68d344.replay.json",
-  import.meta.url
-));
+const anonymousRequest = {
+  coachingPackage: {
+    cueId: "c1",
+    candidateId: "k1",
+    primaryFocusCode: "SURVIVE_THE_NEXT_CONTACT",
+    decisionContext: { facts: [{ id: "d1", text: "决策时在 B小，手持步枪。" }], claims: [] },
+    playerAction: [{ id: "a1", text: "你从掩体拉出。" }],
+    inferences: [],
+    advice: [{ id: "v1", text: "先预瞄，等队友补枪再拉。", trigger: "进入下一条枪线时", factRefs: ["d1"] }],
+    evidence: [{ id: "e1", label: "决策事实", factRefs: ["d1"] }],
+    allowedRefs: { decision: ["d1"], action: ["a1"], advice: ["v1"], evidence: ["e1"] },
+    limitations: []
+  },
+  outcomePackage: {
+    cueId: "c1",
+    candidateId: "k1",
+    outcomeFacts: [{ id: "o1", text: "结果窗口内你被击杀。", outcomeKind: "DEATH" }],
+    deathKillHpRefs: ["o1"],
+    winProbabilityImpact: { text: "我方胜率下降。", confidence: "HIGH", limitations: [] },
+    measurementRefs: ["m1"],
+    confounders: [],
+    limitations: []
+  }
+};
 
-function narrationPayload(path: string) {
-  const view = adaptReplayBundle(JSON.parse(readFileSync(path, "utf8")));
-  const plan = view.review_plan;
-  if (!plan) throw new Error(`${path} must include a ReviewPlan`);
-  return buildNarrationPayload(plan, {
-    playerNames: view.timeline.players.map((player) => player.display_name),
-    additionalForbiddenValues: view.timeline.players.map((player) => player.player_id)
+function request(body: unknown): Request {
+  return new Request("http://localhost/api/coaching/narrate", {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: "http://localhost" },
+    body: JSON.stringify(body)
   });
 }
 
-function acceptedCueCount(path: string): number {
-  const payload = narrationPayload(path);
-  const bytes = new TextEncoder().encode(JSON.stringify(payload)).byteLength;
-  return parseNarrationRequest(payload, bytes).cues.length;
-}
-
-describe("DeepSeek narration real ReplayBundle contract", () => {
-  afterEach(() => vi.unstubAllEnvs());
-
-  it("accepts the decision-only payload generated from test_demo", () => {
-    expect(acceptedCueCount(testDemoPath)).toBe(5);
+describe("single-cue narration contract", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
-  it("passes the real test_demo payload through the API route without a configured key", async () => {
+  it("accepts the strict anonymous CoachingPackage+OutcomePackage request", () => {
+    expect(() => parseNarrationRequest(anonymousRequest)).not.toThrow();
+  });
+
+  it("passes the single-cue request through the API route with deterministic fallback when no key exists", async () => {
     vi.stubEnv("DEEPSEEK_API_KEY", "");
-    const response = await POST(new Request("http://localhost/api/coaching/narrate", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        origin: "http://localhost"
-      },
-      body: JSON.stringify(narrationPayload(testDemoPath))
-    }));
-
+    const response = await POST(request(anonymousRequest));
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      status: "DISABLED",
-      items: [],
-      reason: "MISSING_API_KEY"
-    });
-  });
-
-  const runLarge = process.env.CS2_RUN_LARGE_DEMO_TESTS === "1" && existsSync(falconsPath);
-  it.runIf(runLarge)("accepts all Falcons vs Spirit cues", () => {
-    expect(acceptedCueCount(falconsPath)).toBe(15);
+    const body = await response.json() as { status: string; bundle: Record<string, unknown>; manifest: Record<string, unknown> };
+    expect(body.status).toBe("FALLBACK");
+    expect(body.manifest).toMatchObject({ status: "FALLBACK", provider: "DETERMINISTIC", reason: "MISSING_API_KEY" });
+    expect(Object.keys(body.bundle).sort()).toEqual(["betterPlay", "candidateId", "coreIssue", "cueId", "currentSituation", "outcomeImpact", "playerAction", "primaryFocusCode"].sort());
   });
 });

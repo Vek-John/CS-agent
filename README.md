@@ -3,6 +3,9 @@
 当前交付是一个可运行的纵向 MVP：用户选择本地 `.dem`，cs2d 在浏览器内解析并显示真实 2D 回放；用户选择一名玩家后，AI 教练接管同一个播放头，自动跳过冻结/低价值片段，在决策前暂停并直接讲解，点击“看结果”后播放结果，可回看或继续，整场结束后再总结。localhost 使用 `3000 + 5174` 调试；Cloudflare 使用同一个 Worker，并把 Viewer 挂在 `/cs2d/`，访问者无需额外启动 Viewer 服务。
 
 长期架构唯一事实来源是 [ARCHITECTURE.md](./ARCHITECTURE.md)，本次底座决策见 [ADR-0002](./docs/adr/ADR-0002-adopt-cs2d-localhost-playback-substrate.md)。
+日常的技术选型、实际踩坑、验证结果和后续维护方式见 [技术学习与决策日志](./docs/TECHNICAL_LEARNINGS.md)。
+
+胜率分析默认在 cs2d Worker 中使用 WebGPU FP16、batch 16；只有明确的 WebGPU/ORT/推理失败才回退到同一回放的 INT8 WASM。超时、取消或被新请求替代会结束当前分析，不会偷偷换成另一条结果。
 
 ## 本地运行
 

@@ -1,6 +1,8 @@
 import type {
   CoachCue,
+  CoachingRouteState,
   CoachingSessionState,
+  CueReadiness,
   QuestionAnswer,
   ReviewPlan,
   ReviewSegment,
@@ -13,6 +15,7 @@ export type SessionAction =
   | { type: "TICK"; tick: number }
   | { type: "SEEK"; tick: number }
   | { type: "RETURN_TO_NEAREST_CUE"; tick: number }
+  | { type: "NARRATION_READY"; cueId: string; readiness: Exclude<CueReadiness, "PENDING"> }
   | { type: "SKIP_SEGMENT" }
   | { type: "EXPAND_SKIP" }
   | { type: "REVEAL_OUTCOME" }
@@ -20,6 +23,27 @@ export type SessionAction =
   | { type: "ADVANCE_SEGMENT" }
   | { type: "QUESTION_ASKED"; question: string }
   | { type: "COMPLETE_SESSION" };
+
+/** Session owns this one-way authorization; PlanCompiler only owns route/tick shape. */
+export function createOutcomeCompletionGate(
+  cue: Pick<CoachCue, "id" | "outcome_end_tick">
+): import("@cs-coach/contracts").OutcomeCompletionState {
+  return { cueId: cue.id, outcomeEndTick: cue.outcome_end_tick, status: "LOCKED" };
+}
+
+export function completeOutcomeGate(
+  gate: import("@cs-coach/contracts").OutcomeCompletionState,
+  confirmedTick: number
+): import("@cs-coach/contracts").OutcomeCompletionState {
+  if (!Number.isFinite(confirmedTick) || confirmedTick < gate.outcomeEndTick) return gate;
+  return { ...gate, status: "COMPLETE", completedAtTick: confirmedTick };
+}
+
+export function canPresentOutcome(
+  gate: import("@cs-coach/contracts").OutcomeCompletionState | undefined
+): boolean {
+  return gate?.status === "COMPLETE";
+}
 
 function event(
   state: CoachingSessionState,
@@ -36,7 +60,8 @@ function event(
 
 export function createCoachingSession(
   plan: ReviewPlan,
-  sessionId = "session-local-fixture"
+  sessionId = "session-local-fixture",
+  routeState?: Pick<CoachingRouteState, "routeFingerprint" | "readiness">
 ): CoachingSessionState {
   return {
     id: sessionId,
@@ -47,6 +72,10 @@ export function createCoachingSession(
     consumed_cue_ids: [],
     revealed_cue_ids: [],
     expanded_segment_ids: [],
+    ...(routeState ? {
+      narration_readiness: { ...routeState.readiness },
+      route_fingerprint: routeState.routeFingerprint
+    } : {}),
     user_events: []
   };
 }
@@ -68,6 +97,40 @@ export function getCurrentCue(
 
 function isAutomaticFreezeSkip(segment: ReviewSegment): boolean {
   return segment.mode === "SKIP" && segment.reason_code === "FREEZE_TIME";
+}
+
+function narrationReadiness(state: CoachingSessionState, cueId: string): CueReadiness {
+  return state.narration_readiness?.[cueId] ?? "READY";
+}
+
+function isPendingNarration(state: CoachingSessionState, cueId: string | undefined): cueId is string {
+  return Boolean(cueId && narrationReadiness(state, cueId) === "PENDING");
+}
+
+function bufferedSegmentState(
+  state: CoachingSessionState,
+  segment: ReviewSegment,
+  cueId: string
+): CoachingSessionState {
+  const buffered = {
+    ...state,
+    phase: "BUFFERING" as const,
+    current_cue_id: cueId,
+    current_segment_index: state.current_segment_index,
+    current_tick: segment.start_tick,
+    buffered_from_phase: state.phase === "SKIPPING" ? "SKIPPING" as const : "PLAYING" as const
+  };
+  return {
+    ...buffered,
+    user_events: [
+      ...state.user_events,
+      event(buffered, "NARRATION_BUFFERED", {
+        segment_id: segment.id,
+        cue_id: cueId,
+        detail: "NARRATION_PENDING"
+      })
+    ]
+  };
 }
 
 function enterSegment(
@@ -106,12 +169,21 @@ function enterSegment(
     }
 
     const wasExpanded = nextState.expanded_segment_ids.includes(segment.id);
+    const cueId = segment.cue_ids[0];
+    if (isPendingNarration(nextState, cueId)) {
+      return bufferedSegmentState({
+        ...nextState,
+        current_segment_index: nextIndex
+      }, segment, cueId);
+    }
     return {
       ...nextState,
       phase: segment.mode === "SKIP" && !wasExpanded ? "SKIPPING" : "PLAYING",
       current_segment_index: nextIndex,
-      current_cue_id: segment.cue_ids[0],
-      current_tick: segment.start_tick
+      current_cue_id: cueId,
+      current_tick: segment.start_tick,
+      buffered_from_phase: undefined,
+      outcome_completion: undefined
     };
   }
 
@@ -120,7 +192,9 @@ function enterSegment(
     phase: "WRAP_UP",
     current_segment_index: plan.segments.length,
     current_cue_id: undefined,
-    current_tick: plan.segments.at(-1)?.end_tick ?? nextState.current_tick
+    current_tick: plan.segments.at(-1)?.end_tick ?? nextState.current_tick,
+    buffered_from_phase: undefined,
+    outcome_completion: undefined
   };
 }
 
@@ -144,6 +218,7 @@ function finishOutcome(
     phase: "PAUSED_FOR_COACHING",
     // Keep the map at the problem state while the coach explains the result.
     current_tick: cue.decision_tick,
+    outcome_completion: completeOutcomeGate(createOutcomeCompletionGate(cue), cue.outcome_end_tick),
     revealed_cue_ids:
       isFirstReveal && !state.revealed_cue_ids.includes(cue.id)
         ? [...state.revealed_cue_ids, cue.id]
@@ -218,6 +293,33 @@ export function reduceCoachingSession(
       };
     }
 
+    case "NARRATION_READY": {
+      const nextReadiness = {
+        ...(state.narration_readiness ?? {}),
+        [action.cueId]: action.readiness
+      };
+      if (state.phase !== "BUFFERING" || state.current_cue_id !== action.cueId) {
+        return { ...state, narration_readiness: nextReadiness };
+      }
+      const resumed = {
+        ...state,
+        phase: "PLAYING" as const,
+        narration_readiness: nextReadiness,
+        buffered_from_phase: undefined
+      };
+      return {
+        ...resumed,
+        user_events: [
+          ...state.user_events,
+          event(resumed, "NARRATION_READY", {
+            segment_id: segment?.id,
+            cue_id: action.cueId,
+            detail: action.readiness
+          })
+        ]
+      };
+    }
+
     case "SKIP_SEGMENT": {
       if (state.phase !== "SKIPPING" || !segment) return state;
       const skipped = {
@@ -257,7 +359,8 @@ export function reduceCoachingSession(
             // The decision boundary changes the playback treatment, not the
             // user's viewing position. Continue through the real outcome.
             phase: "REVEALING",
-            current_tick: Math.max(cue.outcome_start_tick, action.tick)
+            current_tick: Math.max(cue.outcome_start_tick, action.tick),
+            outcome_completion: createOutcomeCompletionGate(cue)
           };
         }
         if (action.tick >= segment.end_tick) {
@@ -287,14 +390,17 @@ export function reduceCoachingSession(
       const route = nearestCueRoute(plan, action.tick);
       if (!route) return state;
       const targetSegment = plan.segments[route.segmentIndex];
+      const pending = isPendingNarration(state, route.cue.id);
       return {
         ...state,
-        phase: "PLAYING",
+        phase: pending ? "BUFFERING" : "PLAYING",
         current_segment_index: route.segmentIndex,
         current_cue_id: route.cue.id,
         current_tick: targetSegment.start_tick,
         consumed_cue_ids: state.consumed_cue_ids.filter((cueId) => cueId !== route.cue.id),
-        revealed_cue_ids: state.revealed_cue_ids.filter((cueId) => cueId !== route.cue.id)
+        revealed_cue_ids: state.revealed_cue_ids.filter((cueId) => cueId !== route.cue.id),
+        outcome_completion: undefined,
+        ...(pending ? { buffered_from_phase: "PLAYING" as const } : { buffered_from_phase: undefined })
       };
     }
 
@@ -306,7 +412,7 @@ export function reduceCoachingSession(
       ) {
         return state;
       }
-      return { ...state, phase: "REVEALING", current_tick: cue.outcome_start_tick };
+      return { ...state, phase: "REVEALING", current_tick: cue.outcome_start_tick, outcome_completion: createOutcomeCompletionGate(cue) };
     }
 
     case "REPLAY_OUTCOME": {
@@ -317,7 +423,14 @@ export function reduceCoachingSession(
       ) {
         return state;
       }
-      return { ...state, phase: "REPLAYING", current_tick: cue.outcome_start_tick };
+      return {
+        ...state,
+        phase: "REPLAYING",
+        current_tick: cue.outcome_start_tick,
+        // OutcomeCompletionGate is one-way. Replay hides the presentable
+        // surface through the phase selector, but never revokes completion.
+        outcome_completion: state.outcome_completion ?? completeOutcomeGate(createOutcomeCompletionGate(cue), cue.outcome_end_tick)
+      };
     }
 
     case "ADVANCE_SEGMENT": {

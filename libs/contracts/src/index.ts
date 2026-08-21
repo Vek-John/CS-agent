@@ -1,5 +1,6 @@
 import type { MatchEvent, PlayerStateSample } from "./match";
 import type { WorldPoint } from "./geometry";
+import type { CandidateSet, CueReadiness, DirectorDecisionSet, NarrationBundle, OutcomeCompletionState, OutcomeFact, PlayerActionFact } from "./coaching";
 
 export const REVIEW_MODES = [
   "SKIP",
@@ -47,6 +48,8 @@ export interface RoundTimeline {
   round_number: number;
   start_tick: number;
   freeze_end_tick: number;
+  /** Parsed Demo decision boundary; synthetic fixtures may omit it. */
+  decided_tick?: number;
   end_tick: number;
   score_before: readonly [number, number];
   score_after: readonly [number, number];
@@ -160,6 +163,8 @@ export interface CoachCue {
   id: string;
   segment_id: string;
   cue_type: "DECISION" | "HABIT_RECHECK";
+  candidate_id?: string;
+  primary_focus_code?: string;
   title: string;
   question: string;
   decision_tick: number;
@@ -171,6 +176,11 @@ export interface CoachCue {
   advice: Advice[];
   evidence: Evidence[];
   observable_fact_refs: string[];
+  action_facts?: PlayerActionFact[];
+  action_fact_refs?: string[];
+  outcome_facts?: OutcomeFact[];
+  outcome_fact_refs?: string[];
+  narration?: NarrationBundle;
   /** Optional direct link to the state used to pause the evidence canvas. */
   observable_state_id?: string;
   annotations: Annotation[];
@@ -223,7 +233,8 @@ export interface ReviewPlan {
   id: string;
   demo_id: string;
   player_id: string;
-  status: "BUILDING" | "STARTABLE" | "COMPLETE" | "FAILED";
+  /** Route compilation state; narration readiness lives in CoachingRouteState. */
+  status: "BUILDING" | "COMPLETE" | "FAILED";
   match_timeline_version: string;
   observation_version: string;
   signal_version: string;
@@ -236,12 +247,24 @@ export interface ReviewPlan {
   cues: CoachCue[];
   habit_clusters: HabitCluster[];
   generation_manifest: GenerationManifest;
+  candidate_set_id?: string;
+  candidate_set_version?: string;
+  candidate_set_hash?: string;
+  candidate_set_generation_manifest?: CandidateSet["generationManifest"];
+  director_decision_set?: DirectorDecisionSet;
+  compiler_provenance?: {
+    version: string;
+    route_fingerprint: string;
+    status: "SUCCEEDED" | "FALLBACK";
+    reason?: string;
+  };
 }
 
 export type CoachingSessionPhase =
   | "INTRO"
   | "PLAYING"
   | "SKIPPING"
+  | "BUFFERING"
   | "PAUSED_FOR_COACHING"
   | "REVEALING"
   | "REPLAYING"
@@ -254,6 +277,8 @@ export interface SessionUserEvent {
     | "STARTED"
     | "SEGMENT_SKIPPED"
     | "SKIP_EXPANDED"
+    | "NARRATION_BUFFERED"
+    | "NARRATION_READY"
     | "OUTCOME_REVEALED"
     | "OUTCOME_REPLAYED"
     | "QUESTION_ASKED"
@@ -274,6 +299,14 @@ export interface CoachingSessionState {
   consumed_cue_ids: string[];
   revealed_cue_ids: string[];
   expanded_segment_ids: string[];
+  /** Per-cue narration readiness; absent entries are treated as already available for legacy plans. */
+  narration_readiness?: Readonly<Record<string, CueReadiness>>;
+  /** Route identity is informational here; Host owns the immutable route snapshot. */
+  route_fingerprint?: string;
+  /** Present only for the active cue and complete only after outcome_end confirmation. */
+  outcome_completion?: OutcomeCompletionState;
+  /** The phase that was active immediately before a natural narration buffer. */
+  buffered_from_phase?: "PLAYING" | "SKIPPING";
   user_events: SessionUserEvent[];
 }
 
@@ -299,3 +332,4 @@ export * from "./match";
 export * from "./playback-bridge";
 export * from "./observation";
 export * from "./win-probability";
+export * from "./coaching";

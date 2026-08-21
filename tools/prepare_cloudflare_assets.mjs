@@ -61,14 +61,18 @@ async function countFilesAndBytes(root) {
   return { files, bytes };
 }
 
-async function removeLocalOnlyWebGpuAssets(root) {
+async function removeUnsupportedWebGpuAssets(root) {
   for (const entry of await readdir(root, { withFileTypes: true })) {
     const target = path.join(root, entry.name);
     if (entry.isDirectory()) {
-      await removeLocalOnlyWebGpuAssets(target);
+      await removeUnsupportedWebGpuAssets(target);
       continue;
     }
-    if (/^ort-wasm-simd-threaded\.(jsep|asyncify)|^ort-wasm-simd-threaded-.*\.asyncify\.wasm$/.test(entry.name)) {
+    // The old JSEP runtime is larger than the static-asset limit and is no
+    // longer used. Keep the matching asyncify runtime: WebGPU FP16 is the
+    // default provider and loads it on demand; Vite's precache glob ignores
+    // the large WASM file separately.
+    if (/^ort-wasm-simd-threaded\.jsep/.test(entry.name)) {
       await rm(target, { force: true });
     }
   }
@@ -81,7 +85,7 @@ if (!(await pathExists(viewerSourceRoot))) {
   throw new Error(`Missing cs2d viewer build: ${path.relative(workspaceRoot, viewerSourceRoot)}. Run pnpm cs2d:build first.`);
 }
 await copyReleaseAssets(viewerSourceRoot, viewerDeployRoot);
-await removeLocalOnlyWebGpuAssets(viewerDeployRoot);
+await removeUnsupportedWebGpuAssets(viewerDeployRoot);
 
 // The upstream viewer still has a few public absolute URLs (for example
 // `/maps/...` and `/weapons/...`). Keep these small compatibility sidecars at
@@ -89,6 +93,9 @@ await removeLocalOnlyWebGpuAssets(viewerDeployRoot);
 for (const name of [
   "maps",
   "weapons",
+  // The pinned viewer worker still requests model files from /models/...;
+  // keep this small compatibility mount alongside the /cs2d/ viewer tree.
+  "models",
   "replays",
   "teams",
   "icon.svg",
@@ -105,10 +112,13 @@ for (const name of [
 const required = [
   path.join(deployRoot, "generated-assets", "maps", "de_mirage.png"),
   path.join(deployRoot, "generated-assets", "items", "catalog.json"),
+  path.join(deployRoot, "generated-assets", "models", "cs-net", "win-rate.fp16.onnx"),
+  path.join(deployRoot, "models", "cs-net", "win-rate.fp16.onnx"),
   path.join(viewerDeployRoot, "index.html"),
   path.join(viewerDeployRoot, "assets"),
   path.join(viewerDeployRoot, "ort-wasm-simd-threaded.mjs"),
   path.join(viewerDeployRoot, "ort-wasm-simd-threaded.wasm"),
+  path.join(viewerDeployRoot, "ort-wasm-simd-threaded.asyncify.wasm"),
   path.join(viewerDeployRoot, "zstd.wasm"),
   path.join(deployRoot, "maps", "de_mirage_radar.png"),
   path.join(deployRoot, "weapons", "ak47.svg"),

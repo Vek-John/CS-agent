@@ -3,6 +3,9 @@ import { createSyntheticMirageTimeline } from "@cs-coach/demo-domain";
 import { createFixtureReviewPlan } from "@cs-coach/review-planner";
 import {
   buildSessionSummary,
+  canPresentOutcome,
+  completeOutcomeGate,
+  createOutcomeCompletionGate,
   createCoachingSession,
   getCurrentCue,
   reduceCoachingSession
@@ -73,6 +76,54 @@ describe("CoachingSession deterministic safety kernel", () => {
     expect(state.revealed_cue_ids).not.toContain(cue?.id);
   });
 
+  it("buffers only at a natural segment boundary while the next cue is pending", () => {
+    const cue = plan.cues[0];
+    const cueSegment = plan.segments.find((segment) => segment.id === cue.segment_id);
+    expect(cueSegment).toBeDefined();
+    let state = createCoachingSession(plan, "buffering-session", {
+      routeFingerprint: "route-fixture",
+      readiness: { [cue.id]: "PENDING" }
+    });
+    state = reduceCoachingSession(plan, state, { type: "START" });
+    expect(state.phase).toBe("PLAYING");
+
+    state = reduceCoachingSession(plan, state, { type: "TICK", tick: plan.segments[1].end_tick });
+    expect(state.phase).toBe("BUFFERING");
+    expect(state.current_cue_id).toBe(cue.id);
+    expect(state.current_tick).toBe(cueSegment!.start_tick);
+    expect(state.user_events).toContainEqual(expect.objectContaining({
+      type: "NARRATION_BUFFERED",
+      cue_id: cue.id,
+      detail: "NARRATION_PENDING"
+    }));
+
+    state = reduceCoachingSession(plan, state, { type: "NARRATION_READY", cueId: cue.id, readiness: "READY" });
+    expect(state.phase).toBe("PLAYING");
+    expect(state.buffered_from_phase).toBeUndefined();
+    expect(state.narration_readiness?.[cue.id]).toBe("READY");
+    expect(state.user_events).toContainEqual(expect.objectContaining({
+      type: "NARRATION_READY",
+      cue_id: cue.id,
+      detail: "READY"
+    }));
+  });
+
+  it("treats deterministic FALLBACK as playable and does not buffer ordinary gaps", () => {
+    const cue = plan.cues[0];
+    let state = createCoachingSession(plan, "fallback-session", {
+      routeFingerprint: "route-fixture",
+      readiness: { [cue.id]: "FALLBACK" }
+    });
+    state = reduceCoachingSession(plan, state, { type: "START" });
+    state = reduceCoachingSession(plan, state, { type: "TICK", tick: plan.segments[1].end_tick });
+    expect(state.phase).toBe("PLAYING");
+    expect(state.phase).not.toBe("BUFFERING");
+    expect(state.current_cue_id).toBe(cue.id);
+
+    const ordinary = reduceCoachingSession(plan, createCoachingSession(plan), { type: "START" });
+    expect(ordinary.phase).toBe("PLAYING");
+  });
+
   it("reveals the outcome only after continuous playback reaches its end", () => {
     let state = reachFirstCue();
     state = reduceCoachingSession(plan, state, { type: "TICK", tick: plan.cues[0].outcome_end_tick - 1 });
@@ -86,6 +137,34 @@ describe("CoachingSession deterministic safety kernel", () => {
     state = reduceCoachingSession(plan, state, { type: "ADVANCE_SEGMENT" });
     expect(state.consumed_cue_ids).toContain("cue-r2-overpeek");
     expect(state.current_segment_index).toBe(5);
+  });
+
+  it("keeps the pure outcome presentation gate one-way across replay", () => {
+    let state = reachFirstCue();
+    const cue = plan.cues[0];
+    expect(state.outcome_completion).toMatchObject({ cueId: cue.id, status: "LOCKED" });
+    state = reduceCoachingSession(plan, state, { type: "TICK", tick: cue.outcome_end_tick - 1 });
+    expect(state.outcome_completion?.status).toBe("LOCKED");
+    expect(canPresentOutcome(state.outcome_completion ?? { cueId: cue.id, outcomeEndTick: cue.outcome_end_tick, status: "LOCKED" })).toBe(false);
+    state = reduceCoachingSession(plan, state, { type: "TICK", tick: cue.outcome_end_tick });
+    expect(state.outcome_completion).toMatchObject({ cueId: cue.id, status: "COMPLETE", completedAtTick: cue.outcome_end_tick });
+    expect(canPresentOutcome(state.outcome_completion!)).toBe(true);
+
+    state = reduceCoachingSession(plan, state, { type: "REPLAY_OUTCOME" });
+    expect(state.outcome_completion).toMatchObject({ cueId: cue.id, status: "COMPLETE", completedAtTick: cue.outcome_end_tick });
+    expect(canPresentOutcome(state.outcome_completion!)).toBe(true);
+    state = reduceCoachingSession(plan, state, { type: "TICK", tick: cue.outcome_end_tick });
+    expect(canPresentOutcome(state.outcome_completion!)).toBe(true);
+  });
+
+  it("resets the active cue route when manual return deliberately re-walks it", () => {
+    const cue = plan.cues[0];
+    let state = reachFirstCue();
+    state = reduceCoachingSession(plan, state, { type: "TICK", tick: cue.outcome_end_tick });
+    expect(state.outcome_completion?.status).toBe("COMPLETE");
+    state = reduceCoachingSession(plan, state, { type: "RETURN_TO_NEAREST_CUE", tick: cue.decision_tick });
+    expect(state.revealed_cue_ids).not.toContain(cue.id);
+    expect(state.outcome_completion).toBeUndefined();
   });
 
   it("returns manual playback to the nearest coaching cue and replays its context", () => {

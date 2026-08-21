@@ -88,7 +88,7 @@ export interface AnalysisWasmTelemetry {
 export interface AnalysisWebGpuTelemetry {
   schemaVersion: "cs-net-webgpu-telemetry.v1";
   providerRequested: "webgpu-fp16";
-  providerActual: "webgpu-fp16" | "wasm-int8";
+  providerActual: "webgpu-fp16" | "wasm-int8" | "unavailable";
   precision: "FP16";
   modelSha256: string;
   onnxruntimeVersion: string;
@@ -121,7 +121,9 @@ export interface AnalysisWebGpuTelemetry {
   ortSessionCreated: boolean;
   profileKernelCount: number;
   profileKernelMs: number;
-  fallbackDetection: "PROVEN" | "UNKNOWN" | "FAILED";
+  ortWarningCount: number;
+  ortWarnings: readonly string[];
+  fallbackDetection: "PROVEN" | "UNKNOWN" | "FAILED" | "KNOWN_CPU_SHAPE_OPS_FROM_ORT_WARNING";
   fallbackReason: string;
 }
 export type AnalysisTelemetry = AnalysisWasmTelemetry | AnalysisWebGpuTelemetry;
@@ -194,17 +196,18 @@ function isTelemetry(value: unknown): value is AnalysisTelemetry {
       typeof value.fallbackReason === "string" && value.fallbackReason.length <= 128;
   }
   if (value.schemaVersion === "cs-net-webgpu-telemetry.v1") {
-    const numeric = ["fetchMs", "sessionCreateMs", "warmupMs", "featureBuildMs", "tensorUploadMs", "gpuInferenceMs", "outputReadbackMs", "serializationMs", "totalMs", "sampleCount", "batchSize", "samplesPerSecond", "modelBytes", "inputBytes", "outputBytes", "estimatedPeakGpuBytes", "profileKernelCount", "profileKernelMs"];
+    const numeric = ["fetchMs", "sessionCreateMs", "warmupMs", "featureBuildMs", "tensorUploadMs", "gpuInferenceMs", "outputReadbackMs", "serializationMs", "totalMs", "sampleCount", "batchSize", "samplesPerSecond", "modelBytes", "inputBytes", "outputBytes", "estimatedPeakGpuBytes", "profileKernelCount", "profileKernelMs", "ortWarningCount"];
     const capability = value.capability;
-    return exactKeys(value, ["schemaVersion", "providerRequested", "providerActual", "precision", "modelSha256", "onnxruntimeVersion", ...numeric, "capability", "ortSessionCreated", "fallbackDetection", "fallbackReason"]) &&
+    return exactKeys(value, ["schemaVersion", "providerRequested", "providerActual", "precision", "modelSha256", "onnxruntimeVersion", ...numeric, "capability", "ortSessionCreated", "ortWarnings", "fallbackDetection", "fallbackReason"]) &&
       numeric.every((key) => finite(value[key]) && (value[key] as number) >= 0) &&
-      value.providerRequested === "webgpu-fp16" && (value.providerActual === "webgpu-fp16" || value.providerActual === "wasm-int8") && value.precision === "FP16" &&
+      value.providerRequested === "webgpu-fp16" && (value.providerActual === "webgpu-fp16" || value.providerActual === "wasm-int8" || value.providerActual === "unavailable") && value.precision === "FP16" &&
       typeof value.modelSha256 === "string" && value.modelSha256.length <= 128 && typeof value.onnxruntimeVersion === "string" && value.onnxruntimeVersion.length <= 64 &&
       isRecord(capability) && exactKeys(capability, ["navigatorGpu", "workerNavigatorGpu", "adapterAvailable", "deviceAvailable", "shaderF16", "adapterInfo", "deviceInfo", "deviceFeatures"]) &&
       typeof capability.navigatorGpu === "boolean" && typeof capability.workerNavigatorGpu === "boolean" && typeof capability.adapterAvailable === "boolean" && typeof capability.deviceAvailable === "boolean" && typeof capability.shaderF16 === "boolean" &&
       typeof capability.adapterInfo === "string" && capability.adapterInfo.length <= 256 && typeof capability.deviceInfo === "string" && capability.deviceInfo.length <= 256 &&
       Array.isArray(capability.deviceFeatures) && capability.deviceFeatures.every((item) => typeof item === "string" && item.length <= 64) &&
-      typeof value.ortSessionCreated === "boolean" && (value.fallbackDetection === "PROVEN" || value.fallbackDetection === "UNKNOWN" || value.fallbackDetection === "FAILED") && typeof value.fallbackReason === "string" && value.fallbackReason.length <= 240;
+      typeof value.ortSessionCreated === "boolean" && Array.isArray(value.ortWarnings) && value.ortWarnings.length <= 32 && value.ortWarnings.every((warning) => typeof warning === "string" && warning.length <= 512) &&
+      (value.fallbackDetection === "PROVEN" || value.fallbackDetection === "UNKNOWN" || value.fallbackDetection === "FAILED" || value.fallbackDetection === "KNOWN_CPU_SHAPE_OPS_FROM_ORT_WARNING") && typeof value.fallbackReason === "string" && value.fallbackReason.length <= 512;
   }
   return false;
 }

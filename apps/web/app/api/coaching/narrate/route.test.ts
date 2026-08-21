@@ -2,14 +2,28 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
 
 const validBody = {
-  cues: [{
-    cue_id: "c1",
-    cue_type: "DECISION",
-    facts: [{ id: "f1", text: "决策时玩家有 65 HP。", availability: "DECISION", observed_by_player: true }],
+  coachingPackage: {
+    cueId: "c1",
+    candidateId: "k1",
+    primaryFocusCode: "SURVIVE_THE_NEXT_CONTACT",
+    decisionContext: { facts: [{ id: "d1", text: "决策时玩家有 65 HP。" }], claims: [] },
+    playerAction: [{ id: "a1", text: "你从掩体拉出。" }],
     inferences: [],
-    advice: [],
+    advice: [{ id: "v1", text: "先预瞄，等队友补枪。", trigger: "进入枪线时", factRefs: ["d1"] }],
+    evidence: [{ id: "e1", label: "决策事实", factRefs: ["d1"] }],
+    allowedRefs: { decision: ["d1"], action: ["a1"], advice: ["v1"], evidence: ["e1"] },
     limitations: []
-  }]
+  },
+  outcomePackage: {
+    cueId: "c1",
+    candidateId: "k1",
+    outcomeFacts: [{ id: "o1", text: "随后你被击杀。", outcomeKind: "DEATH" }],
+    deathKillHpRefs: ["o1"],
+    winProbabilityImpact: { text: "我方胜率下降。", confidence: "HIGH", limitations: [] },
+    measurementRefs: ["m1"],
+    confounders: [],
+    limitations: []
+  }
 };
 
 function request(body: unknown, headers: Record<string, string> = {}) {
@@ -20,37 +34,8 @@ function request(body: unknown, headers: Record<string, string> = {}) {
   });
 }
 
-function multiCueBody(count: number) {
-  return {
-    cues: Array.from({ length: count }, (_, index) => ({
-      cue_id: `c${index + 1}`,
-      cue_type: "DECISION",
-      facts: [{ id: "f1", text: "决策时玩家有 65 HP。", availability: "DECISION", observed_by_player: true }],
-      inferences: [],
-      advice: [],
-      limitations: []
-    }))
-  };
-}
-
-function multiCueCompletion(count: number) {
-  return {
-    choices: [{
-      finish_reason: "stop",
-      message: {
-        content: JSON.stringify({
-          items: Array.from({ length: count }, (_, index) => ({
-            cue_id: `c${index + 1}`,
-            title: `第 ${index + 1} 个决策点`,
-            explanation: "基于当前决策事实，保留退路。"
-          }))
-        })
-      }
-    }]
-  };
-}
-
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
 
@@ -60,7 +45,10 @@ describe("POST /api/coaching/narrate", () => {
     const response = await POST(request(validBody));
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ status: "DISABLED", items: [], reason: "MISSING_API_KEY" });
+    const body = await response.json() as { status: string; bundle?: unknown; manifest?: { reason?: string; provider?: string } };
+    expect(body.status).toBe("FALLBACK");
+    expect(body.manifest).toMatchObject({ reason: "MISSING_API_KEY", provider: "DETERMINISTIC" });
+    expect(body.bundle).toBeDefined();
   });
 
   it("rejects cross-origin requests before reading or forwarding the body", async () => {
@@ -79,28 +67,43 @@ describe("POST /api/coaching/narrate", () => {
     const response = await POST(request({ ...validBody, player_id: "76561197964020430", path: "/tmp/demo.dem" }));
 
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ status: "FALLBACK", items: [], reason: "INVALID_REQUEST" });
+    expect(await response.json()).toEqual({ status: "FALLBACK", reason: "INVALID_REQUEST" });
   });
 
-  it("accepts a 15-cue request and returns every narration item", async () => {
+  it("accepts one anonymous CoachingPackage+OutcomePackage and returns a strict bundle", async () => {
     vi.stubEnv("DEEPSEEK_API_KEY", "route-test-secret");
     const fetcher = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(multiCueCompletion(15)), {
+      new Response(JSON.stringify({
+        choices: [{
+          finish_reason: "stop",
+          message: {
+            content: JSON.stringify({
+              bundle: {
+                cueId: "c1",
+                candidateId: "k1",
+                primaryFocusCode: "SURVIVE_THE_NEXT_CONTACT",
+                currentSituation: { text: "决策时玩家有 65 HP。", refs: ["d1"] },
+                playerAction: { text: "你从掩体拉出。", refs: ["a1"] },
+                coreIssue: { text: "先活过接触。", refs: ["d1", "a1"] },
+                betterPlay: { text: "先预瞄，等队友补枪。", refs: ["v1", "e1"] },
+                outcomeImpact: { text: "随后你被击杀。", refs: ["o1", "m1"] }
+              }
+            })
+          }
+        }]
+      }), {
         status: 200,
         headers: { "content-type": "application/json" }
       })
     );
     vi.stubGlobal("fetch", fetcher);
 
-    const response = await POST(request(multiCueBody(15)));
-    const body = await response.json() as { status: string; items?: Array<{ cue_id: string }> };
+    const response = await POST(request(validBody));
+    const body = await response.json() as { status: string; bundle?: { outcomeImpact?: { refs: string[] } } };
 
     expect(response.status).toBe(200);
     expect(body.status).toBe("SUCCEEDED");
-    expect(body.items).toHaveLength(15);
-    expect(body.items?.map((item) => item.cue_id)).toEqual(
-      Array.from({ length: 15 }, (_, index) => `c${index + 1}`)
-    );
+    expect(body.bundle?.outcomeImpact?.refs).toEqual(["o1", "m1"]);
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });

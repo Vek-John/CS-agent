@@ -4,6 +4,9 @@ export const CS_NET_THREAD_CANDIDATES = [1, 2, 4] as const;
 export const CS_NET_BATCH_CANDIDATES = [1, 8, 16, 32, 64, 128] as const;
 /** Current measured stable default on the supported M1 browser baseline. */
 export const CS_NET_MEASURED_DEFAULT_BATCH = 16 as const;
+/** Production analysis defaults; benchmark query parameters may override these internally. */
+export const CS_NET_DEFAULT_PROVIDER = "webgpu-fp16" as const;
+export const CS_NET_DEFAULT_BATCH_SIZE = 16 as const;
 
 export type RuntimeThreadRequest = "auto" | 1 | 2 | 4;
 export type RuntimeThreadCount = 1 | 2 | 4;

@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { createSyntheticMirageTimeline } from "@cs-coach/demo-domain";
 import { createFixtureReviewPlan } from "@cs-coach/review-planner";
 import { PLAYBACK_BRIDGE_CHANNEL, type ReviewPlan } from "@cs-coach/contracts";
+import { createOutcomeCompletionGate, completeOutcomeGate } from "@cs-coach/session";
 import {
   acceptedPlaybackEvent,
+  analysisEventMatchesSelectedPlayer,
   adjacentRoundIndex,
   cs2dHostConfig,
   HOST_SPEED_OPTIONS,
@@ -31,6 +33,12 @@ const event = {
 } as const;
 
 describe("cs2d localhost host boundary", () => {
+  it("filters stale analysis events by the current selected player", () => {
+    expect(analysisEventMatchesSelectedPlayer("player-new", "player-old")).toBe(false);
+    expect(analysisEventMatchesSelectedPlayer("player-new", "player-new")).toBe(true);
+    expect(analysisEventMatchesSelectedPlayer(undefined, "player-new")).toBe(false);
+  });
+
   it("keeps the Host coaching bands locked until the full outcome is paused", () => {
     const cue = createFixtureReviewPlan(createSyntheticMirageTimeline()).cues[0];
 
@@ -38,6 +46,23 @@ describe("cs2d localhost host boundary", () => {
     expect(hostCoachingCueSurface(cue, "PAUSED_FOR_COACHING", false)).toBeUndefined();
     expect(hostCoachingCueSurface(cue, "PAUSED_FOR_COACHING", true)?.outcomeFacts.map((fact) => fact.id))
       .toEqual(["fact-r2-outcome"]);
+  });
+
+  it("does not synthesize a five-field body when the prepared bundle is absent", () => {
+    const cue = createFixtureReviewPlan(createSyntheticMirageTimeline()).cues[0];
+    const gate = completeOutcomeGate(createOutcomeCompletionGate(cue), cue.outcome_end_tick);
+    expect(hostCoachingCueSurface(cue, "PAUSED_FOR_COACHING", gate)).toBeUndefined();
+    const prepared = {
+      cueId: cue.id,
+      candidateId: "candidate-fixture",
+      primaryFocusCode: "SURVIVE_CONTACT",
+      currentSituation: { text: "情况", refs: ["fact-r2-4v3"] },
+      playerAction: { text: "动作", refs: ["action-r2"] },
+      coreIssue: { text: "问题", refs: ["fact-r2-4v3", "action-r2"] },
+      betterPlay: { text: "建议", refs: ["advice-r2-reset"] },
+      outcomeImpact: { text: "结果", refs: ["fact-r2-outcome"] }
+    } as const;
+    expect(hostCoachingCueSurface(cue, "PAUSED_FOR_COACHING", gate, prepared)?.narration).toEqual(prepared);
   });
 
   it("normalizes the host flag and origin", () => {

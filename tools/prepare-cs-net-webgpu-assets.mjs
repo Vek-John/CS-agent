@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
-// Local-only benchmark preparation. These files are intentionally not part of
-// the normal cs2d/cloudflare asset sync and remain ignored by git.
+// Bootstrap/verification helper for the checked-in FP16 viewer asset. It is
+// still useful when regenerating an upstream checkout, while the normal sync
+// path now publishes FP16 and asyncify by default.
 import { cp, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";

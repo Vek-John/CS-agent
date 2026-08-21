@@ -1,0 +1,22 @@
+{
+  "schema_version": "cs-net-fp16-asset/1.0.0",
+  "provider": "CS_NET",
+  "source_revision": "csmodelv3-win-space-only-fp32-2026-08-20",
+  "source_asset": "win-rate.fp32.onnx",
+  "source_sha256": "f9aa34f7591016a561ed1fba83ec6cda75d97e90a20dfab7ddbaddc8464ceec3",
+  "revision": "csmodelv3-win-space-only-fp16-2026-08-21",
+  "asset": "win-rate.fp16.onnx",
+  "sha256": "94ef9a19ff5e3d2e122e57fd0fb2a79c670f14746d79399c1352ab9b25742f63",
+  "bytes": 19452396,
+  "quantization": "FP16",
+  "temperature": 1.0613423585891724,
+  "feature_builder_sha256": "f9f50fd955690236d7de9d944d81b8f53444be17b710c89212dba91bb5115bd1",
+  "conversion": {
+    "tool": "onnxruntime.transformers.float16.convert_float_to_float16",
+    "onnxruntime_version": "1.19.2",
+    "onnx_version": "1.19.1",
+    "keep_io_types": true,
+    "force_fp16_initializers": false
+  },
+  "license": "MIT"
+}

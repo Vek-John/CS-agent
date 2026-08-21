@@ -1,5 +1,11 @@
 import type { Advice, CoachCue, Fact, Inference, ReviewPlan } from "@cs-coach/contracts";
 
+/**
+ * @deprecated Legacy report-surface adapter retained for the old review page
+ * fixtures only. The guided playback Host must use CandidateSet → package
+ * builder → requestNarrationBundle; this module is not part of that route.
+ */
+
 export const COACHING_NARRATION_ENDPOINT = "/api/coaching/narrate";
 
 export type NarrationStatus = "SUCCEEDED" | "DISABLED" | "FALLBACK";

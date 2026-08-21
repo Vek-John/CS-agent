@@ -277,55 +277,167 @@
 
 **验证**
 
-FP16 产物为 19,452,396 bytes，转换 manifest、FP32/FP16 CPU sanity parity、capability/session/profile/计时 telemetry 均独立记录；正式浏览器矩阵固定同一输入，执行 WebGPU batch 16/32/64/128/256 的 cold1 + warm3，并与 FP32 WASM 比较概率、swing、Director cue 和 OutcomeImpact。
+FP16 产物为 19,452,396 bytes，转换 manifest、FP32/FP16 CPU sanity parity、capability/session/profile/计时 telemetry 均独立记录；正式浏览器验收固定同一输入与 canonical 顺序，先用 batch16/32 判断收益，再尝试 batch8/64。batch8 在本轮验收时限内未返回 telemetry，batch64 未启动；不把未完成的组合写成性能数字。保存的 batch16 timeline 与 FP32 CPU parity 继续用于概率、swing、Director cue 和 OutcomeImpact 检查。
 
 **限制 / 下一步**
 
 当前浏览器或模型若缺少 Worker WebGPU、`shader-f16`、JSEP runtime 或纯算子分配证据，继续使用 INT8 WASM；JSEP WASM 本身超过 Cloudflare 单文件限制，故 WebGPU 资产只保留本地实验。只有 parity、稳定性、纯度证据和相对现有 86.882 秒 inference 至少 1.3× 全部通过，才另开 ADR 讨论默认切换。
 
-### 4.12 2026-08-20：真实 Edge 远程调试仍受环境阻断
+### 4.12 2026-08-20：adapter-only WebGPU session 与小矩阵验收
 
 **触发**
 
-用户要求使用真实 Microsoft Edge GUI、硬件 Metal 和独立远程调试实例完成 WebGPU 结果，避免把 Playwright 的 SwiftShader 或 Chrome 结果当作 GPU 结论。
+真实 Edge 的自建 `GPUDevice` 路径会触发 Metal operation wait failure，需要在同一硬件上验证 ORT 自己管理 device 的路径，并快速判断 FP16 是否有明显收益。
 
 **决定**
 
-优先尝试 `open -na "Microsoft Edge" --args --remote-debugging-port=9333 --user-data-dir=/tmp/cs-coach-edge-webgpu-poc --no-first-run --no-default-browser-check`，随后尝试绝对路径和 Computer Use；Playwright Edge 仅作为诊断，不将其失败或 SwiftShader 结果纳入性能结论。
+`libs/cs-net-winrate/src/runtime-webgpu.ts` 只设置 `ort.env.webgpu.adapter`，不写 `ort.env.webgpu.device`，session 只配置 WebGPU EP；profiling 延迟且可选。默认仍为 INT8 WASM `auto → 4 threads × batch16`。
 
 **落点**
 
-`tools/cs-net/benchmark_webgpu_edge.mjs` 固定 `channel=msedge`、headed、移除 SwiftShader 默认参数并使用 `--use-angle=metal`；远程调试与能力记录保存在 `.local-data/acceptance-csnet-webgpu-fp16/edge-webgpu-benchmark.json`。
+`tools/cs-net/benchmark_webgpu_edge.mjs` 通过 `EDGE_CDP_ENDPOINT` 复用已有 localhost 页面；FP16 模型 SHA 为 `94ef9a19ff5e3d2e122e57fd0fb2a79c670f14746d79399c1352ab9b25742f63`，大小 `19,452,396` bytes。ORT JSEP WASM 为 `26,827,543` bytes，超过 Cloudflare 单文件上限，FP16 只保留 localhost/local-only。
 
 **验证**
 
-Edge `151.0.4129.93`、macOS `26.5.2 (25F84)`、Apple M1 Metal 可用。LaunchServices 报 `kLSNoExecutableErr`；Playwright headed Edge 和移除 SwiftShader 的真实 GPU 尝试均在页面创建前 `SIGABRT`。Computer Use 读取 `com.microsoft.edgemac` 时被环境权限拒绝，9333 未监听。
+Edge `151.0.4129.93`、macOS `26.5.2 (25F84)`、Apple M1 Metal 的主页面、iframe、Worker 均有隔离、GPU adapter 和 `shader-f16`。test_demo 真实解析得到 9 回合、7,239 个 canonical samples；batch16 cold `16.69858s`，三个 warm `15.39264s`、`16.885485s`、`17.024465s`，median `16.885485s`，约 `428.7 samples/s`，相对 INT8 `86.882s` 约 `5.15×`；batch32 warm `20.075405s`，更慢。ORT warning 明确 shape ops 被 CPU 分配，telemetry 为 `KNOWN_CPU_SHAPE_OPS_FROM_ORT_WARNING`、2 条 warning；`profileKernelCount=0` 单独表示 profiling 无 kernel 事件，结果不称 pure WebGPU。
 
 **限制 / 下一步**
 
-本轮没有 navigator.gpu、adapter/device、shader-f16、ORT WebGPU session、batch 矩阵、Falcons 或截图证据；不宣称 WebGPU 性能或纯度，不改变 INT8 WASM 默认。Edge GUI/远程调试可启动后直接运行现有 benchmark harness。
+batch8 raw-CDP 运行超过 5 分钟没有 telemetry，按时限终止；batch64 未启动，未测结果不写成性能数字。Falcons/Spirit `453,977,283` bytes 的 batch16 尝试了 CDP target、iframe-local Replay 和最后一次 Playwright Edge 启动：CDP target 在 iframe 可用前超时，首个 harness 曾因把 433 MB Replay 序列化回 Node OOM，Playwright `channel=msedge` 又在页面创建前 `SIGABRT`，所以无 Falcons WebGPU telemetry；既有 parser smoke 仍只证明约 `25.562s` 解析、10 人和 NiKo 选择。当前保守推荐 batch16，合理区间约 8–16（8 未实测），不再扩展 128/256。已知 CPU shape fallback、profiling 无 kernel 事件和 Cloudflare 26.8 MB WASM 限制均阻止切换生产默认；保留失败时独立回退到 INT8 WASM。
 
-### 4.13 2026-08-20：真实 Edge 能力可用但 ORT WebGPU session 未建立
+### 4.13 2026-08-20：WebGPU 结果的证据边界
 
 **触发**
 
-总控提供了独立 GUI Edge CDP 实例，要求在 Apple Metal 硬件路径上验证 Worker WebGPU、`shader-f16`、仅 WebGPU EP 的 ORT session 和 test_demo batch16；不得把回退结果算作 GPU 性能。
+WebGPU session 成功不等于 pure WebGPU；必须同时保留 ORT 节点分配 warning、profiling 状态、providerActual 和 fallbackDetection。
 
 **决定**
 
-保留 WebGPU FP16 为 local-only PoC。真实 Edge 能力探测通过后，session 创建失败即记录 `FAILED` 并回到同一 Replay 的 INT8 WASM；不继续扩展 batch 矩阵，也不改变默认 INT8 WASM `auto → 4 threads × batch16`。ORT 1.27 的 profiling surface 先按兼容方式初始化；匹配的 asyncify WASM 资产替代不兼容的 JSEP runtime 文件。
+保留 WebGPU FP16 为 local-only PoC；能力或 session 失败时回到同一 Replay 的 INT8 WASM。当前真实结果使用 adapter-only ORT 设备管理，默认 provider、采样密度、feature 语义和 Director 不变。
 
 **落点**
 
-`libs/cs-net-winrate/src/runtime-webgpu.ts`、`tools/prepare-cs-net-webgpu-assets.mjs`、`tools/sync-cs-net-assets.mjs` 与 Edge harness。FP16 模型 SHA 为 `94ef9a19ff5e3d2e122e57fd0fb2a79c670f14746d79399c1352ab9b25742f63`，大小 `19,452,396` bytes；匹配 asyncify WASM 为 `24,254,953` bytes。旧尝试和新 continuation 证据均保留。
+`libs/cs-net-winrate/src/runtime-webgpu.ts`、`tools/prepare-cs-net-webgpu-assets.mjs`、`tools/sync-cs-net-assets.mjs` 与 Edge harness。完整证据在 `.local-data/acceptance-csnet-webgpu-fp16/benchmark-summary.json`、batch16/batch32 benchmark JSON 和 Director parity JSON。
 
 **验证**
 
-Edge `151.0.4129.93` 的主页面、iframe、Worker 均有 `crossOriginIsolated`、`SharedArrayBuffer`、GPU adapter/device 与 `shader-f16`；`edge-gpu.png` 记录 Apple M1 Metal 硬件加速。test_demo 真实解析得到 9 回合、7,239 个 canonical samples；batch16 进入 ORT WebGPU session 创建，随后以 `Failed to wait for the operation:3` 失败，telemetry 明确 `ortSessionCreated=false`、`providerActual=wasm-int8`、`fallbackDetection=FAILED`。控制台只有 ORT 的节点分配 warning，无 page error。Falcons/Spirit 已有一次有界解析/10 人选择证据（约 25.9s），未重复长跑。
+保存的 Director parity 对照确认 7,239 点、82 个 swing、cue IDs `c1/c2`、OutcomeImpact 数值和 session 结果确定性一致；FP16 CPU parity 误差低于 `max 0.005 / mean 0.001` 门槛。
 
 **限制 / 下一步**
 
-本轮没有可用的 WebGPU inference 时间、FP16 browser parity、batch32/64/128/256、纯 WebGPU 证明或 1.3× 结论；部分 shape 节点分配 warning 与 session wait failure 需要单独定位。默认继续 INT8 WASM，不把这一轮的 58.3s INT8 fallback wall time 当作 WebGPU 指标。
+不得把 5.15× 相对收益解读为纯 GPU 收益；已知 CPU shape fallback、profiling 无 kernel 事件及 Cloudflare JSEP 26,827,543 bytes 限制仍使它只能作为 local-only 候选。默认继续 INT8 WASM `auto → 4 threads × batch16`。
+
+### 4.14 2026-08-21：Falcons 单 controller 阶段门槛
+
+**触发**
+
+需要对 `spirit-vs-falcons-m2-mirage.dem` 做一次有界的 WebGPU FP16 batch16 验收；该文件为 `453,977,283` bytes，不能把 Replay 或逐帧数据搬回 Node。
+
+**决定**
+
+验收脚本收缩为一个 controller：它自行启动 localhost 3000/5174、自行用独立临时 profile 启动官方 Edge、只连接自己的 CDP endpoint，并在 finally 清理浏览器、服务与 profile。A/B/C/D/E 分别设置 `90s/90s/120s/180s/480s` 门槛，总时限为 10 分钟；页面内 Worker 只向 Node 返回摘要与 telemetry。
+
+**落点**
+
+`tools/cs-net/benchmark_webgpu_edge.mjs` 与 `.local-data/acceptance-csnet-webgpu-fp16/falcons-batch16-final/` 阶段 JSON。脚本固定使用原生 Edge 参数，不含 SwiftShader、use-angle 或软件 GPU 参数；test_demo smoke 只构造页面内前 16 个 canonical samples，Falcons 阶段不回传 Replay。
+
+**验证**
+
+A 阶段通过：服务启动、Falcons 文件、FP16 模型 `19,452,396` bytes 与 asyncify WASM `24,254,953` bytes 均存在，9333 预检为空。B 阶段使用 `/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge`、临时 profile `/var/folders/m3/g18ldpm962x7y2s_7dz0r5q80000gn/T/cs-coach-edge-falcons-controller-fDfN4y`、PID `30757` 和固定参数等待 60 秒，但未出现 9333；stdout/stderr 均为空。finally 后 3000、5174、9333 均关闭，profile 已删除。
+
+**限制 / 下一步**
+
+本次没有进入 test_demo、Falcons 解析或 WebGPU 推理，因此没有新增 Falcons telemetry，不能把任何 INT8 fallback 当作结果。既有 test_demo FP16 batch16 和 Falcons 解析/选人 smoke 证据仍保持有效；下一次若要继续，先解决同一执行环境下原生 Edge headless 进程不暴露 CDP 的启动权限边界，不再叠加 attach 或 Replay 搬运 workaround。
+
+### 4.15 2026-08-21：WebGPU 默认请求与非回退错误边界
+
+**触发**
+
+WebGPU FP16 已有真实 Edge batch16 结果，但 Worker 仍把 provider 缺省解释为 WASM，并在所有 WebGPU 异常上立即回退。这样会把请求取消、旧请求 superseded 或超时误报成可用的 INT8 结果，也无法让 UI 知道当前分析确实 unavailable。
+
+**决定**
+
+Worker、页面路由和共享 runtime 统一默认 `webgpu-fp16` + `batchSize=16`。错误同时读取 `name`、`code`、`message`，归一化为 `FAILURE`、`TIMEOUT` 或 `ABORTED`：只有 `FAILURE` 发送 `providerActual=unavailable` 的失败 telemetry 后，才用同一 Replay、选手和 batch16 执行独立的 INT8 WASM；timeout、AbortError、取消和 superseded 只发送 unavailable/error，不调用 WASM。旧请求在任何阶段都不能写回当前请求。
+
+**落点**
+
+`libs/cs-net-winrate/src/runtime-config.ts`、`libs/cs-net-winrate/src/runtime-webgpu.ts`、`libs/cs-net-winrate/src/runtime-webgpu.test.ts`、`libs/contracts/src/playback-bridge.ts`、上游 `csNetWinRate.worker.ts`/`DemoAnalyzerView.vue` 与 pinned cs2d host patch。
+
+**验证**
+
+定向 runtime 测试覆盖默认 provider/batch、AbortError/取消、TimeoutError/deadline、普通 ORT failure、terminal error code、失败 telemetry 的 `unavailable` provider；bridge validator 测试覆盖该 telemetry。上游 Worker 与 patch 已用 `git apply --reverse --check` 做逐行同步校验；主站 production build、cs2d build、Cloudflare OpenNext build 和资产检查均通过，部署结果包含根 `/models/...` sidecar 与 `/cs2d/` asyncify 资源；未启动浏览器或大型 Replay。
+
+**限制 / 下一步**
+
+本轮没有重新跑 Edge 或 Falcons；真实浏览器仍可能因能力、ORT session 或已知 CPU shape-op 分配进入 INT8 fallback。FP16 模型（19,452,396 bytes）和匹配的 asyncify WASM（24,254,953 bytes）已纳入默认 viewer 发布并按需加载；旧 JSEP WASM（26,827,543 bytes）仍因 Cloudflare 单文件限制排除。生产结果需继续保留实际 provider telemetry，不能把失败记录当成 WASM 结果。
+
+### 4.16 2026-08-21：Demo 与胜率共用可平移时间画布
+
+**触发**
+
+整场 Demo 进度与胜率曲线虽然都用 canonical tick 百分比，但位于两个独立宽度容器；加入横向缩放后会失去回合边界和播放头的视觉对齐，也无法像时间编辑器一样拖动画布查看局部。
+
+**决定**
+
+将 Demo 轨标为 A、胜率轨标为 B，放入同一个横向滚动内容画布。横向缩放只改变共享画布宽度，因此 A/B 始终使用相同百分比坐标；纵向缩放只改变 B 的图表高度。横向放大时，A 保留拖动定位播放头，B 和空白画布使用 Pointer Capture 直接平移，触控板横向滚动继续走原生 overflow；缩放以当前播放头为中心。
+
+**落点**
+
+`apps/web/components/playback/cs2d-playback-host.tsx` 与 `apps/web/app/globals.css`。控件使用 Lucide 方向图标、原生 range 和即时数值反馈，支持键盘、`prefers-reduced-motion` 与窄屏换行；不改变 Replay、canonical tick、Bridge、胜率模型或教练状态机。
+
+**验证**
+
+localhost 载入 `test_demo.dem` 并生成真实胜率曲线：横向 `2.5x` 时共享内容宽度约为 viewport 的 `2.5x`，B 画布拖动使 `scrollLeft` 从 `0` 到 `500px`；A 的第 2/3 回合边界与 B 对应竖线误差小于 `1px`。B 从 `1x` 放到 `2x` 时高度约由 `51.2px` 变为 `102.4px`，A 始终约 `40.8px`。定向测试、TypeScript 检查和宽屏视觉检查通过。
+
+**限制 / 下一步**
+
+当前不实现惯性甩动或缩略导航器；A 的主拖动手势继续负责 seek，画布平移放在 B/空白区域，以免两种高频操作互相抢夺。后续只有真实用户频繁在 A 上尝试平移时，再评估 Space/中键平移手势。
+
+### 4.17 2026-08-21：Session gate 与冻结路线的集成 seam
+
+**触发**
+
+Session 需要同时处理连续播放、结果呈现授权、首批讲解就绪和后台 Narration 更新；旧的 PlanCompiler gate 位置容易让 replay 撤销已完成授权，也容易让旧 generation 的异步结果回写路线。
+
+**决定**
+
+OutcomeCompletionGate 归 Session 所有，并且只沿 `LOCKED → COMPLETE` 前进；重播由 phase selector 隐藏正文，不回撤 gate。Host 只保存 generation、frozen plan snapshot、route state 和 `narrationByCue`，Director → Compiler 通过必需的 `prepareRoute` seam 先冻结路线，Narrator 通过必需的 `prepareNarration` seam 之后按 cue 顺序补包。首两个 cue 并发完成后才发 `READY_TO_START`，其余 cue 不能越过该事件提前调用；取消时旧 generation 静默终止。
+
+**落点**
+
+`libs/session/src/index.ts`、`apps/web/lib/coaching/cs2d-route-integration.ts`、`apps/web/components/playback/cs2d-playback-host.tsx` 及对应 session、route、view、host 测试。
+
+**验证**
+
+定向 Vitest 为 4 个文件、36 tests 全部通过；覆盖 bundle identity/readiness、manifest status、Director → Compiler 顺序、前两个 cue 的 start gate、第三 cue 的调用顺序、自然边界 BUFFERING、one-way gate/replay、generation cancellation 与旧结果隔离；`pnpm typecheck` 与 `git diff --check` 通过。
+
+**限制 / 下一步**
+
+当前 02 的 `requestTeachingDirector + compileReviewPlan` 适配器尚未注入应用入口；默认 Host 使用显式 `ROUTE_PREPARATION_NOT_WIRED` seam，adapter plan 不会被标成冻结路线。接线后只需提供紧凑 AnalysisBundle/route input 与总能返回 READY/FALLBACK 的 Narrator adapter，不改变 Session/Host 的冻结和 gate 契约。
+
+### 4.18 2026-08-21：S2 真实领域 seam 与 localhost 验收边界
+
+**触发**
+
+S1 的 generation controller 需要接入冻结的 CandidateSet、Director、PlanCompiler、CoachingPackage、OutcomePackage 和 Narrator provider；同时需要确认 CandidateSet 失败与空候选路径不会伪造路线或调用 provider。
+
+**决定**
+
+`ANALYSIS_READY` 只把 candidate set、观察证据、MatchTimeline 和胜率时间线传入 Host-owned preparation context。`prepareRoute` 执行 Director → Compiler，只有返回的 compiled plan 写入 `planRef`；`prepareNarration` 对最终 cue 构建双包并调用 Narrator，provider 返回的 `SUCCEEDED` 映射为 READY，`FALLBACK/DISABLED` 映射为 FALLBACK。空 COMPLETE CandidateSet 直接编译 BRIEF/SKIP 覆盖且 provider 调用数为零；FAILED CandidateSet 保留基础 iframe 回放并呈现可恢复错误。换人时 selected-player ref 与 generation 同时失效旧事件，并清除自由查看状态。
+
+**落点**
+
+`apps/web/lib/coaching/cs2d-route-integration.ts`、`apps/web/components/playback/cs2d-playback-host.tsx`、`apps/web/lib/playback/cs2d-playback-host.ts` 及对应测试。
+
+**验证**
+
+全量 Vitest：38 files，253 passed，1 skipped；S2 定向集成覆盖真实 Director → Compiler → packages → Narrator seam、prompt provenance、空/失败 CandidateSet、provider fallback、route freeze、consumed/frozen cue 拒绝更新和 selected-player stale-event guard。`pnpm typecheck`、`pnpm build`、`pnpm cs2d:typecheck`、`pnpm cs2d:build`、`pnpm cloudflare:build`、`pnpm cloudflare:assets` 与 `git diff --check` 通过；Cloudflare source/bundle secret check 通过。viewer dist 的 localhost 证据使用受控静态服务可同时提供 index、asyncify WASM 和模型端点。
+
+`demoTests/test_demo.dem` 另做了一次不依赖浏览器权限的真实纵向 smoke：WASM 只解析一次，约 6.1 秒得到 `de_mirage`、9 回合、10 玩家；CandidateGenerator 产生 58 个候选，确定性 Director/PlanCompiler 得到 8 个 cue、43 个连续 segment，前两个 cue 的双包与五字段 fallback 均通过引用校验并达到 startable，AnalysisBundle roundtrip 不含 `rawReplay`、`frames` 或 `grenadePaths` 结构键。临时验收测试随后删除，没有进入常规测试负担。
+
+**限制 / 下一步**
+
+应用内 Browser 可以加载 `http://localhost:3000` 的 Host，但当前保存权限明确拒绝 `http://localhost:5174`，因此 iframe 无法用于自动上传、截图和 console 验收；没有伪造这些浏览器结果。服务 controller 已清理 3000/5174/9333。下一次可视化验收需先允许 Browser 访问 5174，再上传 `test_demo.dem`；这不影响上述真实 parser/领域链路证据。
 
 ## 5. 常用问题排查表
 

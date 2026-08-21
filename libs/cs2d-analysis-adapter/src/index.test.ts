@@ -8,6 +8,7 @@ import {
 } from "./index";
 import { createCoachingSession, reduceCoachingSession } from "@cs-coach/session";
 import type { WinProbabilityTimelineV1 } from "@cs-coach/contracts";
+import { stableFingerprint } from "@cs-coach/review-planner";
 
 function player(steamId: string, side: "T" | "CT", index: number) {
   return {
@@ -186,17 +187,17 @@ describe("cs2d analysis adapter", () => {
         winner: "T",
         economy: { ct: "FULL", t: "FORCE", ctValue: 20_000, tValue: 12_500 },
         samples: [
-          { tick: cue.decision_tick, probability: 0.62, roundNumber: 1, side: "CT", source: "CS_NET" },
-          { tick: cue.reveal_tick, probability: 0.31, roundNumber: 1, side: "CT", source: "CS_NET" }
+          { tick: cue.decision_tick, probability: 0.31, roundNumber: 1, side: "CT", source: "CS_NET" },
+          { tick: cue.reveal_tick, probability: 0.62, roundNumber: 1, side: "CT", source: "CS_NET" }
         ]
       }],
       swings: [{
         id: "fixture-swing",
         tick: cue.reveal_tick,
-        before: 0.62,
-        after: 0.31,
-        delta: -0.31,
-        direction: "DOWN",
+        before: 0.31,
+        after: 0.62,
+        delta: 0.31,
+        direction: "UP",
         cause: "PLAYER_DEATH",
         selectedPlayerDeath: true,
         victimSide: "T",
@@ -212,8 +213,8 @@ describe("cs2d analysis adapter", () => {
     });
     const impact = bundle.outcome_impacts.find((candidate) => candidate.cueId === cue.id);
     expect(impact).toMatchObject({
-      beforeProbability: 0.62,
-      afterProbability: 0.31,
+      beforeProbability: 0.69,
+      afterProbability: 0.38,
       delta: -0.31,
       percentagePoints: -31,
       attribution: "SELECTED_PLAYER_DEATH",
@@ -221,7 +222,7 @@ describe("cs2d analysis adapter", () => {
     });
     expect(impact?.text).toContain("少了 31 个百分点");
     expect(impact?.text).toContain("你这次处理后");
-    expect(impact?.relativeChange).toBeCloseTo(-0.5);
+    expect(impact?.relativeChange).toBeCloseTo(-0.31 / 0.69);
   });
 
   it("uses canonical Round ticks and produces continuous, non-overlapping coverage", () => {
@@ -684,5 +685,61 @@ describe("cs2d analysis adapter", () => {
     expect(() => deserializeCs2dAnalysisBundle(JSON.stringify({ ...first, rawReplay: replay }))).toThrow(/top-level/);
     const complete = buildCs2dAnalysisBundle({ replay, selectedSteamId: "p-t1", demoId: "complete-demo" });
     expect(() => deserializeCs2dAnalysisBundle(JSON.stringify({ ...complete, observation_evidence: [] }))).toThrow(/observable_state_id/);
+  });
+
+  it("roundtrips full candidate observations even when the provisional plan selects only a subset", () => {
+    const source = replayFixture().rounds[1];
+    const rounds = Array.from({ length: 10 }, (_, index) => {
+      const shift = index * 1_000;
+      return {
+        ...source,
+        number: index + 1,
+        freezeStartTick: source.freezeStartTick + shift,
+        startTick: source.startTick + shift,
+        decidedTick: source.decidedTick + shift,
+        endTick: source.endTick + shift,
+        postEndTick: source.postEndTick + shift,
+        scoreCt: index,
+        scoreT: index,
+        frames: source.frames.map((frame) => ({ ...frame, tick: frame.tick + shift, t: frame.t + shift / 64 })),
+        events: source.events.map((event) => ({ ...event, tick: event.tick + shift, t: event.t + shift / 64 })),
+        grenadePaths: []
+      };
+    });
+    const bundle = buildCs2dAnalysisBundle({ replay: { ...replayFixture(), rounds }, selectedSteamId: "p-t1", demoId: "full-candidate-observation" });
+    expect(bundle.candidate_set.candidates.length).toBeGreaterThan(bundle.review_plan.cues.length);
+    const serialized = serializeCs2dAnalysisBundle(bundle);
+    expect(deserializeCs2dAnalysisBundle(serialized)).toEqual(bundle);
+  });
+
+  it("rejects an observation state rebound to another candidate even when the tampered hash is recomputed", () => {
+    const bundle = buildCs2dAnalysisBundle({ replay: replayFixture(), selectedSteamId: "p-t1", demoId: "wrong-candidate-observation" });
+    expect(bundle.candidate_set.materials.length).toBeGreaterThan(1);
+    const materials = [...bundle.candidate_set.materials];
+    materials[0] = { ...materials[0], observableStateId: materials[1].observableStateId };
+    const candidateSet = {
+      ...bundle.candidate_set,
+      materials,
+      hash: stableFingerprint({
+        id: bundle.candidate_set.id,
+        version: bundle.candidate_set.version,
+        demoId: bundle.candidate_set.demoId,
+        playerId: bundle.candidate_set.playerId,
+        status: bundle.candidate_set.status,
+        failureReason: bundle.candidate_set.failureReason,
+        generationManifest: bundle.candidate_set.generationManifest,
+        candidates: bundle.candidate_set.candidates,
+        materials,
+        limitations: bundle.candidate_set.limitations
+      })
+    };
+    const reviewPlan = {
+      ...bundle.review_plan,
+      candidate_set_hash: candidateSet.hash,
+      director_decision_set: bundle.review_plan.director_decision_set
+        ? { ...bundle.review_plan.director_decision_set, candidateSetHash: candidateSet.hash }
+        : undefined
+    };
+    expect(() => deserializeCs2dAnalysisBundle(JSON.stringify({ ...bundle, candidate_set: candidateSet, review_plan: reviewPlan }))).toThrow(/not bound to its CandidateSet material/);
   });
 });

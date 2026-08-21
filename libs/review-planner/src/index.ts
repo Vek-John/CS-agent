@@ -66,6 +66,22 @@ function validateCue(cue: CoachCue, plan: ReviewPlan, issues: string[]): void {
   }
 
   const observableRefs = new Set(cue.observable_fact_refs);
+  const actionFacts = cue.action_facts ?? [];
+  const actionFactIds = new Set(actionFacts.map((fact) => fact.id));
+  if (cue.action_fact_refs?.some((ref) => !actionFactIds.has(ref))) {
+    issues.push(`Cue ${cue.id} references an unknown player action fact.`);
+  }
+  if (cue.action_fact_refs?.some((ref) => observableRefs.has(ref))) {
+    issues.push(`Cue ${cue.id} mixes player action facts into observable decision refs.`);
+  }
+  const outcomeFacts = cue.outcome_facts ?? [];
+  const outcomeFactIds = new Set(outcomeFacts.map((fact) => fact.id));
+  if (cue.outcome_fact_refs?.some((ref) => !outcomeFactIds.has(ref))) {
+    issues.push(`Cue ${cue.id} references an unknown outcome fact.`);
+  }
+  if (cue.outcome_fact_refs?.some((ref) => observableRefs.has(ref))) {
+    issues.push(`Cue ${cue.id} mixes outcome facts into observable decision refs.`);
+  }
   for (const inference of cue.inferences) {
     if (inference.confidence < 0 || inference.confidence > 1) {
       issues.push(`Inference ${inference.id} confidence is outside [0, 1].`);
@@ -82,6 +98,17 @@ function validateCue(cue: CoachCue, plan: ReviewPlan, issues: string[]): void {
       if (!observableRefs.has(factRef)) {
         issues.push(`Advice ${advice.id} uses non-observable fact ${factRef}.`);
       }
+    }
+  }
+
+  if (cue.narration) {
+    const narrationKeys = Object.keys(cue.narration).sort();
+    const expectedKeys = ["cueId", "candidateId", "primaryFocusCode", "currentSituation", "playerAction", "coreIssue", "betterPlay", "outcomeImpact"].sort();
+    if (narrationKeys.length !== expectedKeys.length || narrationKeys.some((key, index) => key !== expectedKeys[index])) {
+      issues.push(`Cue ${cue.id} narration contains route or timing fields.`);
+    }
+    if (cue.narration.cueId !== cue.id || cue.narration.candidateId !== cue.candidate_id || cue.narration.primaryFocusCode !== cue.primary_focus_code) {
+      issues.push(`Cue ${cue.id} narration identity or primary focus does not echo the cue.`);
     }
   }
 }
@@ -193,6 +220,30 @@ export function collectReviewPlanIssues(timeline: MatchTimeline, plan: ReviewPla
   }
   for (const cue of plan.cues) {
     validateCue(cue, plan, issues);
+  }
+
+  const hasCandidateProvenance = plan.candidate_set_id !== undefined || plan.candidate_set_version !== undefined || plan.candidate_set_hash !== undefined;
+  if (hasCandidateProvenance && (!plan.candidate_set_id || !plan.candidate_set_version || !plan.candidate_set_hash)) {
+    issues.push("Candidate provenance must include id, version, and hash together.");
+  }
+  if (hasCandidateProvenance && !plan.candidate_set_generation_manifest) {
+    issues.push("Compiled candidate provenance must include the generation manifest.");
+  }
+  if (plan.candidate_set_generation_manifest && Object.values(plan.candidate_set_generation_manifest).some((value) => !value.trim())) {
+    issues.push("Candidate generation manifest contains an empty version.");
+  }
+  if (plan.director_decision_set) {
+    if (!plan.candidate_set_id || plan.director_decision_set.candidateSetId !== plan.candidate_set_id || plan.director_decision_set.candidateSetVersion !== plan.candidate_set_version || plan.director_decision_set.candidateSetHash !== plan.candidate_set_hash) {
+      issues.push("DirectorDecisionSet provenance does not match CandidateSet provenance.");
+    }
+    const decisionByCandidate = new Map(plan.director_decision_set.selected.map((decision) => [decision.candidateId, decision]));
+    for (const cue of plan.cues) {
+      if (!cue.candidate_id || !decisionByCandidate.has(cue.candidate_id)) issues.push(`Cue ${cue.id} is not backed by a Director decision.`);
+      else if (cue.primary_focus_code !== decisionByCandidate.get(cue.candidate_id)?.primaryFocusCode) issues.push(`Cue ${cue.id} primary focus does not match its Director decision.`);
+    }
+  }
+  if (plan.compiler_provenance && !plan.compiler_provenance.route_fingerprint.trim()) {
+    issues.push("Compiler provenance must include a route fingerprint.");
   }
 
   if (plan.status === "COMPLETE" && (!plan.full_match_index_ready || !plan.global_aggregation_ready)) {
@@ -497,3 +548,8 @@ export function createFixtureReviewPlan(timeline: MatchTimeline): ReviewPlan {
 
   return assertValidReviewPlan(timeline, plan);
 }
+
+export * from "./teaching-pipeline";
+export * from "./candidate-generator";
+export * from "./coaching-package-builder";
+export * from "./narration-package-builder";

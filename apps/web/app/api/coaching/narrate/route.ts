@@ -2,8 +2,8 @@ import {
   narrationLimits,
   narrateWithDeepSeek,
   parseNarrationRequest,
-  type DeepSeekEnv
-} from "../../../../lib/coaching/deepseek-narration";
+  type DeepSeekNarratorEnv
+} from "../../../../lib/coaching/deepseek-narrator";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +24,7 @@ function sameOrigin(request: Request): boolean {
   }
 }
 
-function serverEnv(): DeepSeekEnv {
+function serverEnv(): DeepSeekNarratorEnv {
   // This route is server-only. Never expose this object to a client module or
   // include the secret in an error/result body.
   return {
@@ -35,14 +35,14 @@ function serverEnv(): DeepSeekEnv {
 
 export async function POST(request: Request): Promise<Response> {
   if (!sameOrigin(request)) {
-    return json({ status: "FALLBACK", items: [], reason: "CROSS_ORIGIN" }, 403);
+    return json({ status: "FALLBACK", reason: "CROSS_ORIGIN" }, 403);
   }
 
   const declaredLength = request.headers.get("content-length");
   if (declaredLength !== null) {
     const length = Number(declaredLength);
     if (!Number.isFinite(length) || length < 0 || length > narrationLimits.maxRequestBytes) {
-      return json({ status: "FALLBACK", items: [], reason: "REQUEST_TOO_LARGE" }, 413);
+      return json({ status: "FALLBACK", reason: "REQUEST_TOO_LARGE" }, 413);
     }
   }
 
@@ -50,21 +50,21 @@ export async function POST(request: Request): Promise<Response> {
     const raw = await request.text();
     const byteLength = new TextEncoder().encode(raw).byteLength;
     if (byteLength > narrationLimits.maxRequestBytes) {
-      return json({ status: "FALLBACK", items: [], reason: "REQUEST_TOO_LARGE" }, 413);
+      return json({ status: "FALLBACK", reason: "REQUEST_TOO_LARGE" }, 413);
     }
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
     } catch {
-      return json({ status: "FALLBACK", items: [], reason: "INVALID_REQUEST_JSON" }, 400);
+      return json({ status: "FALLBACK", reason: "INVALID_REQUEST_JSON" }, 400);
     }
     const narrationRequest = parseNarrationRequest(parsed, byteLength);
     const result = await narrateWithDeepSeek(narrationRequest, serverEnv());
     return json(result);
   } catch (error) {
-    if (error instanceof Error && error.name === "NarrationValidationError") {
-      return json({ status: "FALLBACK", items: [], reason: "INVALID_REQUEST" }, 400);
+    if (error instanceof Error && error.name === "NarratorValidationError") {
+      return json({ status: "FALLBACK", reason: "INVALID_REQUEST" }, 400);
     }
-    return json({ status: "FALLBACK", items: [], reason: "REQUEST_FAILED" }, 500);
+    return json({ status: "FALLBACK", reason: "REQUEST_FAILED" }, 500);
   }
 }

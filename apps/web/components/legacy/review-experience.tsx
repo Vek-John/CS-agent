@@ -46,6 +46,7 @@ const phaseLabels: Record<CoachingSessionPhase, string> = {
   INTRO: "准备开始",
   PLAYING: "正在带看",
   SKIPPING: "建议跳过",
+  BUFFERING: "准备下一段",
   PAUSED_FOR_COACHING: "教练暂停",
   REVEALING: "播放真实结果",
   REPLAYING: "回看结果",

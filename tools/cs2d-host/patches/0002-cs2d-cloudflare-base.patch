@@ -59,9 +59,9 @@ index c8bac84..aba7e43 100644
          // Precache everything (app shell, wasm, maps, weapons, preview replays)
          // so the app works fully offline after the first visit.
          globPatterns: ['**/*.{js,css,html,svg,png,webp,jpg,ico,json,wasm}'],
-+        // WebGPU FP16/asyncify files are local-only experiment assets. They are
-+        // fetched explicitly by the benchmark and must not fail or bloat the
-+        // offline INT8 shell precache.
++        // WebGPU FP16/asyncify files are fetched on demand. Keep them out of
++        // the offline precache because the WASM file is large, while still
++        // shipping the assets for the default provider.
 +        globIgnores: ['**/ort-wasm-simd-threaded.asyncify*.wasm', '**/ort-wasm-simd-threaded.jsep*.wasm'],
          // Largest asset is a ~1.2MB preview replay; bump the cap to fit it.
 -        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,

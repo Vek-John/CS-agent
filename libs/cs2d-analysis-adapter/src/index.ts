@@ -16,7 +16,13 @@ import type {
   RoundTimeline,
   TeamSide,
   OutcomeImpact,
-  WinProbabilityTimelineV1
+  WinProbabilityTimelineV1,
+  WinProbabilityEconomyClass,
+  CanonicalAnalysisFact,
+  CanonicalPlayerContext,
+  CanonicalSignal,
+  CandidateGeneratorInput,
+  CandidateSet
 } from "@cs-coach/contracts";
 import type {
   ObservableState,
@@ -28,7 +34,16 @@ import {
   directVisionFactFromSample
 } from "@cs-coach/observation";
 import { mirageChineseCallout } from "@cs-coach/map-semantics";
-import { assertValidReviewPlan } from "@cs-coach/review-planner";
+import {
+  assertValidReviewPlan,
+  compileReviewPlan,
+  deterministicDirectorFallback,
+  generateCandidateSet,
+  buildOutcomeImpactForCue,
+  assembleCandidateSet,
+  collectCandidateSetIssues,
+  stableFingerprint
+} from "@cs-coach/review-planner";
 
 /**
  * The adapter's only upstream dependency is this structural port.  It is
@@ -54,7 +69,6 @@ export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.3.0/signals" as cons
 export const CS2D_PLANNER_VERSION = "cs2d-analysis-adapter/1.3.0/planner" as const;
 
 /** MVP pacing target: a full match should feel coached, not interrupted. */
-const MAX_TEACHING_CUES = 8;
 const OUTCOME_WINDOW_SECONDS = 4;
 const COACHING_PRE_ROLL_SECONDS = 1;
 
@@ -244,6 +258,8 @@ export interface Cs2dAnalysisBundle {
   readonly selected_steam_id: string;
   readonly match_timeline: MatchTimeline;
   readonly review_plan: ReviewPlan;
+  /** Compact parser-neutral candidate index; raw Replay/frames never cross this seam. */
+  readonly candidate_set: CandidateSet;
   /** Internal evidence component; Session/renderer must not treat it as omniscient state. */
   readonly observation_evidence: readonly ObservableState[];
   /** Full-match signal; it is not an ObservableClaim and is never sent to narration. */
@@ -277,10 +293,9 @@ interface NormalizedState {
 
 type SignalKind = "DEATH" | "KILL" | "BOMB" | "UTILITY" | "HP_CHANGE";
 
-interface SignalCandidate {
+interface RawSignalCandidate {
   readonly round: NormalizedRound;
   readonly kind: SignalKind;
-  readonly habitKey: string;
   readonly sourceTick: number;
   readonly decisionTick: number;
   readonly revealTick: number;
@@ -289,19 +304,6 @@ interface SignalCandidate {
   readonly utilityKind?: string;
   readonly bombEventType?: Cs2dBombEvent["type"];
   readonly timingLimitation?: string;
-}
-
-interface SelectedCandidate extends SignalCandidate {
-  readonly outcomeEndTick: number;
-  readonly occurrenceIndex: number;
-}
-
-interface Counters {
-  fact: number;
-  inference: number;
-  advice: number;
-  evidence: number;
-  cue: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -559,29 +561,6 @@ function classifyItem(item: string): string {
   return "WEAPON";
 }
 
-function decisionHabitKey(candidate: SignalCandidate): string {
-  const source = candidate.state?.source;
-  let context = "contact-preparation";
-  if (source) {
-    const activeClass = classifyItem(safeText(source.weapon, "UNKNOWN_ITEM"));
-    if (activeClass === "BOMB") context = "bomb-carrier-safety";
-    else if (activeClass === "UTILITY") context = "utility-readiness";
-    else if (source.health <= 45) context = "low-health-survival";
-    else if (activeClass === "KNIFE") context = "rotation-safety";
-    else if (source.armor <= 0) context = "unarmored-contact";
-  }
-
-  const liveSpan = Math.max(1, candidate.round.decidedTick - candidate.round.freezeEndTick);
-  const progress = (candidate.decisionTick - candidate.round.freezeEndTick) / liveSpan;
-  const phase = progress < 0.34 ? "early" : progress < 0.72 ? "mid" : "late";
-  return `${context}.${phase}`;
-}
-
-function preRollStartTick(candidate: SignalCandidate, tickRate: number): number {
-  const preRollTicks = Math.max(1, Math.round(tickRate * COACHING_PRE_ROLL_SECONDS));
-  return Math.max(candidate.round.freezeEndTick, candidate.decisionTick - preRollTicks);
-}
-
 function collectStates(
   replay: Cs2dReplay,
   rounds: readonly NormalizedRound[],
@@ -644,8 +623,8 @@ function collectCandidates(
   selectedSteamId: string,
   tickRate: number,
   warnings: string[]
-): SignalCandidate[] {
-  const candidates: SignalCandidate[] = [];
+): RawSignalCandidate[] {
+  const candidates: RawSignalCandidate[] = [];
   let sawShot = false;
   let sawAggregateDamage = false;
 
@@ -670,7 +649,6 @@ function collectCandidates(
         candidates.push({
           round,
           kind,
-          habitKey: "decision-reset",
           sourceTick: event.tick,
           decisionTick,
           revealTick: event.tick,
@@ -687,7 +665,6 @@ function collectCandidates(
         candidates.push({
           round,
           kind: "BOMB",
-          habitKey: "decision-reset",
           sourceTick: event.tick,
           decisionTick,
           revealTick: event.tick,
@@ -732,7 +709,6 @@ function collectCandidates(
       candidates.push({
         round,
         kind: "UTILITY",
-        habitKey: "decision-reset",
         sourceTick: launchApproxTick,
         decisionTick: decisionState.sample.tick,
         revealTick: revealState.sample.tick,
@@ -752,7 +728,6 @@ function collectCandidates(
       candidates.push({
         round,
         kind: "HP_CHANGE",
-        habitKey: "decision-reset",
         sourceTick: current.sample.tick,
         decisionTick,
         revealTick: current.sample.tick,
@@ -776,113 +751,12 @@ function collectCandidates(
   return candidates;
 }
 
-function selectCandidates(
-  candidates: readonly SignalCandidate[],
-  tickRate: number,
-  warnings: string[],
-  winProbability?: WinProbabilityTimelineV1
-): SelectedCandidate[] {
-  type WindowedCandidate = SignalCandidate & { outcomeEndTick: number };
-  const accepted: WindowedCandidate[] = [];
-  let cursorByRound = new Map<number, number>();
-  const outcomeSpan = Math.max(1, Math.round(tickRate * OUTCOME_WINDOW_SECONDS));
-
-  for (const candidate of candidates) {
-    const cursor = cursorByRound.get(candidate.round.number) ?? candidate.round.freezeEndTick;
-    if (candidate.decisionTick < cursor || candidate.revealTick <= candidate.decisionTick || candidate.revealTick > candidate.round.decidedTick) continue;
-    if (preRollStartTick(candidate, tickRate) < cursor) {
-      issue(
-        warnings,
-        `Teaching candidate ${candidate.sourceRef} was skipped because its ${COACHING_PRE_ROLL_SECONDS}-second pre-roll overlaps the prior outcome window.`
-      );
-      continue;
-    }
-    const minimumOutcomeEndTick = candidate.revealTick + Math.max(1, Math.round(tickRate));
-    const outcomeEndTick = Math.min(candidate.round.endTick, Math.max(candidate.revealTick + 1, candidate.revealTick + outcomeSpan));
-    if (outcomeEndTick < minimumOutcomeEndTick) {
-      issue(warnings, `Teaching candidate ${candidate.sourceRef} was skipped because the legal round window does not retain one second after its event.`);
-      continue;
-    }
-    accepted.push({
-      ...candidate,
-      habitKey: decisionHabitKey(candidate),
-      outcomeEndTick
-    });
-    cursorByRound = new Map(cursorByRound).set(candidate.round.number, outcomeEndTick);
-  }
-
-  const priority: Record<SignalKind, number> = { DEATH: 0, HP_CHANGE: 1, KILL: 2, BOMB: 3, UTILITY: 4 };
-  const directorScore = (candidate: WindowedCandidate): number => {
-    let score = 5 - priority[candidate.kind];
-    if (winProbability?.status !== "AVAILABLE") return score;
-    const swings = winProbability.swings.filter((swing) => Math.abs(swing.tick - candidate.revealTick) <= Math.max(1, Math.round(tickRate / 2)));
-    const negativeSwing = swings.filter((swing) => swing.delta < 0).sort((left, right) => left.delta - right.delta)[0];
-    if (negativeSwing) score += Math.min(6, Math.round(Math.abs(negativeSwing.delta) * 10));
-    const economy = winProbability.rounds.find((round) => round.roundNumber === candidate.round.number)?.economy;
-    if (candidate.kind === "DEATH" && economy) {
-      const selectedSide = candidate.state?.sample.side === "T" ? economy.t : economy.ct;
-      if (selectedSide === "ECO") score -= 2;
-      if (selectedSide === "FORCE") score += 1;
-      if (selectedSide === "FULL") score += 2;
-    }
-    return score;
-  };
-  const byRound = new Map<number, WindowedCandidate[]>();
-  for (const candidate of accepted) {
-    const group = byRound.get(candidate.round.number) ?? [];
-    group.push(candidate);
-    byRound.set(candidate.round.number, group);
-  }
-
-  const representativePerRound = [...byRound.values()]
-    .map((group) => [...group].sort((left, right) =>
-      directorScore(right) - directorScore(left) ||
-      priority[left.kind] - priority[right.kind] ||
-      left.decisionTick - right.decisionTick ||
-      left.sourceRef.localeCompare(right.sourceRef)
-    )[0])
-    .filter((candidate): candidate is WindowedCandidate => Boolean(candidate))
-    .sort((left, right) => left.decisionTick - right.decisionTick);
-
-  let chosen: WindowedCandidate[];
-  if (representativePerRound.length > MAX_TEACHING_CUES) {
-    const indexes = new Set<number>();
-    for (let index = 0; index < MAX_TEACHING_CUES; index += 1) {
-      indexes.add(Math.round(index * (representativePerRound.length - 1) / (MAX_TEACHING_CUES - 1)));
-    }
-    chosen = [...indexes].map((index) => representativePerRound[index]).filter(Boolean);
-  } else {
-    chosen = [...representativePerRound];
-    const chosenRefs = new Set(chosen.map((candidate) => candidate.sourceRef));
-    const remaining = accepted
-      .filter((candidate) => !chosenRefs.has(candidate.sourceRef))
-      .sort((left, right) =>
-        directorScore(right) - directorScore(left) ||
-        priority[left.kind] - priority[right.kind] ||
-        left.decisionTick - right.decisionTick ||
-        left.sourceRef.localeCompare(right.sourceRef)
-      );
-    chosen.push(...remaining.slice(0, Math.max(0, MAX_TEACHING_CUES - chosen.length)));
-  }
-
-  chosen.sort((left, right) => left.decisionTick - right.decisionTick || left.sourceRef.localeCompare(right.sourceRef));
-  if (accepted.length > chosen.length) {
-    issue(warnings, `Teaching cues were paced to ${chosen.length}/${accepted.length} candidates (maximum ${MAX_TEACHING_CUES}); all timeline segments remain covered.`);
-  }
-
-  const groupedCounts = new Map<string, number>();
-  return chosen.map((candidate) => {
-    const occurrenceIndex = (groupedCounts.get(candidate.habitKey) ?? 0) + 1;
-    groupedCounts.set(candidate.habitKey, occurrenceIndex);
-    return { ...candidate, occurrenceIndex };
-  });
-}
-
 function buildRoundTimeline(round: NormalizedRound): RoundTimeline {
   return {
     round_number: round.number,
     start_tick: round.startTick,
     freeze_end_tick: round.freezeEndTick,
+    decided_tick: round.decidedTick,
     end_tick: round.endTick,
     score_before: [round.scoreT, round.scoreCt],
     score_after: round.scoreAfter,
@@ -939,84 +813,12 @@ function worldAnnotation(
   }];
 }
 
-function economyTerm(state: NormalizedState | undefined): "eco" | "半起" | undefined {
+function economyTerm(state: NormalizedState | undefined): WinProbabilityEconomyClass {
   const source = state?.source;
-  if (!source || !finiteNumber(source.money) || !finiteNumber(source.equipValue)) return undefined;
-  if (source.equipValue < 1_800 && source.money < 2_500) return "eco";
-  if (source.equipValue < 3_500 && source.money < 3_000) return "半起";
-  return undefined;
-}
-
-function cueText(
-  habitKey: string,
-  isHabit: boolean,
-  contextInput: { callout?: string; state?: NormalizedState } = {}
-): {
-  title: string;
-  explanation: string;
-  advice: string;
-  trigger: string;
-  ruleId: string;
-  taxonomy: string;
-} {
-  const context = habitKey.split(".")[0];
-  const { callout, state } = contextInput;
-  const where = callout ? `你现在在${callout}` : "当前报点未知";
-  const economy = economyTerm(state);
-  const economyLead = economy === "eco" ? "这把是 eco，" : economy === "半起" ? "这把是半起，" : "";
-  const base = context === "utility-readiness"
-    ? {
-        title: "道具先封枪线，队友跟上再拉出去",
-        explanation: `${where}，手里有道具。先用这颗道具封住要过的枪线，再让队友一起拉出去；不然道具落地也没人补枪。`,
-        advice: "先报清这颗道具封哪里；队友能跟上再出手，没铺好枪线就先别硬磕。",
-        trigger: "手持道具并准备拉出当前掩体时",
-        ruleId: "utility-window"
-      }
-    : context === "low-health-survival"
-      ? {
-          title: "低血量别第一个拉，站第二身位补枪",
-          explanation: `${where}，血量已经偏低。现在别第一个拉出去，先让高血量队友架枪，你跟第二身位补枪，打完还能马上换位。`,
-          advice: "让高血量队友打首接触；你跟着补枪，独自拿信息时只露一个能立刻收回的身位。",
-          trigger: "低血量准备进入下一条枪线时",
-          ruleId: "low-health-second-contact"
-        }
-      : context === "rotation-safety"
-        ? {
-            title: "切刀转点前换回枪，预瞄再走",
-            explanation: `${where}，切刀只适合已经确认安全的路。前面还有未知角就先换回枪预瞄，别空手拉出去。`,
-            advice: "安全直路可以切刀提速；接近未知角前换回枪，先架住首接触位再走。",
-            trigger: "刀在手且准备走进未确认枪线时",
-            ruleId: "rotation-weapon-ready"
-          }
-        : context === "bomb-carrier-safety"
-          ? {
-              title: "带包别单拉，先让队友架枪",
-              explanation: `${where}，你带着 C4。先让队友架住并能补枪再往前拉；一个人冲进未知区，掉包后全队连转点都难。`,
-              advice: "队友没跟上就别深拉；需要先探时交包，或者先让队友架住能回收的位置。",
-              trigger: "携带 C4 且准备离开队友补枪范围时",
-              ruleId: "bomb-recoverability"
-            }
-          : context === "unarmored-contact"
-            ? {
-                title: `${economy === "eco" ? "eco 局没头甲" : "头甲不够"}别硬磕，预瞄一个角就换位`,
-                explanation: `${where}，${economyLead}头甲不够，别直接拉出去和对面磕枪。先预瞄一个角，只拉一个身位，第一枪打完就回掩体换位。`,
-                advice: "只拉一个能马上收回的身位；打完就换位，没有队友补枪就先架住，别连续找第二个角。",
-                trigger: "头甲不足且准备拉出掩体时",
-                ruleId: "unarmored-contact-discipline"
-              }
-            : {
-                title: `${economy ? `${economy}局` : "首接触前"}先架枪，预瞄好再拉出去`,
-                explanation: `${where}。${economyLead}先把准星预瞄到首接触位，队友能补枪再拉出去；没人补就架住或换位，别一个人硬磕枪。`,
-                advice: "先预瞄、停半拍；队友没补枪就留在掩体后架枪，或者换位再打。",
-                trigger: "准备进入下一条未知枪线时",
-                ruleId: "contact-preparation"
-              };
-
-  return {
-    ...base,
-    title: `${isHabit ? "又一次：" : ""}${callout ? `${callout}：` : ""}${base.title}`,
-    taxonomy: habitKey
-  };
+  if (!source || !finiteNumber(source.money) || !finiteNumber(source.equipValue)) return "UNKNOWN";
+  if (source.equipValue < 1_800 && source.money < 2_500) return "ECO";
+  if (source.equipValue < 3_500 && source.money < 3_000) return "FORCE";
+  return "FULL";
 }
 
 function stateFactText(state: NormalizedState): string {
@@ -1033,35 +835,32 @@ function stateFactText(state: NormalizedState): string {
         : source.helmet === false
           ? `有 ${armor} 甲、没头`
           : `${armor} 甲、头盔未知`;
-  const utility = source.grenades === undefined
-    ? "道具数量未知"
-    : `有 ${asArray(source.grenades).length} 颗道具`;
+  const utility = source.grenades === undefined ? "道具数量未知" : `有 ${asArray(source.grenades).length} 颗道具`;
   const economy = finiteNumber(source.money) && finiteNumber(source.equipValue)
     ? `，存款 $${Math.max(0, source.money)}、装备价值 $${Math.max(0, source.equipValue)}`
     : "";
   const callout = stateCallout(state);
-  const position = callout ? `你在${callout}` : "当前报点未知";
-  return `${position}：${hp} HP，${headArmor}，手持 ${weapon}，${utility}${economy}。`;
+  return `${callout ? `你在${callout}` : "当前报点未知"}：${hp} HP，${headArmor}，手持 ${weapon}，${utility}${economy}。`;
 }
 
-function outcomeFactText(candidate: SelectedCandidate): string {
+function actionFactText(candidate: RawSignalCandidate): string {
   switch (candidate.kind) {
-    case "DEATH":
-      return "你随后继续这次接触，并在这次对枪中被击杀。";
-    case "KILL":
-      return "你随后在这次接触中完成击杀。";
-    case "HP_CHANGE":
-      return "你随后在这次接触中掉血。";
+    case "DEATH": return "你在这段窗口内继续处理当前接触。";
+    case "KILL": return "你在这段窗口内完成了一次主动接触。";
+    case "BOMB": return "你在这段窗口内执行了目标点相关操作。";
+    case "UTILITY": return `你在这段窗口内使用了${candidate.utilityKind ?? "道具"}。`;
+    case "HP_CHANGE": return "你在这段窗口内继续暴露在交火中。";
+  }
+}
+
+function outcomeFactText(candidate: RawSignalCandidate): string {
+  switch (candidate.kind) {
+    case "DEATH": return "你随后继续这次接触，并在这次对枪中被击杀。";
+    case "KILL": return "你随后在这次接触中完成击杀。";
+    case "HP_CHANGE": return "你随后在这次接触中掉血。";
     case "UTILITY": {
-      const utilityNames: Record<string, string> = {
-        smoke: "烟雾弹",
-        fire: "燃烧弹",
-        he: "手雷",
-        flash: "闪光弹",
-        decoy: "诱饵弹"
-      };
-      const utilityName = utilityNames[candidate.utilityKind ?? ""] ?? "道具";
-      return `你随后投出了这颗${utilityName}。`;
+      const utilityNames: Record<string, string> = { smoke: "烟雾弹", fire: "燃烧弹", he: "手雷", flash: "闪光弹", decoy: "诱饵弹" };
+      return `你随后投出了这颗${utilityNames[candidate.utilityKind ?? ""] ?? "道具"}。`;
     }
     case "BOMB":
       if (candidate.bombEventType === "bomb_planted") return "你随后完成下包。";
@@ -1071,267 +870,147 @@ function outcomeFactText(candidate: SelectedCandidate): string {
   }
 }
 
-function buildCue(
-  candidate: SelectedCandidate,
-  segmentId: string,
-  counters: Counters,
-  warnings: readonly string[],
-  timelineVersion: string
-): { cue: CoachCue; observation?: ObservableState; habitKey: string } {
-  const cueId = `c${counters.cue++}`;
-  const factRefs: string[] = [];
-  const facts: Fact[] = [];
-  let observation: ObservableState | undefined;
-  if (candidate.state) {
-    const factId = `f${counters.fact++}`;
-    factRefs.push(factId);
-    facts.push({
-      id: factId,
-      text: stateFactText(candidate.state),
-      availability: "DECISION",
-      available_at_tick: candidate.state.sample.tick,
-      source: "DEMO",
-      observed_by_player: true
-    });
-    const visionFact = directVisionFactFromSample(
-      factId,
-      candidate.state.sample.player_id,
-      {
-        player_id: candidate.state.sample.player_id,
-        tick: candidate.state.sample.tick,
-        world_position: candidate.state.sample.world_position
-      }
-    );
-    observation = buildObservableState({
-      id: `obs-${cueId}`,
-      demo_id: "pending",
-      timeline_version: timelineVersion,
-      observer_player_id: candidate.state.sample.player_id,
-      at_tick: candidate.decisionTick,
-      observation_version: CS2D_OBSERVATION_VERSION,
-      facts: [visionFact],
-      limitations: [CS2D_LIMITATIONS.observationBoundary, CS2D_LIMITATIONS.frameSampling]
-    });
-  }
-
-  facts.push({
-    id: `f${counters.fact++}`,
-    text: outcomeFactText(candidate),
-    availability: "OUTCOME",
-    available_at_tick: candidate.revealTick,
-    source: "DEMO",
-    observed_by_player: true
-  });
-
-  const callout = stateCallout(candidate.state);
-  const text = cueText(candidate.habitKey, candidate.occurrenceIndex > 1, {
-    callout,
-    state: candidate.state
-  });
-  const inferenceId = `i${counters.inference++}`;
-  const adviceId = `a${counters.advice++}`;
-  const evidenceId = `e${counters.evidence++}`;
-  const cueLimitations = uniqueStrings([
-    CS2D_LIMITATIONS.frameSampling,
-    "暂停点可由后续事件索引定位，但决策侧文案、事实和 reason_code 不包含事件类型或结果。"
-  ]);
-  const inferences: Inference[] = [{
-    id: inferenceId,
-    text: text.explanation,
-    confidence: candidate.state ? 0.72 : 0.45,
-    fact_refs: [...factRefs]
-  }];
-  const advice: Advice[] = [{
-    id: adviceId,
-    text: text.advice,
-    trigger: text.trigger,
-    fact_refs: [...factRefs],
-    rule_id: text.ruleId
-  }];
-  const evidence: Evidence[] = [{
-    id: evidenceId,
-    source: "RULE",
-    label: "选手决策时的可执行检查规则",
-    sample_count: candidate.state ? 1 : undefined,
-    fact_refs: [...factRefs]
-  }];
-
-  const cue: CoachCue = {
-    id: cueId,
-    segment_id: segmentId,
-    cue_type: candidate.occurrenceIndex > 1 ? "HABIT_RECHECK" : "DECISION",
-    title: text.title,
-    question: text.explanation,
-    decision_tick: candidate.decisionTick,
-    reveal_tick: candidate.revealTick,
-    outcome_start_tick: candidate.decisionTick,
-    outcome_end_tick: candidate.outcomeEndTick,
-    facts,
-    inferences,
-    advice,
-    evidence,
-    observable_fact_refs: [...factRefs],
-    ...(observation ? { observable_state_id: observation.id } : {}),
-    annotations: worldAnnotation(candidate.state, callout),
-    confidence: candidate.state ? 0.72 : 0.45,
-    limitations: cueLimitations
-  };
-  return { cue, observation, habitKey: candidate.habitKey };
+function candidateContext(state: NormalizedState | undefined): string {
+  const source = state?.source;
+  if (!source) return "contact-preparation";
+  const activeClass = classifyItem(safeText(source.weapon, "UNKNOWN_ITEM"));
+  if (activeClass === "BOMB") return "bomb-carrier-safety";
+  if (activeClass === "UTILITY") return "utility-readiness";
+  if (source.health <= 45) return "low-health-survival";
+  if (activeClass === "KNIFE") return "rotation-safety";
+  if (source.armor <= 0) return "unarmored-contact";
+  return "contact-preparation";
 }
 
-function lowValueSegment(
-  id: string,
-  roundNumber: number,
-  startTick: number,
-  endTick: number,
-  reasonCode: string,
-  displayReason: string
-): ReviewSegment {
-  return {
-    id,
-    round_number: roundNumber,
-    start_tick: startTick,
-    end_tick: endTick,
-    mode: "SKIP",
-    reason_code: reasonCode,
-    display_reason: displayReason,
-    playback_speed: 8,
-    cue_ids: [],
-    expandable: true
-  };
-}
-
-function buildPlanSegments(
-  rounds: readonly NormalizedRound[],
-  selected: readonly SelectedCandidate[],
-  counters: Counters,
-  warnings: readonly string[],
+function buildCanonicalGeneratorInput(
+  rawCandidates: readonly RawSignalCandidate[],
+  timeline: MatchTimeline,
   demoId: string,
   selectedSteamId: string,
-  timeline: MatchTimeline
-): { segments: ReviewSegment[]; cues: CoachCue[]; observations: ObservableState[]; habitClusters: ReviewPlan["habit_clusters"] } {
-  const segments: ReviewSegment[] = [];
-  const cues: CoachCue[] = [];
+  tickRate: number,
+  winProbabilityTimeline: WinProbabilityTimelineV1,
+  warnings: string[]
+): CandidateGeneratorInput {
+  const facts: CanonicalAnalysisFact[] = [];
+  const signals: CanonicalSignal[] = [];
   const observations: ObservableState[] = [];
-  const habitCueIds = new Map<string, string[]>();
-  const selectedByRound = new Map<number, SelectedCandidate[]>();
-  for (const candidate of selected) {
-    const list = selectedByRound.get(candidate.round.number) ?? [];
-    list.push(candidate);
-    selectedByRound.set(candidate.round.number, list);
-  }
-
-  for (const round of rounds) {
-    let cursor = round.startTick;
-    if (round.freezeEndTick > round.startTick) {
-      segments.push(lowValueSegment(
-        `seg-r${round.number}-freeze`,
-        round.number,
-        round.startTick,
-        round.freezeEndTick,
-        "FREEZE_TIME",
-        "冻结时间由 Session 自动消费；保留为完整比赛覆盖。"
-      ));
-      cursor = round.freezeEndTick;
-    }
-
-    const candidates = selectedByRound.get(round.number) ?? [];
-    for (const candidate of candidates) {
-      const cueStartTick = preRollStartTick(candidate, timeline.tick_rate);
-      if (
-        candidate.decisionTick < cursor ||
-        cueStartTick < cursor ||
-        candidate.outcomeEndTick <= candidate.decisionTick
-      ) continue;
-      if (cursor < cueStartTick) {
-        segments.push(lowValueSegment(
-          `seg-r${round.number}-skip-${cursor}-${cueStartTick}`,
-          round.number,
-          cursor,
-          cueStartTick,
-          "LOW_VALUE_FAST_FORWARD",
-          "普通低价值区间快速带过；需要时可展开查看。"
-        ));
-      }
-      const cueSegmentId = `seg-r${round.number}-cue-${counters.cue}`;
-      const built = buildCue(candidate, cueSegmentId, counters, warnings, timeline.timeline_version);
-      if (built.observation) {
-        observations.push({
-          ...built.observation,
-          demo_id: demoId
-        });
-      }
-      cues.push(built.cue);
-      const cueIds = habitCueIds.get(built.habitKey) ?? [];
-      cueIds.push(built.cue.id);
-      habitCueIds.set(built.habitKey, cueIds);
-      segments.push({
-        id: cueSegmentId,
-        round_number: round.number,
-        start_tick: cueStartTick,
-        end_tick: candidate.outcomeEndTick,
-        mode: candidate.occurrenceIndex > 1 ? "HABIT_CHECK" : "DEEP_DIVE",
-        reason_code: candidate.occurrenceIndex > 1 ? "REPEATED_DECISION_PATTERN" : "COACH_DECISION_POINT",
-        display_reason: candidate.occurrenceIndex > 1
-          ? "同样的处理又出现：先把完整过程看完，再回头说怎么改。"
-          : "从拉出去前一秒看完整处理，结束后回头讲清怎么改。",
-        playback_speed: 1,
-        cue_ids: [built.cue.id],
-        expandable: true
+  for (const raw of rawCandidates) {
+    const stateFactId = `fact-${raw.sourceRef}-state`;
+    const actionFactId = `fact-${raw.sourceRef}-action`;
+    const outcomeFactId = `fact-${raw.sourceRef}-outcome`;
+    const state = raw.state;
+    if (state) {
+      facts.push({
+        id: stateFactId,
+        kind: "DECISION_CONTEXT",
+        roundNumber: raw.round.number,
+        tick: state.sample.tick,
+        text: stateFactText(state),
+        sourceRefs: [raw.sourceRef],
+        observedByPlayer: true,
+        missingFields: [...state.sample.missing_fields],
+        limitations: [CS2D_LIMITATIONS.frameSampling]
       });
-      cursor = candidate.outcomeEndTick;
     }
-    if (cursor < round.decidedTick) {
-      segments.push(lowValueSegment(
-        `seg-r${round.number}-tail-${cursor}-${round.decidedTick}`,
-        round.number,
-        cursor,
-        round.decidedTick,
-        "LOW_VALUE_FAST_FORWARD",
-        "普通低价值区间快速带过；完整保留到回合判定。"
-      ));
+    facts.push({
+      id: actionFactId,
+      kind: "PLAYER_ACTION",
+      roundNumber: raw.round.number,
+      tick: raw.decisionTick,
+      text: actionFactText(raw),
+      sourceRefs: [raw.sourceRef],
+      observedByPlayer: true,
+      missingFields: raw.kind === "HP_CHANGE" ? ["HurtEvent", "exact_action_boundary"] : [],
+      limitations: raw.kind === "HP_CHANGE" ? ["cs2d 没有逐次 HurtEvent；动作窗口由相邻 Frame 保守界定。"] : []
+    });
+    facts.push({
+      id: outcomeFactId,
+      kind: "OUTCOME",
+      roundNumber: raw.round.number,
+      tick: raw.revealTick,
+      text: outcomeFactText(raw),
+      sourceRefs: [raw.sourceRef],
+      observedByPlayer: true,
+      missingFields: [],
+      limitations: raw.timingLimitation ? [raw.timingLimitation] : [],
+      outcomeKind: raw.kind
+    });
+    let observableState: ObservableState | undefined;
+    if (state) {
+      const visionFact = directVisionFactFromSample(stateFactId, state.sample.player_id, {
+        player_id: raw.state.sample.player_id,
+        tick: state.sample.tick,
+        world_position: state.sample.world_position
+      });
+      observableState = buildObservableState({
+        id: `obs-${raw.sourceRef}`,
+        demo_id: demoId,
+        timeline_version: timeline.timeline_version,
+        observer_player_id: selectedSteamId,
+        at_tick: raw.decisionTick,
+        observation_version: CS2D_OBSERVATION_VERSION,
+        facts: [visionFact],
+        limitations: [CS2D_LIMITATIONS.observationBoundary, CS2D_LIMITATIONS.frameSampling]
+      });
+      observations.push(observableState);
     }
-    const postRoundStart = Math.max(round.decidedTick, cursor);
-    if (postRoundStart < round.endTick) {
-      segments.push(lowValueSegment(
-        `seg-r${round.number}-post-${postRoundStart}-${round.endTick}`,
-        round.number,
-        postRoundStart,
-        round.endTick,
-        "POST_ROUND",
-        "回合胜负判定后的反应与过渡时间显式跳过。"
-      ));
-    }
+    const economyRound = winProbabilityTimeline.rounds.find((round) => round.roundNumber === raw.round.number);
+    const side = state?.sample.side ?? "T";
+    const economy = side === "CT" ? economyRound?.economy.ct : economyRound?.economy.t;
+    const context: CanonicalPlayerContext = {
+      playerSide: side,
+      ...(state ? {
+        health: state.source.health,
+        armor: state.source.armor,
+        helmet: state.source.helmet,
+        activeItemClass: classifyItem(safeText(state.source.weapon, "UNKNOWN_ITEM")) as CanonicalPlayerContext["activeItemClass"],
+        money: state.source.money,
+        equipmentValue: state.source.equipValue,
+        utilityCount: state.source.grenades?.length,
+        ...(stateCallout(state) ? { callout: stateCallout(state) } : {})
+      } : {}),
+      economyClass: economy ?? economyTerm(state)
+    };
+    signals.push({
+      signalId: raw.sourceRef,
+      kind: raw.kind,
+      roundNumber: raw.round.number,
+      sourceTick: raw.sourceTick,
+      decisionTick: raw.decisionTick,
+      revealTick: raw.revealTick,
+      sourceRefs: [raw.sourceRef],
+      factRefs: state ? [stateFactId] : [],
+      actionRefs: [actionFactId],
+      outcomeRefs: [outcomeFactId],
+      observableClaimRefs: observableState?.claims.map((claim) => claim.id) ?? [],
+      evidenceRefs: [raw.sourceRef],
+      playerSide: side,
+      playerContext: context,
+      selectedPlayerDeath: raw.kind === "DEATH",
+      utilityKind: raw.utilityKind,
+      bombEventType: raw.bombEventType,
+      annotations: worldAnnotation(raw.state, stateCallout(raw.state)),
+      missingFields: [...(state?.sample.missing_fields ?? [])],
+      limitations: uniqueStrings([CS2D_LIMITATIONS.observationBoundary, ...(raw.timingLimitation ? [raw.timingLimitation] : [])])
+    });
   }
-
-  for (let index = 1; index < rounds.length; index += 1) {
-    const previous = rounds[index - 1];
-    const current = rounds[index];
-    if (previous.endTick < current.startTick) {
-      segments.push(lowValueSegment(
-        `seg-gap-${previous.number}-${current.number}`,
-        0,
-        previous.endTick,
-        current.startTick,
-        "INTER_ROUND_GAP",
-        "回合之间的非比赛区间显式跳过。"
-      ));
-    }
-  }
-  segments.sort((left, right) => left.start_tick - right.start_tick || left.end_tick - right.end_tick || left.id.localeCompare(right.id));
-
-  const habitClusters = [...habitCueIds.entries()]
-    .filter(([, cueIds]) => cueIds.length >= 1)
-    .map(([habitKey, cueIds], index) => ({
-      id: `habit-${index + 1}`,
-      title: cueText(habitKey, false).title,
-      taxonomy_id: habitKey,
-      cue_ids: cueIds,
-      occurrence_count: cueIds.length,
-      opportunity_count: cueIds.length
-    }));
-
-  return { segments, cues, observations, habitClusters };
+  return {
+    demoId,
+    playerId: selectedSteamId,
+    timeline,
+    facts,
+    signals,
+    observableStates: observations,
+    winProbabilityTimeline,
+    generationManifest: {
+      timelineVersion: timeline.timeline_version,
+      sceneIndexVersion: `${CS2D_ADAPTER_VERSION}/scene-index`,
+      observationVersion: CS2D_OBSERVATION_VERSION,
+      signalVersion: CS2D_SIGNAL_VERSION,
+      candidateGeneratorVersion: "review-planner/candidate-generator/1.0.0"
+    },
+    limitations: warnings
+  };
 }
 
 function buildSelectedMatchEvents(
@@ -1453,61 +1132,25 @@ function unavailableWinProbabilityTimeline(tickRate: number, reason: string): Wi
   };
 }
 
-function impactText(before: number, after: number, selectedDeath: boolean): string {
-  const beforePct = Math.round(before * 100);
-  const afterPct = Math.round(after * 100);
-  const points = Math.round(Math.abs(after - before) * 100);
-  if (selectedDeath && after < before) {
-    return `你这次处理后，我方胜率从 ${beforePct}% 掉到 ${afterPct}%，少了 ${points} 个百分点；这里先小身位 peek 拿信息，再决定要不要拉。`;
-  }
-  if (after < before) return `这段处理后，我方胜率从 ${beforePct}% 掉到 ${afterPct}%，少了 ${points} 个百分点；先小身位 peek 拿信息，再决定要不要拉。`;
-  if (after > before) return `这段处理后，我方胜率从 ${beforePct}% 抬到 ${afterPct}%，多拿到 ${points} 个百分点；接下来继续保留补枪位置。`;
-  return `这段处理前后我方胜率都在 ${beforePct}% 左右，先把信息拿全再接下一步。`;
-}
-
-function buildOutcomeImpacts(
-  cues: readonly CoachCue[],
-  timeline: WinProbabilityTimelineV1,
-  matchTimeline: MatchTimeline,
-  selectedPlayerId: string
-): OutcomeImpact[] {
-  if (timeline.status !== "AVAILABLE") return [];
-  return cues.map((cue) => {
-    const round = timeline.rounds.find((candidate) => cue.reveal_tick >= candidate.startTick && cue.reveal_tick <= candidate.endTick) ?? timeline.rounds.find((candidate) => candidate.roundNumber === matchTimeline.rounds.find((r) => cue.segment_id.includes(`r${r.round_number}`))?.round_number);
-    const samples = [...(round?.samples ?? [])].filter((sample) => sample.tick <= cue.outcome_end_tick);
-    const beforeSample = samples.filter((sample) => sample.tick <= cue.decision_tick).at(-1) ?? samples[0];
-    const afterSample = samples.at(-1) ?? beforeSample;
-    const swings = timeline.swings.filter((swing) => swing.tick >= cue.reveal_tick && swing.tick <= cue.outcome_end_tick + timeline.tickRate);
-    const selectedDeathSwing = swings.find((swing) => swing.selectedPlayerDeath);
-    const meaningfulSwing = selectedDeathSwing ?? [...swings].sort((a, b) => a.delta - b.delta)[0];
-    const before = meaningfulSwing?.before ?? beforeSample?.probability ?? 0.5;
-    const after = meaningfulSwing?.after ?? afterSample?.probability ?? before;
-    const outcomeEvents = (matchTimeline.match_events ?? []).filter((event) => event.tick >= cue.reveal_tick && event.tick <= cue.outcome_end_tick);
-    const sameTickEvents = outcomeEvents.filter((event) => event.tick === meaningfulSwing?.tick).length;
-    const selectedDeath = Boolean(selectedDeathSwing || outcomeEvents.some((event) => event.event_type === "PLAYER_DEATH" && event.target_player_id === selectedPlayerId));
-    const deathEvents = outcomeEvents.filter((event) => event.event_type === "PLAYER_DEATH");
-    const bombEvents = outcomeEvents.filter((event) => ["BOMB_PLANT", "BOMB_DEFUSE"].includes(event.event_type));
-    const deathAndBombOverlap = deathEvents.some((death) => bombEvents.some((bomb) => Math.abs(death.tick - bomb.tick) <= timeline.tickRate));
-    const concurrent = sameTickEvents > 1 || deathEvents.length > 1 || deathAndBombOverlap;
-    const attribution: OutcomeImpact["attribution"] = concurrent ? "CONCURRENT_EVENTS" : selectedDeath ? "SELECTED_PLAYER_DEATH" : meaningfulSwing ? "MODEL_SWING" : "ROUND_CONTEXT";
-    const confidence: OutcomeImpact["confidence"] = concurrent ? "LOW" : selectedDeath ? "HIGH" : meaningfulSwing ? "MEDIUM" : "LOW";
-    const delta = after - before;
-    return {
-      cueId: cue.id,
-      beforeProbability: before,
-      afterProbability: after,
-      delta,
-      percentagePoints: Math.round(delta * 100),
-      relativeChange: Math.abs(before) > 1e-6 ? delta / before : null,
-      attribution,
-      confidence,
-      text: impactText(before, after, selectedDeath && !concurrent),
-      limitations: concurrent ? ["多个结果事件在同一窗口内发生，文案只描述处理后变化，不把胜率变化归因给单一动作。"] : ["模型曲线是全场分析信号，不等同于玩家当时可见的信息。"]
-    } satisfies OutcomeImpact;
-  });
-}
-
 function failedBundle(input: Cs2dAnalysisInput, metadata: Cs2dAnalysisMetadata, timeline: MatchTimeline): Cs2dAnalysisBundle {
+  const candidateSet = assembleCandidateSet({
+    id: `candidate-set-${input.demoId}-${input.selectedSteamId}`,
+    version: CS2D_SIGNAL_VERSION,
+    demoId: input.demoId,
+    playerId: input.selectedSteamId,
+    candidates: [],
+    materials: [],
+    status: "FAILED",
+    failureReason: "No canonical round/index could be generated.",
+    generationManifest: {
+      timelineVersion: timeline.timeline_version,
+      sceneIndexVersion: `${CS2D_ADAPTER_VERSION}/scene-index`,
+      observationVersion: CS2D_OBSERVATION_VERSION,
+      signalVersion: CS2D_SIGNAL_VERSION,
+      candidateGeneratorVersion: "review-planner/candidate-generator/1.0.0"
+    },
+    limitations: metadata.limitations
+  });
   const failedPlan: ReviewPlan = {
     id: `plan-${input.demoId}-${input.selectedSteamId}`,
     demo_id: input.demoId,
@@ -1543,6 +1186,7 @@ function failedBundle(input: Cs2dAnalysisInput, metadata: Cs2dAnalysisMetadata, 
     selected_steam_id: input.selectedSteamId,
     match_timeline: timeline,
     review_plan: failedPlan,
+    candidate_set: candidateSet,
     observation_evidence: [],
     win_probability_timeline: input.winProbabilityTimeline ?? unavailableWinProbabilityTimeline(timeline.tick_rate, "Replay 没有收到模型结果。"),
     outcome_impacts: [],
@@ -1623,63 +1267,43 @@ export function buildCs2dAnalysisBundle(input: Cs2dAnalysisInput): Cs2dAnalysisB
   const states = collectStates(replay, rounds, input.selectedSteamId, warnings);
   const candidates = collectCandidates(replay, rounds, states, input.selectedSteamId, tickRate, warnings);
   const winProbabilityTimeline = input.winProbabilityTimeline ?? unavailableWinProbabilityTimeline(tickRate, "模型尚未在 cs2d Worker 中完成推理。");
-  const selected = selectCandidates(candidates, tickRate, warnings, winProbabilityTimeline);
   const provisionalTimeline = buildTimeline(replay, rounds, input.selectedSteamId, states, warnings);
   const timeline: MatchTimeline = { ...provisionalTimeline, demo_id: input.demoId };
-  const counters: Counters = { fact: 1, inference: 1, advice: 1, evidence: 1, cue: 1 };
-  const built = buildPlanSegments(rounds, selected, counters, warnings, input.demoId, input.selectedSteamId, timeline);
-
-  const plan: ReviewPlan = {
-    id: `plan-${input.demoId}-${input.selectedSteamId}`,
-    demo_id: input.demoId,
-    player_id: input.selectedSteamId,
-    status: "COMPLETE",
-    match_timeline_version: timeline.timeline_version,
-    observation_version: CS2D_OBSERVATION_VERSION,
-    signal_version: CS2D_SIGNAL_VERSION,
-    planner_version: CS2D_PLANNER_VERSION,
-    estimated_duration_seconds: (timeline.end_tick - timeline.start_tick) / tickRate,
-    available_until_round: rounds.at(-1)?.number ?? 0,
-    full_match_index_ready: true,
-    global_aggregation_ready: true,
-    segments: built.segments,
-    cues: built.cues,
-    habit_clusters: built.habitClusters,
-    generation_manifest: {
-      parser_version: `${CS2D_SOURCE.repository}@${CS2D_SOURCE.commit}`,
-      observation_version: CS2D_OBSERVATION_VERSION,
-      signal_version: CS2D_SIGNAL_VERSION,
-      planner_version: CS2D_PLANNER_VERSION,
-      provider: "DETERMINISTIC_TEMPLATE",
-      prompt_version: "cs2d-decision-template/1.2.0",
-      status: "DISABLED",
-      narration_deterministic: true,
-      analysis_subject_selection: "EXPLICIT_PLAYER",
-      analysis_subject_player_id: input.selectedSteamId,
-      limitations: [...limitations, ...warnings]
-    }
-  };
-
-  for (const observation of built.observations) {
-    // buildCue first constructs the state before the final demo id is known;
-    // the replacement here keeps that internal state tied to the stable demo.
-    void observation;
+  const generatorInput = buildCanonicalGeneratorInput(candidates, timeline, input.demoId, input.selectedSteamId, tickRate, winProbabilityTimeline, warnings);
+  const candidateSet = generateCandidateSet(generatorInput);
+  const director = deterministicDirectorFallback(candidateSet, "DIRECTOR_DISABLED_PROVIDER_NEUTRAL_BASELINE");
+  const compiled = compileReviewPlan({
+    timeline,
+    candidateSet,
+    directorDecisionSet: director,
+    planId: `plan-${input.demoId}-${input.selectedSteamId}`,
+    observationVersion: CS2D_OBSERVATION_VERSION,
+    signalVersion: CS2D_SIGNAL_VERSION,
+    plannerVersion: CS2D_PLANNER_VERSION,
+    parserVersion: `${CS2D_SOURCE.repository}@${CS2D_SOURCE.commit}`,
+    promptVersion: "cs2d-decision-template/1.2.0",
+    limitations
+  });
+  if (director.manifest.limitations.some((limitation) => limitation.includes("maximum 8"))) {
+    issue(warnings, director.manifest.limitations.find((limitation) => limitation.includes("maximum 8"))!);
   }
-  const observationEvidence = built.observations.map((state) => ({ ...state, demo_id: input.demoId }));
+  const plan = compiled.plan;
+  const observationEvidence = generatorInput.observableStates ?? [];
   const metadata: Cs2dAnalysisMetadata = {
     ...metadataBase,
     canonical_tick_range: { start_tick: timeline.start_tick, end_tick: timeline.end_tick },
-    limitations: uniqueStrings([...limitations, ...warnings]),
+    limitations: uniqueStrings([...limitations, ...warnings, ...plan.generation_manifest.limitations ?? []]),
     warnings: [...warnings]
   };
-
-  assertValidReviewPlan(timeline, plan);
-  const outcomeImpacts = buildOutcomeImpacts(built.cues, winProbabilityTimeline, timeline, input.selectedSteamId);
+  const outcomeImpacts = plan.cues
+    .map((cue) => buildOutcomeImpactForCue(cue, candidateSet, winProbabilityTimeline, timeline, input.selectedSteamId))
+    .filter((impact): impact is OutcomeImpact => Boolean(impact));
   return {
     demo_id: input.demoId,
     selected_steam_id: input.selectedSteamId,
     match_timeline: timeline,
     review_plan: plan,
+    candidate_set: candidateSet,
     observation_evidence: observationEvidence,
     win_probability_timeline: winProbabilityTimeline,
     outcome_impacts: outcomeImpacts,
@@ -1692,6 +1316,7 @@ const BUNDLE_KEYS = [
   "selected_steam_id",
   "match_timeline",
   "review_plan",
+  "candidate_set",
   "observation_evidence",
   "win_probability_timeline",
   "outcome_impacts",
@@ -1709,12 +1334,14 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
     throw new Error("cs2d analysis bundle must contain only the documented top-level fields.");
   }
   const plan = value.review_plan;
+  const candidateSet = value.candidate_set;
   const timeline = value.match_timeline;
   const metadata = value.metadata;
   if (
     typeof value.demo_id !== "string" || !value.demo_id.trim() ||
     typeof value.selected_steam_id !== "string" || !value.selected_steam_id.trim() ||
     !isRecord(plan) || !Array.isArray(plan.segments) || !Array.isArray(plan.cues) ||
+    !isRecord(candidateSet) || !Array.isArray(candidateSet.candidates) || !Array.isArray(candidateSet.materials) ||
     !isRecord(timeline) || !Array.isArray(timeline.rounds) ||
     !Array.isArray(value.observation_evidence) || !isRecord(metadata)
     || !isRecord(value.win_probability_timeline) || !Array.isArray(value.outcome_impacts)
@@ -1726,11 +1353,43 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
   if (
     bundle.demo_id !== bundle.match_timeline.demo_id ||
     bundle.demo_id !== bundle.review_plan.demo_id ||
+    bundle.demo_id !== bundle.candidate_set.demoId ||
     bundle.selected_steam_id !== bundle.match_timeline.selected_player_id ||
-    bundle.selected_steam_id !== bundle.review_plan.player_id
+    bundle.selected_steam_id !== bundle.review_plan.player_id ||
+    bundle.selected_steam_id !== bundle.candidate_set.playerId
   ) {
     throw new Error("cs2d analysis bundle identifiers do not match.");
   }
+  if (bundle.candidate_set.status !== "COMPLETE" && bundle.candidate_set.status !== "FAILED") throw new Error("CandidateSet status is invalid.");
+  if (bundle.candidate_set.status === "FAILED" && (bundle.candidate_set.candidates.length > 0 || bundle.candidate_set.materials.length > 0 || !bundle.candidate_set.failureReason)) throw new Error("FAILED CandidateSet cannot expose partial candidates/materials.");
+  const candidateSetIssues = collectCandidateSetIssues({
+    id: bundle.candidate_set.id,
+    version: bundle.candidate_set.version,
+    demoId: bundle.candidate_set.demoId,
+    playerId: bundle.candidate_set.playerId,
+    status: bundle.candidate_set.status,
+    failureReason: bundle.candidate_set.failureReason,
+    generationManifest: bundle.candidate_set.generationManifest,
+    candidates: bundle.candidate_set.candidates,
+    materials: bundle.candidate_set.materials,
+    limitations: bundle.candidate_set.limitations
+  });
+  if (candidateSetIssues.length > 0) throw new Error(`CandidateSet validation failed: ${candidateSetIssues.join(" ")}`);
+  const candidateSetFingerprint = stableFingerprint({
+    id: bundle.candidate_set.id,
+    version: bundle.candidate_set.version,
+    demoId: bundle.candidate_set.demoId,
+    playerId: bundle.candidate_set.playerId,
+    status: bundle.candidate_set.status,
+    failureReason: bundle.candidate_set.failureReason,
+    generationManifest: bundle.candidate_set.generationManifest,
+    candidates: bundle.candidate_set.candidates,
+    materials: bundle.candidate_set.materials,
+    limitations: bundle.candidate_set.limitations
+  });
+  if (candidateSetFingerprint !== bundle.candidate_set.hash) throw new Error("CandidateSet hash does not match its immutable contents.");
+  if (bundle.candidate_set.status === "COMPLETE" && bundle.review_plan.candidate_set_hash !== bundle.candidate_set.hash) throw new Error("ReviewPlan and CandidateSet hashes do not match.");
+  if (/raw_replay|grenadePaths|frames/i.test(JSON.stringify(bundle.candidate_set))) throw new Error("CandidateSet contains raw Replay/frame fields.");
   if (
     bundle.win_probability_timeline.version !== "win-probability-timeline.v1" ||
     (bundle.win_probability_timeline.status !== "AVAILABLE" && bundle.win_probability_timeline.status !== "UNAVAILABLE") ||
@@ -1757,11 +1416,13 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
     throw new Error("A non-complete cs2d analysis plan must not expose partial teaching content.");
   }
 
-  const cueByObservation = new Map(
-    bundle.review_plan.cues
-      .filter((cue) => cue.observable_state_id)
-      .map((cue) => [cue.observable_state_id!, cue])
+  const materialByState = new Map(
+    bundle.candidate_set.materials
+      .filter((material) => material.observableStateId)
+      .map((material) => [material.observableStateId!, material])
   );
+  const candidateById = new Map(bundle.candidate_set.candidates.map((candidate) => [candidate.candidateId, candidate]));
+  const stateById = new Map<string, ObservableState>();
   const seenObservationIds = new Set<string>();
   for (const state of bundle.observation_evidence) {
     assertValidObservableState(state);
@@ -1769,19 +1430,29 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
       throw new Error(`ObservationState ${state.id} is duplicated.`);
     }
     seenObservationIds.add(state.id);
-    const cue = cueByObservation.get(state.id);
+    const material = materialByState.get(state.id);
+    const candidate = material ? candidateById.get(material.candidateId) : undefined;
     if (
-      !cue ||
+      !material || !candidate ||
       state.demo_id !== bundle.demo_id ||
       state.timeline_version !== bundle.match_timeline.timeline_version ||
       state.observer_player_id !== bundle.selected_steam_id ||
-      state.at_tick > cue.decision_tick
+      state.at_tick > candidate.decisionTick ||
+      candidate.observableClaimRefs.some((claimId) => !state.claims.some((claim) => claim.id === claimId))
     ) {
-      throw new Error(`ObservationState ${state.id} is not bound to its selected-player decision cue.`);
+      throw new Error(`ObservationState ${state.id} is not bound to its CandidateSet material.`);
     }
+    stateById.set(state.id, state);
   }
-  if (seenObservationIds.size !== cueByObservation.size) {
-    throw new Error("Every cue observable_state_id must resolve to exactly one ObservationState.");
+  for (const material of bundle.candidate_set.materials) {
+    if (material.observableStateId && !stateById.has(material.observableStateId)) throw new Error(`Candidate material observable_state_id ${material.observableStateId} is missing from observation_evidence.`);
+  }
+  for (const cue of bundle.review_plan.cues) {
+    if (!cue.observable_state_id) continue;
+    if (!cue.candidate_id) throw new Error(`Cue ${cue.id} has an ObservableState without candidate binding.`);
+    const material = bundle.candidate_set.materials.find((item) => item.candidateId === cue.candidate_id);
+    if (!material || material.observableStateId !== cue.observable_state_id || !stateById.has(cue.observable_state_id)) throw new Error(`Cue ${cue.id} references an ObservableState from another candidate.`);
+    if (stateById.get(cue.observable_state_id)!.at_tick > cue.decision_tick) throw new Error(`Cue ${cue.id} references a future ObservableState.`);
   }
 }
 
@@ -1792,6 +1463,7 @@ export function serializeCs2dAnalysisBundle(bundle: Cs2dAnalysisBundle): string 
     selected_steam_id: bundle.selected_steam_id,
     match_timeline: bundle.match_timeline,
     review_plan: bundle.review_plan,
+    candidate_set: bundle.candidate_set,
     observation_evidence: bundle.observation_evidence,
     win_probability_timeline: bundle.win_probability_timeline,
     outcome_impacts: bundle.outcome_impacts,

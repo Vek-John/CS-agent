@@ -2142,6 +2142,8 @@ button:disabled {
 .cs2d-coaching-bands { display: grid; gap: 0.42rem; margin-top: 0.78rem; }
 .cs2d-coaching-band { padding: 0.68rem 0.72rem 0.72rem 0.78rem; border-left: 0.18rem solid; background: rgba(255,255,255,0.035); }
 .cs2d-coaching-band--situation { border-color: #4da3ff; }
+.cs2d-coaching-band--action { border-color: #ff6258; }
+.cs2d-coaching-band--better { border-color: #52d878; }
 .cs2d-coaching-band--outcome { border-color: #ff6258; }
 .cs2d-coaching-band--analysis { border-color: #52d878; }
 .cs2d-coaching-band-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 0.55rem; }
@@ -2152,7 +2154,10 @@ button:disabled {
 .cs2d-coaching-band > p { margin: 0.5rem 0 0; color: #d5d8dd; font-size: 0.64rem; line-height: 1.5; }
 .cs2d-coaching-band li + li { margin-top: 0; }
 .cs2d-coaching-band--outcome > p { color: #ffaaa4; }
+.cs2d-coaching-band--action > p { color: #ffaaa4; }
 .cs2d-coaching-band--analysis > p { color: #e5e8ec; }
+.cs2d-coaching-band--better > p { color: #e5e8ec; }
+.cs2d-coaching-trigger { display: block; margin-top: 0.42rem; color: var(--text-tertiary); font-size: 0.55rem; line-height: 1.45; }
 .cs2d-coaching-advice { margin-top: 0.62rem; padding-top: 0.58rem; border-top: 0.0625rem solid rgba(82,216,120,0.22); }
 .cs2d-coaching-advice strong { color: #93f2aa; font-size: 0.59rem; font-weight: 720; }
 .cs2d-coaching-advice p { margin: 0.24rem 0 0; color: #e5e8ec; font-size: 0.65rem; line-height: 1.52; }
@@ -2189,7 +2194,7 @@ button:disabled {
 .cs2d-coach-facts div { min-height: 2.1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 0.0625rem solid var(--line); }
 .cs2d-coach-facts dt { color: var(--text-tertiary); font-size: 0.6rem; }
 .cs2d-coach-facts dd { margin: 0; color: var(--text); font: 600 0.64rem/1 ui-monospace, monospace; text-align: right; }
-.cs2d-timeline-toolbar { min-width: 0; display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 0.55rem; }
+.cs2d-timeline-toolbar { min-width: 0; display: grid; grid-template-columns: auto auto minmax(13rem, 1fr) auto; align-items: center; gap: 0.55rem; }
 .cs2d-host-controls,
 .cs2d-round-controls,
 .cs2d-speed-controls { min-width: 0; display: flex; align-items: center; gap: 0.3rem; }
@@ -2222,9 +2227,85 @@ button:disabled {
 .cs2d-host-play { min-width: 3.25rem; background: #f5f5f7; color: #111216; }
 .cs2d-control-count { font: 650 0.52rem/1 ui-monospace, monospace; }
 .cs2d-round-position { min-width: 7.6rem; color: var(--text-secondary); font-size: 0.6rem; text-align: center; white-space: nowrap; }
+.cs2d-timeline-zoom-controls {
+  justify-self: center;
+  min-width: 0;
+  padding: 0.22rem;
+  display: inline-flex;
+  align-items: center;
+  border: 0.0625rem solid rgba(255,255,255,0.08);
+  border-radius: 0.58rem;
+  background: rgba(255,255,255,0.055);
+  box-shadow: inset 0 0.0625rem rgba(255,255,255,0.035);
+}
+.cs2d-timeline-zoom-control {
+  min-width: 0;
+  height: 2rem;
+  padding: 0 0.48rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  color: var(--text-secondary);
+  cursor: default;
+}
+.cs2d-timeline-zoom-control + .cs2d-timeline-zoom-control { border-left: 0.0625rem solid rgba(255,255,255,0.1); }
+.cs2d-timeline-zoom-control svg { flex: 0 0 auto; }
+.cs2d-zoom-axis-tag,
+.cs2d-timeline-axis-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0.0625rem solid rgba(100,170,255,0.28);
+  border-radius: 0.24rem;
+  background: rgba(10,132,255,0.12);
+  color: #a9d2ff;
+  font: 700 0.48rem/1 ui-monospace, monospace;
+  letter-spacing: 0;
+}
+.cs2d-zoom-axis-tag { min-width: 1.15rem; height: 1rem; padding: 0 0.2rem; }
+.cs2d-timeline-axis-tag { min-width: 1.25rem; height: 1.05rem; margin-right: 0.28rem; padding: 0 0.2rem; vertical-align: middle; }
+.cs2d-timeline-zoom-control input {
+  width: clamp(4.2rem, 7vw, 6.5rem);
+  height: 1.4rem;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  cursor: ew-resize;
+}
+.cs2d-timeline-zoom-control:first-child input { cursor: ns-resize; }
+.cs2d-timeline-zoom-control input:disabled { cursor: default; opacity: 0.38; }
+.cs2d-timeline-zoom-control input::-webkit-slider-runnable-track { height: 0.26rem; border-radius: 999px; background: rgba(255,255,255,0.14); }
+.cs2d-timeline-zoom-control input::-webkit-slider-thumb {
+  width: 0.82rem;
+  height: 0.82rem;
+  margin-top: -0.28rem;
+  border: 0.0625rem solid rgba(255,255,255,0.58);
+  border-radius: 50%;
+  appearance: none;
+  background: #a7a9ae;
+  box-shadow: 0 0.08rem 0.2rem rgba(0,0,0,0.38);
+}
+.cs2d-timeline-zoom-control input::-moz-range-track { height: 0.26rem; border: 0; border-radius: 999px; background: rgba(255,255,255,0.14); }
+.cs2d-timeline-zoom-control input::-moz-range-thumb { width: 0.82rem; height: 0.82rem; border: 0.0625rem solid rgba(255,255,255,0.58); border-radius: 50%; background: #a7a9ae; box-shadow: 0 0.08rem 0.2rem rgba(0,0,0,0.38); }
+.cs2d-timeline-zoom-control input:focus-visible { outline: 0.125rem solid var(--blue-bright); outline-offset: 0.08rem; border-radius: 0.28rem; }
+.cs2d-timeline-zoom-control output { min-width: 2.35rem; color: var(--text-tertiary); font: 600 0.5rem/1 ui-monospace, monospace; text-align: right; }
 .cs2d-speed-controls button[aria-pressed="true"],
 .cs2d-timeline-round-button[aria-pressed="true"] { border-color: rgba(100,170,255,0.72); color: #e9f3ff; }
 .cs2d-host-timeline { min-height: 8.7rem; padding: 0.65rem 0.8rem 0.7rem; display: grid; gap: 0.45rem; border-radius: 0.95rem; }
+.cs2d-timeline-sync-viewport {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-color: rgba(255,255,255,0.24) transparent;
+  scrollbar-width: thin;
+  touch-action: pan-y;
+}
+.cs2d-timeline-sync-viewport.is-zoomed .cs2d-winrate-chart,
+.cs2d-timeline-sync-viewport.is-zoomed .cs2d-winrate-note { cursor: grab; }
+.cs2d-timeline-sync-viewport.is-panning,
+.cs2d-timeline-sync-viewport.is-panning * { cursor: grabbing !important; user-select: none; }
+.cs2d-timeline-sync-content { min-width: 100%; display: grid; gap: 0.45rem; }
 .cs2d-timeline-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
 .cs2d-timeline-heading label { color: var(--text-secondary); font-size: 0.62rem; }
 .cs2d-timeline-heading output { min-width: 0; overflow: hidden; color: var(--text-secondary); font: 600 0.62rem/1 ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
@@ -2309,21 +2390,22 @@ button:disabled {
 .cs2d-winrate-panel,
 .cs2d-winrate-unavailable {
   margin-top: 0.2rem;
-  padding: 0.62rem 0.68rem 0.55rem;
+  padding: 0.62rem 0 0.55rem;
   border: 0.0625rem solid rgba(255,255,255,0.1);
   border-radius: 0.68rem;
   background: rgba(255,255,255,0.025);
 }
-.cs2d-winrate-unavailable { display: grid; gap: 0.2rem; color: var(--text-secondary); font-size: 0.62rem; }
+.cs2d-winrate-unavailable { padding-right: 0.68rem; padding-left: 0.68rem; display: grid; gap: 0.2rem; color: var(--text-secondary); font-size: 0.62rem; }
 .cs2d-winrate-unavailable strong { color: #ffb85c; font-size: 0.68rem; }
-.cs2d-winrate-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.cs2d-winrate-heading { padding: 0 0.68rem; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
 .cs2d-winrate-heading > div { display: flex; align-items: baseline; gap: 0.55rem; min-width: 0; }
 .cs2d-winrate-heading strong { color: var(--text); font-size: 0.68rem; }
 .cs2d-winrate-heading span { overflow: hidden; color: var(--text-tertiary); font-size: 0.56rem; text-overflow: ellipsis; white-space: nowrap; }
+.cs2d-winrate-heading .cs2d-timeline-axis-tag { color: #a9d2ff; font-size: 0.48rem; }
 .cs2d-winrate-heading output { color: #67d391; font: 700 0.68rem/1 ui-monospace, monospace; }
-.cs2d-winrate-chart { position: relative; height: 3.2rem; margin-top: 0.38rem; padding-right: 1.6rem; }
+.cs2d-winrate-chart { position: relative; height: 3.2rem; margin-top: 0.38rem; }
 .cs2d-winrate-chart svg { width: 100%; height: 100%; overflow: visible; }
-.cs2d-winrate-hotspots { position: absolute; inset: 0 1.6rem 0 0; pointer-events: none; }
+.cs2d-winrate-hotspots { position: absolute; inset: 0; pointer-events: none; }
 .cs2d-winrate-hotspot { position: absolute; display: block; pointer-events: auto; outline: none; }
 .cs2d-winrate-hotspot--round { top: 0; bottom: 0; border-radius: 0.18rem; opacity: 0; transition: background-color 140ms ease, opacity 140ms ease; }
 .cs2d-winrate-hotspot--round:hover,
@@ -2338,8 +2420,8 @@ button:disabled {
 .cs2d-winrate-swing { stroke-width: 2.5; vector-effect: non-scaling-stroke; }
 .cs2d-winrate-swing--down { stroke: #ff9f0a; }
 .cs2d-winrate-swing--up { stroke: #30d158; }
-.cs2d-winrate-axis { position: absolute; top: -0.05rem; right: 0; bottom: -0.05rem; display: flex; flex-direction: column; justify-content: space-between; color: var(--text-tertiary); font: 500 0.48rem/1 ui-monospace, monospace; }
-.cs2d-winrate-note { margin-top: 0.28rem; color: var(--text-tertiary); font-size: 0.52rem; line-height: 1.35; }
+.cs2d-winrate-axis { position: absolute; top: -0.05rem; right: 0.3rem; bottom: -0.05rem; display: flex; flex-direction: column; justify-content: space-between; color: rgba(174,174,178,0.9); font: 500 0.48rem/1 ui-monospace, monospace; text-shadow: 0 0.08rem 0.2rem #111317, 0 0 0.32rem #111317; pointer-events: none; }
+.cs2d-winrate-note { margin-top: 0.28rem; padding: 0 0.68rem; color: var(--text-tertiary); font-size: 0.52rem; line-height: 1.35; }
 @media (prefers-reduced-motion: reduce) {
   .cs2d-winrate-line { transition: none; }
   .cs2d-winrate-hotspot { transition: none; }
@@ -2361,6 +2443,8 @@ button:disabled {
   .cs2d-host-workspace { grid-template-columns: 1fr; overflow-y: auto; }
   .cs2d-host-stage iframe { min-height: 36rem; }
   .cs2d-host-coach { overflow: visible; }
+  .cs2d-timeline-toolbar { grid-template-columns: auto auto minmax(13rem, 1fr); }
+  .cs2d-speed-controls { grid-column: 1 / -1; justify-content: flex-end; }
 }
 @media (max-width: 44rem) {
   .cs2d-host-shell { padding: 0.4rem; gap: 0.4rem; }
@@ -2371,6 +2455,9 @@ button:disabled {
   .cs2d-timeline-toolbar { display: flex; align-items: stretch; flex-wrap: wrap; }
   .cs2d-host-controls, .cs2d-round-controls { flex: 1 1 auto; }
   .cs2d-host-controls button, .cs2d-round-controls button { flex: 1 1 2.75rem; }
+  .cs2d-timeline-zoom-controls { flex: 1 1 100%; justify-content: stretch; overflow-x: auto; }
+  .cs2d-timeline-zoom-control { flex: 1 1 50%; }
+  .cs2d-timeline-zoom-control input { flex: 1 1 4rem; width: auto; }
   .cs2d-speed-controls { flex: 1 1 100%; justify-content: flex-start; }
   .cs2d-speed-controls button { flex: 0 0 auto; }
   .cs2d-round-position { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }

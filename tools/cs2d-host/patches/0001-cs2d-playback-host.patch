@@ -137,17 +137,19 @@ index 9c4c084..8971d3b 100644
  
  const { t } = useI18n()
  
-@@ -31,6 +39,149 @@ const route = useRoute()
+@@ -31,6 +39,156 @@ const route = useRoute()
  const router = useRouter()
  const parser = useDemoParser()
  
 +const hostMode = computed(() => route.query.host === '1')
++const CS_NET_DEFAULT_PROVIDER = 'webgpu-fp16' as const
++const CS_NET_DEFAULT_BATCH_SIZE = 16 as const
 +const hostRouteQuery = computed(() => ({
 +  host: '1',
 +  ...(typeof route.query.parentOrigin === 'string' ? { parentOrigin: route.query.parentOrigin } : {}),
 +  ...(typeof route.query.csThreads === 'string' ? { csThreads: route.query.csThreads } : {}),
-+  ...(typeof route.query.csBatch === 'string' ? { csBatch: route.query.csBatch } : {}),
-+  ...(typeof route.query.csProvider === 'string' ? { csProvider: route.query.csProvider } : {}),
++  csBatch: typeof route.query.csBatch === 'string' && /^\d+$/.test(route.query.csBatch) && Number(route.query.csBatch) > 0 ? route.query.csBatch : String(CS_NET_DEFAULT_BATCH_SIZE),
++  csProvider: route.query.csProvider === 'wasm-int8' || route.query.csProvider === 'wasm-fp32' || route.query.csProvider === 'webgpu-fp16' ? route.query.csProvider : CS_NET_DEFAULT_PROVIDER,
 +}))
 +const hostSelectedPlayerId = ref<string | null>(null)
 +const hostSelectionLocked = computed(() => hostSelectedPlayerId.value !== null)
@@ -156,7 +158,7 @@ index 9c4c084..8971d3b 100644
 +  | { type: 'progress'; requestId: number; phase: 'downloading' | 'inference' | 'ready'; completed: number; total: number; detail?: string }
 +  | { type: 'telemetry'; requestId: number; telemetry: Record<string, unknown> }
 +  | { type: 'ready'; requestId: number; timeline: WinProbabilityTimelineV1 }
-+  | { type: 'error'; requestId: number; message: string }
++  | { type: 'error'; requestId: number; code?: string; message: string }
 +
 +let winRateWorker: Worker | null = null
 +let winRateRequestId = 0
@@ -197,7 +199,11 @@ index 9c4c084..8971d3b 100644
 +      worker.terminate()
 +      winRateWorker = null
 +      if (message.type === 'ready') resolve(message.timeline)
-+      else reject(new Error(message.message))
++      else {
++        const error = new Error(message.message)
++        if (message.code) Object.assign(error, { code: message.code })
++        reject(error)
++      }
 +    }
 +    worker.onerror = (error) => {
 +      worker.terminate()
@@ -206,10 +212,11 @@ index 9c4c084..8971d3b 100644
 +    }
 +    const threadQuery = typeof route.query.csThreads === 'string' ? route.query.csThreads : undefined
 +    const threads: RuntimeThreadRequest | undefined = threadQuery === '1' || threadQuery === '2' || threadQuery === '4' ? Number(threadQuery) as RuntimeThreadRequest : undefined
-+    const batchQuery = typeof route.query.csBatch === 'string' && /^\d+$/.test(route.query.csBatch) ? Number(route.query.csBatch) : undefined
++    const batchQuery = typeof route.query.csBatch === 'string' && /^\d+$/.test(route.query.csBatch) && Number(route.query.csBatch) > 0 ? Number(route.query.csBatch) : undefined
 +    const providerQuery = route.query.csProvider
-+    const provider = providerQuery === 'wasm-int8' || providerQuery === 'wasm-fp32' || providerQuery === 'webgpu-fp16' ? providerQuery : undefined
-+    worker.postMessage({ requestId, replay, selectedPlayerId, ...(provider ? { provider } : {}), ...(threads ? { threads } : {}), ...(batchQuery ? { batchSize: batchQuery } : {}) })
++    const provider = providerQuery === 'wasm-int8' || providerQuery === 'wasm-fp32' || providerQuery === 'webgpu-fp16' ? providerQuery : CS_NET_DEFAULT_PROVIDER
++    const batchSize = batchQuery ?? CS_NET_DEFAULT_BATCH_SIZE
++    worker.postMessage({ requestId, replay, selectedPlayerId, provider, batchSize, ...(threads ? { threads } : {}) })
 +  })
 +}
 +
@@ -4281,13 +4288,14 @@ new file mode 100644
 index 0000000..50fc238
 --- /dev/null
 +++ b/apps/app/src/viewer/analysis/csNetWinRate.worker.ts
-@@ -0,0 +1,108 @@
+@@ -0,0 +1,133 @@
 +import {
 +  buildCsNetFeatureBatches,
 +  type CsNetReplay,
 +} from '@cs-coach/cs-net-winrate'
 +import {
-+  defaultBatchSize,
++  CS_NET_DEFAULT_BATCH_SIZE,
++  CS_NET_DEFAULT_PROVIDER,
 +  type RuntimeThreadRequest,
 +} from '@cs-coach/cs-net-winrate/runtime-config'
 +import {
@@ -4295,7 +4303,9 @@ index 0000000..50fc238
 +  type WinRateRuntimeTelemetry,
 +} from '@cs-coach/cs-net-winrate/runtime'
 +import {
++  createWebGpuTerminalError,
 +  createWebGpuFailureTelemetry,
++  decideWebGpuFailure,
 +  runWebGpuFp16Inference,
 +  type WebGpuRuntimeTelemetry,
 +} from '@cs-coach/cs-net-winrate/runtime-webgpu'
@@ -4309,6 +4319,7 @@ index 0000000..50fc238
 +  provider?: ProviderRequest
 +  threads?: RuntimeThreadRequest
 +  batchSize?: number
++  profile?: boolean
 +}
 +
 +let activeRequestId = 0
@@ -4326,12 +4337,17 @@ index 0000000..50fc238
 +  const controller = new AbortController()
 +  activeController = controller
 +  activeRequestId = requestId
++  const isCurrentRequest = () => activeRequestId === requestId
 +  const current = () => activeRequestId === requestId && !controller.signal.aborted
 +
 +  try {
 +    const sampleCount = request.replay.rounds.reduce((sum, round) => sum + round.frames.length, 0)
-+    const deviceMemory = (globalThis.navigator as Navigator & { deviceMemory?: number } | undefined)?.deviceMemory ?? 8
-+    const batchSize = request.batchSize ?? defaultBatchSize(sampleCount, Number(deviceMemory))
++    const provider = request.provider === 'wasm-int8' || request.provider === 'wasm-fp32' || request.provider === 'webgpu-fp16'
++      ? request.provider
++      : CS_NET_DEFAULT_PROVIDER
++    const batchSize = typeof request.batchSize === 'number' && Number.isFinite(request.batchSize) && request.batchSize > 0
++      ? Math.max(1, Math.floor(request.batchSize))
++      : CS_NET_DEFAULT_BATCH_SIZE
 +    const makeBatches = () => buildCsNetFeatureBatches(request.replay, batchSize)
 +    const onProgress = (progress: { phase: string; completed: number; total: number; detail?: string }) => {
 +      if (!current()) return
@@ -4345,6 +4361,15 @@ index 0000000..50fc238
 +    const wasmRun = (modelName: 'win-rate.int8.onnx' | 'win-rate.fp32.onnx') => runWinRateInference(request.replay, makeBatches(), {
 +      modelUrl: new URL(`/models/cs-net/${modelName}`, self.location.origin).toString(),
 +      selectedPlayerId: request.selectedPlayerId,
++      ...(modelName === 'win-rate.fp32.onnx' ? {
++        model: {
++          revision: 'csmodelv3-win-space-only-fp32-2026-08-20',
++          assetUrl: '/models/cs-net/win-rate.fp32.onnx',
++          assetSha256: 'f9aa34f7591016a561ed1fba83ec6cda75d97e90a20dfab7ddbaddc8464ceec3',
++          assetBytes: 38284975,
++          quantization: 'FP32' as const,
++        },
++      } : {}),
 +      threads: request.threads ?? 'auto',
 +      batchSize,
 +      signal: controller.signal,
@@ -4354,12 +4379,13 @@ index 0000000..50fc238
 +      },
 +    })
 +    let timeline
-+    if (request.provider === 'webgpu-fp16') {
++    if (provider === 'webgpu-fp16') {
 +      try {
 +        timeline = await runWebGpuFp16Inference(request.replay, makeBatches(), {
 +          modelUrl: new URL('/models/cs-net/win-rate.fp16.onnx', self.location.origin).toString(),
 +          selectedPlayerId: request.selectedPlayerId,
 +          batchSize,
++          profile: request.profile === true,
 +          signal: controller.signal,
 +          onProgress,
 +          onTelemetry: (telemetry: WebGpuRuntimeTelemetry) => {
@@ -4368,24 +4394,30 @@ index 0000000..50fc238
 +        })
 +      } catch (error) {
 +        if (!current()) return
++        const failure = decideWebGpuFailure(error)
 +        const failureTelemetry = await createWebGpuFailureTelemetry(
-+          error instanceof Error ? error.message : 'WEBGPU_UNKNOWN_FAILURE',
++          failure.reason,
 +          sampleCount,
 +          batchSize,
++          failure.kind,
 +        )
-+        if (current()) worker.postMessage({ type: 'telemetry', requestId, telemetry: failureTelemetry })
++        if (!current()) return
++        worker.postMessage({ type: 'telemetry', requestId, telemetry: failureTelemetry })
++        if (!failure.shouldFallback) throw createWebGpuTerminalError(failure)
 +        timeline = await wasmRun('win-rate.int8.onnx')
 +      }
 +    } else {
-+      timeline = await wasmRun(request.provider === 'wasm-fp32' ? 'win-rate.fp32.onnx' : 'win-rate.int8.onnx')
++      timeline = await wasmRun(provider === 'wasm-fp32' ? 'win-rate.fp32.onnx' : 'win-rate.int8.onnx')
 +    }
 +    if (!current()) return
 +    worker.postMessage({ type: 'ready', requestId, timeline })
 +  } catch (error) {
-+    if (!current()) return
++    if (!isCurrentRequest()) return
++    const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : undefined
 +    worker.postMessage({
 +      type: 'error',
 +      requestId,
++      ...(code ? { code } : {}),
 +      message: error instanceof Error ? error.message.slice(0, 240) : '胜率模型不可用',
 +    })
 +  }

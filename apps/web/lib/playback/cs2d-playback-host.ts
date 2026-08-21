@@ -3,6 +3,7 @@ import {
   isPlaybackEventEnvelope,
   type CoachCue,
   type CoachingSessionPhase,
+  type OutcomeCompletionState,
   type PlaybackCommand,
   type PlaybackEventEnvelope,
   type PlaybackStateEvent,
@@ -92,14 +93,27 @@ export function playbackCommandMessage(command: PlaybackCommand) {
   return commandEnvelope(command);
 }
 
+/** Analysis events are accepted only for the player currently selected in the iframe. */
+export function analysisEventMatchesSelectedPlayer(
+  currentSelectedPlayerId: string | undefined,
+  eventSelectedPlayerId: string
+): boolean {
+  return Boolean(currentSelectedPlayerId && currentSelectedPlayerId === eventSelectedPlayerId);
+}
+
 /** Host-only gate: coaching evidence renders after the full outcome pass. */
 export function hostCoachingCueSurface(
   cue: CoachCue | undefined,
   phase: CoachingSessionPhase | undefined,
-  outcomeVisible: boolean
+  outcomeGate: OutcomeCompletionState | boolean | undefined,
+  preparedNarration?: import("@cs-coach/contracts").NarrationBundle
 ): CoachingCueView | undefined {
-  if (!cue || phase !== "PAUSED_FOR_COACHING" || !outcomeVisible) return undefined;
-  return buildCoachingCueView(cue, outcomeVisible);
+  if (!cue || phase !== "PAUSED_FOR_COACHING") return undefined;
+  if (typeof outcomeGate === "boolean") {
+    return outcomeGate ? buildCoachingCueView(cue, true, preparedNarration) : undefined;
+  }
+  if (!outcomeGate || outcomeGate.cueId !== cue.id || outcomeGate.status !== "COMPLETE") return undefined;
+  return preparedNarration ? buildCoachingCueView(cue, outcomeGate, preparedNarration) : undefined;
 }
 
 export const HOST_SPEED_OPTIONS = [0.25, 0.5, 1, 2, 4, 8] as const;
