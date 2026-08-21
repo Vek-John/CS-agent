@@ -507,6 +507,28 @@ Wrangler 打包报告生成 bundle 中存在重复 `radar_position` 对象键；
 
 本次未在浏览器重新上传真实 Demo；动态状态来自既有 MatchTimeline 契约和单元夹具，下一次实际 Demo 复盘应抽查三类 cue（死亡、C4、道具）是否都能生成准确短句。NarrationBundle 仍是五字段内部契约，后续不要为了 UI 数量再次复制一套 LLM Schema。
 
+### 4.22 2026-08-21：Cloudflare DeepSeek 讲解全部降级为模板
+
+**触发**
+
+生产 `/api/coaching/narrate` 对最小匿名合法请求连续返回 `HTTP 200 / FALLBACK / UPSTREAM_SCHEMA`。Cloudflare Secret 元数据存在；上游实际响应为 HTTP 200、`finish_reason=stop`，因此不是密钥缺失、超时或 HTTP 错误。
+
+**决定**
+
+用同一模型和请求参数做脱敏结构探针后确认，DeepSeek 按旧 prompt 将五个 Narration 字段输出成纯字符串，而服务端契约要求每个字段携带 `text + refs`，以维持 decision/action/outcome 证据防火墙。保留严格解析和拒绝无引用输出的行为；将 prompt 升级到 `deepseek-narration-bundle/1.1.1`，明确禁止裸字符串并给出五个字段的匿名引用形状示例。没有用代码猜测 refs，因为那会把未验证文本伪装成有证据讲解。
+
+**落点**
+
+`apps/web/lib/coaching/deepseek-narrator.ts`、对应 prompt 回归断言和本节记录；NarrationBundle/ARCHITECTURE 契约不变。
+
+**验证**
+
+修复前线上最小请求连续 3 次均为 `UPSTREAM_SCHEMA`。修复后使用本地授权 Secret 直连同一 DeepSeek 模型，响应仍为 HTTP 200/`stop`，且 `currentSituation/playerAction/coreIssue/betterPlay/outcomeImpact` 五项均为包含 `text`、`refs` 的对象；定向 Vitest 12 项、typecheck 通过。待新 Worker 发布后再运行同一线上最小请求，要求状态为 `SUCCEEDED`。
+
+**限制 / 下一步**
+
+真实 Demo 的完整复盘仍需抽查一条死亡 cue 和一条道具/C4 cue，确认模型在多事实、多引用时保持命名空间正确；模型再次输出非法结构时仍会可追溯降级为确定性模板，不阻塞回放。
+
 ## 5. 常用问题排查表
 
 | 现象 | 首先检查 | 常见根因 | 不要做什么 |

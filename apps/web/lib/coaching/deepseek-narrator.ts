@@ -8,7 +8,7 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_REQUEST_BYTES = 48 * 1024;
 const MAX_TEXT_LENGTH = 1600;
 const ALLOWED_MODELS = new Set(["deepseek-v4-flash", "deepseek-v4-pro"]);
-export const DEEPSEEK_NARRATOR_PROMPT_VERSION = "deepseek-narration-bundle/1.1.0";
+export const DEEPSEEK_NARRATOR_PROMPT_VERSION = "deepseek-narration-bundle/1.1.1";
 
 export interface DeepSeekNarratorEnv {
   DEEPSEEK_API_KEY?: string;
@@ -244,6 +244,8 @@ function systemPrompt(): string {
     "Return JSON only with exactly one top-level key bundle.",
     "The bundle must contain exactly cueId, candidateId, primaryFocusCode, currentSituation, playerAction, coreIssue, betterPlay, outcomeImpact.",
     "Echo cueId=c1, candidateId=k1, and primaryFocusCode exactly; use only supplied anonymous refs.",
+    "Every one of the five narration fields must be an object with exactly text and refs; never return a narration field as a bare string. refs must be a non-empty array of the supplied anonymous IDs.",
+    "Shape example: currentSituation={text:'...',refs:['d1']}, playerAction={text:'...',refs:['a1']}, coreIssue={text:'...',refs:['d1','a1']}, betterPlay={text:'...',refs:['v1','e1']}, outcomeImpact={text:'...',refs:['o1','m1']}.",
     "currentSituation cites decision refs only; playerAction cites action refs only; coreIssue cites decision/action refs; betterPlay must cite an advice ref and may cite decision/action/advice/evidence refs; outcomeImpact cites outcome/measurement refs only.",
     "Every field is one short sentence. Use concise, direct Simplified Chinese CS player language; prefer架枪、预瞄、小身位 peek、补枪、eco、强起 and similar concrete terms.",
     "Never print primaryFocusCode or any uppercase taxonomy token in prose. coreIssue must say what the action risks or causes; betterPlay must give one immediately executable adjustment.",

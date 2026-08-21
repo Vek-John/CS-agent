@@ -77,6 +77,8 @@ describe("DeepSeek five-field narrator provider", () => {
     expect(body.response_format).toEqual({ type: "json_object" });
     expect(body.messages[0].content).toContain("架枪、预瞄、小身位 peek、补枪、eco、强起");
     expect(body.messages[0].content).toContain("Never print primaryFocusCode");
+    expect(body.messages[0].content).toContain("never return a narration field as a bare string");
+    expect(body.messages[0].content).toContain("currentSituation={text:'...',refs:['d1']}");
     expect(body.messages[1].content).not.toMatch(/tick|frame|segment|route|order/i);
   });
 
