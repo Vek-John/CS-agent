@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { cp, mkdir, readdir, rm, stat } from "node:fs/promises";
+import { cp, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 
@@ -9,6 +9,11 @@ const sourceRoot = path.join(workspaceRoot, "apps", "web", ".open-next", "assets
 const deployRoot = path.join(workspaceRoot, "apps", "web", ".open-next", "cloudflare-assets");
 const viewerSourceRoot = path.join(workspaceRoot, ".local-data", "upstream", "cs2d", "apps", "app", "dist");
 const viewerDeployRoot = path.join(deployRoot, "cs2d");
+const isolationHeaders = `/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: cross-origin
+`;
 
 async function copyReleaseAssets(source, destination) {
   await mkdir(destination, { recursive: true });
@@ -87,6 +92,12 @@ if (!(await pathExists(viewerSourceRoot))) {
 await copyReleaseAssets(viewerSourceRoot, viewerDeployRoot);
 await removeUnsupportedWebGpuAssets(viewerDeployRoot);
 
+// Cloudflare serves exact static-asset matches before invoking the Worker by
+// default. Keep those responses in the same isolated browsing context as the
+// Next shell; otherwise Chromium blocks the same-origin /cs2d/ iframe before
+// its app code can start.
+await writeFile(path.join(deployRoot, "_headers"), isolationHeaders, "utf8");
+
 // The upstream viewer still has a few public absolute URLs (for example
 // `/maps/...` and `/weapons/...`). Keep these small compatibility sidecars at
 // the Worker root while the actual app shell lives under `/cs2d/`.
@@ -110,6 +121,7 @@ for (const name of [
 }
 
 const required = [
+  path.join(deployRoot, "_headers"),
   path.join(deployRoot, "generated-assets", "maps", "de_mirage.png"),
   path.join(deployRoot, "generated-assets", "items", "catalog.json"),
   path.join(deployRoot, "generated-assets", "models", "cs-net", "win-rate.fp16.onnx"),
