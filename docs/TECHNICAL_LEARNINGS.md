@@ -461,6 +461,28 @@ GitHub `main`、Cloudflare Worker `cs2-ai-demo-coach`，生产地址 `https://cs
 
 Wrangler 打包报告生成 bundle 中存在重复 `radar_position` 对象键；本次编译与线上 smoke 未受影响，但应在下一轮修改相应 Adapter 时消除，避免前一个字段被后一个字段覆盖。此次只做结构与静态资产 smoke，没有在线上传完整 Demo 或消耗 DeepSeek API；真实生产 Demo 的浏览器端到端表现仍需下一次有界验收。
 
+### 4.20 2026-08-21：Cloudflare 静态资产隔离头与 cs2d iframe 拒绝访问
+
+**触发**
+
+生产 Host 自身返回 HTTP 200，但 Edge 在中间地图区域显示 `chrome-error://chromewebdata/` 的拒绝图标；直接打开同一 `/cs2d/` URL 又能正常显示选择 Demo 页面。线上响应对比发现 Host 有 COOP/COEP/CORP，而精确匹配的 `/cs2d/` 静态资产只有 `Content-Type`。
+
+**决定**
+
+根因是 Cloudflare Workers Static Assets 默认资产优先：命中静态文件时不会执行 `tools/cloudflare-worker.mjs`，所以该文件声称统一添加的隔离头实际上没有覆盖 Viewer。没有启用全局 `assets.run_worker_first`，因为本地验证证明它会让 OpenNext 把 `/cs2d/` 308 到 `/cs2d` 后返回 404，并让所有大 WASM/模型请求额外经过 Worker。改为由 `prepare_cloudflare_assets.mjs` 在最终发布资产根生成 Cloudflare `_headers`，对所有静态资产补同一组 COOP `same-origin`、COEP `require-corp`、CORP `cross-origin`。
+
+**落点**
+
+`tools/prepare_cloudflare_assets.mjs`；修复提交 `0b3feda`；Cloudflare Worker 版本 `cc160f0c-646c-4314-b703-213ab7ae7996`。
+
+**验证**
+
+修复前的线上断言稳定失败：`/cs2d/?host=1...` 缺少 `Cross-Origin-Opener-Policy`。修复后 Wrangler 本地解析 1 条 `_headers` 规则，`/cs2d/` 返回 200 且三项隔离头齐全；Edge 本地完整 Host 中 iframe 正常显示“选择本地 Demo”，Viewer 的脚本、Worker、WASM、地图和武器资源均返回 200。全量 Vitest 38 files、253 passed、1 skipped，typecheck、Cloudflare production build 与 source/bundle secret scan 通过。重新部署后同一线上断言转绿，`/cs2d/` 返回 200 且三项隔离头齐全。
+
+**限制 / 下一步**
+
+部署前曾直接访问生产 `/cs2d/` 的 Edge profile 可能仍由旧 PWA Service Worker/CacheStorage 返回不带隔离头的缓存导航，普通强制刷新不能保证立即退出旧控制器；这不是 Cloudflare Access 权限。首次访问和新网络响应已修复，旧 profile 需要关闭仍打开的 `/cs2d/` 页面并清除此站点的离线缓存或重启浏览器。后续应在嵌入 host 模式禁用上游 PWA 注册，避免 Viewer 基础设施与主产品共享 Service Worker 生命周期。
+
 ## 5. 常用问题排查表
 
 | 现象 | 首先检查 | 常见根因 | 不要做什么 |
