@@ -4237,10 +4237,13 @@ diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
 index d7e3b34..fd72cda 100644
 --- a/pnpm-lock.yaml
 +++ b/pnpm-lock.yaml
-@@ -23,6 +23,9 @@ importers:
+@@ -23,6 +23,12 @@ importers:
        '@bokuweb/zstd-wasm':
          specifier: ^0.0.27
          version: 0.0.27
++      '@cs-coach/cs-net-winrate':
++        specifier: link:../../../../../libs/cs-net-winrate
++        version: link:../../../../../libs/cs-net-winrate
 +      '@cs-coach/cs2d-analysis-adapter':
 +        specifier: link:../../../../../libs/cs2d-analysis-adapter
 +        version: link:../../../../../libs/cs2d-analysis-adapter
