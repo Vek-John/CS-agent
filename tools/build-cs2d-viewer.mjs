@@ -23,8 +23,11 @@ function run(command, args, options = {}) {
 
 const patchArgs = ["--clone"];
 if (!existsSync(resolve(upstream, "node_modules"))) patchArgs.push("--install");
-run(process.execPath, [modelSync]);
 run(process.execPath, [patcher, ...patchArgs]);
+// Clone and install the pinned upstream before syncing model/runtime assets.
+// The sync step creates directories under the checkout; running it first
+// leaves git clone with a non-empty destination in clean CI workspaces.
+run(process.execPath, [modelSync]);
 
 run("pnpm", ["--dir", upstream, "--filter", "cs2-demo-viewer", "build"], {
   env: { ...process.env, CS2D_BASE_PATH: "/cs2d/" },
