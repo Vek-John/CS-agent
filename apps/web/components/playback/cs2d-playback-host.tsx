@@ -41,6 +41,13 @@ import type {
   AnalysisProgressEvent,
   AnalysisTelemetryEvent
 } from "@cs-coach/contracts";
+import type {
+  AgentToolRequest,
+  SessionSummaryInput,
+  SessionWrapUpRequest,
+  SessionWrapUpResult
+} from "@cs-coach/coach-agent/client";
+import { deterministicSessionWrapUpResult, SessionWrapUpRequestSchema } from "@cs-coach/coach-agent/client";
 import {
   deserializeCs2dAnalysisBundle,
   type Cs2dAnalysisBundle
@@ -72,6 +79,30 @@ import {
 } from "../../lib/coaching/cs2d-coaching-view";
 import { resolveItemPresentation } from "../../lib/assets/game-asset-display";
 import { loadLocalGameAssetCatalog } from "../../lib/assets/local-game-asset-catalog";
+import { requestSessionWrapUp } from "../../lib/coaching/deepseek-wrap-up";
+import { buildStage3WrapUpInput } from "../../lib/coaching/coach-agent-stage3-wrap-up";
+import { buildSessionWrapUpRequest } from "@cs-coach/coach-agent/client";
+import {
+  CoachAgentHostAdapter,
+  dispatchCoachAgentEvent,
+  selectFirstStage2Cue,
+  Stage2AckTimeoutController,
+  type Stage2ToolContext
+} from "../../lib/coaching/coach-agent-host-adapter";
+import {
+  CoachAgentStage3HostAdapter,
+  createStage3HostAdapterStore,
+  stage3EligibleCueIds,
+  stage3ToolStatusLabel,
+  stableStage3IdentityToken,
+  type Stage3HostAdapterInput,
+  type Stage3IdentityInput,
+  type Stage3HostAdapterStore
+} from "../../lib/coaching/coach-agent-stage3-host-adapter";
+import {
+  CoachAgentStage3Controller,
+  type Stage3ControllerState
+} from "../../lib/coaching/coach-agent-stage3-controller";
 import {
   acceptedPlaybackEvent,
   adjacentRoundIndex,
@@ -143,12 +174,25 @@ type ReviewPreparationStatus = {
   detail: string;
 };
 
+type Stage2Status = "IDLE" | "STARTING" | "FOCUSING" | "RESUMING" | "COMPLETED" | "FAILED" | "CANCELLED";
+
+type Stage2PendingTool = {
+  request: AgentToolRequest;
+  context: Stage2ToolContext;
+  generation: number;
+  cueId: string;
+};
+
+type Stage3WrapUpStatus = "IDLE" | "LOADING" | "READY" | "FALLBACK" | "ERROR";
+
 export function Cs2dPlaybackHost({
   reviewPreparationDependencies
 }: Cs2dPlaybackHostProps = {}) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const planRef = useRef<ReviewPlan | undefined>(undefined);
   const [benchmarkQuery, setBenchmarkQuery] = useState("");
+  const [stage2Mode, setStage2Mode] = useState(false);
+  const [stage3Mode, setStage3Mode] = useState(false);
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
     const query = new URLSearchParams(window.location.search);
@@ -162,6 +206,10 @@ export function Cs2dPlaybackHost({
       if (provider === "wasm-int8" || provider === "wasm-fp32" || provider === "webgpu-fp16") params.set("csProvider", provider);
       setBenchmarkQuery(params.toString());
     }
+  }, []);
+  useEffect(() => {
+    setStage2Mode(new URLSearchParams(window.location.search).get("coachAgent") === "stage2");
+    setStage3Mode(new URLSearchParams(window.location.search).get("coachAgent") === "stage3");
   }, []);
   const config = useMemo(() => {
     const base = cs2dHostConfig();
@@ -198,9 +246,31 @@ export function Cs2dPlaybackHost({
   const timelineContentRef = useRef<HTMLDivElement>(null);
   const timelinePanRef = useRef<{ pointerId: number; startClientX: number; startScrollLeft: number } | undefined>(undefined);
   const userTookOverRef = useRef(false);
+  const stage2AdapterRef = useRef(new CoachAgentHostAdapter());
+  const stage2AckTimeoutRef = useRef(new Stage2AckTimeoutController());
+  const stage2PendingRef = useRef<Stage2PendingTool | undefined>(undefined);
+  const stage2StartedCueRef = useRef<string | undefined>(undefined);
+  const stage2IdentityRef = useRef<{ key: string; runId: string; sessionId: string } | undefined>(undefined);
+  const stage3StoreRef = useRef<Stage3HostAdapterStore | undefined>(undefined);
+  if (!stage3StoreRef.current) stage3StoreRef.current = createStage3HostAdapterStore();
+  const stage3AdapterRef = useRef(new CoachAgentStage3HostAdapter(stage3StoreRef.current));
+  const stage3ControllerRef = useRef<CoachAgentStage3Controller | undefined>(undefined);
+  const stage3BlockedCueRef = useRef(new Set<string>());
+  const stage3InputRef = useRef<Stage3HostAdapterInput | undefined>(undefined);
+  const replayHashRef = useRef<string | undefined>(undefined);
+  const liveSessionRef = useRef<CoachingSessionState | undefined>(undefined);
+  const liveCueRef = useRef<ReviewPlan["cues"][number] | undefined>(undefined);
   const guidedSeekEpochRef = useRef(0);
   const guidedSeekGateRef = useRef<GuidedSeekGate | undefined>(undefined);
   const [userTookOver, setUserTookOver] = useState(false);
+  const [stage2Status, setStage2Status] = useState<Stage2Status>("IDLE");
+  const [stage2Error, setStage2Error] = useState<string>();
+  const [stage3State, setStage3State] = useState<Stage3ControllerState>({ status: "IDLE" });
+  const [stage3WrapUpStatus, setStage3WrapUpStatus] = useState<Stage3WrapUpStatus>("IDLE");
+  const [stage3WrapUpResult, setStage3WrapUpResult] = useState<SessionWrapUpResult>();
+  const [stage3WrapUpRequest, setStage3WrapUpRequest] = useState<SessionWrapUpRequest>();
+  const [stage3WrapUpError, setStage3WrapUpError] = useState<string>();
+  const stage3WrapUpGenerationRef = useRef<number | undefined>(undefined);
   const [timelineHorizontalZoom, setTimelineHorizontalZoom] = useState(1);
   const [winRateVerticalZoom, setWinRateVerticalZoom] = useState(1);
   const [timelinePanning, setTimelinePanning] = useState(false);
@@ -215,6 +285,21 @@ export function Cs2dPlaybackHost({
   }, []);
 
   const invalidateGeneration = useCallback(() => {
+    stage2AckTimeoutRef.current.clear();
+    stage2AdapterRef.current.cancel(generationRef.current);
+    stage3ControllerRef.current?.reset();
+    stage3BlockedCueRef.current.clear();
+    stage3InputRef.current = undefined;
+    stage3WrapUpGenerationRef.current = undefined;
+    setStage3WrapUpStatus("IDLE");
+    setStage3WrapUpResult(undefined);
+    setStage3WrapUpRequest(undefined);
+    setStage3WrapUpError(undefined);
+    stage2PendingRef.current = undefined;
+    stage2StartedCueRef.current = undefined;
+    stage2IdentityRef.current = undefined;
+    setStage2Status("IDLE");
+    setStage2Error(undefined);
     generationRef.current += 1;
     preparationRef.current?.cancel();
     preparationRef.current = undefined;
@@ -231,6 +316,30 @@ export function Cs2dPlaybackHost({
     iframeRef.current?.contentWindow?.postMessage(playbackCommandMessage(command), config.origin);
   }, [config.origin]);
 
+  const isStage3InputLive = useCallback((input: Stage3HostAdapterInput): boolean => {
+    const liveSession = liveSessionRef.current;
+    const liveCue = liveCueRef.current;
+    return !userTookOverRef.current &&
+      replayHashRef.current === input.demoContentHash &&
+      liveSession?.phase === "PAUSED_FOR_COACHING" &&
+      liveSession.current_cue_id === input.cue.id &&
+      liveSession.outcome_completion?.cueId === input.cue.id &&
+      liveSession.outcome_completion.status === "COMPLETE" &&
+      liveSession.outcome_completion.outcomeEndTick === input.outcomeGate.outcomeEndTick &&
+      liveCue?.id === input.cue.id;
+  }, []);
+
+  if (!stage3ControllerRef.current) {
+    stage3ControllerRef.current = new CoachAgentStage3Controller({
+      adapter: stage3AdapterRef.current,
+      dispatch: dispatchCoachAgentEvent,
+      post: send,
+      bridgeAvailable: () => Boolean(iframeRef.current?.contentWindow),
+      isLive: isStage3InputLive,
+      onState: setStage3State,
+    });
+  }
+
   const invalidateGuidedSeek = useCallback(() => {
     guidedSeekEpochRef.current += 1;
     guidedSeekGateRef.current = undefined;
@@ -238,10 +347,18 @@ export function Cs2dPlaybackHost({
 
   const markUserTookOver = useCallback(() => {
     invalidateGuidedSeek();
+    stage2AckTimeoutRef.current.clear();
+    stage2AdapterRef.current.cancel(generationRef.current);
+    stage2PendingRef.current = undefined;
+    void stage3ControllerRef.current?.takeover(stage3InputRef.current, "已由你接管，当前 Agent 工具已取消；基础回放仍可继续。", generationRef.current);
+    if (stage2Status === "STARTING" || stage2Status === "FOCUSING" || stage2Status === "RESUMING") {
+      setStage2Status("CANCELLED");
+      setStage2Error("已由你接管，地图标注已取消；基础回放仍可继续。");
+    }
     if (!userTookOverRef.current) send({ type: "setCamera", mode: "full" });
     userTookOverRef.current = true;
     setUserTookOver(true);
-  }, [invalidateGuidedSeek, send]);
+  }, [invalidateGuidedSeek, send, stage2Status]);
 
   const clearUserTakeover = useCallback(() => {
     invalidateGuidedSeek();
@@ -261,7 +378,10 @@ export function Cs2dPlaybackHost({
         : current);
     }
     clearUserTakeover();
-  }, [clearUserTakeover, playback?.canonicalTick]);
+    if (stage3Mode && stage3InputRef.current) {
+      void stage3ControllerRef.current?.resumeAfterTakeover(stage3InputRef.current);
+    }
+  }, [clearUserTakeover, playback?.canonicalTick, stage3Mode]);
 
   const issueUserCommand = useCallback((command: PlaybackCommand) => {
     if (session) markUserTookOver();
@@ -594,6 +714,68 @@ export function Cs2dPlaybackHost({
         }
         return;
       }
+      if (payload.type === "TEACHING_TOOL_ACK") {
+        if (stage3Mode) {
+          stage3ControllerRef.current?.acceptAck(payload);
+          return;
+        }
+        const pending = stage2PendingRef.current;
+        if (!stage2Mode || !pending || pending.generation !== generationRef.current) return;
+        const liveSession = liveSessionRef.current;
+        const liveCue = liveCueRef.current;
+        if (
+          !liveSession ||
+          liveSession.phase !== "PAUSED_FOR_COACHING" ||
+          liveSession.current_cue_id !== pending.cueId ||
+          liveSession.outcome_completion?.cueId !== pending.cueId ||
+          liveSession.outcome_completion.status !== "COMPLETE" ||
+          liveCue?.id !== pending.cueId
+        ) {
+          stage2PendingRef.current = undefined;
+          stage2AckTimeoutRef.current.clear();
+          stage2AdapterRef.current.cancel(pending.generation);
+          setStage2Status("FAILED");
+          setStage2Error("当前讲解状态已变化，地图标注已取消；基础回放仍可继续。");
+          return;
+        }
+        try {
+          const toolResult = stage2AdapterRef.current.acceptTeachingToolAck(
+            pending.request,
+            payload,
+            pending.context,
+          );
+          if (!toolResult) return;
+          stage2AckTimeoutRef.current.clear();
+          const resume = stage2AdapterRef.current.createResumeEvent(
+            pending.request,
+            toolResult,
+            pending.context,
+            `stage2-resume-${pending.cueId}-${pending.generation}`.slice(0, 160),
+          );
+          if (!resume) return;
+          stage2PendingRef.current = undefined;
+          setStage2Status("RESUMING");
+          void dispatchCoachAgentEvent(resume).then((result) => {
+            if (generationRef.current !== pending.generation || !stage2AdapterRef.current.isCurrent(pending.generation)) return;
+            if (result.status === "COMPLETED") {
+              setStage2Status("COMPLETED");
+              setStage2Error(undefined);
+            } else {
+              setStage2Status("FAILED");
+              setStage2Error("地图标注未完成；基础回放仍可继续。");
+            }
+          }).catch((error) => {
+            if (generationRef.current !== pending.generation || !stage2AdapterRef.current.isCurrent(pending.generation)) return;
+            setStage2Status("FAILED");
+            setStage2Error(error instanceof Error ? error.message.slice(0, 160) : "地图标注未完成；基础回放仍可继续。");
+          });
+        } catch (error) {
+          stage2PendingRef.current = undefined;
+          setStage2Status("FAILED");
+          setStage2Error(error instanceof Error ? error.message.slice(0, 160) : "地图标注校验失败；基础回放仍可继续。");
+        }
+        return;
+      }
 
       const pendingSeek = guidedSeekGateRef.current;
       if (pendingSeek) {
@@ -618,7 +800,7 @@ export function Cs2dPlaybackHost({
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [config.origin, invalidateGeneration, invalidateGuidedSeek, resetAnalysis, reviewPreparationDependencies]);
+  }, [config.origin, invalidateGeneration, invalidateGuidedSeek, resetAnalysis, reviewPreparationDependencies, stage2Mode, stage3Mode]);
 
   const transition = useCallback((action: SessionAction) => {
     const activePlan = planRef.current;
@@ -743,6 +925,283 @@ export function Cs2dPlaybackHost({
         ? "胜率模型不可用，已使用基础教练路线"
         : undefined;
   const currentWinPoint = winRateCurve?.points.filter((point) => point.tick <= tick).at(-1);
+  const stage2Cue = stage2Mode && activePlan && routeState
+    ? selectFirstStage2Cue(activePlan, routeState)
+    : undefined;
+  const stage3Cue = stage3Mode && activePlan && routeState && cue && stage3EligibleCueIds(activePlan, routeState).includes(cue.id)
+    ? cue
+    : undefined;
+  const stage2Busy = stage2Status === "STARTING" || stage2Status === "FOCUSING" || stage2Status === "RESUMING";
+  const stage3Busy = stage3State.status === "STARTING" || stage3State.status === "FOCUSING" || stage3State.status === "RESUMING";
+  const agentToolBusy = stage2Busy || stage3Busy;
+  const stage3IdentityContext: Stage3IdentityInput | undefined = activePlan && routeState && replay?.demoContentHash
+    ? {
+        plan: activePlan,
+        routeState,
+        analysis: {
+          demo_id: bundle?.demo_id ?? activePlan.demo_id,
+          selected_steam_id: bundle?.selected_steam_id ?? selected?.playerId ?? activePlan.player_id,
+          metadata: bundle?.metadata,
+        },
+        demoContentHash: replay.demoContentHash,
+        selectedPlayerId: selected?.playerId ?? activePlan.player_id,
+        sessionId: `stage3-session-${stableStage3IdentityToken(replay.demoContentHash, activePlan.id, routeState.routeFingerprint, selected?.playerId ?? activePlan.player_id)}`,
+        runId: `stage3-run-${stableStage3IdentityToken(replay.demoContentHash, activePlan.id, routeState.routeFingerprint, selected?.playerId ?? activePlan.player_id)}`,
+      }
+    : undefined;
+  // Async Stage2 work must consult these refs immediately before postMessage or
+  // remote resume; the PAUSED values captured when START began are not authority.
+  replayHashRef.current = replay?.demoContentHash;
+  liveSessionRef.current = session;
+  liveCueRef.current = cue;
+
+  useEffect(() => {
+    if (!stage2Mode || !activePlan || !routeState || !session || !cue || !stage2Cue) return;
+    if (stage2StartedCueRef.current === stage2Cue.id || stage2Cue.id !== cue.id) return;
+    if (
+      userTookOverRef.current ||
+      session.phase !== "PAUSED_FOR_COACHING" ||
+      !cueRevealed ||
+      !presentableNarration ||
+      !session.outcome_completion ||
+      session.outcome_completion.status !== "COMPLETE"
+    ) return;
+    stage2StartedCueRef.current = stage2Cue.id;
+    const generation = generationRef.current;
+    if (!replay?.demoContentHash) {
+      setStage2Status("FAILED");
+      setStage2Error("当前 Demo 没有可验证内容哈希；基础回放仍可继续。");
+      return;
+    }
+    const selectedIdentity = selected?.playerId ?? activePlan.player_id;
+    const identityKey = `${replay.demoContentHash}:${activePlan.id}:${routeState.routeFingerprint}:${selectedIdentity}`;
+    const identityToken = stableStage3IdentityToken(replay.demoContentHash, activePlan.id, routeState.routeFingerprint, selectedIdentity);
+    const identity = stage2IdentityRef.current?.key === identityKey
+      ? stage2IdentityRef.current
+      : {
+          key: identityKey,
+          runId: `stage2-run-${identityToken}`,
+          sessionId: `stage2-session-${identityToken}`,
+        };
+    stage2IdentityRef.current = identity;
+    setStage2Status("STARTING");
+    setStage2Error(undefined);
+    try {
+      const prepared = stage2AdapterRef.current.prepareStart({
+        plan: activePlan,
+        routeState,
+        cue: stage2Cue,
+        narration: presentableNarration,
+        outcomeGate: session.outcome_completion,
+        currentSessionPhase: "PAUSED_FOR_COACHING",
+        analysis: {
+          demo_id: bundle?.demo_id ?? activePlan.demo_id,
+          selected_steam_id: bundle?.selected_steam_id ?? selected?.playerId ?? activePlan.player_id,
+          metadata: bundle?.metadata,
+        },
+        demoContentHash: replay.demoContentHash,
+        selectedPlayerId: selected?.playerId ?? activePlan.player_id,
+        sessionId: identity.sessionId,
+        runId: identity.runId,
+        generation,
+      });
+      if (prepared.capabilities.length !== 1) {
+        setStage2Status("FAILED");
+        setStage2Error("当前 cue 没有可绑定的地图证据；基础回放仍可继续。");
+        return;
+      }
+      void dispatchCoachAgentEvent(prepared.event).then((result) => {
+        if (generationRef.current !== generation || userTookOverRef.current || !stage2AdapterRef.current.isCurrent(generation)) return;
+        const request = result.effects[0];
+        if (result.status !== "WAITING_TOOL" || !request) {
+          setStage2Status("FAILED");
+          setStage2Error("教练工具未进入等待状态；基础回放仍可继续。");
+          return;
+        }
+        const context: Stage2ToolContext = {
+          generation,
+          currentSessionPhase: "PAUSED_FOR_COACHING",
+          outcomeGate: session.outcome_completion!,
+        };
+        try {
+          const liveSession = liveSessionRef.current;
+          const liveCue = liveCueRef.current;
+          if (
+            !liveSession ||
+            liveSession.phase !== "PAUSED_FOR_COACHING" ||
+            liveSession.current_cue_id !== stage2Cue.id ||
+            liveSession.outcome_completion?.cueId !== stage2Cue.id ||
+            liveSession.outcome_completion.status !== "COMPLETE" ||
+            liveCue?.id !== stage2Cue.id
+          ) {
+            stage2AdapterRef.current.cancel(generation);
+            setStage2Status("FAILED");
+            setStage2Error("当前讲解状态已变化，地图标注已取消；基础回放仍可继续。");
+            return;
+          }
+          const command = stage2AdapterRef.current.createFocusMapCommand(request, context);
+          if (!command) return;
+          stage2PendingRef.current = { request, context, generation, cueId: stage2Cue.id };
+          stage2AckTimeoutRef.current.arm(generation, (expiredGeneration) => {
+            const pending = stage2PendingRef.current;
+            if (
+              !pending ||
+              pending.generation !== expiredGeneration ||
+              generationRef.current !== expiredGeneration ||
+              !stage2AdapterRef.current.isCurrent(expiredGeneration)
+            ) return;
+            stage2PendingRef.current = undefined;
+            stage2AdapterRef.current.cancel(expiredGeneration);
+            setStage2Status("FAILED");
+            setStage2Error("地图标注没有回应；基础回放仍可继续。");
+          });
+          setStage2Status("FOCUSING");
+          if (generationRef.current !== generation || userTookOverRef.current || !stage2AdapterRef.current.isCurrent(generation)) return;
+          send(command);
+        } catch (error) {
+          setStage2Status("FAILED");
+          setStage2Error(error instanceof Error ? error.message.slice(0, 160) : "地图标注校验失败；基础回放仍可继续。");
+        }
+      }).catch((error) => {
+        if (generationRef.current !== generation || userTookOverRef.current) return;
+        setStage2Status("FAILED");
+        setStage2Error(error instanceof Error ? error.message.slice(0, 160) : "教练工具不可用；基础回放仍可继续。");
+      });
+    } catch (error) {
+      setStage2Status("FAILED");
+      setStage2Error(error instanceof Error ? error.message.slice(0, 160) : "当前 cue 校验失败；基础回放仍可继续。");
+    }
+  }, [activePlan, bundle, cue, cueRevealed, presentableNarration, replay?.demoContentHash, routeState, selected?.playerId, send, session, stage2Cue, stage2Mode]);
+
+  useEffect(() => {
+    if (
+      !stage3Mode ||
+      stage2Mode ||
+      !activePlan ||
+      !routeState ||
+      !session ||
+      !cue ||
+      !stage3Cue ||
+      !presentableNarration ||
+      !cueRevealed ||
+      userTookOverRef.current ||
+      session.phase !== "PAUSED_FOR_COACHING" ||
+      !session.outcome_completion ||
+      session.outcome_completion.status !== "COMPLETE" ||
+      stage3ControllerRef.current?.hasStartedCue(cue.id)
+    ) return;
+    if (!replay?.demoContentHash) {
+      if (!stage3BlockedCueRef.current.has(cue.id)) {
+        stage3BlockedCueRef.current.add(cue.id);
+        setStage3State({ status: "FAILED", cueId: cue.id, error: "当前 Demo 没有可验证内容哈希；基础回放仍可继续。" });
+      }
+      return;
+    }
+    const selectedIdentity = selected?.playerId ?? activePlan.player_id;
+    const identityToken = stableStage3IdentityToken(replay.demoContentHash, activePlan.id, routeState.routeFingerprint, selectedIdentity);
+    const candidate = cue.candidate_id
+      ? bundle?.candidate_set.candidates.find((item) => item.candidateId === cue.candidate_id)
+      : undefined;
+    const stage3Input: Stage3HostAdapterInput = {
+      plan: activePlan,
+      routeState,
+      cue: stage3Cue,
+      narration: presentableNarration,
+      outcomeGate: session.outcome_completion,
+      currentSessionPhase: "PAUSED_FOR_COACHING",
+      analysis: {
+        demo_id: bundle?.demo_id ?? activePlan.demo_id,
+        selected_steam_id: bundle?.selected_steam_id ?? selected?.playerId ?? activePlan.player_id,
+        metadata: bundle?.metadata,
+      },
+      demoContentHash: replay.demoContentHash,
+      selectedPlayerId: selected?.playerId ?? activePlan.player_id,
+      sessionId: `stage3-session-${identityToken}`,
+      runId: `stage3-run-${identityToken}`,
+      generation: generationRef.current,
+      tickRate: replay.tickRate,
+      evidence: {
+        candidate,
+        material: candidateMaterial,
+        outcomeImpact,
+        winProbabilityTimeline: bundle?.win_probability_timeline,
+      },
+    };
+    const lifecycleInput = stage3ControllerRef.current?.resumeInputFor(stage3Input) ?? stage3Input;
+    stage3InputRef.current = lifecycleInput;
+    stage3ControllerRef.current?.start(lifecycleInput);
+  }, [activePlan, bundle, candidateMaterial, cue, cueRevealed, outcomeImpact, presentableNarration, replay, routeState, selected?.playerId, session, stage2Mode, stage3Cue, stage3Mode]);
+
+  useEffect(() => {
+    if (!stage3Mode || !stage3IdentityContext || !activePlan || !session || !segment || userTookOverRef.current) return;
+    // Teaching segments are entered through START_CUE. All deterministic
+    // ordinary/skip/freeze segments get an observer event instead; no Policy
+    // call is attached to this lifecycle path.
+    if (segment.cue_ids.length > 0) return;
+    if (session.phase !== "PLAYING" && session.phase !== "SKIPPING") return;
+    const mode = segment.mode === "SKIP"
+      ? segment.reason_code === "FREEZE_TIME" ? "FREEZE" : "SKIP"
+      : segment.mode === "BRIEF" ? "BRIEF" : "OBSERVE";
+    stage3ControllerRef.current?.observeSegment(
+      stage3IdentityContext,
+      segment.id,
+      session.current_segment_index,
+      mode,
+      session.phase,
+    );
+  }, [activePlan, segment, session, stage3IdentityContext, stage3Mode]);
+
+  const requestStage3WrapUp = useCallback(async (agentResult: import("@cs-coach/coach-agent/client").CoachAgentResult, generation: number, runId: string) => {
+    if (!stage3Mode || !activePlan || generation !== generationRef.current || agentResult.identity.runId !== runId) return;
+    if (stage3WrapUpGenerationRef.current === generation) return;
+    stage3WrapUpGenerationRef.current = generation;
+    setStage3WrapUpStatus("LOADING");
+    setStage3WrapUpError(undefined);
+    const summaryInput = agentResult.state.sessionSummaryInput as SessionSummaryInput | null;
+    if (!summaryInput) {
+      const fallbackRequest = SessionWrapUpRequestSchema.parse({
+        schemaVersion: "coach-agent-session-wrap-up.v1",
+        themes: [],
+        completedCues: [],
+        limitations: ["Agent 没有返回可用的完成摘要。"],
+      });
+      setStage3WrapUpRequest(fallbackRequest);
+      setStage3WrapUpResult(deterministicSessionWrapUpResult(fallbackRequest, "MISSING_SESSION_SUMMARY"));
+      setStage3WrapUpStatus("FALLBACK");
+      setStage3WrapUpError("Agent 没有返回可用的完成摘要；已保留基础复盘结果。");
+      return;
+    }
+    try {
+      const projection = buildStage3WrapUpInput(activePlan, summaryInput, narrationByCue);
+      const request = buildSessionWrapUpRequest(projection);
+      setStage3WrapUpRequest(request);
+      const result = await requestSessionWrapUp(projection);
+      if (generation !== generationRef.current || userTookOverRef.current || result === undefined) return;
+      setStage3WrapUpResult(result);
+      setStage3WrapUpStatus(result.status === "SUCCEEDED" ? "READY" : "FALLBACK");
+      if (result.status !== "SUCCEEDED") setStage3WrapUpError("模型总结不可用，已使用确定性主题摘要。");
+    } catch (error) {
+      if (generation !== generationRef.current) return;
+      const fallbackRequest = SessionWrapUpRequestSchema.parse({
+        schemaVersion: "coach-agent-session-wrap-up.v1",
+        themes: [],
+        completedCues: [],
+        limitations: ["已完成 cue 的可呈现资料不足，未强行生成主题。"],
+      });
+      setStage3WrapUpRequest(fallbackRequest);
+      setStage3WrapUpResult(deterministicSessionWrapUpResult(fallbackRequest, "INVALID_PRESENTABLE_INPUT"));
+      setStage3WrapUpStatus("FALLBACK");
+      setStage3WrapUpError(error instanceof Error ? error.message.slice(0, 160) : "总结准备失败；基础复盘仍可完成。");
+    }
+  }, [activePlan, narrationByCue, stage3Mode]);
+
+  useEffect(() => {
+    if (!stage3Mode || !stage3IdentityContext || !session || userTookOverRef.current) return;
+    if (session.phase !== "WRAP_UP" && session.phase !== "COMPLETED") return;
+    void stage3ControllerRef.current?.completeSession(stage3IdentityContext).then((result) => {
+      if (result) void requestStage3WrapUp(result, generationRef.current, stage3IdentityContext.runId);
+    });
+  }, [requestStage3WrapUp, session, stage3IdentityContext, stage3Mode]);
 
   return (
     <main className="cs2d-host-shell">
@@ -872,9 +1331,47 @@ export function Cs2dPlaybackHost({
                   <p>{threeStageCoaching.improvement.text}</p>
                 </section>
               </div>
+              {stage2Mode && stage2Cue?.id === cue.id ? (
+                <section className={`cs2d-coach-card${stage2Status === "FAILED" || stage2Status === "CANCELLED" ? " cs2d-coach-card--muted" : ""}`} role="status" aria-live="polite">
+                  <small>
+                    {stage2Status === "FOCUSING" ? "正在标出关键站位" :
+                      stage2Status === "RESUMING" ? "正在准备下一段" :
+                        stage2Status === "COMPLETED" ? "关键站位已标出" :
+                          stage2Status === "FAILED" || stage2Status === "CANCELLED" ? "地图证据暂不可用" : "正在准备地图证据"}
+                  </small>
+                  <p>{stage2Error ?? (stage2Status === "COMPLETED" ? "证据已回到当前讲解卡；你可以继续下一段。" : "当前工具只绑定已验证的地图证据。")}</p>
+                </section>
+              ) : null}
+              {stage3Mode && stage3Cue?.id === cue.id ? (
+                <section className={`cs2d-coach-card${stage3State.status === "FAILED" || stage3State.status === "CANCELLED" || stage3State.status === "RECOVERY_REQUIRED" ? " cs2d-coach-card--muted" : ""}`} role="status" aria-live="polite">
+                  <small>
+                    {stage3State.status === "FOCUSING" && stage3State.tool
+                      ? stage3ToolStatusLabel(stage3State.tool)
+                      : stage3State.status === "RESUMING"
+                        ? "正在准备下一段"
+                        : stage3State.status === "COMPLETED"
+                          ? "教学工具已完成"
+                          : stage3State.status === "RECOVERY_REQUIRED"
+                            ? "需要恢复工具状态"
+                            : stage3State.status === "FAILED" || stage3State.status === "CANCELLED"
+                              ? "教学工具暂不可用"
+                              : "准备下一段"}
+                  </small>
+                  <p>{stage3State.error ?? (stage3State.status === "COMPLETED" ? "证据已回到当前讲解卡；你可以继续下一段。" : "工具只绑定当前 cue 已验证的证据。")}</p>
+                  {!stage3State.error && stage3State.presentation?.tool === "SHOW_WIN_RATE_IMPACT" ? (
+                    <p>{Math.round(stage3State.presentation.beforeProbability * 100)}% → {Math.round(stage3State.presentation.afterProbability * 100)}% · {stage3State.presentation.percentagePoints.toFixed(1)} 个百分点 · {stage3State.presentation.economyClass} · 相关性不等于单一行为因果</p>
+                  ) : null}
+                  {!stage3State.error && stage3State.presentation?.tool === "SHOW_ECONOMY_CONTEXT" ? (
+                    <p>{stage3State.presentation.economyClass} · {stage3State.presentation.focusLabel}</p>
+                  ) : null}
+                  {stage3State.status === "RECOVERY_REQUIRED" && stage3InputRef.current ? (
+                    <button type="button" onClick={() => stage3InputRef.current && stage3ControllerRef.current?.recover(stage3InputRef.current)}>恢复工具状态</button>
+                  ) : null}
+                </section>
+              ) : null}
               <div className="cs2d-coach-result-actions">
-                <button type="button" onClick={() => transition({ type: "REPLAY_OUTCOME" })}>再看一遍</button>
-                <button className="cs2d-coach-primary" type="button" onClick={() => transition({ type: "ADVANCE_SEGMENT" })}>继续下一段</button>
+                <button type="button" disabled={agentToolBusy} onClick={() => transition({ type: "REPLAY_OUTCOME" })}>再看一遍</button>
+                <button className="cs2d-coach-primary" type="button" disabled={agentToolBusy} onClick={() => transition({ type: "ADVANCE_SEGMENT" })}>继续下一段</button>
               </div>
             </section>
           ) : null}
@@ -907,7 +1404,37 @@ export function Cs2dPlaybackHost({
             </section>
           ) : null}
 
-          {session && !userTookOver && ["WRAP_UP", "COMPLETED"].includes(session.phase) ? (
+          {session && !userTookOver && stage3Mode && ["WRAP_UP", "COMPLETED"].includes(session.phase) ? (
+            <section className="cs2d-coach-summary" aria-live="polite">
+              <small>全场总结 · {stage3WrapUpStatus === "LOADING" ? "准备中" : stage3WrapUpStatus === "ERROR" ? "需要恢复" : stage3WrapUpStatus === "FALLBACK" ? "确定性摘要" : "已就绪"}</small>
+              {stage3WrapUpStatus === "LOADING" ? <p>正在整理已完成且可呈现的讲解点。</p> : null}
+              {stage3WrapUpError ? <p>{stage3WrapUpError}</p> : null}
+              {(stage3WrapUpResult?.bundle.themes.length ?? 0) > 0 ? (
+                <div>
+                  {stage3WrapUpResult?.bundle.themes.slice(0, 3).map((theme, index) => {
+                    const requestTheme = stage3WrapUpRequest?.themes.find((candidateTheme) => candidateTheme.focus === theme.focus);
+                    const roundLabels = [...new Set((requestTheme?.cueRefs ?? []).map((cueId) => {
+                      const referencedCue = activePlan?.cues.find((candidateCue) => candidateCue.id === cueId);
+                      const referencedSegment = referencedCue ? activePlan?.segments.find((candidateSegment) => candidateSegment.id === referencedCue.segment_id) : undefined;
+                      return referencedSegment?.round_number ? `第 ${referencedSegment.round_number} 回合` : "准备阶段";
+                    }))];
+                    return (
+                      <article key={`${theme.focus}-${index}`} className="cs2d-coach-card">
+                        <small>主题 {index + 1} · {roundLabels.join("、") || "已完成讲解点"}</small>
+                        <p>{theme.summary.text}</p>
+                        <p><b>训练建议：</b>{theme.trainingAdvice.text}</p>
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : stage3WrapUpStatus !== "LOADING" ? (
+                <p>本场没有足够重复证据，不强行定义长期习惯。</p>
+              ) : null}
+              {session.phase === "WRAP_UP" ? <button className="cs2d-coach-primary" type="button" onClick={() => transition({ type: "COMPLETE_SESSION" })}>完成本次复盘</button> : null}
+            </section>
+          ) : null}
+
+          {session && !userTookOver && !stage3Mode && ["WRAP_UP", "COMPLETED"].includes(session.phase) ? (
             <section className="cs2d-coach-summary">
               <small>全场总结</small>
               <h3>{summary?.habit_title ?? "本场讲解已全部看完"}</h3>

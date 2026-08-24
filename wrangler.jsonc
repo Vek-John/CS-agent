@@ -5,6 +5,17 @@
   "compatibility_date": "2026-08-13",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [
+      { "name": "COACH_AGENT", "class_name": "CoachAgentDurableObject" }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "coach-agent-v1",
+      "new_sqlite_classes": ["CoachAgentDurableObject"]
+    }
+  ],
   "vars": {
     "DEPLOY_TARGET": "cloudflare"
   },

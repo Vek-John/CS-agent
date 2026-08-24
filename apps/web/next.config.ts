@@ -13,7 +13,8 @@ const nextConfig: NextConfig = {
     "@cs-coach/map-semantics",
     "@cs-coach/observation",
     "@cs-coach/review-planner",
-    "@cs-coach/session"
+    "@cs-coach/session",
+    "@cs-coach/coach-agent"
   ],
   async headers() {
     return [{ source: "/:path*", headers: crossOriginIsolationHeaders }];

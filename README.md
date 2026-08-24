@@ -83,6 +83,16 @@ Replay / MatchTimeline / Win-rate timeline
 - WebGPU FP16 batch 16 是当前优先推理路径，只有明确推理失败才回退 INT8 WASM；
 - 模型、DeepSeek 或部分字段不可用时，基础回放和可追溯的确定性回退仍可继续。
 
+### 受约束 Coach Agent
+
+- 在完整结果播放、Outcome Gate 完成且三段式讲解可见后，Agent 才决定是否增加一次视觉演示；
+- 只从当前 cue 已绑定的合法 capability 中选择，不能生成 tick、坐标、玩家 ID 或修改路线；
+- 当前支持 0.5x 慢放、地图证据聚焦、已发生投掷物轨迹、负向胜率影响和经济语境；没有额外教学价值时直接结束 cue；
+- 每 cue 默认最多一个成功工具，失败后最多一次合法替代；自由跳转会暂停 Agent，返回路线后恢复；
+- 全场结束只从已完成 cue 聚合最多三个重复主题，并保留 cue/evidence 引用。
+
+当前发布通过 <http://localhost:3000/?coachAgent=stage3> 显式启用整场 Agent；无参数入口保留为基础回放回退，`?coachAgent=stage2` 只用于单 cue 回归。
+
 ### 讲解风格
 
 讲解刻意使用 CS 玩家能听懂的报点和术语，例如“先把准星摆好”“小身位 peek”“等补枪”“没头甲别和警察硬磕”，而不是只输出抽象的分析报告。完整讲解结构为：
@@ -111,6 +121,8 @@ pnpm install
 pnpm cs2d:setup
 pnpm dev
 ```
+
+必须通过 `pnpm dev` 启动，项目才会显式读取 `.local-data/deepseek.env`。直接运行 `next dev`/`next start` 不会自动读取这个非标准私密路径，除非调用者自己把同名变量注入进程环境。
 
 打开 <http://localhost:3000>，在回放区域选择本地 `.dem`。`pnpm dev` 会同时启动：
 
@@ -156,7 +168,7 @@ pnpm cloudflare:assets
 pnpm cloudflare:deploy
 ```
 
-生产 Worker 会把 Next 教练壳、`/api/coaching/narrate` 和 `/cs2d/` Viewer 放在同一部署中。推送 `main` 也会触发仓库现有的 Cloudflare Actions workflow；如果只想验证构建，请使用 `pnpm cloudflare:build`，不要执行 deploy。
+生产 Worker 会把 Next 教练壳、Director/Narrator/Coach Policy/Wrap-up API、每 session 一个 Coach Agent Durable Object 和 `/cs2d/` Viewer 放在同一部署中。推送 `main` 也会触发仓库现有的 Cloudflare Actions workflow；如果只想验证构建，请使用 `pnpm cloudflare:build`，不要执行 deploy。
 
 ## 项目结构
 
@@ -173,6 +185,7 @@ libs/
   cs2d-analysis-adapter/       Replay → Timeline / Observation / Plan
   review-planner/              候选、Director seam、PlanCompiler
   session/                     播放状态机、结果门禁和整场总结
+  coach-agent/                 LangGraph runtime、capability、checkpoint 与 Agent Eval
   observation/                 玩家观察状态与 claim 白名单
   cs-net-winrate/              胜率特征与 Worker runtime
   map-semantics/               Mirage 点位和地图语义
@@ -207,7 +220,8 @@ pnpm cloudflare:assets
 - cs2d Frame 通常约 8 Hz，状态不是逐 tick 无损；投掷物时间也有采样精度限制；
 - 当前缺少可靠的逐次 HurtEvent、ShotEvent shooter、完整声学遮挡、队内语音和全部战术上下文；
 - 目前的候选主要围绕玩家死亡、接触、生命变化、持包和道具时机，还没有职业样本检索、复杂补枪模型或自由追问；
-- 选择玩家后若分析失败，需要重新载入 Demo 重试，会话进度尚未持久化；
+- localhost Agent 使用进程内 MemorySaver，刷新后不能恢复；Cloudflare 生产使用 Durable Object checkpoint，但仍必须重新载入相同 Demo 并通过 demo/route hash 校验后才能恢复；
+- Stage 3 当前通过 `?coachAgent=stage3` 显式启用，默认无参数入口暂时保留为发布回退；
 - WebGPU/FP16 性能依浏览器、GPU 和 Worker 能力而异，失败时才回退 WASM，不把超时伪装成成功结果。
 
 ## 开源与第三方许可

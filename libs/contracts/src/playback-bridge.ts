@@ -23,6 +23,10 @@ export interface ReplayReadyEvent {
   rounds: readonly PlaybackRoundSummary[];
   players: readonly PlaybackPlayerSummary[];
   freezeSkipped: true;
+  /** Present only for a raw .dem parsed by the parser Worker. */
+  demoContentHash?: string;
+  /** Worker-side SHA-256 latency; diagnostics only, never player-facing. */
+  hashLatencyMs?: number;
 }
 export interface PlayerSelectedEvent {
   type: "PLAYER_SELECTED";
@@ -133,6 +137,64 @@ export interface AnalysisTelemetryEvent {
   selectedPlayerId: string;
   telemetry: AnalysisTelemetry;
 }
+export interface TeachingToolAckEvent {
+  type: "TEACHING_TOOL_ACK";
+  schemaVersion: "cs2d-teaching-tool-ack.v1";
+  tool: "REPLAY_CUE_SLOW" | "FOCUS_MAP_EVIDENCE" | "SHOW_GRENADE_TRACE" | "SHOW_WIN_RATE_IMPACT" | "SHOW_ECONOMY_CONTEXT";
+  callId: string;
+  runId: string;
+  generation: number;
+  cueId: string;
+  annotationRef?: string;
+  status: "SUCCEEDED" | "REJECTED" | "FAILED";
+  observationCode: "CUE_PLAYED" | "EVIDENCE_SHOWN" | "UNAVAILABLE" | "NO_CHANGE";
+  completed: boolean;
+  limitations: readonly string[];
+}
+export type TeachingToolCommandArgs =
+  | {
+      tool: "REPLAY_CUE_SLOW";
+      startCanonicalTick: number;
+      decisionCanonicalTick: number;
+      outcomeEndCanonicalTick: number;
+      speed: 0.5;
+    }
+  | {
+      tool: "FOCUS_MAP_EVIDENCE";
+      annotationRef: string;
+      focusWorld: { x: number; y: number };
+      label: string;
+    }
+  | {
+      tool: "SHOW_GRENADE_TRACE";
+      trajectoryRefs: readonly string[];
+      landingRefs: readonly string[];
+    }
+  | {
+      tool: "SHOW_WIN_RATE_IMPACT";
+      measurementRef: string;
+      beforeProbability: number;
+      afterProbability: number;
+      percentagePoints: number;
+      economyClass: "PISTOL" | "ECO" | "FORCE" | "FULL" | "UNKNOWN";
+      correlationText: string;
+    }
+  | {
+      tool: "SHOW_ECONOMY_CONTEXT";
+      economyRef: string;
+      economyClass: "PISTOL" | "ECO" | "FORCE" | "FULL" | "UNKNOWN";
+      focusLabel: string;
+    };
+export interface TeachingToolCommand {
+  type: "teachingTool";
+  schemaVersion: "cs2d-teaching-tool-command.v2";
+  tool: TeachingToolCommandArgs["tool"];
+  callId: string;
+  runId: string;
+  generation: number;
+  cueId: string;
+  args: TeachingToolCommandArgs;
+}
 export type PlaybackBridgeEvent =
   | ReplayReadyEvent
   | PlayerSelectedEvent
@@ -140,7 +202,8 @@ export type PlaybackBridgeEvent =
   | AnalysisReadyEvent
   | AnalysisProgressEvent
   | AnalysisTelemetryEvent
-  | AnalysisFailedEvent;
+  | AnalysisFailedEvent
+  | TeachingToolAckEvent;
 export type PlaybackCameraMode = "full" | "target";
 
 export type PlaybackCommand =
@@ -149,7 +212,20 @@ export type PlaybackCommand =
   | { type: "seekCanonicalTick"; canonicalTick: number }
   | { type: "selectRound"; roundIndex: number }
   | { type: "setSpeed"; speed: number }
-  | { type: "setCamera"; mode: PlaybackCameraMode };
+  | { type: "setCamera"; mode: PlaybackCameraMode }
+  | TeachingToolCommand
+  | {
+      type: "focusMapEvidence";
+      schemaVersion: "cs2d-teaching-tool-command.v1";
+      tool: "FOCUS_MAP_EVIDENCE";
+      callId: string;
+      runId: string;
+      generation: number;
+      cueId: string;
+      annotationRef: string;
+      focusWorld: { x: number; y: number };
+      label: string;
+    };
 
 export interface PlaybackEventEnvelope {
   channel: typeof PLAYBACK_BRIDGE_CHANNEL;
@@ -174,6 +250,9 @@ function safeIndex(value: unknown): value is number {
 }
 function nonEmpty(value: unknown): value is string {
   return typeof value === "string" && Boolean(value.trim());
+}
+function sha256Digest(value: unknown): value is string {
+  return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
 }
 function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
   const actual = Object.keys(value).sort();
@@ -223,12 +302,14 @@ function isRound(value: unknown): value is PlaybackRoundSummary {
 function isEvent(value: unknown): value is PlaybackBridgeEvent {
   if (!isRecord(value) || typeof value.type !== "string") return false;
   if (value.type === "REPLAY_READY") {
-    if (!exactKeys(value, ["type", "schemaVersion", "map", "tickRate", "startCanonicalTick", "endCanonicalTick", "roundCount", "rounds", "players", "freezeSkipped"])) return false;
+    const baseKeys = ["type", "schemaVersion", "map", "tickRate", "startCanonicalTick", "endCanonicalTick", "roundCount", "rounds", "players", "freezeSkipped"];
+    const hasHash = Object.prototype.hasOwnProperty.call(value, "demoContentHash") || Object.prototype.hasOwnProperty.call(value, "hashLatencyMs");
+    if (!exactKeys(value, hasHash ? [...baseKeys, "demoContentHash", "hashLatencyMs"] : baseKeys)) return false;
     return value.schemaVersion === "cs2d-replay-ready.v1" && nonEmpty(value.map) && finite(value.tickRate) && value.tickRate > 0 &&
       finite(value.startCanonicalTick) && finite(value.endCanonicalTick) && value.endCanonicalTick >= value.startCanonicalTick &&
       safeIndex(value.roundCount) && Array.isArray(value.rounds) && value.rounds.length === value.roundCount && value.rounds.every(isRound) &&
       Array.isArray(value.players) && value.players.length > 0 && value.players.length <= 64 && value.players.every(isPlayer) &&
-      value.freezeSkipped === true;
+      value.freezeSkipped === true && (!hasHash || (sha256Digest(value.demoContentHash) && finite(value.hashLatencyMs) && value.hashLatencyMs >= 0));
   }
   if (value.type === "PLAYER_SELECTED") {
     return exactKeys(value, ["type", "playerId", "displayName", "side", "selectionIndex"]) &&
@@ -259,6 +340,20 @@ function isEvent(value: unknown): value is PlaybackBridgeEvent {
     return exactKeys(value, ["type", "schemaVersion", "selectedPlayerId", "telemetry"]) &&
       value.schemaVersion === "cs2d-analysis-telemetry.v1" && nonEmpty(value.selectedPlayerId) && isTelemetry(value.telemetry);
   }
+  if (value.type === "TEACHING_TOOL_ACK") {
+    const isFocus = value.tool === "FOCUS_MAP_EVIDENCE";
+    return exactKeys(value, isFocus
+      ? ["type", "schemaVersion", "tool", "callId", "runId", "generation", "cueId", "annotationRef", "status", "observationCode", "completed", "limitations"]
+      : ["type", "schemaVersion", "tool", "callId", "runId", "generation", "cueId", "status", "observationCode", "completed", "limitations"]) &&
+      value.schemaVersion === "cs2d-teaching-tool-ack.v1" &&
+      (value.tool === "REPLAY_CUE_SLOW" || value.tool === "FOCUS_MAP_EVIDENCE" || value.tool === "SHOW_GRENADE_TRACE" || value.tool === "SHOW_WIN_RATE_IMPACT" || value.tool === "SHOW_ECONOMY_CONTEXT") &&
+      nonEmpty(value.callId) && nonEmpty(value.runId) && safeIndex(value.generation) && nonEmpty(value.cueId) &&
+      (!isFocus || nonEmpty(value.annotationRef)) &&
+      (value.status === "SUCCEEDED" || value.status === "REJECTED" || value.status === "FAILED") &&
+      (value.observationCode === "CUE_PLAYED" || value.observationCode === "EVIDENCE_SHOWN" || value.observationCode === "UNAVAILABLE" || value.observationCode === "NO_CHANGE") &&
+      typeof value.completed === "boolean" && Array.isArray(value.limitations) && value.limitations.length <= 8 &&
+      value.limitations.every((item) => typeof item === "string" && item.trim().length > 0 && item.length <= 200);
+  }
   return false;
 }
 
@@ -271,6 +366,51 @@ export function isPlaybackCommandEnvelope(value: unknown): value is PlaybackComm
   if (payload.type === "selectRound") return exactKeys(payload, ["type", "roundIndex"]) && safeIndex(payload.roundIndex);
   if (payload.type === "setSpeed") return exactKeys(payload, ["type", "speed"]) && finite(payload.speed) && payload.speed > 0 && payload.speed <= 16;
   if (payload.type === "setCamera") return exactKeys(payload, ["type", "mode"]) && (payload.mode === "full" || payload.mode === "target");
+  if (payload.type === "focusMapEvidence") {
+    const point = payload.focusWorld;
+    return exactKeys(payload, ["type", "schemaVersion", "tool", "callId", "runId", "generation", "cueId", "annotationRef", "focusWorld", "label"]) &&
+      payload.schemaVersion === "cs2d-teaching-tool-command.v1" && payload.tool === "FOCUS_MAP_EVIDENCE" &&
+      nonEmpty(payload.callId) && nonEmpty(payload.runId) && safeIndex(payload.generation) && nonEmpty(payload.cueId) && nonEmpty(payload.annotationRef) &&
+      isRecord(point) && exactKeys(point, ["x", "y"]) && finite(point.x) && finite(point.y) &&
+      typeof payload.label === "string" && payload.label.length <= 160;
+  }
+  if (payload.type === "teachingTool") {
+    const args = payload.args;
+    if (!exactKeys(payload, ["type", "schemaVersion", "tool", "callId", "runId", "generation", "cueId", "args"]) ||
+        payload.schemaVersion !== "cs2d-teaching-tool-command.v2" ||
+        !nonEmpty(payload.callId) || !nonEmpty(payload.runId) || !safeIndex(payload.generation) || !nonEmpty(payload.cueId) ||
+        !isRecord(args) || payload.tool !== args.tool) return false;
+    if (args.tool === "REPLAY_CUE_SLOW") {
+      return exactKeys(args, ["tool", "startCanonicalTick", "decisionCanonicalTick", "outcomeEndCanonicalTick", "speed"]) &&
+        finite(args.startCanonicalTick) && finite(args.decisionCanonicalTick) && finite(args.outcomeEndCanonicalTick) &&
+        args.startCanonicalTick <= args.decisionCanonicalTick && args.decisionCanonicalTick <= args.outcomeEndCanonicalTick && args.speed === 0.5;
+    }
+    if (args.tool === "FOCUS_MAP_EVIDENCE") {
+      const point = args.focusWorld;
+      return exactKeys(args, ["tool", "annotationRef", "focusWorld", "label"]) && nonEmpty(args.annotationRef) &&
+        isRecord(point) && exactKeys(point, ["x", "y"]) && finite(point.x) && finite(point.y) &&
+        typeof args.label === "string" && args.label.length <= 160;
+    }
+    if (args.tool === "SHOW_GRENADE_TRACE") {
+      return exactKeys(args, ["tool", "trajectoryRefs", "landingRefs"]) &&
+        Array.isArray(args.trajectoryRefs) && args.trajectoryRefs.length > 0 && args.trajectoryRefs.length <= 16 &&
+        Array.isArray(args.landingRefs) && args.landingRefs.length > 0 && args.landingRefs.length <= 16 &&
+        args.trajectoryRefs.every((ref) => nonEmpty(ref) && ref.length <= 160) && args.landingRefs.every((ref) => nonEmpty(ref) && ref.length <= 160);
+    }
+    if (args.tool === "SHOW_WIN_RATE_IMPACT") {
+      return exactKeys(args, ["tool", "measurementRef", "beforeProbability", "afterProbability", "percentagePoints", "economyClass", "correlationText"]) &&
+        nonEmpty(args.measurementRef) && finite(args.beforeProbability) && args.beforeProbability >= 0 && args.beforeProbability <= 1 &&
+        finite(args.afterProbability) && args.afterProbability >= 0 && args.afterProbability <= 1 && finite(args.percentagePoints) &&
+        (args.economyClass === "PISTOL" || args.economyClass === "ECO" || args.economyClass === "FORCE" || args.economyClass === "FULL" || args.economyClass === "UNKNOWN") &&
+        typeof args.correlationText === "string" && args.correlationText.length <= 200;
+    }
+    if (args.tool === "SHOW_ECONOMY_CONTEXT") {
+      return exactKeys(args, ["tool", "economyRef", "economyClass", "focusLabel"]) && nonEmpty(args.economyRef) &&
+        (args.economyClass === "PISTOL" || args.economyClass === "ECO" || args.economyClass === "FORCE" || args.economyClass === "FULL" || args.economyClass === "UNKNOWN") &&
+        typeof args.focusLabel === "string" && args.focusLabel.length <= 160;
+    }
+    return false;
+  }
   return false;
 }
 

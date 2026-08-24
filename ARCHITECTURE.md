@@ -1,7 +1,7 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：3.4.2
+> 版本：3.5.3
 > 最后更新：2026-08-24
 > 适用范围：Web 2D 到桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
@@ -28,7 +28,7 @@
 
 长期契约包括：事实模型、观察信息边界、教学决策与讲解的职责、`ReviewPlan`/`CoachingSession`/播放器协议、状态机、版本化和验证规则。实现可以替换，只要继续满足这些契约。
 
-以下内容不是长期架构事实，只能出现在“当前实现快照”、ADR 或代码文档中：具体上游 commit、localhost 端口、CSS 尺寸/颜色/镜头倍率、当前测试 Demo 的数量，以及迁移期间保留的旧 renderer 或某次迁移的规则实现。FastAPI、异步 Worker、PostgreSQL、Redis、对象存储、Parquet/DuckDB、SSE、LangGraph Checkpoint、桌面适配器和本地记忆属于长期运行基线；变化时必须通过架构变更或 ADR 处理，不能因为某个当前切片尚未接入就删除。LangGraph 是 CoachingRuntime 的长期编排边界，但不是 Parser、Renderer 或事实存储的替代品。
+以下内容不是长期架构事实，只能出现在“当前实现快照”、ADR 或代码文档中：具体上游 commit、localhost 端口、CSS 尺寸/颜色/镜头倍率、当前测试 Demo 的数量，以及迁移期间保留的旧 renderer 或某次迁移的规则实现。模块化单体、浏览器 Worker、内容寻址事实、可恢复的 LangGraph Checkpoint、桌面适配器和本地记忆属于长期能力边界；具体数据库、队列、对象存储和部署产品只有在确实接入并经 ADR 接受后才是实现基线。Coach Agent 的当前 checkpoint 基线是每 session 一个 Cloudflare Durable Object，不依赖 PostgreSQL 或 Redis。LangGraph 是 CoachingRuntime 的长期编排边界，但不是 Parser、Renderer、`CoachingSession` reducer 或事实存储的替代品。
 
 ### 0.3 架构审查问题
 
@@ -55,8 +55,9 @@ Demo
   → PlanCompiler 生成并校验 ReviewPlan
   → Narrator 根据分离的 CoachingPackage 与 OutcomePackage 构建密封讲解
   → 播放器执行＋SessionOrchestrator 主持
+  → Coach Agent 在完成的 cue 内从合法 TeachingCapability 选择至多一个附加演示
   → 用户追问、回看与交互
-  → 会后总结
+  → SessionTheme 聚合与有引用的会后总结
   → 长期个人习惯记忆（后续）
 ```
 
@@ -129,6 +130,14 @@ Parser、SceneIndex、ObservationBuilder、CandidateGenerator 和 PlanCompiler �
 
 渐进式就绪不降低事实门槛：CandidateSet 未完整索引时不能调用 Director；ReviewPlan 未经 PlanCompiler 校验和冻结时不能启动。后台只允许为未消费 cue 补充 narration，不得重排、增删或改写 segment、cue、canonical tick、主要教学重点和引用集合；用户开始观看的 cue 立即冻结。缓冲追上准备头时停在自然 segment 边界，进入显式 `BUFFERING`，优先准备下一个 cue 后自动恢复。未知或失败区间不得被当成低价值 `SKIP`。
 
+### 2.12 Coach Agent 的受限自主性
+
+Coach Agent 只在 `ReviewPlan` 已冻结、完整 outcome 已播放、`OutcomeCompletionGate=COMPLETE` 且 `NarrationBundle` 已可呈现后决定“是否需要一个额外视觉演示，以及选择哪一个”。它不能生成或修改 candidate、segment、顺序、canonical tick、主要教学重点、NarrationBundle、事实或引用，也不能直接写 React state、播放器 tick 或 `CoachingSession.phase`。
+
+确定性的 `CapabilityBuilder` 根据当前 cue 与合法证据预先绑定 `TeachingCapability` 的全部参数；Policy 只能返回已有 `capabilityId` 或 `FINISH_CUE`。普通回合、`FREEZE_TIME`、确定性 `SKIP`、播放器自然推进和只有规则能唯一决定的动作不调用 Policy LLM。每个 cue 默认最多一个成功 `TeachingMove`；工具失败后最多尝试一个不同的合法替代，预算耗尽后确定性结束 cue。
+
+Graph 通过 `AgentEffect` 请求 Host 执行外部动作。Host 必须重新校验当前 session/cue/gate/播放事实、按稳定 `callId` 去重并把结构化 `ToolObservation` 返回 Graph；Graph 不直接操作 iframe。播放桥丢失、用户自由跳转或取消时停在自然边界，旧 ToolResult、Narration 或 READY 事件不得继续推进已经失效的 run。Agent 失败永远不能阻断基础回放。
+
 ## 3. 系统上下文与演进
 
 ```mermaid
@@ -138,13 +147,14 @@ flowchart TB
 
     Web --> API["API / 会话控制面"]
     Desktop --> API
-    Web --> Store[("对象存储")]
-    Desktop --> Store
+    Web -. 未来跨设备/批处理 .-> Store[("可选对象存储")]
+    Desktop -.-> Store
 
-    API --> DB[("PostgreSQL")]
-    API --> Runtime["Coaching Runtime\n模块化单体内的编排"]
+    API -. 未来元数据/语料 .-> DB[("可选 PostgreSQL")]
+    API --> Runtime["Coach Agent Runtime\nTypeScript StateGraph"]
     Runtime --> Director["Teaching Director\n教学点选择"]
     Runtime --> Narrator["Narrator\n结构化讲解生成"]
+    Runtime --> Capability["CapabilityBuilder\n绑定参数与证据"]
     Runtime --> Tools["强类型领域工具"]
     Tools --> Domain["时间轴 / 场景 / 观察 / 计划引擎"]
     Tools --> Playback["SessionOrchestrator\n播放命令安全内核"]
@@ -152,9 +162,11 @@ flowchart TB
     Playback --> Desktop
     Director --> LLM["LLM Adapter"]
     Narrator --> LLM
-    Runtime --> Checkpoint[("LangGraph PostgreSQL Checkpoint")]
-    API --> Queue[("Redis 队列")]
-    Queue --> Worker["分析 Worker"]
+    Runtime --> Checkpoint[("每 session 一个 Durable Object\n紧凑 LangGraph Checkpoint")]
+    Runtime --> Effect["AgentEffect\nToolRequest / ToolResult"]
+    Effect --> Playback
+    API -. 实测需要后 .-> Queue[("可选任务队列")]
+    Queue -.-> Worker["分析 Worker"]
     Worker --> Parser["Demo Parser Adapter"]
     Worker --> Domain
     Worker --> Store
@@ -162,7 +174,7 @@ flowchart TB
 
     Corpus["职业 Demo 语料管线"] --> Parser
     Corpus --> Domain
-    Corpus --> DB
+    Corpus -.-> DB
 
     Desktop --> LocalMemory[("本地加密记忆库")]
     Desktop --> Game["CS2 Demo 播放"]
@@ -233,10 +245,10 @@ flowchart LR
 
 ### 4.1 运行单元
 
-1. `web`：上传、在线 2D 回放、教练侧栏、问答和总结；
-2. `api`：资源、权限、会话控制、问答和 SSE；
-3. `coaching-runtime`：运行于模块化单体内的 LangGraph CoachingRuntime，编排 Teaching Director、Narrator Adapter、PlanCompiler 和 SessionOrchestrator；
-4. `worker`：解析、场景索引、Observation、Director 调度、计划校验、职业检索和讲解准备；
+1. `web`：Next Host、在线 2D 回放、教练侧栏、受控工具执行、问答和总结；
+2. `api`：同源 Provider 路由与紧凑 Agent dispatch；Cloudflare custom Worker 在 Agent 路径前置路由，其余请求交给模块化单体；
+3. `coach-agent`：`@langchain/langgraph` TypeScript `StateGraph`，生产运行于每 session 一个 Cloudflare Durable Object；localhost 只用进程内 MemorySaver；
+4. `worker`：cs2d iframe 内的 Parser/胜率 Worker 负责单次解析、结构化 Replay、场景索引、Observation 和本地模型推理；raw Replay 不跨 iframe；
 5. `desktop`（后续）：本地文件、CS2 播放控制、悬浮教练窗口和本地记忆；
 6. `corpus-cli`：职业语料导入与离线批处理，复用领域库。
 
@@ -246,14 +258,14 @@ flowchart LR
 |---|---|---|
 | Web | Next.js、React、TypeScript | 上传、会话 UI 和总结 |
 | 2D 回放 | 固定版本 `zenojunior/cs2d` Vue/Canvas renderer | 浏览器内真实雷达、多楼层、10 人 HUD、投掷物、事件与时间轴；主仓库保存 patch，不复制整仓源码 |
-| API | Python 3.12、FastAPI、Pydantic v2 | 与数据分析生态一致 |
-| 教练运行时 | LangGraph Python `StateGraph`＋确定性领域节点 | 编排 Director、Narrator、问答、揭示、总结和恢复；不取代领域服务或播放器 |
-| Graph Checkpoint | LangGraph PostgreSQL Checkpointer | 只保存可恢复的编排状态和领域 ID，不保存 raw Replay 或事实主数据；存储实现可替换但不改变恢复语义 |
-| LLM 接口 | Provider-neutral JSON/Schema Adapter | Director 与 Narrator 是不同调用和不同数据包，可使用同一模型 |
+| API | Next.js Route Handler＋Cloudflare custom Worker | DeepSeek Secret 只在同源服务端路由；浏览器只发送白名单 JSON 包与紧凑 Agent 事件 |
+| 教练运行时 | `@langchain/langgraph` TypeScript `StateGraph`＋确定性领域节点 | Graph API 显式节点/条件边；不用 ReAct、多 Agent 模板或 Provider 绑定领域化 |
+| Graph Checkpoint | Cloudflare Durable Object storage 自定义 `BaseCheckpointSaver` | 每 session 一个对象；只保存紧凑 Agent state，默认保留最近 20 个 checkpoint；localhost MemorySaver 不承诺刷新恢复 |
+| LLM 接口 | Provider-neutral JSON/Schema Adapter | Director、Narrator 与 Coach Policy 是不同调用和不同白名单数据包，可使用同一 Provider |
 | LLM 可观测性 | LangSmith（可选） | 只用于调用追踪、成本和质量观测，不成为运行时依赖 |
-| Worker | Dramatiq + Redis | 异步、重试和资源隔离 |
+| Worker | 浏览器 Web Worker/WASM；服务端异步任务按实测需要后置 | Parser、Replay 和本地胜率模型留在数据所有者页面，不为 Agent 新增 Redis 队列 |
 | Demo 解析 | 固定版本 `zenojunior/cs2d` Worker/WASM | `.dem` 在浏览器内解析一次；结构化 Replay 通过内部 Adapter 生成教练领域对象 |
-| 数据库 | PostgreSQL 16 + pgvector | 元数据、会话、职业检索 |
+| 数据库 | Coach Agent 首版不要求数据库 | 职业语料、跨用户元数据等未来能力可独立接入，但不能成为基础回放或 Agent checkpoint 前置条件 |
 | 轨迹文件 | Parquet + PyArrow / DuckDB | 不把全量 tick 塞入关系库 |
 | 对象存储 | S3 兼容接口 | 本地 MinIO，生产可替换 |
 | 实时状态 | REST + SSE | 控制请求走 REST，进度和会话事件走 SSE |
@@ -261,9 +273,9 @@ flowchart LR
 | 桌面端 | Tauri（候选，需 ADR 确认） | 小体积、系统窗口与 Rust 能力 |
 | 本地记忆 | SQLite + OS Keychain 派生密钥 | 可迁移、可导出、可删除 |
 
-整体采用“模块化单体＋异步分析流水线＋LangGraph CoachingRuntime＋Teaching Director/Narrator＋确定性播放器控制”。LangGraph 编排有状态的教学会话；模型只产生受限结构化提案和讲解，SessionOrchestrator、PlanCompiler 与领域服务负责事实、时间和执行。
+整体采用“模块化单体＋浏览器 Worker＋Durable Object Coach Agent＋Teaching Director/Narrator＋确定性播放器控制”。LangGraph 编排有状态的教学动作选择与恢复；模型只产生受限结构化提案，`CoachingSession` reducer、PlanCompiler 与领域服务负责事实、时间和执行。
 
-Worker 使用至少三档队列优先级：`interactive` 处理 frozen route 上即将观看的 cue，`normal` 处理后续候选讲解，`batch` 处理职业语料和非紧急重算。用户会话优先维持下一个 cue 的 narration 水位；水位下降时只提升未就绪候选，不为普通回合启动深度 LLM 任务，也不抢占已经开始的幂等任务。
+若后续实测需要服务端异步调度，优先级语义固定为：`interactive` 处理 frozen route 上即将观看的 cue，`normal` 处理后续候选讲解，`batch` 处理职业语料和非紧急重算；实现不预设 Redis。用户会话优先维持下一个 cue 的 narration 水位；水位下降时只提升未就绪候选，不为普通回合启动深度 LLM 任务，也不抢占已经开始的幂等任务。
 
 不把微服务、Kubernetes、独立向量数据库、全量 tick 入关系库、LLM 任意 SQL/数据库权限或端到端模型控制产品作为架构前提。LangGraph 是当前 CoachingRuntime 的编排基线，但 Graph 外的领域模块不依赖它；只有测量到瓶颈或出现明确能力收益时，才在不改变领域契约的前提下替换实现。
 
@@ -279,9 +291,13 @@ Host 只保留一套教练控制和一条整场时间轴；用户可自由接管
 
 当前部署可以使用 DeepSeek 作为 LLM Provider；这是实现选择，不改变 Director 与 Narrator 的两个职责和两个输入契约。目标运行时同时支持 Teaching Director 的结构化教学决策与 Narrator 的结构化讲解生成，二者都必须经过 Provider-neutral Schema 校验。缺 key、超时、上游失败或输出校验失败时，保留确定性计划与模板讲解，不阻塞播放。密钥注入和 Cloudflare 构建规则记录在 README 与部署脚本，不在此重复实现细节。
 
+Stage 0 已验证 `@langchain/langgraph` 的 TypeScript Graph 在 Cloudflare `nodejs_compat` 环境可 invoke、checkpoint、interrupt 并用 `Command` resume；Durable Object 的真实 HTTP smoke 验证 START 产生一个 effect、resume 完成且重复 resume 不产生第二次 effect。浏览器内 Graph 方案在同一 async-context/interrupt seam 连续两次失败后被否决：IndexedDB saver 的隔离测试仍保留为实验事实，但默认浏览器 bundle 只导入 `@cs-coach/coach-agent/client`，不加载 LangGraph runtime。详细证据和取舍见 ADR-0003。
+
+当前 Stage 3 产品切片通过 `?coachAgent=stage3` 显式启用：Host 在冻结路线和 `OutcomeCompletionGate` 之后把当前 cue 的白名单摘要交给 CoachAgentRuntime；Graph 可从慢放、地图证据、投掷物轨迹、胜率影响和经济语境中选择至多一个合法工具，也可直接结束 cue。多 cue 进度、用户接管、稳定 callId 去重、工具失败恢复、会话主题和最多三个有引用的全场总结均已接入；完成会话只保留最近三个压缩 checkpoint，活动会话最多保留二十个。默认无参数入口仍保留为发布回退，Stage 2 单 cue 入口只用于回归。
+
 `ReviewSegment` 继续使用半开区间 `[start_tick, end_tick)` 并完整覆盖正式回合、冻结时间、回合判定后区间与回合间隙。cs2d 的 `Round 0` 刀局/初始化段不伪装成正式第 1 回合；`winner: null` 不被猜测。cue 只允许位于 live/decided 边界之前；GrenadePath 的 0.1 秒时间只作为近似，精确 canonical tick 优先取 Round、Frame 与 GameEvent。
 
-旧 Python `demoparser2` Adapter、旧 PixiJS renderer 和合成 fixture 只保留为迁移回归与故障对照，不再是默认产品数据流，也不得与 cs2d Replay 混合成一场会话。当前 localhost 可以绕过部分服务端路径，但长期部署仍以 FastAPI、异步 Worker、PostgreSQL、Redis、对象存储、Parquet/DuckDB、SSE、LangGraph Checkpoint 和本地记忆为基线；这些基础设施不能因为当前切片尚未全部接入而从架构中删除。
+旧 Python `demoparser2` Adapter、旧 PixiJS renderer 和合成 fixture 只保留为迁移回归与故障对照，不再是默认产品数据流，也不得与 cs2d Replay 混合成一场会话。当前 Coach Agent 不引入 FastAPI、PostgreSQL、Redis、对象存储或新的微服务；未来职业语料、跨设备同步或批处理若需要这些能力，必须以独立可测收益和后续 ADR 接入，不能反向成为本地 Demo 基础回放的前置条件。
 
 ## 5. 建议仓库结构
 
@@ -300,6 +316,7 @@ Host 只保留一套教练控制和一条整场时间轴；用户可自由接管
 │   ├── observation/               # 当时可知信息重建
 │   ├── teaching_director/         # Director 输入包、输出 Schema 与调用适配
 │   ├── plan_compiler/             # ReviewPlan 编译、覆盖与时间边界校验
+│   ├── coach-agent/               # 深模块：Graph、Policy、Capability、Trace 与 checkpoint
 │   ├── coaching/                  # EvidenceBuilder、Narrator、问答与总结
 │   ├── session/                   # 确定性会话约束与命令校验
 │   ├── playback/                  # 播放器与标注端口
@@ -385,39 +402,35 @@ PlanCompiler 最终划分 `SKIP`、`BRIEF`、`OBSERVE`、`DEEP_DIVE` 和 `HABIT_
 
 ### 6.7 SessionOrchestrator
 
-LangGraph `StateGraph` 是 CoachingRuntime 的有状态编排骨架。它读取 `ReviewPlan`，维护当前 segment、cue、已讲习惯、用户追问、待执行播放动作和完成进度，并协调播放器、教练侧栏、标注、问答、用户接管与恢复。Graph 节点调用 Teaching Director、Narrator、Question、Outcome 和 Summary Adapter，但不直接读取 raw Replay 或向播放器发任意命令。
+`CoachingSession` reducer 继续拥有播放阶段、当前 segment/cue、canonical tick、OutcomeCompletionGate、用户接管与路线推进。LangGraph `StateGraph` 是它外侧的 `CoachAgentRuntime` 编排骨架，不是第二个 Session 状态机。调用方只依赖一个深接口：`CoachAgentRuntime.dispatch(event): Promise<CoachAgentResult>`；调用方不知道 graph node、LLM 次数、checkpoint、重试或工具循环。
 
-Graph 内的 `SessionOrchestrator` 节点仍是确定性的：它校验完整时间轴覆盖、允许的状态转移、目标 tick、播放器 ACK、未来信息边界和恢复位置。Director 只在计划生成阶段选择候选；Narrator 只在已校验的 CoachingPackage 上生成讲解。会话状态、业务事件和播放器确认状态分别保存；checkpoint 只能保存可恢复的编排状态和领域 ID，不能成为 Demo 事实、ReviewPlan 或 CoachingSession 的唯一来源。
+Host 把已经发生的路线、播放器、gate、narration、工具结果和控制面事实转换为 `CoachAgentEvent`。Graph 只能发布 `AgentEffect`；Host 与 reducer 再次校验并执行。Director 只在计划生成阶段选择已有 candidate 与唯一主要重点；PlanCompiler 继续拥有整场路线、顺序和 tick；Narrator 继续拥有三段式讲解；Graph 不能生成第二套文案或改写这些产物。会话状态、Agent checkpoint、业务事件和播放器确认状态分别保存；任一 checkpoint 都不能成为 Demo 事实、ReviewPlan 或 CoachingSession 的唯一来源。
 
-典型节点包括：
+目标 Graph 节点按职责分为：
 
-- `load_review_plan`：载入已校验的复盘计划；
-- `present_segment` / `advance_segment`：按覆盖约束推进；
-- `prepare_narration`：按 frozen route 顺序为选中 cue 构建两份包并生成密封 NarrationBundle；
-- `await_user` / `answer_question`：等待继续、追问或播放控制；
-- `reveal_outcome` / `replay_segment`：在授权后生成结果包并播放；
-- `habit_check`：复查已讲习惯；
-- `wrap_up` / `propose_memory_update`：总结并提出记忆候选。
+- route/播放编排：`bootstrap`、`await_route_frozen`、`select_next_segment`、`deterministic_playback_effect`、`await_playback_confirmation`、`advance_segment`；
+- cue 授权：`prepare_cue`、`play_full_outcome_effect`、`await_outcome_confirmation`、`complete_outcome_gate`、`return_to_decision_effect`、`present_three_stage_narration`；
+- 受限自主：`build_teaching_capabilities`、`coach_policy`、`request_teaching_tool`、`await_tool_observation`、`observe_tool_result`、`finish_cue`；
+- 全场主线：`update_session_themes`、`compile_session_summary`、`present_wrap_up`。
 
-`SessionOrchestrator` 同时包含一层与 LLM 无关的确定性安全内核，负责校验完整时间轴覆盖、允许的状态转移、目标 tick、播放器 ACK、未来信息边界和恢复位置。LLM 可以提出教学动作，但不决定未经校验的下一个 tick，也不直接向播放器发送任意命令。
+迁移按纵向切片进行：先从已冻结 `ReviewPlan` 和已准备 `NarrationBundle` 跑通一个真实 cue，再扩展多 cue 和整场 Graph，最后才让 Graph 编排 route preparation；CandidateGenerator、Director、PlanCompiler 与 Narrator 的实现和语义不随迁移改变。
 
 #### 6.7.1 CoachingRuntime 工具边界
 
-CoachingRuntime 通过强类型领域工具访问系统能力，不把数据库连接或任意 SQL 暴露给模型。首批工具包括：
+`CapabilityBuilder` 只从当前 cue 与合法证据生成参数已绑定的 `TeachingCapability`。首版能力严格限于：
 
 ```text
-get_current_scene(cue_id)
-get_observable_state(cue_id)
-get_round_context(round_number)
-search_similar_pro_scenes(scene_id)
-get_habit_history(taxonomy_id)
-pause_demo(tick)
-replay_segment(start_tick, end_tick, speed)
-add_annotation(annotation)
-propose_memory_update(proposal)
+REPLAY_CUE_SLOW
+FOCUS_MAP_EVIDENCE
+SHOW_GRENADE_TRACE
+SHOW_WIN_RATE_IMPACT
+SHOW_ECONOMY_CONTEXT
+FINISH_CUE
 ```
 
-每个工具自动限定当前用户、Demo、session 和 cue，执行参数 Schema、`decision_tick`、证据门槛和审计校验。读取工具只返回经过领域层验证的结构化数据；写入工具只能产生白名单命令或待确认提案。用户提供的“如果队友报了两个”等信息只进入当前会话条件上下文，不回写为 Demo 事实。
+LLM 只能选择 `capabilityId`；速度、cue 范围、actor/annotation/callout refs、投掷物轨迹、measurement ref 与经济语境都由代码绑定。`SHOW_WIN_RATE_IMPACT` 只有在 outcome gate 完成、模型 AVAILABLE、存在合法 measurement ref 且有意义负向摆动时可出现；地图和道具工具同样要求对应空间或轨迹证据。`FINISH_CUE` 始终合法，并且在额外视觉不能明显提高理解时应优先结束。
+
+工具请求使用稳定 `callId = runId + cueId + graphStep + capabilityId` 的确定性派生值。`interrupt` 前不得发生外部副作用；Host 保存 capability registry、拒绝列表外参数、去重同一 callId，执行后用 `Command resume` 返回 `AgentToolResult`。由于恢复会从节点开头重执行，任何节点都必须先读取当前 Playback/Session 事实，不能盲目重复播放。首版不提供网页搜索、Shell、raw Replay 查询、任意 seek、任意坐标、职业案例生成或 Critic/反思 Agent。
 
 ### 6.8 Playback
 
@@ -436,6 +449,10 @@ propose_memory_update(proposal)
 3. `@cs-coach/cs2d-analysis-adapter` 在 iframe 内从同一 Replay 派生严格白名单 `Cs2dAnalysisBundle`；它是分析端口，不是 renderer frame builder；
 4. Next 教练壳只通过 `cs2d-playback-bridge.v1` 接收摘要、选择、播放状态与 AnalysisBundle，并发送 `play/pause/seekCanonicalTick/selectRound/setSpeed/setCamera`；bridge 对 envelope 与 payload 使用精确字段校验；
 5. `SessionOrchestrator` 根据 `ReviewPlan` 控制同一个 cs2d 播放头，从 cue 前约 1 秒连续播放到 outcome end，自动回到 decision tick 讲解，必要时重播，再继续下一段。
+
+Stage 2 的首个 visual tool `FOCUS_MAP_EVIDENCE` 只在 `coachAgent=stage2` 试验入口选择 frozen route 的首个含 WORLD point annotation 的 cue。`CoachAgentHostAdapter` 从已 presentable 的 Narration、COMPLETE outcome gate、allowlisted AnalysisBundle 与 parser Worker 返回的 `demoContentHash` 构造 `START_CUE`；Capability registry 持有 annotation→world point 绑定，Agent request 只能选择 capability ID。Host 以带 generation/run/cue/callId 的严格 command 驱动 cs2d 既有 `focusWorld` camera seam，Viewer 返回严格 `TEACHING_TOOL_ACK` 后 Host 才 `Command resume`。bridge 丢失、ACK 超时或用户接管不会推进 Session，基础回放仍可继续。
+
+Stage 3B 只在显式 `coachAgent=stage3` 入口扩展同一 frozen route 的多 cue Host 工具层，不改变 `CoachingSession` reducer、canonical tick 或 Director/Compiler/Narrator 的权威。v2 `START_CUE` 仅携带已 presentable 的三段 Narration 白名单摘要、route segment index/mode 与稳定身份；Host registry 绑定五种工具的合法 evidence/ref 参数，Agent request 不携带坐标、tick、player 或速度。`REPLAY_CUE_SLOW`、`FOCUS_MAP_EVIDENCE`、`SHOW_GRENADE_TRACE`、`SHOW_WIN_RATE_IMPACT`、`SHOW_ECONOMY_CONTEXT` 只有满足各自 gate/ref/可靠性条件才可用，失败停在自然边界。按 run 保存 PENDING/CONFIRMED lifecycle ledger，网络失败释放后可用同 eventId 幂等重试；观察事件按 frozen route cursor 串行补齐，只有匹配结果确认后推进 cursor。Host effect epoch 拒绝晚 ACK，takeover 取消旧副作用并以新 lifecycle event 恢复，基础播放始终可用；Stage 2 v1 入口继续独立回归。
 
 用户界面不提供 `PLAYER_KNOWLEDGE` renderer。`ObservableState` 是教练内部证据边界；renderer 不根据它隐藏敌人，教练也不得因为地图上显示全知事实而读取这些事实。当前投掷物只显示播放位置以前的轨迹，C4/HUD 只能读取 `t <= currentT` 的状态，禁止用数组首项或未来落点补值。
 
@@ -836,24 +853,32 @@ PersonalHabit
 
 个人记忆引用可撤销的本地证据映射；服务端对象过期后不能造成记忆库无法打开。
 
-### 7.11 CoachingRuntimeState
+### 7.11 CoachAgentState
 
-LangGraph Graph State 只保存会话编排所需的轻量状态和领域对象 ID：
+LangGraph Graph State 使用显式 `schemaVersion` 与 `graphVersion`，只保存 Agent 编排所需的轻量 JSON 状态和领域引用：
 
 ```text
-CoachingRuntimeState
-  session_id, review_plan_id
-  current_segment_index, current_cue_id, current_tick
-  coaching_mode, playback_state
-  explained_habit_ids[]
-  consumed_cue_ids[]
-  user_context[]
-  pending_action?
-  last_playback_ack?
-  error_and_retry_state?
+CoachAgentState
+  schemaVersion, graphVersion
+  runId, sessionId
+  demoId, demoContentHash
+  selectedPlayerId
+  routeId, routeHash
+  runStatus
+  activeSegmentId?, activeCueId?
+  currentSessionPhase, outcomeGateStatus, narrationReadiness
+  availableCapabilities[]
+  selectedTeachingMove?, pendingToolCall?
+  boundedToolHistory[]
+  completedCueIds[]
+  sessionThemes[]
+  policyBudget, fallbackReasons[]
+  lastStableCheckpoint, traceSummary
 ```
 
-不得把原始 tick 流、完整轨迹、职业样本全集、长期个人记忆或数据库 ORM 对象放入 Graph State。状态中的 ID 必须能通过领域服务重新解析；checkpoint 丢失时，应可从 `CoachingSession` 事件和播放器状态恢复到安全边界。
+不得把 raw Replay、frame 数组、完整胜率样本、Demo 二进制、大段 Prompt、chain-of-thought、API Key、地图纹理、模型文件、原始 tick 流、完整轨迹或职业样本全集放入 Graph State。状态中的 ID 必须能通过 Host/领域服务重新解析；checkpoint 丢失时，应可从 `CoachingSession` 事件和播放器状态恢复到安全边界。
+
+生产 checkpoint 由每 session 一个 Durable Object 保存；内部 thread 以稳定 sessionId 为所有者，并在任何恢复前逐字段校验 run、Demo content hash、selected player 与 route hash。页面刷新后 Replay 尚未重新加载时状态只能 `DORMANT`；只有 Host 再次提供相同 content/route hash 和实际播放器事实后才能恢复。哈希不匹配拒绝恢复并创建新 run。checkpoint 默认保留最近 20 个版本；完成会话后只保留必要摘要和最近少量恢复点，避免无限增长。
 
 ### 7.12 ProgressiveReviewArtifact
 
@@ -947,6 +972,8 @@ stateDiagram-v2
     QUESTIONING --> PAUSED_FOR_COACHING: 回答完成
     PAUSED_FOR_COACHING --> REPLAYING: 再看一遍
     REPLAYING --> PAUSED_FOR_COACHING
+    PAUSED_FOR_COACHING --> REPLAYING: Host 接受 TeachingMove
+    REPLAYING --> PAUSED_FOR_COACHING: ToolObservation 完成并回到 decision
     PAUSED_FOR_COACHING --> PLAYING: 继续下一段
     PLAYING --> WRAP_UP: 最后一回合结束
     WRAP_UP --> COMPLETED
@@ -955,8 +982,9 @@ stateDiagram-v2
 原则：
 
 - 图的流程由 LangGraph 编排；所有播放命令和关键状态转移仍由确定性约束层校验；
+- `TeachingMove` 不是新的 Session phase；它只能请求 reducer 已允许的 `REPLAYING`/稳定教学画面或地图呈现动作，并等待 Playback 确认；
 - Director、Narrator、问答和总结只在允许的 Graph 分支内调用，不可绕过 `ReviewPlan` 覆盖约束；
-- 用户可随时暂停或跳转，称为 `USER_CONTROLLED` 子状态；
+- 用户可随时暂停或跳转，称为 `USER_TAKEOVER` 子状态；Agent 暂停，返回最近 cue 后恢复但不重排路线；
 - 恢复时以播放器确认的 tick 为准，而不是仅信任服务端快照；
 - Web 断线可本地继续播放，但进入新讲解点前必须重新同步；
 - Graph 只能进入 `READY` 的 segment；缓冲耗尽时进入显式 `BUFFERING`，不得临时生成无证据讲解；
@@ -1026,11 +1054,13 @@ priority = proximity_to_playhead
 
 ### 9.3 复盘阶段
 
-客户端加载轻量 session package 和分块轨迹。LangGraph 根据当前 segment 和用户交互路由 Graph 节点；`SessionOrchestrator` 安全内核将节点产生的动作转换成受限播放命令，从 cue 前置上下文连续播放到结果结束，再回到决策点暂停；用户追问时 Question Adapter 只能通过领域工具取得当前 cue 和允许的上下文。Graph checkpoint 和业务会话事件分别持久化，均不能阻塞播放器基本控制。
+客户端加载轻量 session package；Replay 和逐帧数据继续留在 cs2d iframe。`CoachingSession` reducer 先按冻结路线从 cue 前置上下文连续播放到结果结束，确认 gate 后回到决策点并呈现 Narrator 的三段式讲解。随后 Host 才向 Coach Agent dispatch 当前 cue 的白名单摘要；Graph 选择 `FINISH_CUE` 或至多一个合法 `TeachingCapability`，以 interrupt 返回 `AgentEffect`，等待 Host 执行和 `Command resume`。Graph checkpoint 和业务会话事件分别持久化，Agent/Provider/tool 任一失败都不能阻塞播放器基本控制。
 
 地图在所有会话状态都显示当前 tick 的 cs2d 全知 Replay，不提供显式视角切换。信息授权发生在包引用和呈现 gate，而非 renderer：自动播放结果窗口时侧栏不显示密封 NarrationBundle 的任何分析字段；只有播放器确认到达 `outcome_end_tick` 后，Session 才把该 bundle 标记为 PRESENTABLE，并把五字段证据投影为“当前状态 / 这样做的问题 / 可以怎么改进”三段。进入下一个 cue 时重新绑定下一份内部 ObservableState 与密封 bundle；全场胜率曲线仍可始终显示，不受该文字 gate 裁剪。
 
 自动路线继续主持完整 Demo；用户主动操作时仅暂时交出播放头，不丢弃会话。自由查看侧栏显示实际回合与覆盖该位置的 segment，地图/HUD/事件均由同一播放头更新。用户可随时返回离当前播放位置最近的教练节点并从约 1 秒前置上下文重看；未接管时冻结时间直接自动消费、低价值段显式快进、关键 cue 连续播放完整处理并在结束后回到决策点讲解，结果播放、重播和结束暂停维持同一聚焦镜头。
+
+Coach Agent 活动只显示简短玩家状态，例如“正在看完整处理”“正在回到决策点”“正在慢放关键动作”“正在标出补枪距离”“正在展示道具轨迹”“正在准备下一段”。UI 不显示 Prompt、chain-of-thought、candidate ID 或 tick。暂停、自由跳转、重播与“继续”是播放控制事件，不进入 Policy Prompt。
 
 ### 9.4 会后阶段
 
@@ -1040,7 +1070,7 @@ priority = proximity_to_playhead
 
 ### 10.1 PostgreSQL
 
-保存用户/匿名访问凭证、Demo 元数据、解析任务、回合索引、事实引用、教学信号、复盘计划、讲解点、会话事件、总结、职业局面索引、反馈和版本清单。
+这是未来跨设备元数据、职业语料和批处理索引的候选持久层，不是当前基础回放或 Coach Agent 的前置条件。接入后可保存用户/匿名访问凭证、Demo 元数据、解析任务、回合索引、事实引用、教学信号、复盘计划、讲解点、会话事件、总结、职业局面索引、反馈和版本清单。
 
 ### 10.2 对象存储
 
@@ -1048,13 +1078,17 @@ priority = proximity_to_playhead
 
 ### 10.3 Redis
 
-仅用于任务队列、短期进度、幂等锁和限流，不作为事实来源。Redis 清空后可从 PostgreSQL 与对象存储恢复。
+若未来异步任务规模需要，Redis 仅可用于任务队列、短期进度、幂等锁和限流，不作为事实来源或 LangGraph saver。当前 Coach Agent 不使用 Redis。
 
-### 10.4 本地记忆库
+### 10.4 Coach Agent Checkpoint
+
+生产使用 Cloudflare Durable Object storage 的自定义 LangGraph `BaseCheckpointSaver`；每个 session 一个 Durable Object，保存紧凑版本化 state、pending writes 与有限 trace，默认 retention 20。localhost Next adapter 使用 process-local MemorySaver 并明确 `recoverableAfterRefresh=false`。IndexedDB saver 只保留为未选中的 Stage 0 能力实验，不进入默认产品路径。
+
+### 10.5 本地记忆库
 
 桌面端 SQLite 保存个人习惯和本地证据映射。敏感字段加密，密钥材料通过操作系统 Keychain/Credential Manager 管理。用户可一键导出 JSON、清空单项或整个记忆库。
 
-### 10.5 分层缓存
+### 10.6 分层缓存
 
 缓存键必须包含内容哈希和所有影响语义的版本，不能只用文件名或 Demo ID：
 
@@ -1165,6 +1199,12 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 - 用户纠正率、删除率和错误记忆率；
 - 未授权上传次数必须为零。
 
+### 13.6 Coach Agent Eval
+
+Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 capability”，不能把合法 capability 出现在列表中误算成 Policy 选对。首版维护约 20 个手工 fixture，记录是否需要工具、首选/可接受替代、禁止 capability 与必需 evidence refs，并覆盖 gate、空间/轨迹/measurement 缺失、列表外工具、boundArgs 不可变、失败最多一次替代、每 cue 一个成功 move、takeover、interrupt 幂等、checkpoint/route hash、SessionTheme、Provider 全失败和预算终止。
+
+初始门槛：非法工具、route/tick 修改、决策/结果引用串线和重复副作用均为 0；是否需要工具一致率至少 90%；需要工具时首选 capability 一致率至少 80%；全场路线完成率 100%；每 cue Policy LLM 至多一次、成功视觉工具默认至多一个；`SKIP/FREEZE` Policy 调用为 0。
+
 所有模型、规则、Director、PlanCompiler 和 Narrator 版本上线前必须跑固定黄金集；关键指标退化则阻止发布。
 
 ## 14. 安全、隐私与版权
@@ -1191,6 +1231,8 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 - `CONSUMED/FROZEN` 产物不可原地覆盖，新分析只能生成新版本；
 - SSE 断开不取消分析；会话事件批量、异步写入；
 - LLM 设置每场 token 与调用预算，模板降级必须可用；
+- Coach Policy 每 cue 至多一次；工具失败最多一个合法替代；预算耗尽、bridge 丢失或 checkpoint 异常都确定性结束/停在自然边界；
+- Agent runtime、Policy 和教学工具失败不取消 `CoachingSession` 的基础回放；
 - 职业检索先结构化过滤，避免无界向量搜索；
 - 删除任务用状态机记录，覆盖数据库、对象和缓存；
 - 数据库每日备份并定期执行恢复演练。
@@ -1204,10 +1246,11 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 - 播放命令延迟、失败、重试和 tick 漂移；
 - 会话完成、追问、回看、跳过展开和恢复；
 - LLM 延迟、成本、模板降级和引用校验失败；
+- AgentTrace 的 graphVersion/node/cue/input hash/selected capability/evidence/tool result/fallback/latency/token/provider/checkpoint/final status；
 - 职业检索样本量与低证据比例；
 - 删除请求完成时间和残留扫描结果。
 
-日志以 ID 和错误码为主，不记录用户讲解全文或个人记忆明文。
+日志以 ID 和错误码为主，不记录用户讲解全文、Prompt、chain-of-thought、raw Replay 或个人记忆明文。真实 Demo trace 默认只保存在本地；LangSmith 仅可选用于合成 fixture 或脱敏摘要。
 
 ## 17. 演进阶段与触发条件
 
@@ -1215,7 +1258,7 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 
 ### 17.1 Web 2D 运行基线
 
-以模块化单体、异步 Worker、真实地图回放、完整时间轴、结构化职业检索和 LangGraph 会话作为可持续运行基线。先确保单次解析、SceneIndex、Observation、全场覆盖、自由 seek、完整处理播放、自动回到决策点和结果事实解锁在真实 Demo 上稳定工作。
+以模块化单体、浏览器 Worker、真实地图回放、完整时间轴、结构化职业检索和 Durable Object LangGraph 会话作为可持续运行基线。先确保单次解析、SceneIndex、Observation、全场覆盖、自由 seek、完整处理播放、自动回到决策点和结果事实解锁在真实 Demo 上稳定工作。
 
 ### 17.2 Director/Narrator 完整落地
 
@@ -1256,16 +1299,21 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 | 中文报点事实 | Accepted | 同次 cs2d 解析保留 `m_szLastPlaceName`，由版本化精确词典本地化；未知不猜测，不二次解析 |
 | 自研 PixiJS renderer | Superseded | `/pixi-poc` 与旧 renderer 只保留回归；默认产品不再扩展第二套 renderer |
 | 桌面长期形态 | Proposed | 本地 CS2 Demo＋教练侧窗，通过 PlaybackPort 接入 |
-| 服务端架构 | Accepted | 模块化单体＋异步 Worker |
+| 运行架构 | Accepted | Next/Cloudflare 模块化单体＋浏览器 Parser/模型 Worker＋每 session 一个 Agent Durable Object；不新增微服务或 Redis/Postgres saver |
 | 分析启动策略 | Accepted | 完整 CandidateSet 与 frozen route 先完成；前两个候选 narration READY/FALLBACK 后开始，余下按路线顺序准备 |
 | 讲解缓冲与冻结 | Accepted | 后台只能补未消费 cue 的 narration；追上准备头时在自然边界 BUFFERING，CONSUMED/FROZEN route/focus 不可改写 |
 | 回合缓存策略 | Accepted | 内容寻址、版本化、按回合/候选分块；bulk Replay 留在所属 iframe/Worker，只跨 seam 传摘要与引用 |
 | CoachingRuntime 编排 | Accepted | 使用 LangGraph `StateGraph` 主持长期、有状态、可中断恢复的教练会话；Graph 不取代领域事实和播放器 |
-| Graph 与确定性底座边界 | Accepted | Graph 路由 Director/Narrator/问答/结果/总结；领域服务计算事实，PlanCompiler 与 SessionOrchestrator 校验状态和播放命令 |
+| Coach Agent 运行位置 | Accepted | 浏览器内 Graph 因 async-context/interrupt seam 连续失败两次被否决；生产每 session 一个 Cloudflare Durable Object，浏览器只保留 client-safe remote dispatch |
+| Graph Checkpoint | Accepted | Durable Object storage 自定义 BaseCheckpointSaver，紧凑 JSON state、identity/hash 恢复校验、retention 20；localhost MemorySaver 不承诺刷新恢复 |
+| CoachAgentRuntime 深接口 | Accepted | 调用方只依赖 `dispatch(event)`；Graph node、checkpoint、Policy 次数、重试与工具循环封装在 `libs/coach-agent` |
+| TeachingCapability | Accepted | CapabilityBuilder 绑定全部参数与合法 evidence；Policy 只能选择 capabilityId 或 FINISH_CUE，每 cue 默认最多一个成功视觉工具 |
+| AgentEffect / Host 工具 | Accepted | Graph 用 interrupt 发 ToolRequest，Host 校验 Session/Playback、按稳定 callId 去重并 Command resume；Graph 不直接写 React/iframe/reducer |
+| Graph 与确定性底座边界 | Accepted | Director/PlanCompiler/Narrator/CoachingSession 继续权威；Graph 只编排已冻结 route 上的受限教学动作、失败恢复和会话主题 |
 | 模型数据访问 | Accepted | Director/Narrator/Question 只通过强类型领域工具和白名单包访问数据，不授予 LLM 任意 SQL 或数据库连接 |
 | 职业行为路线 | Accepted | 结构化数据库/规则提供可追溯证据，Director 可使用其结果；监督排序与行为先验只替换明确子模块 |
 | LLM 职责 | Accepted | Director 选择候选与唯一重点，Narrator 在该重点内完成具体分析；模型不解析原始 tick、不创造事实/建议语义、不直接控制播放器 |
-| LLM Provider | Accepted | Director 与 Narrator 通过 Provider-neutral Adapter 调用；当前可使用 DeepSeek，必须严格 Schema 校验、引用校验和模板降级 |
+| LLM Provider | Accepted | Director、Narrator 与 Coach Policy 通过 Provider-neutral Adapter 调用；当前可使用 DeepSeek，必须严格 Schema/引用校验和确定性降级；普通/freeze/skip 不调用 Policy |
 | 全场胜率模型 | Accepted | 固定 cs-net win-rate head 经独立 feature adapter 接入 cs2d iframe Worker；`WinProbabilityTimelineV1` 全场常显并与唯一时间轴共用横坐标；模型不可用时显式 `UNAVAILABLE`，不阻塞回放 |
 | OutcomeImpact | Accepted | 完整曲线始终可见；结构化影响可提前进入 OutcomePackage，但只有结果播放后才能呈现文案；并发死亡/下包降低归因，不把全知曲线当 Observation |
 | 个人记忆 | Accepted | 本地优先、用户可控、只影响优先级 |
@@ -1300,3 +1348,7 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 | 3.4.0 | 2026-08-21 | 固化 Deterministic CandidateGenerator → DirectorDecisionSet → PlanCompiler → 双包 Narrator 纵向链路；整场 CandidateSet 与 route 在会话前冻结，前两个候选讲解就绪即可开始；OutcomePackage 可后台参与密封讲解生成，但完整 NarrationBundle 只有 outcome_end 后可呈现，后台不得重排已发布路线。 |
 | 3.4.1 | 2026-08-21 | 保留 NarrationBundle 五字段证据边界，将玩家可见讲解收敛为“当前状态 / 这样做的问题 / 可以怎么改进”三段投影；内部 taxonomy 不进 UI，零百分点 cue 影响不展示。 |
 | 3.4.2 | 2026-08-24 | 将全链路教学上限统一为 `MAX_TEACHING_CUES=50`；增加成功 KILL 的实用性过滤，胜率上升或无负向结果的对枪只保留为时间轴事实，不进入教练路线；OutcomeImpact 对不实用 KILL 不再生成正向影响文案。 |
+| 3.5.0 | 2026-08-24 | 将固定 LLM 会话扩展为受约束 Coach Agent：新增 CoachAgentRuntime 深接口、紧凑 state、TeachingCapability、AgentEffect/Host interrupt-resume、每 cue 工具预算与 SessionTheme；Stage 0 否决浏览器内 Graph，接受每 session 一个 Cloudflare Durable Object 与自定义 checkpoint saver，保持 Director/PlanCompiler/Narrator/CoachingSession 权威。 |
+| 3.5.1 | 2026-08-24 | Stage 2 只在显式试验入口接入首个 `FOCUS_MAP_EVIDENCE`：Host registry 绑定 frozen cue 的 WORLD annotation，严格 bridge ACK/generation/callId/超时保护副作用；parser Worker 返回 raw Demo SHA-256 身份，默认入口与 Director/PlanCompiler/Narrator 语义不变。 |
+| 3.5.2 | 2026-08-24 | Stage 3B 在显式试验入口扩展五种受约束 Host 工具与多 cue lifecycle observer：稳定 capability/call identity、PENDING/CONFIRMED recovery ledger、takeover epoch、v2 presentable summary 与受控 cs2d bridge；普通入口和 Stage 2 v1 入口保持不变。 |
+| 3.5.3 | 2026-08-24 | 完成 Stage 3 整场切片：多 cue、takeover/resume、五种证据绑定教学工具、SessionTheme、三主题全场总结、完成态 checkpoint 压缩与真实 DeepSeek Policy Adapter；`test_demo` 14/14 全场通过，Falcons/Spirit 按发布范围保留 29/49 有界验证，显式 Stage 3 入口继续作为发布回退边界。 |

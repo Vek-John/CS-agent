@@ -225,6 +225,10 @@ export interface Cs2dAnalysisInput {
   readonly selectedSteamId: string;
   /** Stable local/demo identifier; it is not sent to the narration provider. */
   readonly demoId: string;
+  /** SHA-256 computed in the parser Worker; no raw bytes cross this adapter. */
+  readonly demoContentHash?: string;
+  /** Parser Worker timing for the hash operation; diagnostics only. */
+  readonly demoContentHashLatencyMs?: number;
   /** Optional full-match model output. The adapter stays usable when the model is unavailable. */
   readonly winProbabilityTimeline?: WinProbabilityTimelineV1;
 }
@@ -252,6 +256,8 @@ export interface Cs2dAnalysisMetadata {
   readonly excluded_rounds: readonly Cs2dExcludedRound[];
   readonly limitations: readonly string[];
   readonly warnings: readonly string[];
+  readonly demo_content_hash?: string;
+  readonly demo_content_hash_latency_ms?: number;
 }
 
 /** Output intentionally excludes the raw Replay. It is the analysis/session port. */
@@ -322,6 +328,10 @@ function finiteNumber(value: unknown): value is number {
 
 function finiteTick(value: unknown): value is number {
   return finiteNumber(value) && Number.isSafeInteger(value);
+}
+
+function isSha256(value: unknown): value is string {
+  return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
 }
 
 function safeText(value: unknown, fallback: string): string {
@@ -1217,6 +1227,12 @@ export function buildCs2dAnalysisBundle(input: Cs2dAnalysisInput): Cs2dAnalysisB
     throw new Error(`selectedSteamId ${input.selectedSteamId} is not present in cs2d Replay.players.`);
   }
   if (!input.demoId.trim()) throw new Error("demoId must be a stable non-empty identifier.");
+  if (input.demoContentHash !== undefined && !isSha256(input.demoContentHash)) {
+    throw new Error("demoContentHash must be a 64-character SHA-256 digest.");
+  }
+  if (input.demoContentHashLatencyMs !== undefined && (!finiteNumber(input.demoContentHashLatencyMs) || input.demoContentHashLatencyMs < 0)) {
+    throw new Error("demoContentHashLatencyMs must be a non-negative number.");
+  }
   if (replay.map !== "de_mirage") {
     throw new Error(`cs2d analysis currently supports de_mirage only; received ${safeText(replay.map, "unknown")}. The cs2d renderer may still play that map without AI analysis.`);
   }
@@ -1247,7 +1263,9 @@ export function buildCs2dAnalysisBundle(input: Cs2dAnalysisInput): Cs2dAnalysisB
     renderer_input: false as const,
     replay_binary_reparsed: false as const,
     raw_replay_retained_by_caller: true,
-    excluded_rounds: [...excludedRounds]
+    excluded_rounds: [...excludedRounds],
+    ...(input.demoContentHash ? { demo_content_hash: input.demoContentHash.toLowerCase() } : {}),
+    ...(input.demoContentHashLatencyMs !== undefined ? { demo_content_hash_latency_ms: input.demoContentHashLatencyMs } : {}),
   };
 
   if (rounds.length === 0) {
@@ -1415,6 +1433,13 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
     bundle.metadata.raw_replay_retained_by_caller !== true
   ) {
     throw new Error("cs2d analysis metadata does not match the pinned adapter boundary.");
+  }
+  if (bundle.metadata.demo_content_hash !== undefined && !isSha256(bundle.metadata.demo_content_hash)) {
+    throw new Error("cs2d analysis metadata contains an invalid demo_content_hash.");
+  }
+  if (bundle.metadata.demo_content_hash_latency_ms !== undefined &&
+      (!finiteNumber(bundle.metadata.demo_content_hash_latency_ms) || bundle.metadata.demo_content_hash_latency_ms < 0)) {
+    throw new Error("cs2d analysis metadata contains an invalid hash latency.");
   }
 
   if (bundle.review_plan.status === "COMPLETE") {

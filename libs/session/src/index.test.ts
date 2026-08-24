@@ -22,6 +22,54 @@ function reachFirstCue() {
   return state;
 }
 
+function planWithThirdCue() {
+  const sourceCue = plan.cues[1];
+  if (!sourceCue) throw new Error("fixture third cue source missing");
+  const segment = {
+    id: "seg-r5-third",
+    round_number: 5,
+    start_tick: 6400,
+    end_tick: 7600,
+    mode: "DEEP_DIVE" as const,
+    reason_code: "THIRD_CUE",
+    display_reason: "第三个教学点",
+    playback_speed: 1,
+    cue_ids: ["cue-r5-third"],
+    expandable: true
+  };
+  const cue = {
+    ...sourceCue,
+    id: "cue-r5-third",
+    segment_id: segment.id,
+    decision_tick: 6800,
+    reveal_tick: 6900,
+    outcome_start_tick: 6800,
+    outcome_end_tick: 7100
+  };
+  return {
+    ...plan,
+    id: "plan-fixture-three-cues",
+    segments: [...plan.segments, segment],
+    cues: [...plan.cues, cue]
+  };
+}
+
+function reachSecondCuePaused(testPlan: typeof plan) {
+  const firstCue = testPlan.cues[0];
+  const secondCue = testPlan.cues[1];
+  if (!firstCue || !secondCue) throw new Error("fixture second cue missing");
+  let state = createCoachingSession(testPlan);
+  state = reduceCoachingSession(testPlan, state, { type: "START" });
+  state = reduceCoachingSession(testPlan, state, {
+    type: "TICK",
+    tick: testPlan.segments[1]!.end_tick
+  });
+  state = reduceCoachingSession(testPlan, state, { type: "TICK", tick: firstCue.outcome_end_tick });
+  state = reduceCoachingSession(testPlan, state, { type: "ADVANCE_SEGMENT" });
+  state = reduceCoachingSession(testPlan, state, { type: "TICK", tick: secondCue.outcome_end_tick });
+  return state;
+}
+
 describe("CoachingSession deterministic safety kernel", () => {
   it("auto-consumes freeze time while retaining it in the event log and full plan", () => {
     let state = createCoachingSession(plan);
@@ -203,6 +251,65 @@ describe("CoachingSession deterministic safety kernel", () => {
     expect(state.current_segment_index).toBe(secondSegmentIndex);
     expect(state.current_tick).toBe(secondSegment.start_tick);
     expect(state.current_tick).not.toBe(firstSegment.start_tick);
+  });
+
+  it("revokes an unreconciled revealed cue during takeover so it pauses again after the target cue", () => {
+    const testPlan = planWithThirdCue();
+    const firstCue = testPlan.cues[0]!;
+    const secondCue = testPlan.cues[1]!;
+    const secondSegment = testPlan.segments.find((segment) => segment.id === secondCue.segment_id)!;
+    let state = reachSecondCuePaused(testPlan);
+
+    expect(state.consumed_cue_ids).toEqual([firstCue.id]);
+    expect(state.revealed_cue_ids).toEqual([firstCue.id, secondCue.id]);
+
+    state = reduceCoachingSession(testPlan, state, {
+      type: "RETURN_TO_NEAREST_CUE",
+      tick: firstCue.decision_tick
+    });
+    expect(state.consumed_cue_ids).toEqual([]);
+    expect(state.revealed_cue_ids).toEqual([]);
+
+    state = reduceCoachingSession(testPlan, state, { type: "TICK", tick: firstCue.outcome_end_tick });
+    state = reduceCoachingSession(testPlan, state, { type: "ADVANCE_SEGMENT" });
+    state = reduceCoachingSession(testPlan, state, { type: "TICK", tick: secondCue.outcome_end_tick });
+
+    expect(state.current_cue_id).toBe(secondCue.id);
+    expect(state.current_segment_index).toBe(testPlan.segments.indexOf(secondSegment));
+    expect(state.phase).toBe("PAUSED_FOR_COACHING");
+    expect(state.outcome_completion).toMatchObject({ cueId: secondCue.id, status: "COMPLETE" });
+  });
+
+  it("does not force a second teaching pass for a revealed cue that was already consumed", () => {
+    const testPlan = planWithThirdCue();
+    const firstCue = testPlan.cues[0]!;
+    const secondCue = testPlan.cues[1]!;
+    const thirdCue = testPlan.cues[2]!;
+    const secondSegment = testPlan.segments.find((segment) => segment.id === secondCue.segment_id)!;
+    let state = reachSecondCuePaused(testPlan);
+
+    state = {
+      ...state,
+      consumed_cue_ids: [firstCue.id, secondCue.id]
+    };
+    state = reduceCoachingSession(testPlan, state, {
+      type: "RETURN_TO_NEAREST_CUE",
+      tick: firstCue.decision_tick
+    });
+    state = reduceCoachingSession(testPlan, state, { type: "TICK", tick: firstCue.outcome_end_tick });
+    state = reduceCoachingSession(testPlan, state, { type: "ADVANCE_SEGMENT" });
+    state = reduceCoachingSession(testPlan, state, { type: "TICK", tick: secondSegment.end_tick });
+    let guard = 0;
+    while (state.current_cue_id !== thirdCue.id && guard < 4) {
+      const currentSegment = testPlan.segments[state.current_segment_index];
+      if (!currentSegment) break;
+      state = reduceCoachingSession(testPlan, state, { type: "TICK", tick: currentSegment.end_tick });
+      guard += 1;
+    }
+
+    expect(state.current_cue_id).toBe(thirdCue.id);
+    expect(state.phase).toBe("PLAYING");
+    expect(state.revealed_cue_ids).toContain(secondCue.id);
   });
 
   it("unlocks a summary only after the entire path is consumed", () => {

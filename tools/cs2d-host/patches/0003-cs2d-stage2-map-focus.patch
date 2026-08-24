@@ -1,0 +1,699 @@
+diff --git a/apps/app/src/viewer/DemoAnalyzerView.vue b/apps/app/src/viewer/DemoAnalyzerView.vue
+index 3d63f09..987d6b6 100644
+--- a/apps/app/src/viewer/DemoAnalyzerView.vue
++++ b/apps/app/src/viewer/DemoAnalyzerView.vue
+@@ -162,6 +162,8 @@ async function selectHostPlayer(playerId: string) {
+         replay: replay as unknown as Cs2dReplay,
+         selectedSteamId: player.steamId,
+         demoId: typeof routeId === 'string' && routeId.trim() ? routeId : 'cs2d-local-demo',
++        demoContentHash: parser.demoContentHash.value ?? undefined,
++        demoContentHashLatencyMs: parser.hashLatencyMs.value ?? undefined,
+         ...(winProbabilityTimeline ? { winProbabilityTimeline } : {}),
+       })
+     emitPlaybackEvent({
+@@ -185,7 +187,11 @@ watch(
+   (replay, previous) => {
+     if (!hostMode.value || !replay || replay === previous) return
+     hostSelectedPlayerId.value = null
+-    emitPlaybackEvent(replayReadyMessage(replay))
++    emitPlaybackEvent(replayReadyMessage({
++      ...replay,
++      demoContentHash: parser.demoContentHash.value ?? undefined,
++      hashLatencyMs: parser.hashLatencyMs.value ?? undefined,
++    }))
+   },
+ )
+ 
+diff --git a/apps/app/src/viewer/ingest/demoParser.worker.ts b/apps/app/src/viewer/ingest/demoParser.worker.ts
+index 7e09e13..d5969d0 100644
+--- a/apps/app/src/viewer/ingest/demoParser.worker.ts
++++ b/apps/app/src/viewer/ingest/demoParser.worker.ts
+@@ -16,9 +16,16 @@ export interface ParseRequest {
+ 
+ export type ParseResponse =
+   | { type: 'progress'; phase: 'parsing' | 'building' | 'serializing'; tick?: number; totalTicks?: number }
+-  | { type: 'result'; ok: true; replay: unknown; voice: VoiceData }
++  | { type: 'result'; ok: true; replay: unknown; voice: VoiceData; demoContentHash: string; hashLatencyMs: number }
+   | { type: 'result'; ok: false; error: string }
+ 
++async function sha256Hex(bytes: Uint8Array): Promise<{ digest: string; latencyMs: number }> {
++  const started = performance.now()
++  const digest = await crypto.subtle.digest('SHA-256', bytes.buffer as ArrayBuffer)
++  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
++  return { digest: hex, latencyMs: Math.max(0, performance.now() - started) }
++}
++
+ // Initializes the wasm only once (idempotent across messages).
+ let ready: Promise<unknown> | null = null
+ 
+@@ -30,6 +37,9 @@ self.onmessage = async (e: MessageEvent<ParseRequest>) => {
+     // `buffer` is already the raw `.dem` (decompression happens earlier, in a
+     // separate throwaway worker — see `useDemoParser`).
+     const dem = new Uint8Array(buffer)
++    // Keep the raw buffer in this parser Worker. Hashing is serialised before
++    // WASM parsing; only the fixed digest/latency leave this boundary.
++    const content = await sha256Hex(dem)
+     // The parser reports real progress via this callback (same thread, but the
+     // posted messages reach the main thread live): stage 0 = parsing (per tick),
+     // 1 = building the replay, 2 = serializing.
+@@ -53,7 +63,14 @@ self.onmessage = async (e: MessageEvent<ParseRequest>) => {
+ 
+     // Transfer each packet's buffer (zero-copy) to the main thread.
+     const transfer = voice.tracks.flatMap((t) => t.packets.map((p) => p.data.buffer))
+-    const res: ParseResponse = { type: 'result', ok: true, replay, voice }
++    const res: ParseResponse = {
++      type: 'result',
++      ok: true,
++      replay,
++      voice,
++      demoContentHash: content.digest,
++      hashLatencyMs: content.latencyMs,
++    }
+     self.postMessage(res, { transfer })
+   } catch (err) {
+     const res: ParseResponse = {
+diff --git a/apps/app/src/viewer/ingest/useDemoParser.ts b/apps/app/src/viewer/ingest/useDemoParser.ts
+index f5549a9..b71fe1e 100644
+--- a/apps/app/src/viewer/ingest/useDemoParser.ts
++++ b/apps/app/src/viewer/ingest/useDemoParser.ts
+@@ -37,6 +37,8 @@ export function useDemoParser() {
+   const fileName = ref('')
+   const fileSize = ref(0)
+   const rawSize = ref(0) // decompressed `.dem` size in bytes (0 until known)
++  const demoContentHash = ref<string | null>(null)
++  const hashLatencyMs = ref<number | null>(null)
+   const parseTick = ref(0) // current demo tick during the `parsing` phase
+   const parseTotalTicks = ref(0) // total demo ticks (0 until the header is read)
+ 
+@@ -108,6 +110,8 @@ export function useDemoParser() {
+     fileName.value = file.name
+     fileSize.value = file.size
+     rawSize.value = 0
++    demoContentHash.value = null
++    hashLatencyMs.value = null
+     parseTick.value = 0
+     parseTotalTicks.value = 0
+     status.value = 'reading'
+@@ -143,6 +147,8 @@ export function useDemoParser() {
+         if (msg.ok) {
+           replay.value = msg.replay as Replay
+           voice.value = msg.voice
++          demoContentHash.value = msg.demoContentHash
++          hashLatencyMs.value = msg.hashLatencyMs
+           progress.value = 1
+           status.value = 'done'
+         } else {
+@@ -180,6 +186,8 @@ export function useDemoParser() {
+     voice.value = entry.voice
+     fileName.value = entry.fileName
+     fileSize.value = entry.fileSize ?? 0
++    demoContentHash.value = null
++    hashLatencyMs.value = null
+     status.value = 'done'
+   }
+ 
+@@ -193,6 +201,8 @@ export function useDemoParser() {
+     fileName.value = ''
+     fileSize.value = 0
+     rawSize.value = 0
++    demoContentHash.value = null
++    hashLatencyMs.value = null
+     parseTick.value = 0
+     parseTotalTicks.value = 0
+   }
+@@ -212,6 +222,8 @@ export function useDemoParser() {
+     fileName,
+     fileSize,
+     rawSize,
++    demoContentHash,
++    hashLatencyMs,
+     parseTick,
+     parseTotalTicks,
+     parse,
+diff --git a/apps/app/src/viewer/player/ViewerMap.vue b/apps/app/src/viewer/player/ViewerMap.vue
+index 97014d6..ee865b7 100644
+--- a/apps/app/src/viewer/player/ViewerMap.vue
++++ b/apps/app/src/viewer/player/ViewerMap.vue
+@@ -50,6 +50,8 @@ const props = defineProps<{
+   /** Frame (and track) a moving world point, e.g. a grenade along its arc.
+    *  Takes precedence over the player-based camera modes while set. */
+   focusWorld?: { x: number; y: number } | null
++  /** Static host teaching highlight bound to the same WORLD point. */
++  focusWorldLabel?: string | null
+   /** Player this view observes (e.g. an embedded kill/death clip): a small red
+    *  eye is drawn just before their name, so it reads who the clip is about. */
+   observedSteamId?: string | null
+@@ -1322,6 +1324,10 @@ function draw() {
+   for (const p of props.players) if (!p.alive || deaths.has(p.steamId)) drawPlayer(p, deaths.get(p.steamId))
+   for (const p of props.players) if (p.alive && !deaths.has(p.steamId)) drawPlayer(p, undefined)
+ 
++  // Stage2 evidence is a restrained, static marker: the camera still uses the
++  // existing focusWorld seam, while this label makes the bound point legible.
++  if (props.focusWorld) drawFocusEvidence()
++
+   // C4 detonation shockwave (on top of players, at the plant position).
+   const blastEv = props.round?.events.find((e) => e.type === 'bomb_exploded')
+   if (blastEv) {
+@@ -1533,6 +1539,35 @@ function drawWatermark() {
+   ctx.restore()
+ }
+ 
++function drawFocusEvidence() {
++  if (!ctx || !props.focusWorld) return
++  const point = w2s(props.focusWorld.x, props.focusWorld.y)
++  const radius = clamp(unitsToScreen(72), 18, 34)
++  ctx.save()
++  ctx.strokeStyle = '#f5c451'
++  ctx.fillStyle = 'rgba(245, 196, 81, 0.16)'
++  ctx.lineWidth = 2.5
++  ctx.beginPath()
++  ctx.arc(point.x, point.y, radius, 0, Math.PI * 2)
++  ctx.fill()
++  ctx.stroke()
++  ctx.beginPath()
++  ctx.moveTo(point.x - radius - 8, point.y)
++  ctx.lineTo(point.x + radius + 8, point.y)
++  ctx.moveTo(point.x, point.y - radius - 8)
++  ctx.lineTo(point.x, point.y + radius + 8)
++  ctx.stroke()
++  const label = (props.focusWorldLabel?.trim() || '关键站位').slice(0, 64)
++  ctx.font = '600 12px Inter, system-ui, sans-serif'
++  ctx.textAlign = 'center'
++  ctx.textBaseline = 'bottom'
++  ctx.shadowColor = 'rgba(0,0,0,0.72)'
++  ctx.shadowBlur = 4
++  ctx.fillStyle = '#fff7d6'
++  ctx.fillText(label, point.x, point.y - radius - 10)
++  ctx.restore()
++}
++
+ // Automatic camera (auto-zoom + single-player follow). Owns its rAF loops and
+ // drives the shared zoom/pan below; `followZoom` is adjusted by the wheel here.
+ const { followZoom, kickIfFocused } = useMapCamera({
+@@ -1644,6 +1679,8 @@ watch(() => props.players, draw)
+ watch(() => props.bombBlink, draw)
+ watch(() => props.previewPath, draw)
+ watch(() => props.previewPaths, draw)
++watch(() => props.focusWorld, draw, { deep: true })
++watch(() => props.focusWorldLabel, draw)
+ watch(() => props.levelRange, draw, { deep: true })
+ watch(() => props.talking, draw)
+ watch(() => props.muted, draw, { deep: true })
+diff --git a/apps/app/src/viewer/player/ViewerStage.vue b/apps/app/src/viewer/player/ViewerStage.vue
+index 445d1a3..ba931ed 100644
+--- a/apps/app/src/viewer/player/ViewerStage.vue
++++ b/apps/app/src/viewer/player/ViewerStage.vue
+@@ -1,8 +1,8 @@
+ <script setup lang="ts">
+-import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue'
++import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+ import { useLocalStorage } from '@vueuse/core'
+ import { appFullscreenKey } from '@/shell/appFullscreen'
+-import type { Replay, VoiceData } from '@/viewer/domain/schema'
++import type { GrenadePath, Replay, VoiceData } from '@/viewer/domain/schema'
+ import ViewerMap from '@/viewer/player/ViewerMap.vue'
+ import ViewerControls from '@/viewer/player/ViewerControls.vue'
+ import CoachToolbar from '@/viewer/player/CoachToolbar.vue'
+@@ -28,7 +28,7 @@ import { useCommentFlow } from '@/viewer/player/useCommentFlow'
+ import { useContextMenu } from '@/viewer/player/useContextMenu'
+ import { SIDE_COLOR } from '@/viewer/domain/colors'
+ import { useI18n } from '@/app/i18n'
+-import { emitPlaybackEvent, listenForPlaybackCommands } from '@/viewer/player/hostBridge'
++import { emitPlaybackEvent, listenForPlaybackCommands, type PlaybackCommand } from '@/viewer/player/hostBridge'
+ 
+ const { t } = useI18n()
+ 
+@@ -79,6 +79,85 @@ const r = useReplay()
+ // a coaching cue, so player movement never reframes the whole match.
+ const hostCameraMode = ref<'full' | 'target'>('full')
+ const hostCameraRevision = ref(0)
++const hostFocusWorld = ref<{ x: number; y: number } | null>(null)
++const hostFocusLabel = ref<string | null>(null)
++const hostPreviewPaths = ref<GrenadePath[] | null>(null)
++const hostTeachingBanner = ref<string | null>(null)
++const hostTeachingDetails = ref<string | null>(null)
++const handledTeachingCallIds = new Set<string>()
++
++type HostSlowReplay = {
++  command: Extract<PlaybackCommand, { type: 'teachingTool' }>
++  phase: 'PLAYING' | 'RETURNING'
++}
++const hostSlowReplay = ref<HostSlowReplay | null>(null)
++type HostGrenadeReplay = {
++  command: Extract<PlaybackCommand, { type: 'teachingTool' }>
++  paths: GrenadePath[]
++  startCanonicalTick: number
++  endCanonicalTick: number
++  returnRoundIndex: number
++  returnCanonicalTick: number
++  phase: 'PLAYING' | 'RETURNING'
++}
++const hostGrenadeReplay = ref<HostGrenadeReplay | null>(null)
++
++function emitTeachingAck(
++  command: Extract<PlaybackCommand, { type: 'teachingTool' }> | Extract<PlaybackCommand, { type: 'focusMapEvidence' }>,
++  status: 'SUCCEEDED' | 'REJECTED' | 'FAILED',
++  observationCode: 'CUE_PLAYED' | 'EVIDENCE_SHOWN' | 'UNAVAILABLE' | 'NO_CHANGE',
++  completed: boolean,
++  annotationRef?: string,
++) {
++  emitPlaybackEvent({
++    type: 'TEACHING_TOOL_ACK',
++    schemaVersion: 'cs2d-teaching-tool-ack.v1',
++    tool: command.tool,
++    callId: command.callId,
++    runId: command.runId,
++    generation: command.generation,
++    cueId: command.cueId,
++    ...(annotationRef ? { annotationRef } : {}),
++    status,
++    observationCode,
++    completed,
++    limitations: [],
++  })
++}
++
++function grenadePathRef(roundNumber: number, path: GrenadePath): string | null {
++  const first = path.points[0]
++  const last = path.points.at(-1)
++  if (!first || !last) return null
++  return `cs2d-r${roundNumber}-grenade-${first.t}-${last.t}`
++}
++
++function resolveHostGrenadeWindow(replay: Replay | null, refs: readonly string[]) {
++  if (!replay || refs.length === 0) return null
++  const wanted = new Set(refs)
++  for (let roundIndex = 0; roundIndex < replay.rounds.length; roundIndex += 1) {
++    const round = replay.rounds[roundIndex]
++    const paths: GrenadePath[] = []
++    for (const path of round.grenadePaths ?? []) {
++      const ref = grenadePathRef(round.number, path)
++      if (ref && wanted.has(ref)) paths.push(path)
++    }
++    if (paths.length > 0) {
++      const first = paths.flatMap((path) => path.points).sort((left, right) => left.t - right.t)[0]
++      const last = paths.flatMap((path) => path.points).sort((left, right) => right.t - left.t)[0]
++      if (!first || !last) return null
++      const freezeStart = round.freezeStartTick ?? round.startTick
++      const tickRate = replay.demoTickRate || 64
++      return {
++        paths,
++        startCanonicalTick: Math.round(freezeStart + first.t * tickRate),
++        endCanonicalTick: Math.round(freezeStart + last.t * tickRate),
++        roundIndex,
++      }
++    }
++  }
++  return null
++}
+ 
+ // Apply the per-view skip-freeze override before the replay loads, so the first
+ // round opens past the freeze. Declared first so its immediate run precedes
+@@ -94,6 +173,18 @@ watch(
+   () => props.replay,
+   (rep) => {
+     r.setReplay(rep)
++    handledTeachingCallIds.clear()
++    hostSlowReplay.value = null
++    hostGrenadeReplay.value = null
++    hostPreviewPaths.value = null
++    hostTeachingBanner.value = null
++    hostTeachingDetails.value = null
++    if (props.hostMode) {
++      hostFocusWorld.value = null
++      hostFocusLabel.value = null
++      hostCameraMode.value = 'full'
++      hostCameraRevision.value += 1
++    }
+     if (props.autoplay) r.play()
+   },
+   { immediate: true },
+@@ -121,10 +212,133 @@ onMounted(() => {
+     setCamera: (mode) => {
+       hostCameraMode.value = mode
+       hostCameraRevision.value += 1
++      if (mode === 'full') {
++        hostSlowReplay.value = null
++        hostGrenadeReplay.value = null
++        r.pause()
++        r.speed.value = 1
++        hostFocusWorld.value = null
++        hostFocusLabel.value = null
++        hostPreviewPaths.value = null
++        hostTeachingBanner.value = null
++        hostTeachingDetails.value = null
++      }
++    },
++    teachingTool: (command) => {
++      if (handledTeachingCallIds.has(command.callId)) return
++      handledTeachingCallIds.add(command.callId)
++      const args = command.args
++      if (args.tool === 'REPLAY_CUE_SLOW') {
++        hostPreviewPaths.value = null
++        hostTeachingBanner.value = '正在看完整处理'
++        hostTeachingDetails.value = null
++        hostSlowReplay.value = { command, phase: 'PLAYING' }
++        r.pause()
++        r.speed.value = 0.5
++        r.seekCanonicalTick(args.startCanonicalTick)
++        void nextTick(() => r.play())
++        return
++      }
++      if (args.tool === 'FOCUS_MAP_EVIDENCE') {
++        hostTeachingBanner.value = '正在标出地图证据'
++        hostTeachingDetails.value = args.label
++        hostFocusWorld.value = args.focusWorld
++        hostFocusLabel.value = args.label
++        hostCameraMode.value = 'target'
++        hostCameraRevision.value += 1
++        void nextTick(() => emitTeachingAck(command, 'SUCCEEDED', 'EVIDENCE_SHOWN', true, args.annotationRef))
++        return
++      }
++      if (args.tool === 'SHOW_GRENADE_TRACE') {
++        hostTeachingBanner.value = '正在展示道具轨迹'
++        hostTeachingDetails.value = null
++        const window = resolveHostGrenadeWindow(r.replay.value, [...args.trajectoryRefs, ...args.landingRefs])
++        if (!window) {
++          emitTeachingAck(command, 'FAILED', 'UNAVAILABLE', false)
++          return
++        }
++        hostPreviewPaths.value = []
++        hostGrenadeReplay.value = {
++          command,
++          paths: window.paths,
++          startCanonicalTick: window.startCanonicalTick,
++          endCanonicalTick: window.endCanonicalTick,
++          returnRoundIndex: r.roundIndex.value,
++          returnCanonicalTick: canonicalTick.value,
++          phase: 'PLAYING',
++        }
++        r.pause()
++        r.speed.value = 1
++        r.seekCanonicalTick(window.startCanonicalTick)
++        void nextTick(() => r.play())
++        return
++      }
++      hostTeachingBanner.value = args.tool === 'SHOW_WIN_RATE_IMPACT' ? '正在展示胜率影响' : '正在展示经济语境'
++      hostTeachingDetails.value = args.tool === 'SHOW_WIN_RATE_IMPACT'
++        ? `${Math.round(args.beforeProbability * 100)}% → ${Math.round(args.afterProbability * 100)}% · ${args.percentagePoints.toFixed(1)} 个百分点 · ${args.economyClass} · 相关性不等于单一行为因果`
++        : `${args.economyClass} · ${args.focusLabel}`
++      void nextTick(() => emitTeachingAck(command, 'SUCCEEDED', 'EVIDENCE_SHOWN', true))
++    },
++    focusMapEvidence: (command) => {
++      if (handledTeachingCallIds.has(command.callId)) return
++      handledTeachingCallIds.add(command.callId)
++      hostTeachingBanner.value = '正在标出地图证据'
++      hostTeachingDetails.value = command.label
++      hostFocusWorld.value = command.focusWorld
++      hostFocusLabel.value = command.label
++      hostCameraMode.value = 'target'
++      hostCameraRevision.value += 1
++      void nextTick(() => emitTeachingAck(command, 'SUCCEEDED', 'EVIDENCE_SHOWN', true, command.annotationRef))
+     },
+   })
+ })
+ onUnmounted(() => stopHostBridge?.())
++
++watch(canonicalTick, (tick) => {
++  const slow = hostSlowReplay.value
++  if (slow) {
++    const args = slow.command.args
++    if (args.tool === 'REPLAY_CUE_SLOW') {
++      if (slow.phase === 'PLAYING' && tick >= args.outcomeEndCanonicalTick) {
++        // Viewer owns only its local clock. It must reach the outcome boundary,
++        // pause, and seek back before the Host receives CUE_PLAYED.
++        r.pause()
++        r.speed.value = 1
++        r.seekCanonicalTick(args.decisionCanonicalTick)
++        slow.phase = 'RETURNING'
++        return
++      }
++      if (slow.phase === 'RETURNING' && tick <= args.decisionCanonicalTick + 1) {
++        hostSlowReplay.value = null
++        hostTeachingBanner.value = '正在回到决策点'
++        emitTeachingAck(slow.command, 'SUCCEEDED', 'CUE_PLAYED', true)
++        return
++      }
++    }
++  }
++  const grenade = hostGrenadeReplay.value
++  if (!grenade) return
++  if (grenade.phase === 'PLAYING') {
++    const currentT = r.currentT.value
++    hostPreviewPaths.value = grenade.paths
++      .map((path) => ({ ...path, points: path.points.filter((point) => point.t <= currentT) }))
++      .filter((path) => path.points.length >= 2)
++    if (tick >= grenade.endCanonicalTick) {
++      r.pause()
++      r.speed.value = 1
++      r.seekCanonicalTick(grenade.returnCanonicalTick)
++      hostPreviewPaths.value = []
++      grenade.phase = 'RETURNING'
++    }
++    return
++  }
++  if (r.roundIndex.value === grenade.returnRoundIndex && tick <= grenade.returnCanonicalTick + 1) {
++    hostGrenadeReplay.value = null
++    hostPreviewPaths.value = null
++    hostTeachingDetails.value = '轨迹已展示，画面已回到决策点'
++    emitTeachingAck(grenade.command, 'SUCCEEDED', 'EVIDENCE_SHOWN', true)
++  }
++})
+ watch(
+   () => [props.hostMode, r.roundIndex.value, canonicalTick.value, r.playing.value, r.speed.value] as const,
+   ([hostMode, roundIndex, tick, playing, speed]) => {
+@@ -393,6 +607,9 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+       :host-target-steam-id="props.hostMode ? props.hostTargetPlayerId : null"
+       :host-camera-mode="props.hostMode ? hostCameraMode : null"
+       :host-camera-revision="props.hostMode ? hostCameraRevision : 0"
++      :focus-world="props.hostMode ? hostFocusWorld : null"
++      :focus-world-label="props.hostMode ? hostFocusLabel : null"
++      :preview-paths="props.hostMode ? hostPreviewPaths : null"
+       :controls="!props.hostMode"
+       :low-quality-effects="lowQualityEffects"
+       :radar-src="activeLevelRadar"
+@@ -424,6 +641,16 @@ defineExpose({ pause: r.pause, jumpToThrow, roundIndex: r.roundIndex })
+       @popover-moved="onPopoverMoved"
+     />
+ 
++    <div
++      v-if="props.hostMode && hostTeachingBanner"
++      class="pointer-events-none absolute left-4 top-4 z-30 max-w-[min(30rem,calc(100%-2rem))] rounded-md bg-ink-950/90 px-3 py-2 text-sm text-ink-50 shadow-lg ring-1 ring-ink-700"
++      role="status"
++      aria-live="polite"
++    >
++      <strong class="block font-medium">{{ hostTeachingBanner }}</strong>
++      <span v-if="hostTeachingDetails" class="mt-0.5 block text-xs text-ink-300">{{ hostTeachingDetails }}</span>
++    </div>
++
+     <!-- Transient confirmation toast (e.g. "position copied") -->
+     <Transition
+       enter-active-class="transition-opacity duration-150"
+diff --git a/apps/app/src/viewer/player/hostBridge.ts b/apps/app/src/viewer/player/hostBridge.ts
+index 347fd2e..5b770e5 100644
+--- a/apps/app/src/viewer/player/hostBridge.ts
++++ b/apps/app/src/viewer/player/hostBridge.ts
+@@ -30,6 +30,8 @@ export interface ReplayReadyMessage {
+   rounds: PlaybackRoundSummary[]
+   players: PlaybackPlayerSummary[]
+   freezeSkipped: true
++  demoContentHash?: string
++  hashLatencyMs?: number
+ }
+ 
+ export interface PlayerSelectedMessage {
+@@ -103,6 +105,21 @@ export interface AnalysisTelemetryMessage {
+   }
+ }
+ 
++export interface TeachingToolAckMessage {
++  type: 'TEACHING_TOOL_ACK'
++  schemaVersion: 'cs2d-teaching-tool-ack.v1'
++  tool: 'REPLAY_CUE_SLOW' | 'FOCUS_MAP_EVIDENCE' | 'SHOW_GRENADE_TRACE' | 'SHOW_WIN_RATE_IMPACT' | 'SHOW_ECONOMY_CONTEXT'
++  callId: string
++  runId: string
++  generation: number
++  cueId: string
++  annotationRef?: string
++  status: 'SUCCEEDED' | 'REJECTED' | 'FAILED'
++  observationCode: 'CUE_PLAYED' | 'EVIDENCE_SHOWN' | 'UNAVAILABLE' | 'NO_CHANGE'
++  completed: boolean
++  limitations: string[]
++}
++
+ export type PlaybackEvent =
+   | ReplayReadyMessage
+   | PlayerSelectedMessage
+@@ -111,6 +128,7 @@ export type PlaybackEvent =
+   | AnalysisProgressMessage
+   | AnalysisTelemetryMessage
+   | AnalysisFailedMessage
++  | TeachingToolAckMessage
+ 
+ export type PlaybackCameraMode = 'full' | 'target'
+ 
+@@ -121,6 +139,63 @@ export type PlaybackCommand =
+   | { type: 'selectRound'; roundIndex: number }
+   | { type: 'setSpeed'; speed: number }
+   | { type: 'setCamera'; mode: PlaybackCameraMode }
++  | {
++      type: 'teachingTool'
++      schemaVersion: 'cs2d-teaching-tool-command.v2'
++      tool: TeachingToolCommandArgs['tool']
++      callId: string
++      runId: string
++      generation: number
++      cueId: string
++      args: TeachingToolCommandArgs
++    }
++  | {
++      type: 'focusMapEvidence'
++      schemaVersion: 'cs2d-teaching-tool-command.v1'
++      tool: 'FOCUS_MAP_EVIDENCE'
++      callId: string
++      runId: string
++      generation: number
++      cueId: string
++      annotationRef: string
++      focusWorld: { x: number; y: number }
++      label: string
++    }
++
++export type TeachingToolCommandArgs =
++  | {
++      tool: 'REPLAY_CUE_SLOW'
++      startCanonicalTick: number
++      decisionCanonicalTick: number
++      outcomeEndCanonicalTick: number
++      speed: 0.5
++    }
++  | {
++      tool: 'FOCUS_MAP_EVIDENCE'
++      annotationRef: string
++      focusWorld: { x: number; y: number }
++      label: string
++    }
++  | {
++      tool: 'SHOW_GRENADE_TRACE'
++      trajectoryRefs: string[]
++      landingRefs: string[]
++    }
++  | {
++      tool: 'SHOW_WIN_RATE_IMPACT'
++      measurementRef: string
++      beforeProbability: number
++      afterProbability: number
++      percentagePoints: number
++      economyClass: 'PISTOL' | 'ECO' | 'FORCE' | 'FULL' | 'UNKNOWN'
++      correlationText: string
++    }
++  | {
++      tool: 'SHOW_ECONOMY_CONTEXT'
++      economyRef: string
++      economyClass: 'PISTOL' | 'ECO' | 'FORCE' | 'FULL' | 'UNKNOWN'
++      focusLabel: string
++    }
+ 
+ interface EventEnvelope {
+   channel: typeof PLAYBACK_BRIDGE_CHANNEL
+@@ -197,6 +272,60 @@ function isCommandEnvelope(value: unknown): value is CommandEnvelope {
+       return hasExactKeys(payload, ['type', 'speed']) && isFiniteNumber(payload.speed) && payload.speed > 0 && payload.speed <= 16
+     case 'setCamera':
+       return hasExactKeys(payload, ['type', 'mode']) && (payload.mode === 'full' || payload.mode === 'target')
++    case 'teachingTool': {
++      const args = payload.args
++      if (!hasExactKeys(payload, ['type', 'schemaVersion', 'tool', 'callId', 'runId', 'generation', 'cueId', 'args']) ||
++        payload.schemaVersion !== 'cs2d-teaching-tool-command.v2' ||
++        typeof payload.callId !== 'string' || !payload.callId.trim() ||
++        typeof payload.runId !== 'string' || !payload.runId.trim() ||
++        !isFiniteNumber(payload.generation) || !Number.isInteger(payload.generation) || payload.generation < 0 ||
++        typeof payload.cueId !== 'string' || !payload.cueId.trim() || !isRecord(args) || payload.tool !== args.tool) return false
++      if (args.tool === 'REPLAY_CUE_SLOW') {
++        return hasExactKeys(args, ['tool', 'startCanonicalTick', 'decisionCanonicalTick', 'outcomeEndCanonicalTick', 'speed']) &&
++          isFiniteNumber(args.startCanonicalTick) && isFiniteNumber(args.decisionCanonicalTick) && isFiniteNumber(args.outcomeEndCanonicalTick) &&
++          args.startCanonicalTick <= args.decisionCanonicalTick && args.decisionCanonicalTick <= args.outcomeEndCanonicalTick && args.speed === 0.5
++      }
++      if (args.tool === 'FOCUS_MAP_EVIDENCE') {
++        const point = args.focusWorld
++        return hasExactKeys(args, ['tool', 'annotationRef', 'focusWorld', 'label']) && typeof args.annotationRef === 'string' && !!args.annotationRef.trim() &&
++          isRecord(point) && hasExactKeys(point, ['x', 'y']) && isFiniteNumber(point.x) && isFiniteNumber(point.y) &&
++          typeof args.label === 'string' && args.label.length <= 160
++      }
++      if (args.tool === 'SHOW_GRENADE_TRACE') {
++        return hasExactKeys(args, ['tool', 'trajectoryRefs', 'landingRefs']) && Array.isArray(args.trajectoryRefs) && args.trajectoryRefs.length > 0 && args.trajectoryRefs.length <= 16 &&
++          Array.isArray(args.landingRefs) && args.landingRefs.length > 0 && args.landingRefs.length <= 16 &&
++          args.trajectoryRefs.every((ref) => typeof ref === 'string' && !!ref.trim() && ref.length <= 160) &&
++          args.landingRefs.every((ref) => typeof ref === 'string' && !!ref.trim() && ref.length <= 160)
++      }
++      if (args.tool === 'SHOW_WIN_RATE_IMPACT') {
++        return hasExactKeys(args, ['tool', 'measurementRef', 'beforeProbability', 'afterProbability', 'percentagePoints', 'economyClass', 'correlationText']) &&
++          typeof args.measurementRef === 'string' && !!args.measurementRef.trim() &&
++          isFiniteNumber(args.beforeProbability) && args.beforeProbability >= 0 && args.beforeProbability <= 1 &&
++          isFiniteNumber(args.afterProbability) && args.afterProbability >= 0 && args.afterProbability <= 1 &&
++          isFiniteNumber(args.percentagePoints) &&
++          ['PISTOL', 'ECO', 'FORCE', 'FULL', 'UNKNOWN'].includes(String(args.economyClass)) &&
++          typeof args.correlationText === 'string' && args.correlationText.length <= 200
++      }
++      if (args.tool === 'SHOW_ECONOMY_CONTEXT') {
++        return hasExactKeys(args, ['tool', 'economyRef', 'economyClass', 'focusLabel']) &&
++          typeof args.economyRef === 'string' && !!args.economyRef.trim() &&
++          ['PISTOL', 'ECO', 'FORCE', 'FULL', 'UNKNOWN'].includes(String(args.economyClass)) &&
++          typeof args.focusLabel === 'string' && args.focusLabel.length <= 160
++      }
++      return false
++    }
++    case 'focusMapEvidence': {
++      const point = payload.focusWorld
++      return hasExactKeys(payload, ['type', 'schemaVersion', 'tool', 'callId', 'runId', 'generation', 'cueId', 'annotationRef', 'focusWorld', 'label']) &&
++        payload.schemaVersion === 'cs2d-teaching-tool-command.v1' && payload.tool === 'FOCUS_MAP_EVIDENCE' &&
++        typeof payload.callId === 'string' && !!payload.callId.trim() &&
++        typeof payload.runId === 'string' && !!payload.runId.trim() &&
++        isFiniteNumber(payload.generation) && Number.isInteger(payload.generation) && payload.generation >= 0 &&
++        typeof payload.cueId === 'string' && !!payload.cueId.trim() &&
++        typeof payload.annotationRef === 'string' && !!payload.annotationRef.trim() &&
++        isRecord(point) && hasExactKeys(point, ['x', 'y']) && isFiniteNumber(point.x) && isFiniteNumber(point.y) &&
++        typeof payload.label === 'string' && payload.label.length <= 160
++    }
+     default:
+       return false
+   }
+@@ -210,6 +339,8 @@ export function listenForPlaybackCommands(
+     selectRound: (roundIndex: number) => void
+     setSpeed: (speed: number) => void
+     setCamera: (mode: PlaybackCameraMode) => void
++    teachingTool: (command: Extract<PlaybackCommand, { type: 'teachingTool' }>) => void
++    focusMapEvidence: (command: Extract<PlaybackCommand, { type: 'focusMapEvidence' }>) => void
+   },
+ ): () => void {
+   if (window.parent === window) return () => {}
+@@ -236,6 +367,12 @@ export function listenForPlaybackCommands(
+       case 'setCamera':
+         handlers.setCamera(command.mode)
+         break
++      case 'teachingTool':
++        handlers.teachingTool(command)
++        break
++      case 'focusMapEvidence':
++        handlers.focusMapEvidence(command)
++        break
+     }
+   }
+   window.addEventListener('message', onMessage)
+@@ -247,6 +384,8 @@ export function replayReadyMessage(replay: {
+   demoTickRate: number
+   players: { steamId: string; name: string; startSide: 'T' | 'CT' }[]
+   rounds: { number: number; freezeStartTick?: number; startTick: number; postEndTick?: number; endTick: number }[]
++  demoContentHash?: string
++  hashLatencyMs?: number
+ }): ReplayReadyMessage {
+   const rounds = replay.rounds.map((round, roundIndex) => ({
+     roundIndex,
+@@ -269,5 +408,8 @@ export function replayReadyMessage(replay: {
+       startSide: player.startSide,
+     })),
+     freezeSkipped: true,
++    ...(replay.demoContentHash && typeof replay.hashLatencyMs === 'number'
++      ? { demoContentHash: replay.demoContentHash, hashLatencyMs: replay.hashLatencyMs }
++      : {}),
+   }
+ }

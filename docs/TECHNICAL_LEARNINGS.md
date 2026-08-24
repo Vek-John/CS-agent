@@ -573,6 +573,160 @@ Wrangler 打包报告生成 bundle 中存在重复 `radar_position` 对象键；
 
 DeepSeek Director packet 仍为紧凑的最多 32 个候选，避免把大 CandidateSet 传给模型；50 是最终路线 ceiling，Provider 一次可能返回少于 50，后续未选候选不会被自动补成教练点。需要更多覆盖时应改进候选摘要/排序，而不是放宽成功对枪过滤。
 
+### 4.25 2026-08-24：固定 PIN 的 cs2d 受控 patched checkout 复用
+
+**触发**
+
+`.local-data/upstream/cs2d` 的 HEAD 仍是固定 PIN，但已有受控回放、Host bridge、分析 Worker 和模型资产修改。0001 patch 的 reverse/apply check 均因超集 dirty diff 失败，导致 `pnpm cs2d:build` 在 patch 阶段阻塞；0002 patch 仍可精确 reverse。
+
+**决定**
+
+把 patcher 作为唯一深模块 seam：新增显式 `--reuse-patched-checkout` 路径，只有固定 PIN、`git diff --check` 通过、dirty 路径属于 patch/受控生成资产 allowlist，且 host bridge、host mode、canonical seek、Cloudflare base/COI 和 parser/replay marker 全部存在时，才返回 `EXACT_APPLIED` 或 `CONTROLLED_SUPERSET` 并跳过重复 apply。干净 checkout 仍走 clone/apply；错误 PIN、任意 dirty 路径、缺 marker 或 diff whitespace 错误直接拒绝。
+
+**落点**
+
+`tools/apply-cs2d-host-patch.mjs`、`tools/apply-cs2d-host-patch.test.mjs`、`tools/build-cs2d-viewer.mjs`。build caller 显式传 reuse flag，但没有改变 CoachAgent、DO Worker 或默认 Host。
+
+**验证**
+
+patcher smoke 复用当前受控超集 checkout 成功；三态与拒绝路径测试 4 项通过；`git diff --check` 和 upstream `git diff --check` 通过；`CI=true pnpm cs2d:build` 在 17 秒内成功完成模型/ORT 同步与 Vite viewer build，生成 `apps/app/dist`。
+
+**限制 / 下一步**
+
+本次没有运行 Cloudflare 全链或 `--build-parser`；复用 allowlist 对模型生成目录采用显式受控前缀，若生成资产布局变化需同步更新 patcher marker/allowlist 和测试。首次干净环境仍需 clone、安装依赖并正常 apply 两个 patch。
+
+### 4.26 2026-08-24：浏览器 LangGraph interrupt 被否决，切换每 session Durable Object
+
+**触发**
+
+Stage 0 的最小 TypeScript `StateGraph`、MemorySaver、IndexedDB saver 和 browser bundle 单测都通过，但真实浏览器第一次执行 `interrupt()` 报“outside the context of a graph”。在同一 async-context seam 做一次有界 single-flight shim 修正后，第二次能抛出 GraphInterrupt，却仍由 browser graph invoke 向页面冒泡，未形成可 resume checkpoint。两次都发生在相同的 LangGraph browser async-context/interrupt 边界。
+
+**决定**
+
+按“两次同一基础设施 seam 失败即停止 workaround”的规则否决浏览器内 Graph。生产改为每个 session 一个 Cloudflare Durable Object：TypeScript StateGraph 与自定义 `BaseCheckpointSaver` 在 `nodejs_compat` 原生 AsyncLocalStorage 环境运行；浏览器只导入 client-safe remote dispatch，Graph 用 interrupt 返回紧凑 ToolRequest，Host 执行本地 Replay 工具后用 ToolResult/Command resume。localhost 同路径使用 process-local MemorySaver，并诚实标记刷新后不可恢复；IndexedDB saver 只保留为实验事实，不进入默认入口。
+
+**落点**
+
+`libs/coach-agent`、`apps/web/app/api/coaching/agent`、`apps/web/app/agent-poc`、`tools/coach-agent-durable-object.mjs`、`tools/cloudflare-worker.mjs`、`wrangler.jsonc`、ADR-0003 与 ARCHITECTURE 3.5.0。Graph state 和 checkpoint 只保存版本化身份、cue/capability、有限 tool history/theme/trace；raw Replay、frames、模型、Prompt、CoT 和 Key 不进入该边界。
+
+**验证**
+
+固定依赖解析为 `@langchain/langgraph@1.4.12`、`@langchain/core@1.2.9`、`zod@4.4.3`。Durable Object 定向测试 13 files / 42 tests、TypeScript 检查、OpenNext build、Cloudflare assets prepare 和 Wrangler release-assets dry-run 通过。真实 `wrangler dev` HTTP smoke 的三个独立请求依次得到 `START: WAITING_TOOL + 1 effect`、`RESUME: COMPLETED + 0 effect`、重复 resume `0 effect`，backend 为 `DURABLE_OBJECT` 且 `recoverableAfterRefresh=true`；8787 等测试端口和临时持久化目录均已清理。
+
+**限制 / 下一步**
+
+当前 Graph 仍是单 cue 纵向切片；Stage 2 需要从当前 cs2d 生成的冻结 ReviewPlan 提取一个真实 test_demo cue，接入 OutcomeCompletionGate、三段式 Narration、CapabilityBuilder 和一个 Host visual tool。完整多 cue、takeover、SessionTheme、真实 DeepSeek Policy trace 与会话结束后的 checkpoint 压缩仍未完成。浏览器内失败证据保存在 `.local-data/acceptance-agent-eval/stage0/in-app-browser-fallback-decision.json`，Durable Object HTTP 证据保存在 `.local-data/acceptance-agent-eval/stage0-do/wrangler-http-smoke.json`。
+
+### 4.27 2026-08-24：Capability 合法性不能代替 Agent Policy 质量
+
+**触发**
+
+首版 TeachingCapability Eval 只检查“标注的首选工具是否出现在 builder 生成列表中”，没有实际执行 Policy；只要 builder 多生成工具，指标就会虚高。Graph 与 DeepSeek fallback 同时还会在 Provider 失败时机械选择第一个 capability，导致“合法但没有额外教学价值”的演示被当成成功。
+
+**决定**
+
+把 Eval 分成两层：CapabilityBuilder 只判断工具是否合法并绑定参数；Policy Eval 实际调用可注入 `PolicyAdapter`，判断是否应 `FINISH_CUE`、实际选中的 capability、禁止工具和输出 evidence。新增 Graph/Provider/Eval 共用的 deterministic policy seam：只有 focus 与 evidence 形成唯一有价值匹配时选择工具；多项同等合法、没有增量价值或证据不匹配时结束 cue。慢放进一步要求 verified `actionRefs`，不能用 decision/outcome fact 冒充可回放动作。生产 runtime 默认使用 deterministic adapter，Fake 只允许测试显式注入。
+
+**落点**
+
+`libs/coach-agent/src/deterministic-policy.ts`、`capability-builder.ts`、`graph.ts`、`adapters.ts`、`teaching-capability-eval.ts`、Agent Eval manifest、DeepSeek Coach Policy fallback 与 ADR-0003。
+
+**验证**
+
+23 个手工 fixture 实际运行 Policy 后：need-tool 一致率 100%，需要工具时首选一致率 100%，非法选择率 0%，required evidence 与合法 capability 生成均 100%，实际选择/结束为 12/11。相关回归 13 files / 52 tests、标准 TypeScript 检查与 `git diff --check` 通过；默认多 capability runtime 不再产生虚假 `POLICY_INVALID_OUTPUT`。
+
+**限制 / 下一步**
+
+这些是合成/手工领域 fixture，不代表真实 Demo 的模型质量；Stage 4 仍需用当前 cs2d AnalysisBundle、DeepSeek Policy 和真实 ToolObservation 重放同一标注集。`USER_TAKEOVER` 只有状态枚举，尚无可执行事件，因此保持明确 `UNVERIFIED`。
+
+### 4.28 2026-08-24：Stage 2 visual tool 必须由 Host 绑定证据并受 ACK/超时约束
+
+**触发**
+
+Stage 2 要把真实 frozen ReviewPlan 的一个 cue 纵向接入地图工具。直接让 Agent 传坐标会越过证据边界；同时 React 异步 START、iframe ACK、用户接管和重复 resume 可能让旧 generation 继续产生副作用。Parser 还需要把 60MB raw `.dem` 的内容身份从 recent-history UUID 中分离出来。
+
+**决定**
+
+新增纯 `CoachAgentHostAdapter` 深 seam：它只接 frozen route、presentable narration、COMPLETE gate、allowlisted analysis identity 和 parser SHA-256，CapabilityBuilder 只生成 `FOCUS_MAP_EVIDENCE`，Host registry 保留 annotation→WORLD point 绑定，request 只能选择 capability ID。严格 bridge command/ACK 带 run/cue/generation/callId；Host 在 postMessage 前去重，ACK 后才 resume，generation cancel 会清 registry。ACK watchdog 超时转结构化失败并恢复基础回放控制，不盲目推进。raw bytes 留在 parser Worker，跨 iframe 只发 hash/摘要/命令。
+
+**落点**
+
+`apps/web/lib/coaching/coach-agent-host-adapter.ts`、`apps/web/components/playback/cs2d-playback-host.tsx`、`libs/contracts/src/playback-bridge.ts`、`libs/cs2d-analysis-adapter/src/index.ts`、`tools/cs2d-host/patches/0003-cs2d-stage2-map-focus.patch`、固定 cs2d 的 parser/bridge/Viewer patch。
+
+**验证**
+
+Adapter/bridge/client-safe 定向测试 49 项通过；root typecheck、Next typecheck、cs2d `vue-tsc` 通过；`CI=true pnpm cs2d:build` 成功。Stage2 patch 在临时 worktree 以固定 PIN 干净应用 0001+0002 后由 `git diff --binary --relative` 一次性生成，随后 clean `git apply --check`、apply 与 marker/reuse 验证通过；临时 worktree 已清理。60,601,900B `test_demo.dem` 的 Node WebCrypto SHA-256 基线为 42.13ms，摘要为 `84a1…b622cb2`；Hash latency 只记录 Worker 返回的诊断字段，不进入 UI。
+
+**限制 / 下一步**
+
+本轮没有跑浏览器自动化、完整 Cloudflare 链路或 433MB Falcons；没有在真实浏览器中测量 Worker hash latency。当前仅一个 cue、一个地图点工具，Viewer ACK 仍是本地可执行命令确认；多 cue、其他 visual tools、真实 Durable Object resume 与真实 Demo 浏览器 telemetry 需下一阶段验证。
+
+### 4.29 2026-08-24：Stage 3B 的 lifecycle recovery 必须由 Host ledger 证明
+
+**触发**
+
+把 Stage 2 单一地图聚焦扩展到多 cue 和五种受约束工具后，冻结路线中的连续 FREEZE/普通段可能被 reducer 一次性消费；同时 HTTP observer/COMPLETE 失败、iframe ACK 丢失、takeover 和 React effect 重入都可能让 Host 把未确认的 segment 当成已同步，或让 Graph checkpoint 永久停在等待工具。
+
+**决定**
+
+以 `CoachAgentHostAdapter`/controller 作为深 seam：capabilityId/callId 按 run+cue+graph step 稳定，Host 只在 registry 中绑定 canonical tick、世界坐标、player、速度和展示参数；lifecycle event 使用 `PENDING`/`CONFIRMED` 状态，HTTP/dispatch 失败释放 PENDING，同 eventId 可安全重试，只有匹配结果 CONFIRMED 才推进 route cursor。观察事件通过单一 Promise tail 按 frozen plan catch-up 串行发送；工具 effect 使用独立单调 epoch，takeover 后旧 ACK 永不复活。五种工具均由各自 evidence/gate/可靠性资格决定，浏览器只呈现短状态和已绑定的证据卡。
+
+**落点**
+
+`apps/web/lib/coaching/coach-agent-stage3-host-adapter.ts`、`coach-agent-stage3-controller.ts`、`cs2d-playback-host.tsx`、`libs/contracts/src/playback-bridge.ts`、Stage 3 wrap-up seam，以及固定 PIN cs2d 的 `ViewerStage.vue`/`hostBridge.ts` 受控 patch。Stage 3 事件使用 v2；Stage 2 v1 入口保留。
+
+**验证**
+
+Stage3 Host/controller/integration/wrap-up 与 bridge/patcher 定向回归 6 files / 35 tests 通过；`CI=true pnpm typecheck`、Next production build、cs2d `vue-tsc --noEmit` 与 `CI=true pnpm cs2d:build` 通过。`0003` 在临时 worktree 以固定 PIN 干净应用 `0001`/`0002` 后，用六个当前上游文件一次生成 447 行 binary diff；随后三份 patch clean apply-check/apply、`git diff --check` 与受控 marker/reuse 校验通过，临时 worktree 已清理。
+
+**限制 / 下一步**
+
+Stage 2 的真实浏览器单 cue 地图聚焦已有验收证据；本轮没有再跑浏览器自动化、完整 Cloudflare bundle、433MB Falcons 或真实多 cue Stage 3 浏览器 telemetry。Stage 3 的五工具资格、ACK/timeout/takeover/recovery 已有纯 seam 覆盖，但实际可用性仍取决于当前 cue 是否存在合法 WORLD/trajectory/measurement/economy refs；不满足条件时会确定性降级，不伪造证据。
+
+### 4.30 2026-08-24：Takeover 不能把未消费的 reveal 当成已完成教学
+
+**触发**
+
+真实 Stage 3 回放中，cue2 正在慢放时用户自由接管并回到 cue1。cue1 恢复成功后，Session 因 `revealed_cue_ids` 仍保留未 `consumed_cue_ids` 的 cue2，把它当成已揭示节点直接越过，继续到了后续进度；旧 iframe ACK 也必须继续失效。
+
+**决定**
+
+`RETURN_TO_NEAREST_CUE` 仍只撤销目标 cue 的 consumed/revealed 状态，但同时撤销所有“已 revealed、未 consumed”的其他 cue；已消费的后续 cue 保留，避免整场重复教学。Host controller 在 takeover 取消仍在 START/tool effect 的 cue 时释放该 cue 的 started marker；重新进入后复用稳定 run ledger，旧 POSTED/未知 call 不重新 post，只产生一次受限 FAILED resume，旧 epoch ACK 永不通过。已 COMPLETED 的 cue 不释放 marker，继续由 Graph completedCueIds 和 reducer consumed 事实防止重复 TeachingMove。
+
+**落点**
+
+`libs/session/src/index.ts`、`libs/session/src/index.test.ts`、`apps/web/lib/coaching/coach-agent-stage3-controller.ts` 及其 Stage 3 controller 回归测试。
+
+**验证**
+
+Session 红测先复现“cue2 revealed 未消费后被越过”，修复后 session 12 tests 通过；Stage3 Host/controller/integration/wrap-up、bridge 与 session 定向回归 6 files / 44 tests 通过；`CI=true pnpm typecheck` 与 `CI=true pnpm build` 通过。回归覆盖未消费 cue 再次完整 outcome→pause/gate、已消费 cue 不重复教学、takeover 后旧 ACK 屏蔽及 posted-unknown call 的一次 FAILED recovery。
+
+**限制 / 下一步**
+
+本轮未重新跑真实浏览器自动化、完整 Cloudflare 链路或 433MB Demo；真实 Stage4 多 cue 场景仍需在同一 test_demo/Dog 路线复验截图和 console。当前修复只改变 Session reveal/consume recovery 与 Host/controller ledger，不改变 Agent Graph route 排序或默认入口。
+
+### 4.31 2026-08-24：整场 Agent 验收必须同时证明工具价值、恢复边界和 Provider 身份
+
+**触发**
+
+Stage 3 的 seam 测试通过后仍有三类真实问题不会由单元测试暴露：全场重复主题引用会随 cue 数增长而超过紧凑 state 上限；用户在慢放中接管可能留下 revealed-but-unconsumed cue；本地文件中存在 DeepSeek key 也不代表手工启动的 Next 进程实际加载了它。Falcons/Spirit 的 433 MB 回放还会把浏览器 controller 生命周期和产品失败混在一起。
+
+**决定**
+
+SessionTheme 对 cue/round/evidence refs 使用稳定去重并分别限制为 16，完成态只保留必要摘要和最近三个 checkpoint；takeover 回到最近 cue 时撤销所有未消费 reveal，并用 effect epoch 屏蔽旧 ACK。真实 Demo 只由页面/Worker 持有，控制面逐 cue 读取摘要。localhost DeepSeek 只由 `tools/run-localhost.mjs` 显式解析 `.local-data/deepseek.env` 并注入 Next 子进程；手工 `next start` 不再被当成带 Provider 的验收方式。
+
+**验证**
+
+`test_demo.dem` 以 Dog 完成 14/14 cue：实际执行 3 次 `SHOW_GRENADE_TRACE`、11 次 `REPLAY_CUE_SLOW`，全部回到稳定决策画面，生成 3 个只引用已完成 cue 的全场主题，最终新标签页 console warn/error 为空。Stage 2 已单独证明 `FOCUS_MAP_EVIDENCE`。Falcons/Spirit 以 NiKo 完成首 cue smoke，并在第二次有界运行推进到 29/49；实际观察到 grenade、slow replay、map focus 和 win-rate impact，随后浏览器自动化 kernel 被 SIGKILL。按大文件基础设施“两次失败停止叠 workaround”以及发布范围收敛，不再启动第三次全场运行。
+
+DeepSeek Policy 使用项目私密 env 启动后的同源 `/api/coaching/policy` 实测返回 HTTP 200、`SUCCEEDED/DEEPSEEK`、`deepseek-v4-flash`、629 tokens，约 1.84 秒；模型从两个合法 capability 中选择 `cap-smoke-slow`，只引用 `action-1/outcome-1`。同一旧 `next start` 进程的无泄密探针明确得到 `DEEPSEEK_API_KEY=false`，因此此前 fallback 是验收启动错误，不是用户 key 错误。
+
+发布门禁为 66 个 Vitest 文件、423 passed、1 skipped；TypeScript、Next production build、cs2d typecheck/build、Cloudflare OpenNext build、source/bundle secret scan、363 个静态资产准备和 Wrangler dry-run 全部通过。dry-run 显示 `COACH_AGENT → CoachAgentDurableObject` binding，Worker 约 11,317 KiB、gzip 约 2,253 KiB；生产 Secret 列表只确认名称 `DEEPSEEK_API_KEY`，未读取其值。
+
+**限制 / 下一步**
+
+Falcons/Spirit 没有完成 49/49，真实 Demo 尚未命中 `SHOW_ECONOMY_CONTEXT`；该工具只有 fixture、Host 和 UI 回归证据。Stage 3 继续由 `?coachAgent=stage3` 显式启用，默认入口保留为快速回退。发布后仍需用轻量线上请求确认 Durable Object binding、Policy Provider 和静态 Viewer，不上传大 Demo。
+
 ## 5. 常用问题排查表
 
 | 现象 | 首先检查 | 常见根因 | 不要做什么 |

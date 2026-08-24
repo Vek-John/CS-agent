@@ -28,6 +28,14 @@ describe("cs2d playback bridge", () => {
     expect(isPlaybackEventEnvelope(ready)).toBe(true);
     expect(isPlaybackEventEnvelope({ ...ready, payload: { ...ready.payload, frames: [] } })).toBe(false);
     expect(JSON.stringify(ready)).not.toMatch(/\"(?:replay|frames|events)\"/i);
+    expect(isPlaybackEventEnvelope({
+      ...ready,
+      payload: { ...ready.payload, demoContentHash: "a".repeat(64), hashLatencyMs: 12.5 },
+    })).toBe(true);
+    expect(isPlaybackEventEnvelope({
+      ...ready,
+      payload: { ...ready.payload, demoContentHash: "not-a-sha", hashLatencyMs: 12.5 },
+    })).toBe(false);
   });
   it("validates every command and rejects additional data", () => {
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "play" }))).toBe(true);
@@ -37,6 +45,45 @@ describe("cs2d playback bridge", () => {
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "setSpeed", speed: 8 }))).toBe(true);
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "setCamera", mode: "full" }))).toBe(true);
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "setCamera", mode: "target" }))).toBe(true);
+    expect(isPlaybackCommandEnvelope(commandEnvelope({
+      type: "focusMapEvidence",
+      schemaVersion: "cs2d-teaching-tool-command.v1",
+      tool: "FOCUS_MAP_EVIDENCE",
+      callId: "stage2-call",
+      runId: "stage2-run",
+      generation: 1,
+      cueId: "cue-1",
+      annotationRef: "annotation-1",
+      focusWorld: { x: 10, y: -20 },
+      label: "关键站位",
+    }))).toBe(true);
+    expect(isPlaybackCommandEnvelope({
+      ...commandEnvelope({
+        type: "focusMapEvidence",
+        schemaVersion: "cs2d-teaching-tool-command.v1",
+        tool: "FOCUS_MAP_EVIDENCE",
+        callId: "stage2-call",
+        runId: "stage2-run",
+        generation: 1,
+        cueId: "cue-1",
+        annotationRef: "annotation-1",
+        focusWorld: { x: 10, y: -20 },
+        label: "关键站位",
+      }),
+      payload: {
+        type: "focusMapEvidence",
+        schemaVersion: "cs2d-teaching-tool-command.v1",
+        tool: "FOCUS_MAP_EVIDENCE",
+        callId: "stage2-call",
+        runId: "stage2-run",
+        generation: 1,
+        cueId: "cue-1",
+        annotationRef: "annotation-1",
+        focusWorld: { x: 10, y: -20 },
+        label: "关键站位",
+        rawReplay: {},
+      },
+    })).toBe(false);
     expect(isPlaybackCommandEnvelope({ ...commandEnvelope({ type: "play" }), replay: {} })).toBe(false);
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "selectRound", roundIndex: -1 }))).toBe(false);
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "setSpeed", speed: Number.NaN }))).toBe(false);
@@ -139,6 +186,30 @@ describe("cs2d playback bridge", () => {
       ...event,
       payload: { ...event.payload, telemetry: { ...telemetry, rawReplay: {} } }
     })).toBe(false);
+  });
+
+  it("accepts only a strict teaching ACK tied to one map annotation", () => {
+    const ack = {
+      channel: PLAYBACK_BRIDGE_CHANNEL,
+      direction: "event",
+      payload: {
+        type: "TEACHING_TOOL_ACK",
+        schemaVersion: "cs2d-teaching-tool-ack.v1",
+        tool: "FOCUS_MAP_EVIDENCE",
+        callId: "stage2-call",
+        runId: "stage2-run",
+        generation: 1,
+        cueId: "cue-1",
+        annotationRef: "annotation-1",
+        status: "SUCCEEDED",
+        observationCode: "EVIDENCE_SHOWN",
+        completed: true,
+        limitations: [],
+      },
+    } as const;
+    expect(isPlaybackEventEnvelope(ack)).toBe(true);
+    expect(isPlaybackEventEnvelope({ ...ack, payload: { ...ack.payload, callId: "" } })).toBe(false);
+    expect(isPlaybackEventEnvelope({ ...ack, payload: { ...ack.payload, extra: true } })).toBe(false);
   });
 
   it("accepts WebGPU FP16 telemetry with explicit unknown purity", () => {

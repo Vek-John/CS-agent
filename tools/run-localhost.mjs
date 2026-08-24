@@ -20,7 +20,7 @@ if (existsSync(localCoachEnvPath)) {
 
 const modelResult = spawnSync(process.execPath, [modelSync], { cwd: root, stdio: 'inherit', env: { ...process.env, CS2D_DEV_ASSETS: '1' } })
 if (modelResult.status !== 0) process.exit(modelResult.status ?? 1)
-const patchResult = spawnSync(process.execPath, [patcher], { cwd: root, stdio: 'inherit' })
+const patchResult = spawnSync(process.execPath, [patcher, '--reuse-patched-checkout'], { cwd: root, stdio: 'inherit' })
 if (patchResult.status !== 0) process.exit(patchResult.status ?? 1)
 if (!existsSync(resolve(upstream, 'node_modules'))) {
   process.stderr.write('[cs2d-host] dependencies missing. Run: pnpm cs2d:setup\n')

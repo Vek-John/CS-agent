@@ -21,7 +21,7 @@ function run(command, args, options = {}) {
   }
 }
 
-const patchArgs = ["--clone"];
+const patchArgs = ["--clone", "--reuse-patched-checkout"];
 if (!existsSync(resolve(upstream, "node_modules"))) patchArgs.push("--install");
 run(process.execPath, [patcher, ...patchArgs]);
 // Clone and install the pinned upstream before syncing model/runtime assets.

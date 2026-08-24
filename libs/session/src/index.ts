@@ -391,6 +391,7 @@ export function reduceCoachingSession(
       if (!route) return state;
       const targetSegment = plan.segments[route.segmentIndex];
       const pending = isPendingNarration(state, route.cue.id);
+      const consumedCueIds = new Set(state.consumed_cue_ids);
       return {
         ...state,
         phase: pending ? "BUFFERING" : "PLAYING",
@@ -398,7 +399,13 @@ export function reduceCoachingSession(
         current_cue_id: route.cue.id,
         current_tick: targetSegment.start_tick,
         consumed_cue_ids: state.consumed_cue_ids.filter((cueId) => cueId !== route.cue.id),
-        revealed_cue_ids: state.revealed_cue_ids.filter((cueId) => cueId !== route.cue.id),
+        // A revealed cue is only safe to keep revealed after its teaching
+        // boundary was consumed.  Takeover can happen during a later cue's
+        // outcome/replay, so leave no unreconciled reveal that TICK could
+        // mistake for completed teaching on the next walk.
+        revealed_cue_ids: state.revealed_cue_ids.filter(
+          (cueId) => cueId !== route.cue.id && consumedCueIds.has(cueId)
+        ),
         outcome_completion: undefined,
         ...(pending ? { buffered_from_phase: "PLAYING" as const } : { buffered_from_phase: undefined })
       };
