@@ -1,4 +1,5 @@
 import type { Advice, CoachCue, Fact, Inference, ReviewPlan } from "@cs-coach/contracts";
+import { MAX_TEACHING_CUES } from "@cs-coach/contracts";
 
 /**
  * @deprecated Legacy report-surface adapter retained for the old review page
@@ -241,6 +242,9 @@ export function buildNarrationPayload(
   plan: ReviewPlan,
   context: NarrationRedactionContext = {}
 ): NarrationRequestPayload {
+  if (plan.cues.length > MAX_TEACHING_CUES) {
+    throw new Error(`Legacy narration cannot prepare more than ${MAX_TEACHING_CUES} coaching cues.`);
+  }
   collectUniqueIds(plan);
 
   const aliases: AliasMaps = {

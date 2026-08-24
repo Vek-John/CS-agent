@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { MAX_TEACHING_CUES } from "@cs-coach/contracts";
 import {
   narrateWithDeepSeek,
   parseNarrationRequest,
@@ -259,11 +260,23 @@ describe("DeepSeek narration provider", () => {
     })).not.toThrow();
   });
 
-  it("rejects more than thirty-two cues and oversized serialized input", () => {
+  it("accepts the 50-cue route ceiling while preserving the byte cap", async () => {
+    const request = multiCueRequest(MAX_TEACHING_CUES);
+    const result = await narrateWithDeepSeek(
+      request,
+      { DEEPSEEK_API_KEY: SECRET },
+      async () => completion(multiCueSuccessContent(request))
+    );
+    expect(result.status).toBe("SUCCEEDED");
+    expect(result.items).toHaveLength(MAX_TEACHING_CUES);
+    expect(result.items.at(-1)?.cue_id).toBe("c50");
+  });
+
+  it("rejects more than 50 cues and oversized serialized input", () => {
     const base = sampleRequest().cues[0];
-    const cues = Array.from({ length: 33 }, (_, index) => ({ ...base, cue_id: `c${index + 1}` }));
-    expect(() => parseNarrationRequest({ cues })).toThrow(/1 to 32 cues/);
-    expect(() => parseNarrationRequest({ cues: [{ ...base, cue_id: "c33" }] })).toThrow();
+    const cues = Array.from({ length: MAX_TEACHING_CUES + 1 }, (_, index) => ({ ...base, cue_id: `c${index + 1}` }));
+    expect(() => parseNarrationRequest({ cues })).toThrow(/1 to 50 cues/);
+    expect(() => parseNarrationRequest({ cues: [{ ...base, cue_id: "c51" }] })).toThrow();
     expect(() => parseNarrationRequest(sampleRequest(), 64 * 1024 + 1)).toThrow();
   });
 });

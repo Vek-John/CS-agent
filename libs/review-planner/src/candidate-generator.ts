@@ -18,7 +18,7 @@ import type {
 } from "@cs-coach/contracts";
 import { assembleCandidateSet } from "./teaching-pipeline";
 
-export const CANDIDATE_GENERATOR_VERSION = "review-planner/candidate-generator/1.0.0";
+export const CANDIDATE_GENERATOR_VERSION = "review-planner/candidate-generator/1.1.0";
 const OUTCOME_WINDOW_SECONDS = 4;
 const PRE_ROLL_SECONDS = 1;
 const WIN_RATE_DROP_THRESHOLD = 0.12;

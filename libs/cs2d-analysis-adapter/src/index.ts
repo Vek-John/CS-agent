@@ -24,6 +24,7 @@ import type {
   CandidateGeneratorInput,
   CandidateSet
 } from "@cs-coach/contracts";
+import { MAX_TEACHING_CUES } from "@cs-coach/contracts";
 import type {
   ObservableState,
   WorldPoint
@@ -44,6 +45,7 @@ import {
   collectCandidateSetIssues,
   stableFingerprint
 } from "@cs-coach/review-planner";
+import { CANDIDATE_GENERATOR_VERSION } from "@cs-coach/review-planner";
 
 /**
  * The adapter's only upstream dependency is this structural port.  It is
@@ -62,11 +64,11 @@ export const CS2D_SOURCE = {
   input_boundary: "WASM_WORKER_STRUCTURED_REPLAY_ONLY"
 } as const;
 
-export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.3.0" as const;
+export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.4.0" as const;
 export const CS2D_TIMELINE_VERSION = "zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec/timeline/1.0.0" as const;
 export const CS2D_OBSERVATION_VERSION = "cs2d-analysis-adapter/1.0.0/internal-observation" as const;
-export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.3.0/signals" as const;
-export const CS2D_PLANNER_VERSION = "cs2d-analysis-adapter/1.3.0/planner" as const;
+export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.4.0/signals" as const;
+export const CS2D_PLANNER_VERSION = "cs2d-analysis-adapter/1.4.0/planner" as const;
 
 /** MVP pacing target: a full match should feel coached, not interrupted. */
 const OUTCOME_WINDOW_SECONDS = 4;
@@ -1012,7 +1014,7 @@ function buildCanonicalGeneratorInput(
       sceneIndexVersion: `${CS2D_ADAPTER_VERSION}/scene-index`,
       observationVersion: CS2D_OBSERVATION_VERSION,
       signalVersion: CS2D_SIGNAL_VERSION,
-      candidateGeneratorVersion: "review-planner/candidate-generator/1.0.0"
+      candidateGeneratorVersion: CANDIDATE_GENERATOR_VERSION
     },
     limitations: warnings
   };
@@ -1152,7 +1154,7 @@ function failedBundle(input: Cs2dAnalysisInput, metadata: Cs2dAnalysisMetadata, 
       sceneIndexVersion: `${CS2D_ADAPTER_VERSION}/scene-index`,
       observationVersion: CS2D_OBSERVATION_VERSION,
       signalVersion: CS2D_SIGNAL_VERSION,
-      candidateGeneratorVersion: "review-planner/candidate-generator/1.0.0"
+      candidateGeneratorVersion: CANDIDATE_GENERATOR_VERSION
     },
     limitations: metadata.limitations
   });
@@ -1178,7 +1180,7 @@ function failedBundle(input: Cs2dAnalysisInput, metadata: Cs2dAnalysisMetadata, 
       signal_version: CS2D_SIGNAL_VERSION,
       planner_version: CS2D_PLANNER_VERSION,
       provider: "DETERMINISTIC_TEMPLATE",
-      prompt_version: "cs2d-decision-template/1.2.0",
+      prompt_version: "cs2d-decision-template/1.3.0",
       status: "FALLBACK",
       narration_deterministic: true,
       analysis_subject_selection: "EXPLICIT_PLAYER",
@@ -1286,11 +1288,11 @@ export function buildCs2dAnalysisBundle(input: Cs2dAnalysisInput): Cs2dAnalysisB
     signalVersion: CS2D_SIGNAL_VERSION,
     plannerVersion: CS2D_PLANNER_VERSION,
     parserVersion: `${CS2D_SOURCE.repository}@${CS2D_SOURCE.commit}`,
-    promptVersion: "cs2d-decision-template/1.2.0",
+    promptVersion: "cs2d-decision-template/1.3.0",
     limitations
   });
-  if (director.manifest.limitations.some((limitation) => limitation.includes("maximum 8"))) {
-    issue(warnings, director.manifest.limitations.find((limitation) => limitation.includes("maximum 8"))!);
+  if (director.manifest.limitations.some((limitation) => limitation.includes(`maximum ${MAX_TEACHING_CUES}`))) {
+    issue(warnings, director.manifest.limitations.find((limitation) => limitation.includes(`maximum ${MAX_TEACHING_CUES}`))!);
   }
   const plan = compiled.plan;
   const observationEvidence = generatorInput.observableStates ?? [];

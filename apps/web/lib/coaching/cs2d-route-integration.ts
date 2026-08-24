@@ -10,9 +10,11 @@ import type {
   ReviewPlan,
   WinProbabilityTimelineV1
 } from "@cs-coach/contracts";
+import { MAX_TEACHING_CUES } from "@cs-coach/contracts";
 import {
   buildCoachingRouteState,
   buildCoachingPackage,
+  buildDirectorRequest,
   buildOutcomeImpactForCue,
   buildOutcomePackage,
   compileReviewPlan,
@@ -86,7 +88,7 @@ export interface ReviewPreparationProviderOverrides {
   narrator?: typeof requestNarrationBundle;
 }
 
-const MAX_DIRECTOR_CUES = 8;
+const MAX_DIRECTOR_CUES = MAX_TEACHING_CUES;
 
 /**
  * The real app seam: the adapter plan is only input.  Director and Compiler
@@ -104,8 +106,9 @@ export function createCs2dReviewPreparationDependencies(
       if (analysis.candidateSet.status === "FAILED") {
         throw new Error(`CANDIDATE_SET_FAILED:${analysis.candidateSet.failureReason ?? "UNKNOWN"}`);
       }
-      const directorDecisionSet: DirectorDecisionSet = analysis.candidateSet.candidates.length === 0
-        ? deterministicDirectorFallback(analysis.candidateSet, "NO_CANDIDATES", 0)
+      const directorCandidateCount = buildDirectorRequest(analysis.candidateSet, MAX_DIRECTOR_CUES).candidates.length;
+      const directorDecisionSet: DirectorDecisionSet = directorCandidateCount === 0
+        ? deterministicDirectorFallback(analysis.candidateSet, analysis.candidateSet.candidates.length === 0 ? "NO_CANDIDATES" : "NO_PRACTICAL_CANDIDATES", MAX_DIRECTOR_CUES)
         : await director(analysis.candidateSet, { signal, maxSelected: MAX_DIRECTOR_CUES });
       const compiled = compileReviewPlan({
         timeline: analysis.matchTimeline,

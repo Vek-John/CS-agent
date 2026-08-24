@@ -6,6 +6,7 @@ import type {
   CandidateSignalKind,
   CandidateResultSummary
 } from "@cs-coach/contracts";
+import { MAX_DIRECTOR_PACKET_CANDIDATES, MAX_TEACHING_CUES } from "@cs-coach/contracts";
 import {
   buildDirectorRequest,
   deterministicDirectorFallback
@@ -14,10 +15,10 @@ import {
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DEFAULT_MODEL = "deepseek-v4-flash";
 const REQUEST_TIMEOUT_MS = 15_000;
-const MAX_CANDIDATES = 32;
+const MAX_CANDIDATES = MAX_DIRECTOR_PACKET_CANDIDATES;
 const MAX_REQUEST_BYTES = 48 * 1024;
 const ALLOWED_MODELS = new Set(["deepseek-v4-flash", "deepseek-v4-pro"]);
-export const DEEPSEEK_DIRECTOR_PROMPT_VERSION = "deepseek-teaching-director/1.0.1";
+export const DEEPSEEK_DIRECTOR_PROMPT_VERSION = "deepseek-teaching-director/1.0.2";
 
 export interface DirectorProviderCandidate {
   candidate_id: string;
@@ -140,7 +141,7 @@ export function parseDirectorRequest(value: unknown, byteLength = 0): DirectorPr
   if (byteLength > MAX_REQUEST_BYTES) throw new DirectorValidationError("Director request is too large.");
   if (!isRecord(value) || !exactKeys(value, ["candidate_set_id", "candidate_set_version", "candidate_set_hash", "candidates", "max_selected"])) throw new DirectorValidationError("Director request shape is invalid.");
   const rawMaxSelected = value.max_selected;
-  if (!nonEmpty(value.candidate_set_id) || !nonEmpty(value.candidate_set_version) || !nonEmpty(value.candidate_set_hash) || !Array.isArray(value.candidates) || value.candidates.length > MAX_CANDIDATES || typeof rawMaxSelected !== "number" || !Number.isInteger(rawMaxSelected) || rawMaxSelected < 0 || rawMaxSelected > 8) throw new DirectorValidationError("Director request contains invalid bounds.");
+  if (!nonEmpty(value.candidate_set_id) || !nonEmpty(value.candidate_set_version) || !nonEmpty(value.candidate_set_hash) || !Array.isArray(value.candidates) || value.candidates.length > MAX_CANDIDATES || typeof rawMaxSelected !== "number" || !Number.isInteger(rawMaxSelected) || rawMaxSelected < 0 || rawMaxSelected > MAX_TEACHING_CUES) throw new DirectorValidationError("Director request contains invalid bounds.");
   const maxSelected = rawMaxSelected;
   const candidates = value.candidates.map(parseProviderCandidate);
   const seen = new Set<string>();
@@ -185,9 +186,10 @@ export function parseDirectorResponse(
   value: unknown,
   expectedCandidateAliases: readonly string[],
   allowedRefs?: Record<string, { reasonRefs: ReadonlySet<string>; evidenceRefs: ReadonlySet<string> }>,
-  allowedFocusCodes?: Record<string, ReadonlySet<string>>
+  allowedFocusCodes?: Record<string, ReadonlySet<string>>,
+  maxSelected = MAX_TEACHING_CUES
 ): DirectorProviderDecision[] {
-  if (!isRecord(value) || !exactKeys(value, ["selected"]) || !Array.isArray(value.selected) || value.selected.length > 8) throw new DirectorValidationError("Director response must contain exactly selected[].");
+  if (!isRecord(value) || !exactKeys(value, ["selected"]) || !Array.isArray(value.selected) || value.selected.length > maxSelected) throw new DirectorValidationError("Director response must contain exactly selected[].");
   const expected = new Set(expectedCandidateAliases);
   const seen = new Set<string>();
   const selected = value.selected.map((item) => parseProviderDecision(item, expected, allowedRefs, allowedFocusCodes));
@@ -202,7 +204,7 @@ function focusFor(kind: CandidateSignalKind): string {
   return kind === "DEATH" ? "SURVIVE_THE_NEXT_CONTACT" : kind === "KILL" ? "CONVERT_ADVANTAGE" : kind === "BOMB" ? "OBJECTIVE_TIMING" : kind === "UTILITY" ? "UTILITY_PURPOSE_AND_TEMPO" : kind === "WIN_RATE_DROP" ? "WIN_PROBABILITY_SWING_RESPONSE" : "SURVIVE_CONTACT";
 }
 
-export function buildDirectorProviderRequestContext(set: CandidateSet, maxSelected = 8): DirectorProviderRequestContext {
+export function buildDirectorProviderRequestContext(set: CandidateSet, maxSelected = MAX_TEACHING_CUES): DirectorProviderRequestContext {
   const source: DirectorRequest = buildDirectorRequest(set, maxSelected);
   const candidateByAlias: DirectorRequestMapping["candidateByAlias"] = {};
   const candidates = source.candidates.map((summary, index) => {
@@ -268,7 +270,8 @@ function systemPrompt(): string {
     "Shape example: {selected:[{candidate_id:'c1',priority:1,primary_focus_code:'SURVIVE_THE_NEXT_CONTACT',selection_reason:'...',reason_refs:['r1'],evidence_refs:['e1'],confidence:0.8}]}. reason_refs and evidence_refs must be arrays of supplied aliases.",
     "Each selection has exactly one primary_focus_code.",
     "Do not emit ticks, frames, segments, order, route, player identity, or final coaching prose.",
-    "Keep selection_reason concise and grounded in supplied refs."
+    "Keep selection_reason concise and grounded in supplied refs.",
+    "Do not select a KILL candidate unless its supplied result summary shows a meaningful negative selected-side win-probability swing; a successful kill with a rising or absent swing is playback context, not a coaching stop."
   ].join(" ");
 }
 
@@ -284,6 +287,7 @@ export async function directWithDeepSeek(
   } catch {
     return fallbackProviderResult({ candidate_set_id: "invalid", candidate_set_version: "invalid", candidate_set_hash: "invalid", candidates: [], max_selected: 0 }, "INVALID_REQUEST");
   }
+  if (safeRequest.candidates.length === 0) return fallbackProviderResult(safeRequest, "NO_PRACTICAL_CANDIDATES");
   const key = env.DEEPSEEK_API_KEY?.trim();
   if (!key) return fallbackProviderResult(safeRequest, "MISSING_API_KEY");
   const model = env.DEEPSEEK_MODEL?.trim() || DEFAULT_MODEL;
@@ -317,7 +321,7 @@ export async function directWithDeepSeek(
       evidenceRefs: new Set(candidate.evidence_refs)
     }]));
     const allowedFocusCodes = Object.fromEntries(safeRequest.candidates.map((candidate) => [candidate.candidate_id, new Set(candidate.allowed_focus_codes)]));
-    const selected = parseDirectorResponse(parsed, safeRequest.candidates.map((candidate) => candidate.candidate_id), allowedRefs, allowedFocusCodes);
+    const selected = parseDirectorResponse(parsed, safeRequest.candidates.map((candidate) => candidate.candidate_id), allowedRefs, allowedFocusCodes, safeRequest.max_selected);
     return { status: "SUCCEEDED", selected, model, manifest: { model, prompt_version: DEEPSEEK_DIRECTOR_PROMPT_VERSION, status: "SUCCEEDED", limitations: [] } };
   } catch (error) {
     return fallbackProviderResult(safeRequest, error instanceof DirectorValidationError ? "UPSTREAM_SCHEMA" : error instanceof Error && error.name === "AbortError" ? "TIMEOUT" : "UPSTREAM_ERROR");
@@ -360,8 +364,10 @@ export async function requestTeachingDirector(
   set: CandidateSet,
   options: { endpoint?: string; fetcher?: FetchLike; maxSelected?: number; signal?: AbortSignal } = {}
 ): Promise<DirectorDecisionSet> {
-  if (set.candidates.length === 0) return deterministicDirectorFallback(set, "NO_CANDIDATES", options.maxSelected);
   const context = buildDirectorProviderRequestContext(set, options.maxSelected);
+  if (context.request.candidates.length === 0) {
+    return deterministicDirectorFallback(set, set.candidates.length === 0 ? "NO_CANDIDATES" : "NO_PRACTICAL_CANDIDATES", context.request.max_selected);
+  }
   const endpoint = options.endpoint ?? "/api/coaching/direct";
   try {
     const fetcher = options.fetcher ?? fetch;

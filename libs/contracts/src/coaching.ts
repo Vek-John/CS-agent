@@ -25,6 +25,11 @@ export type CandidateSetStatus = "COMPLETE" | "FAILED";
 export type DirectorStatus = "SUCCEEDED" | "FALLBACK" | "DISABLED";
 export type DirectorProvider = "DETERMINISTIC" | "DEEPSEEK";
 
+/** Hard route ceiling; the practical selector may choose fewer cues. */
+export const MAX_TEACHING_CUES = 50;
+/** Provider packet ceiling; it is independent from the final route ceiling. */
+export const MAX_DIRECTOR_PACKET_CANDIDATES = 32;
+
 export const DIRECTOR_FOCUS_CODES_BY_SIGNAL: Record<CandidateSignalKind, readonly string[]> = {
   DEATH: ["SURVIVE_THE_NEXT_CONTACT", "SURVIVE_CONTACT"],
   KILL: ["CONVERT_ADVANTAGE"],

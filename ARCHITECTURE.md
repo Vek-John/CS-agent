@@ -1,8 +1,8 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：3.4.1
-> 最后更新：2026-08-21
+> 版本：3.4.2
+> 最后更新：2026-08-24
 > 适用范围：Web 2D 到桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
 > 当前产品范围：[MVP_SCOPE.md](./MVP_SCOPE.md)
@@ -363,7 +363,7 @@ SceneIndex 把完整 Replay 按回合组织成可寻址事实窗口；它不产�
 
 候选带稳定 `candidateId`、来源信号、事件/帧引用、约一秒 pre-roll、decision/reveal/outcome 窗口、决策事实与 claim 引用、实际动作引用、结果引用、胜率/经济信号、缺失字段、限制和确定性初始分数。CandidateGenerator 只回答“哪些可验证窗口可能值得教”，不决定最终教学数量、主要问题或文案。相同输入和版本必须产生相同、按 `decision_tick → candidateId` 排序的 CandidateSet；`UNKNOWN` 或生成失败不能成为低价值 `SKIP` 的依据。
 
-CandidateSet 在调用 Director 前必须完整索引。为了大 Demo，Generator 在拥有 Replay 的 iframe/Worker 内消费 RoundChunk 或紧凑事实索引；不得把整份 Replay 复制到控制面、LLM 或新的 AI Worker。跨 seam 只传候选摘要与引用。
+CandidateSet 在调用 Director 前必须完整索引。为了大 Demo，Generator 在拥有 Replay 的 iframe/Worker 内消费 RoundChunk 或紧凑事实索引；不得把整份 Replay 复制到控制面、LLM 或新的 AI Worker。跨 seam 只传候选摘要与引用。路线有一个统一的 `MAX_TEACHING_CUES=50` 硬上限，但它不是目标数量；实际路线只保留通过实用性门槛、窗口去重和回合分布后的候选。
 
 ### 6.6 TeachingDirector 与 PlanCompiler
 
@@ -376,6 +376,8 @@ PlanCompiler 把 CandidateSet、DirectorDecisionSet、GroundTruth、ObservableSt
 - 每个 cue 的 facts、claims、advice 和 evidence 引用有效；
 - 深讲预算、同类去重、回合分布和用户配置满足约束；
 - Director 只能引用 CandidateSet 内的候选和 refs，重复/未知候选、多重点或额外字段必须拒绝；
+- 成功击杀只有在胜率模型可用且结果窗口明确显示所选方至少下降 1 个百分点时才可作为教学候选；胜率上升、无负向摆动或仅有成功击杀事实的 KILL 只保留在时间轴，不进入 Director/PlanCompiler 路线；
+- `MAX_TEACHING_CUES=50` 是 Director、PlanCompiler、回退和 Host 共享的最大深讲数，超过后确定性截断并保留完整时间轴覆盖；
 - Director 超时、拒答或输出无效时使用带 reason、版本和 manifest 的确定性回退；
 - 编译后的 route fingerprint、segment/cue 顺序、tick、candidate 绑定和主要重点在会话启动前冻结。
 
@@ -1243,9 +1245,9 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 | 全知比赛状态 | Accepted | 每 tick/变化点保留位置、朝向、生命护甲、当前手持、库存道具、经济和 C4 等解析器可得事实 |
 | 内部观察证据 | Accepted | `ObservationClaim` 仅约束规则/LLM 决策证据；不作为用户可见 renderer 模式，不用布尔可见性 |
 | 单次解析与分析派生 | Accepted | `.dem` 只生成一份 GroundTruth ReplayBundle；Adapter 从同一 Replay 派生 MatchTimeline/SceneIndex/Observation，整场胜率只推理一次，不二次解析或向控制面复制 raw Replay |
-| CandidateGenerator 与候选寻址 | Accepted | 确定性深模块从事实/Observation/信号产生完整、稳定排序的 CandidateSet；只提名可验证窗口，不替 Director 判断教学价值 |
+| CandidateGenerator 与候选寻址 | Accepted | 确定性深模块从事实/Observation/信号产生完整、稳定排序的 CandidateSet；只提名可验证窗口，不替 Director 判断教学价值；成功 KILL 的实用性硬门槛在 Director/Compiler seam 生效 |
 | Teaching Director | Accepted | 结构化 LLM 只从匿名 CandidateSet 摘要选择已有 candidate、唯一主要重点和优先级，不输出 tick、事实、文案或播放器命令 |
-| PlanCompiler | Accepted | 确定性校验 Candidate/Decision 引用、完整覆盖、时间边界、预算和去重；会话前冻结 route，非法 Director 输出走可追溯回退 |
+| PlanCompiler | Accepted | 确定性校验 Candidate/Decision 引用、完整覆盖、时间边界、50 cue 预算和去重；会话前冻结 route，非法或不实用的 Director 输出走可追溯回退 |
 | Narrator 与证据防火墙 | Accepted | Narrator 可提前读取严格分离的 CoachingPackage＋OutcomePackage，输出带字段级 refs 的五字段密封 NarrationBundle；不能改 route/focus/Advice |
 | OutcomeCompletionGate | Accepted | Gate 只把密封 NarrationBundle 从 PREPARED 变为 PRESENTABLE；必须确认播放到 outcome_end，且不裁剪全场常显胜率曲线 |
 | Web 2D cs2d 底座 | Accepted | 浏览器 Worker/WASM 单次解析与真实地图 renderer；具体 revision、可重放 patch 和权利状态记录在 ADR；源码不入仓库，MVP 由 CI 生成 `/cs2d/` 构建物随 Cloudflare 发布，权利解决前不扩大再分发 |
@@ -1297,3 +1299,4 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 | 3.3.0 | 2026-08-18 | 接入固定 cs-net win-rate head 的真实 ONNX/INT8 资产和 iframe Worker 推理；新增全场常显 `WinProbabilityTimelineV1`、经济分类、Director 摆动排序与结果窗口 gated `OutcomeImpact`；模型/下载失败显式降级，不改变单次 cs2d Replay 与 Observation 边界。 |
 | 3.4.0 | 2026-08-21 | 固化 Deterministic CandidateGenerator → DirectorDecisionSet → PlanCompiler → 双包 Narrator 纵向链路；整场 CandidateSet 与 route 在会话前冻结，前两个候选讲解就绪即可开始；OutcomePackage 可后台参与密封讲解生成，但完整 NarrationBundle 只有 outcome_end 后可呈现，后台不得重排已发布路线。 |
 | 3.4.1 | 2026-08-21 | 保留 NarrationBundle 五字段证据边界，将玩家可见讲解收敛为“当前状态 / 这样做的问题 / 可以怎么改进”三段投影；内部 taxonomy 不进 UI，零百分点 cue 影响不展示。 |
+| 3.4.2 | 2026-08-24 | 将全链路教学上限统一为 `MAX_TEACHING_CUES=50`；增加成功 KILL 的实用性过滤，胜率上升或无负向结果的对枪只保留为时间轴事实，不进入教练路线；OutcomeImpact 对不实用 KILL 不再生成正向影响文案。 |

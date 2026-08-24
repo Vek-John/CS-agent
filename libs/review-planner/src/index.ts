@@ -1,4 +1,5 @@
 import type { CoachCue, MatchTimeline, ReviewPlan } from "@cs-coach/contracts";
+import { MAX_TEACHING_CUES } from "@cs-coach/contracts";
 
 export class ReviewPlanValidationError extends Error {
   readonly issues: string[];
@@ -132,6 +133,10 @@ function isInterRoundGapSegment(
 
 export function collectReviewPlanIssues(timeline: MatchTimeline, plan: ReviewPlan): string[] {
   const issues: string[] = [];
+
+  if (plan.cues.length > MAX_TEACHING_CUES) {
+    issues.push(`ReviewPlan exceeds the ${MAX_TEACHING_CUES}-cue route ceiling.`);
+  }
 
   if (plan.demo_id !== timeline.demo_id) {
     issues.push(`Plan demo ${plan.demo_id} does not match timeline demo ${timeline.demo_id}.`);

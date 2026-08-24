@@ -8,6 +8,7 @@ import type {
   OutcomePackage,
   WinProbabilityTimelineV1
 } from "@cs-coach/contracts";
+import { candidateWinProbabilityIsAvailable, isPracticalTeachingCandidate } from "./teaching-pipeline";
 
 function unique(values: readonly string[]): string[] {
   return [...new Set(values.filter((value) => typeof value === "string" && value.trim()))];
@@ -71,19 +72,20 @@ export function buildCoachingPackage(cue: CoachCue, candidateSet: CandidateSet, 
 export function buildOutcomePackage(cue: CoachCue, candidateSet: CandidateSet, outcomeImpact?: OutcomeImpact): OutcomePackage {
   const { candidate, material } = candidateMaterialFor(cue, candidateSet);
   if (outcomeImpact && outcomeImpact.cueId !== cue.id) throw new Error(`OutcomeImpact is bound to ${outcomeImpact.cueId}, not ${cue.id}.`);
+  const effectiveImpact = outcomeImpact && candidateWinProbabilityIsAvailable(candidate) && isPracticalTeachingCandidate(candidate) ? outcomeImpact : undefined;
   const outcomeFacts = material.outcomeFacts.filter((fact) => candidate.outcomeRefs.includes(fact.id));
   if (candidate.outcomeRefs.length > 0 && outcomeFacts.length === 0) throw new Error(`Candidate ${candidate.candidateId} is not startable: outcome facts are missing.`);
-  if (candidate.outcomeRefs.length === 0 && !outcomeImpact) throw new Error(`Candidate ${candidate.candidateId} is not startable: outcome or measurement evidence is missing.`);
-  const measurementRefs = outcomeImpact ? [`measurement-${cue.id}`] : [];
+  if (candidate.outcomeRefs.length === 0 && !effectiveImpact) throw new Error(`Candidate ${candidate.candidateId} is not startable: outcome or measurement evidence is missing.`);
+  const measurementRefs = effectiveImpact ? [`measurement-${cue.id}`] : [];
   return {
     cueId: cue.id,
     candidateId: cue.candidate_id ?? cue.id,
     outcomeFacts,
     deathKillHpRefs: outcomeFacts.filter((fact) => ["DEATH", "KILL", "HP_CHANGE"].includes(fact.outcomeKind)).map((fact) => fact.id),
-    ...(outcomeImpact ? { winProbabilityImpact: outcomeImpact } : {}),
+    ...(effectiveImpact ? { winProbabilityImpact: effectiveImpact } : {}),
     measurementRefs,
-    confounders: outcomeImpact?.confidence === "LOW" ? ["多个结果事件或模型信号同时发生，不能归因给单一动作。"] : [],
-    limitations: [...cue.limitations, ...(outcomeImpact?.limitations ?? [])]
+    confounders: effectiveImpact?.confidence === "LOW" ? ["多个结果事件或模型信号同时发生，不能归因给单一动作。"] : [],
+    limitations: [...cue.limitations, ...(effectiveImpact?.limitations ?? [])]
   };
 }
 
@@ -118,7 +120,8 @@ function selectedProbability(side: "T" | "CT", probability: number): number {
 /** Final-plan outcome builder: candidate identity is the only binding key. */
 export function buildOutcomeImpactForCue(cue: CoachCue, candidateSet: CandidateSet, timeline: WinProbabilityTimelineV1, matchTimeline: MatchTimeline, selectedPlayerId: string): OutcomeImpact | undefined {
   const candidate = candidateSet.candidates.find((item) => item.candidateId === cue.candidate_id);
-  if (!candidate || timeline.status !== "AVAILABLE") return undefined;
+  if (!candidate || timeline.status !== "AVAILABLE" || !candidateWinProbabilityIsAvailable(candidate)) return undefined;
+  if (!isPracticalTeachingCandidate(candidate)) return undefined;
   const side = selectedSideAtTick(matchTimeline, selectedPlayerId, cue.decision_tick);
   const round = timeline.rounds.find((item) => item.roundNumber === candidate.roundNumber);
   const swings = timeline.swings
@@ -130,6 +133,8 @@ export function buildOutcomeImpactForCue(cue: CoachCue, candidateSet: CandidateS
   const beforeSample = samples.filter((sample) => sample.tick <= cue.decision_tick).at(-1);
   const afterSample = samples.at(-1);
   const summary = candidate.resultSummary;
+  const hasSummaryMeasurement = summary.winProbabilityBefore !== undefined && summary.winProbabilityAfter !== undefined;
+  if (!hasSummaryMeasurement && !meaningful && !(beforeSample && afterSample)) return undefined;
   const before = summary.winProbabilityBefore ?? meaningful?.before ?? (beforeSample ? selectedProbability(side, beforeSample.probability) : 0.5);
   const after = summary.winProbabilityAfter ?? meaningful?.after ?? (afterSample ? selectedProbability(side, afterSample.probability) : before);
   const delta = Math.round((after - before) * 1_000_000) / 1_000_000;

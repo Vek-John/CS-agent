@@ -551,6 +551,28 @@ Wrangler 打包报告生成 bundle 中存在重复 `radar_position` 对象键；
 
 模型供应商仍可能在复杂候选包上产生非法引用，服务端会拒绝并记录可追溯 fallback reason；后续应在真实 Demo 复盘中抽查多候选排序和重复习惯覆盖，而不是放宽校验。
 
+### 4.24 2026-08-24：教学候选上限与成功对枪过滤
+
+**触发**
+
+生产/真实夹具路线仍沿用旧的 8 个 cue 上限；同时，所选玩家赢下对枪且所选方胜率上升的 `KILL` 仍可能被编译为教练片段，结果卡甚至会生成“胜率上升”影响文案。这类片段对用户没有明确可执行的纠错价值。
+
+**决定**
+
+新增跨 contracts、CandidateGenerator、Director、PlanCompiler、Host preparation 和 DeepSeek request parser 共用的 `MAX_TEACHING_CUES=50`。这是硬上限而非目标数量，确定性路线仍按回合代表、窗口去重和分数选择更少的候选。新增 `isPracticalTeachingCandidate`：模型曲线可用时，成功 `KILL` 只有在所选方结果窗口至少下降 1 个百分点时才允许进入路线；胜率上升、零/无负向摆动的 KILL 被保留为回放事实但不会触发 Director/Narrator。模型不可用时保留 KILL 事实候选，但不生成伪造胜率影响。
+
+**落点**
+
+`libs/contracts/src/coaching.ts`、`libs/review-planner/src/teaching-pipeline.ts`、`candidate-generator.ts`、`narration-package-builder.ts`、`apps/web/lib/coaching/cs2d-route-integration.ts`、`deepseek-director.ts`、`libs/cs2d-analysis-adapter/src/index.ts`；MVP/ARCHITECTURE 更新为最多 50 个 practical cue，版本分别为 CandidateGenerator 1.1.0、Director prompt 1.0.2、cs2d adapter 1.4.0、ARCHITECTURE 3.4.2。
+
+**验证**
+
+回归测试先稳定复现旧行为：成功 KILL 被选中、50 被压回 8、60 回合只生成 8 个停点。修复后定向测试 43 项、全量 Vitest 39 files / 264 passed / 1 skipped、typecheck、Next production build、cs2d typecheck/build 和 Cloudflare build secret scan 通过；cs2d 适配器夹具验证 60 回合最多生成 50 个 cue，并保留跨全场分布；正向 KILL 不进入 deterministic Director，且不生成 OutcomeImpact。完整 Falcons/Spirit Demo 的新路线仍需在发布后抽查。
+
+**限制 / 下一步**
+
+DeepSeek Director packet 仍为紧凑的最多 32 个候选，避免把大 CandidateSet 传给模型；50 是最终路线 ceiling，Provider 一次可能返回少于 50，后续未选候选不会被自动补成教练点。需要更多覆盖时应改进候选摘要/排序，而不是放宽成功对枪过滤。
+
 ## 5. 常用问题排查表
 
 | 现象 | 首先检查 | 常见根因 | 不要做什么 |

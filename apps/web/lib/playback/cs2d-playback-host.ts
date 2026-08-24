@@ -136,6 +136,48 @@ export function reviewSegmentLabel(segment: ReviewPlan["segments"][number]): str
   return "普通比赛";
 }
 
+export interface CoachingCueProgress {
+  current: number;
+  total: number;
+}
+
+/** Counts only routed coaching cues; ordinary coverage segments stay invisible here. */
+export function coachingCueProgress(
+  plan: ReviewPlan,
+  currentSegmentIndex: number,
+  currentCueId?: string,
+): CoachingCueProgress | undefined {
+  const knownCueIds = new Set(plan.cues.map((cue) => cue.id));
+  const seen = new Set<string>();
+  const routedCueIds: string[] = [];
+
+  for (const segment of plan.segments) {
+    for (const cueId of segment.cue_ids) {
+      if (!knownCueIds.has(cueId) || seen.has(cueId)) continue;
+      seen.add(cueId);
+      routedCueIds.push(cueId);
+    }
+  }
+
+  if (routedCueIds.length === 0) return undefined;
+
+  const activeCueIndex = currentCueId ? routedCueIds.indexOf(currentCueId) : -1;
+  if (activeCueIndex >= 0) {
+    return { current: activeCueIndex + 1, total: routedCueIds.length };
+  }
+
+  const routeStart = Number.isInteger(currentSegmentIndex)
+    ? Math.max(0, currentSegmentIndex)
+    : 0;
+  for (let segmentIndex = routeStart; segmentIndex < plan.segments.length; segmentIndex += 1) {
+    const nextCueId = plan.segments[segmentIndex].cue_ids.find((cueId) => seen.has(cueId));
+    if (!nextCueId) continue;
+    return { current: routedCueIds.indexOf(nextCueId) + 1, total: routedCueIds.length };
+  }
+
+  return { current: routedCueIds.length, total: routedCueIds.length };
+}
+
 export function timelinePercent(value: number, min: number, max: number): number {
   if (![value, min, max].every(Number.isFinite) || max <= min) return 0;
   return Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));

@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import { MAX_DIRECTOR_PACKET_CANDIDATES, MAX_TEACHING_CUES } from "@cs-coach/contracts";
 import type { CandidateMaterial, TeachingCandidate } from "@cs-coach/contracts";
 import { assembleCandidateSet } from "@cs-coach/review-planner";
 import {
   buildDirectorProviderRequestContext,
   directWithDeepSeek,
+  parseDirectorRequest,
   requestTeachingDirector
 } from "./deepseek-director";
 
@@ -74,6 +76,39 @@ function candidateSet(count = 100) {
   });
 }
 
+function successfulKillSet() {
+  const base = candidateSet(1);
+  const candidate = {
+    ...base.candidates[0],
+    source: { kind: "KILL" as const, refs: ["successful-kill"] },
+    resultSummary: {
+      ...base.candidates[0].resultSummary,
+      selectedPlayerDeath: false,
+      winProbabilityBefore: 0.4,
+      winProbabilityAfter: 0.7,
+      winProbabilityDelta: 0.3,
+      winProbabilityPercentagePoints: 30
+    }
+  };
+  return assembleCandidateSet({ ...base, candidates: [candidate], materials: [...base.materials] });
+}
+
+function noModelKillSet() {
+  const base = successfulKillSet();
+  const candidate = {
+    ...base.candidates[0],
+    resultSummary: {
+      ...base.candidates[0].resultSummary,
+      winProbabilityBefore: undefined,
+      winProbabilityAfter: undefined,
+      winProbabilityDelta: undefined,
+      winProbabilityPercentagePoints: undefined,
+      limitations: ["WinProbabilityTimeline unavailable."]
+    }
+  };
+  return assembleCandidateSet({ ...base, candidates: [candidate] });
+}
+
 function completion(content: string, finishReason = "stop"): Response {
   return new Response(JSON.stringify({ choices: [{ finish_reason: finishReason, message: { content } }] }), { status: 200, headers: { "content-type": "application/json" } });
 }
@@ -83,10 +118,31 @@ describe("DeepSeek Director provider packet", () => {
     const set = candidateSet();
     const context = buildDirectorProviderRequestContext(set);
     expect(set.candidates).toHaveLength(100);
-    expect(context.request.candidates).toHaveLength(32);
+    expect(context.request.candidates).toHaveLength(MAX_DIRECTOR_PACKET_CANDIDATES);
     expect(new TextEncoder().encode(JSON.stringify(context.request)).byteLength).toBeLessThan(48 * 1024);
     expect(context.request.candidates[0].result_summary).toMatchObject({ selectedPlayerDeath: true, winProbabilityPercentagePoints: -23 });
     expect(context.request.candidates[0].allowed_focus_codes).toContain("SURVIVE_THE_NEXT_CONTACT");
+  });
+
+  it("keeps hostile missing-field text inside the 48KB provider packet budget", () => {
+    const base = candidateSet(100);
+    const hugeText = "missing-field-" + "x".repeat(20_000);
+    const set = assembleCandidateSet({
+      ...base,
+      candidates: base.candidates.map((candidate) => ({
+        ...candidate,
+        missingFields: [hugeText],
+        resultSummary: { ...candidate.resultSummary, missingFields: [hugeText] }
+      }))
+    });
+    const context = buildDirectorProviderRequestContext(set);
+    expect(new TextEncoder().encode(JSON.stringify(context.request)).byteLength).toBeLessThan(48 * 1024);
+  });
+
+  it("carries the 50-cue route cap through the provider request boundary", () => {
+    const context = buildDirectorProviderRequestContext(candidateSet(1), MAX_TEACHING_CUES);
+    expect(context.request.max_selected).toBe(50);
+    expect(() => parseDirectorRequest(context.request)).not.toThrow();
   });
 
   it("states the exact selected response shape so the provider does not echo the request", async () => {
@@ -135,6 +191,22 @@ describe("DeepSeek Director provider packet", () => {
     const result = await requestTeachingDirector(candidateSet(0), { fetcher });
     expect(result.manifest.status).toBe("DISABLED");
     expect(result.manifest.reason).toBe("NO_CANDIDATES");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("does not call the provider when only non-practical KILL candidates remain", async () => {
+    const fetcher = vi.fn();
+    const result = await requestTeachingDirector(successfulKillSet(), { fetcher });
+    expect(result.manifest.status).toBe("DISABLED");
+    expect(result.manifest.reason).toBe("NO_PRACTICAL_CANDIDATES");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("does not call the provider for a KILL when WinProbabilityTimeline is unavailable", async () => {
+    const fetcher = vi.fn();
+    const result = await requestTeachingDirector(noModelKillSet(), { fetcher });
+    expect(result.manifest.status).toBe("DISABLED");
+    expect(result.manifest.reason).toBe("NO_PRACTICAL_CANDIDATES");
     expect(fetcher).not.toHaveBeenCalled();
   });
 });

@@ -224,4 +224,71 @@ describe("CandidateSet-backed narration package builder", () => {
 
     expect(buildOutcomeImpactForCue(cue, set, winTimeline, timeline, timeline.selected_player_id)).toBeUndefined();
   });
+
+  it("does not build a positive win-rate impact for a successful kill cue", () => {
+    const kill = {
+      ...candidate(),
+      candidateId: "candidate-successful-kill",
+      source: { kind: "KILL" as const, refs: ["source-kill"] },
+      resultSummary: {
+        ...candidate().resultSummary,
+        selectedPlayerDeath: false,
+        winProbabilityBefore: 0.4,
+        winProbabilityAfter: 0.7,
+        winProbabilityDelta: 0.3,
+        winProbabilityPercentagePoints: 30
+      }
+    } satisfies TeachingCandidate;
+    const set = assembleCandidateSet({
+      id: "candidate-set-successful-kill",
+      version: "fixture-candidate/1",
+      demoId: timeline.demo_id,
+      playerId: timeline.selected_player_id,
+      candidates: [kill],
+      materials: [impactMaterial(kill)],
+      generationManifest: manifest
+    });
+    const cue = { ...compiledCue(setWithState().set), candidate_id: kill.candidateId, observable_state_id: undefined };
+    const winTimeline: WinProbabilityTimelineV1 = {
+      version: "win-probability-timeline.v1",
+      status: "AVAILABLE",
+      model: { provider: "CS_NET", revision: "fixture", assetUrl: "fixture", assetSha256: "a".repeat(64), assetBytes: 1, quantization: "INT8", temperature: 1, sourceCommit: "fixture", featureVersion: "fixture" },
+      tickRate: 64,
+      rounds: [],
+      swings: [],
+      limitations: []
+    };
+
+    expect(buildOutcomeImpactForCue(cue, set, winTimeline, timeline, timeline.selected_player_id)).toBeUndefined();
+    const positiveImpact = {
+      cueId: cue.id,
+      beforeProbability: 0.4,
+      afterProbability: 0.7,
+      delta: 0.3,
+      percentagePoints: 30,
+      relativeChange: 0.75,
+      attribution: "MODEL_SWING" as const,
+      confidence: "HIGH" as const,
+      text: "我方胜率上升。",
+      limitations: []
+    };
+    const outcome = buildOutcomePackage(cue, set, positiveImpact);
+    expect(outcome.winProbabilityImpact).toBeUndefined();
+    expect(outcome.measurementRefs).toEqual([]);
+  });
+
+  it("does not fabricate a win-rate impact when the model timeline is unavailable", () => {
+    const { set } = setWithState();
+    const cue = compiledCue(set);
+    const unavailable: WinProbabilityTimelineV1 = {
+      version: "win-probability-timeline.v1",
+      status: "UNAVAILABLE",
+      model: { provider: "CS_NET", revision: "fixture", assetUrl: "fixture", assetSha256: "a".repeat(64), assetBytes: 1, quantization: "INT8", temperature: 1, sourceCommit: "fixture", featureVersion: "fixture" },
+      tickRate: 64,
+      rounds: [],
+      swings: [],
+      limitations: ["模型不可用"]
+    };
+    expect(buildOutcomeImpactForCue(cue, set, unavailable, timeline, timeline.selected_player_id)).toBeUndefined();
+  });
 });

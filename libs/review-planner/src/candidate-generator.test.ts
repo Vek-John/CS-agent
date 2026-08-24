@@ -5,11 +5,13 @@ import type {
   CanonicalSignal,
   WinProbabilityTimelineV1
 } from "@cs-coach/contracts";
+import { MAX_DIRECTOR_PACKET_CANDIDATES } from "@cs-coach/contracts";
 import { createSyntheticMirageTimeline } from "@cs-coach/demo-domain";
 import {
   assertValidNarrationBundle,
   buildDirectorRequest,
   compileReviewPlan,
+  collectDirectorDecisionIssues,
   deterministicDirectorFallback,
   deterministicNarrationBundle
 } from "./teaching-pipeline";
@@ -70,6 +72,16 @@ function input(signals: readonly CanonicalSignal[], timeline = winTimeline({ id:
   return { demoId: "demo-fixture-mirage-v1", playerId: "p-user", timeline: createSyntheticMirageTimeline(), facts: baseFacts(), signals, winProbabilityTimeline: timeline, generationManifest: manifest };
 }
 
+function unavailableTimeline(): WinProbabilityTimelineV1 {
+  return {
+    ...winTimeline({ id: "unavailable", tick: 2430, before: 0.3, after: 0.7 }),
+    status: "UNAVAILABLE",
+    rounds: [],
+    swings: [],
+    unavailableReason: "fixture model unavailable"
+  };
+}
+
 describe("parser-neutral CandidateGenerator", () => {
   it("nominates from canonical facts/signals rather than prebuilt TeachingCandidate objects", () => {
     const set = generateCandidateSet(input([signal("DEATH")]));
@@ -103,6 +115,88 @@ describe("parser-neutral CandidateGenerator", () => {
     expect(decision.selected[0].candidateId).toContain("death");
   });
 
+  it("does not turn a successful kill with a rising selected-side win rate into a coaching stop", () => {
+    const successfulKill = { ...signal("KILL"), playerSide: "CT" as const, selectedPlayerDeath: false };
+    const set = generateCandidateSet(input(
+      [successfulKill],
+      winTimeline({ id: "successful-kill", tick: 2430, before: 0.3, after: 0.7 })
+    ));
+
+    expect(set.candidates.some((candidate) => candidate.source.kind === "KILL")).toBe(true);
+    expect(set.candidates.find((candidate) => candidate.source.kind === "KILL")?.resultSummary.winProbabilityDelta).toBeUndefined();
+    expect(buildDirectorRequest(set).candidates).toHaveLength(0);
+    expect(deterministicDirectorFallback(set).selected).toHaveLength(0);
+  });
+
+  it("keeps a no-model KILL as a fact candidate but creates no provider job or coaching route", () => {
+    const set = generateCandidateSet(input([{ ...signal("KILL"), playerSide: "CT" as const }], unavailableTimeline()));
+    expect(set.candidates.some((candidate) => candidate.source.kind === "KILL")).toBe(true);
+    expect(buildDirectorRequest(set).candidates).toHaveLength(0);
+    const director = deterministicDirectorFallback(set, "NO_MODEL");
+    expect(director.manifest.status).toBe("DISABLED");
+    expect(director.selected).toHaveLength(0);
+    const compiled = compileReviewPlan({
+      timeline: createSyntheticMirageTimeline(),
+      candidateSet: set,
+      directorDecisionSet: director,
+      planId: "no-model-kill-plan",
+      observationVersion: manifest.observationVersion,
+      signalVersion: manifest.signalVersion,
+      plannerVersion: "fixture-planner/1"
+    });
+    expect(compiled.plan.cues).toHaveLength(0);
+  });
+
+  it("rejects a positive KILL even if a Director tries to select it", () => {
+    const successfulKill = { ...signal("KILL"), playerSide: "CT" as const, selectedPlayerDeath: false };
+    const set = generateCandidateSet(input(
+      [successfulKill],
+      winTimeline({ id: "successful-kill-director", tick: 2430, before: 0.3, after: 0.7 })
+    ));
+    const candidate = set.candidates[0];
+    const issues = collectDirectorDecisionIssues(set, {
+      candidateSetId: set.id,
+      candidateSetVersion: set.version,
+      candidateSetHash: set.hash,
+      selected: [{
+        candidateId: candidate.candidateId,
+        priority: 1,
+        primaryFocusCode: "CONVERT_ADVANTAGE",
+        selectionReason: "尝试选择成功对枪。",
+        reasonRefs: candidate.factRefs.slice(0, 1),
+        evidenceRefs: candidate.evidenceRefs.slice(0, 1),
+        confidence: 0.8
+      }],
+      manifest: { status: "SUCCEEDED", provider: "DEEPSEEK", limitations: [] }
+    });
+    expect(issues.some((issue) => issue.includes("practical negative outcome"))).toBe(true);
+    const compiled = compileReviewPlan({
+      timeline: createSyntheticMirageTimeline(),
+      candidateSet: set,
+      directorDecisionSet: {
+        candidateSetId: set.id,
+        candidateSetVersion: set.version,
+        candidateSetHash: set.hash,
+        selected: [{
+          candidateId: candidate.candidateId,
+          priority: 1,
+          primaryFocusCode: "CONVERT_ADVANTAGE",
+          selectionReason: "尝试选择成功对枪。",
+          reasonRefs: candidate.factRefs.slice(0, 1),
+          evidenceRefs: candidate.evidenceRefs.slice(0, 1),
+          confidence: 0.8
+        }],
+        manifest: { status: "SUCCEEDED", provider: "DEEPSEEK", limitations: [] }
+      },
+      planId: "positive-kill-plan",
+      observationVersion: manifest.observationVersion,
+      signalVersion: manifest.signalVersion,
+      plannerVersion: "fixture-planner/1"
+    });
+    expect(compiled.directorDecisionSet.manifest.status).toBe("DISABLED");
+    expect(compiled.plan.cues).toHaveLength(0);
+  });
+
   it("sends economy and result summaries into the compact Director packet", () => {
     const set = generateCandidateSet(input([signal("DEATH")]));
     const request = buildDirectorRequest(set);
@@ -115,7 +209,7 @@ describe("parser-neutral CandidateGenerator", () => {
     const set = generateCandidateSet({ ...input(many), signals: many });
     const request = buildDirectorRequest(set);
     expect(set.candidates.length).toBeGreaterThan(32);
-    expect(request.candidates.length).toBeLessThanOrEqual(32);
+    expect(request.candidates.length).toBeLessThanOrEqual(MAX_DIRECTOR_PACKET_CANDIDATES);
     expect(new TextEncoder().encode(JSON.stringify(request)).byteLength).toBeLessThan(48 * 1024);
   });
 });

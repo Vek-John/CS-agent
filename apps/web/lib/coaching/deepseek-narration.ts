@@ -1,8 +1,10 @@
 /** @deprecated Legacy decision-only report adapter; /api/coaching/narrate uses deepseek-narrator.ts. */
+import { MAX_TEACHING_CUES } from "@cs-coach/contracts";
+
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DEFAULT_MODEL = "deepseek-v4-flash";
 const REQUEST_TIMEOUT_MS = 15_000;
-const MAX_CUES = 32;
+const MAX_LEGACY_NARRATION_CUES = MAX_TEACHING_CUES;
 const MAX_REQUEST_BYTES = 64 * 1024;
 const MAX_ID_LENGTH = 12;
 const MAX_TEXT_LENGTH = 1600;
@@ -106,7 +108,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 type IdKind = "cue" | "fact" | "inference" | "advice" | "rule";
 
 const ID_PATTERNS: Record<IdKind, RegExp> = {
-  cue: /^c(?:[1-9]|[12][0-9]|3[0-2])$/,
+  cue: /^c(?:[1-9]|[1-4][0-9]|50)$/,
   fact: /^f[1-9][0-9]{0,2}$/,
   inference: /^i[1-9][0-9]{0,2}$/,
   advice: /^a[1-9][0-9]{0,2}$/,
@@ -214,8 +216,8 @@ function validateCue(value: unknown): NarrationCueInput {
 
 export function parseNarrationRequest(value: unknown, byteLength = 0): NarrationRequest {
   if (byteLength > MAX_REQUEST_BYTES) throw new NarrationValidationError("request too large");
-  if (!isRecord(value) || Object.keys(value).some((key) => key !== "cues") || !Array.isArray(value.cues) || value.cues.length === 0 || value.cues.length > MAX_CUES) {
-    throw new NarrationValidationError("request must contain 1 to 32 cues");
+  if (!isRecord(value) || Object.keys(value).some((key) => key !== "cues") || !Array.isArray(value.cues) || value.cues.length === 0 || value.cues.length > MAX_LEGACY_NARRATION_CUES) {
+    throw new NarrationValidationError(`request must contain 1 to ${MAX_LEGACY_NARRATION_CUES} cues`);
   }
   const cues = value.cues.map(validateCue);
   const ids = cues.map((cue) => cue.cue_id);
@@ -347,7 +349,7 @@ export async function narrateWithDeepSeek(
 }
 
 export const narrationLimits = {
-  maxCues: MAX_CUES,
+  maxCues: MAX_LEGACY_NARRATION_CUES,
   maxRequestBytes: MAX_REQUEST_BYTES,
   allowedModels: [...ALLOWED_MODELS]
 } as const;

@@ -74,8 +74,9 @@ import { resolveItemPresentation } from "../../lib/assets/game-asset-display";
 import { loadLocalGameAssetCatalog } from "../../lib/assets/local-game-asset-catalog";
 import {
   acceptedPlaybackEvent,
-  analysisEventMatchesSelectedPlayer,
   adjacentRoundIndex,
+  analysisEventMatchesSelectedPlayer,
+  coachingCueProgress,
   clampCanonicalTick,
   cs2dHostConfig,
   playbackCommandMessage,
@@ -677,7 +678,7 @@ export function Cs2dPlaybackHost({
   }, [activePlan, session]);
 
   const sessionProgress = activePlan && session
-    ? `${Math.min(activePlan.segments.length, session.current_segment_index + 1)} / ${activePlan.segments.length}`
+    ? coachingCueProgress(activePlan, session.current_segment_index, session.current_cue_id)
     : undefined;
   const positionLabel = playbackPositionLabel(playback, replay);
   const freeViewPosition = reviewPositionAtTick(playback, replay, activePlan);
@@ -775,7 +776,12 @@ export function Cs2dPlaybackHost({
               {selected ? <p className="cs2d-coach-focus" title={selected.displayName}>正在复盘：{selected.displayName}</p> : null}
               <h2>{userTookOver ? "自由查看" : session ? phaseText[session.phase] : selected ? (routeState && !routeState.routeFrozen ? "等待教学路线冻结" : `正在分析 ${selected.displayName}`) : replay ? "先在地图内选择玩家" : "等待 Demo"}</h2>
             </div>
-            <span className="cs2d-coach-badge">{sessionProgress ?? "LOCAL"}</span>
+            <span
+              className="cs2d-coach-badge"
+              aria-label={sessionProgress ? `第 ${sessionProgress.current} 个讲解片段，共 ${sessionProgress.total} 个` : "本地回放"}
+            >
+              {sessionProgress ? <><small>讲解</small><b>{sessionProgress.current}/{sessionProgress.total}</b></> : "LOCAL"}
+            </span>
           </div>
 
           {session && userTookOver ? (

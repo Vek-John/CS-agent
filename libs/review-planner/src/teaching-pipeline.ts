@@ -22,12 +22,12 @@ import type {
   ReviewSegment,
   TeachingCandidate
 } from "@cs-coach/contracts";
-import { DIRECTOR_FOCUS_CODES_BY_SIGNAL } from "@cs-coach/contracts";
+import { DIRECTOR_FOCUS_CODES_BY_SIGNAL, MAX_DIRECTOR_PACKET_CANDIDATES, MAX_TEACHING_CUES } from "@cs-coach/contracts";
 import { assertValidReviewPlan } from "./index";
 import { buildDeterministicAdvice } from "./coaching-package-builder";
 import { playerFacingFocusProblem } from "./coaching-language";
 
-const DEFAULT_MAX_CUES = 8;
+const DEFAULT_MAX_CUES = MAX_TEACHING_CUES;
 const DEFAULT_COMPILER_VERSION = "review-planner/compiler/1.0.0";
 const DEFAULT_PROMPT_VERSION = "deterministic-template/1.0.0";
 
@@ -37,6 +37,10 @@ function nonEmpty(value: unknown): value is string {
 
 function unique(values: readonly string[]): string[] {
   return [...new Set(values.filter(nonEmpty))];
+}
+
+function compactTextList(values: readonly string[], maxItems: number, maxLength: number): string[] {
+  return values.slice(0, maxItems).map((value) => value.slice(0, maxLength));
 }
 
 function stableStringify(value: unknown): string {
@@ -170,23 +174,24 @@ function allCandidateRefs(candidate: TeachingCandidate): Set<string> {
 
 export function buildDirectorRequest(set: CandidateSet, maxSelected = DEFAULT_MAX_CUES): DirectorRequest {
   const valueOf = (candidate: TeachingCandidate): number => candidate.deterministicScore + (candidate.resultSummary.selectedPlayerDeath ? 100 : candidate.source.kind === "KILL" ? 80 : 0) + (candidate.winRateSignalRefs.length > 0 ? 80 : 0) + (candidate.actionRefs.length > 0 && candidate.factRefs.length > 0 ? 10 : 0) + Math.min(6, candidate.evidenceRefs.length);
+  const practicalCandidates = set.candidates.filter(isPracticalTeachingCandidate);
   const byRound = new Map<number, TeachingCandidate[]>();
-  for (const candidate of set.candidates) byRound.set(candidate.roundNumber, [...(byRound.get(candidate.roundNumber) ?? []), candidate]);
+  for (const candidate of practicalCandidates) byRound.set(candidate.roundNumber, [...(byRound.get(candidate.roundNumber) ?? []), candidate]);
   const representatives = [...byRound.values()].map((group) => [...group].sort((left, right) => valueOf(right) - valueOf(left) || left.decisionTick - right.decisionTick || left.candidateId.localeCompare(right.candidateId))[0]);
   const representativeIds = new Set(representatives.map((candidate) => candidate.candidateId));
-  const ranked = [...representatives, ...set.candidates.filter((candidate) => !representativeIds.has(candidate.candidateId))].sort((left, right) => valueOf(right) - valueOf(left) || left.decisionTick - right.decisionTick || left.candidateId.localeCompare(right.candidateId));
-  const compacted = ranked.slice(0, 32);
+  const ranked = [...representatives, ...practicalCandidates.filter((candidate) => !representativeIds.has(candidate.candidateId))].sort((left, right) => valueOf(right) - valueOf(left) || left.decisionTick - right.decisionTick || left.candidateId.localeCompare(right.candidateId));
+  const compacted = ranked.slice(0, MAX_DIRECTOR_PACKET_CANDIDATES);
   const candidates: DirectorCandidateSummary[] = compacted.map((candidate) => ({
     candidateId: candidate.candidateId,
     sourceKind: candidate.source.kind,
     deterministicScore: candidate.deterministicScore,
-    missingFields: [...candidate.missingFields].slice(0, 8),
+    missingFields: compactTextList(candidate.missingFields, 8, 96),
     limitations: [...candidate.limitations].slice(0, 4).map((limitation) => limitation.slice(0, 160)),
     reasonRefs: [...candidate.factRefs, ...candidate.source.refs].slice(0, 3),
     evidenceRefs: [...candidate.evidenceRefs].slice(0, 3),
     resultSummary: {
       ...candidate.resultSummary,
-      missingFields: [...candidate.resultSummary.missingFields].slice(0, 8),
+      missingFields: compactTextList(candidate.resultSummary.missingFields, 8, 96),
       limitations: [...candidate.resultSummary.limitations].slice(0, 4).map((limitation) => limitation.slice(0, 160))
     },
     allowedFocusCodes: [...DIRECTOR_FOCUS_CODES_BY_SIGNAL[candidate.source.kind]]
@@ -196,8 +201,29 @@ export function buildDirectorRequest(set: CandidateSet, maxSelected = DEFAULT_MA
     candidateSetVersion: set.version,
     candidateSetHash: set.hash,
     candidates,
-    maxSelected: Math.max(0, Math.min(DEFAULT_MAX_CUES, Math.trunc(maxSelected)))
+    maxSelected: Math.max(0, Math.min(MAX_TEACHING_CUES, Math.trunc(maxSelected)))
   };
+}
+
+/**
+ * A successful kill is useful as a fact, but not automatically a coaching
+ * stop. Keep it only when the selected side subsequently lost a meaningful
+ * amount of win probability; positive/no-swing kills are practical playback
+ * context, not mistakes to explain.
+ */
+export function isPracticalTeachingCandidate(candidate: TeachingCandidate): boolean {
+  if (candidate.source.kind !== "KILL") return true;
+  // A KILL remains in the CandidateSet as a fact, but without a model curve it
+  // cannot prove a practical negative outcome and must not start AI teaching.
+  if (!candidateWinProbabilityIsAvailable(candidate)) return false;
+  const percentagePoints = candidate.resultSummary.winProbabilityPercentagePoints;
+  const delta = candidate.resultSummary.winProbabilityDelta;
+  if ((percentagePoints !== undefined && percentagePoints >= 0) || (delta !== undefined && delta >= 0)) return false;
+  return (percentagePoints !== undefined && percentagePoints <= -1) || (delta !== undefined && delta <= -0.01);
+}
+
+export function candidateWinProbabilityIsAvailable(candidate: TeachingCandidate): boolean {
+  return !candidate.resultSummary.limitations.some((limitation) => /WinProbabilityTimeline unavailable/i.test(limitation));
 }
 
 function focusFor(candidate: TeachingCandidate): string {
@@ -241,7 +267,7 @@ function legalCandidates(set: CandidateSet): TeachingCandidate[] {
   };
   const rank = (candidate: TeachingCandidate): number => candidate.deterministicScore + (candidate.resultSummary.selectedPlayerDeath ? 100 : candidate.source.kind === "KILL" ? 80 : 0) + (candidate.winRateSignalRefs.length > 0 ? 80 : 0) + (candidate.factRefs.length > 0 && candidate.actionRefs.length > 0 ? 10 : 0) + Math.min(6, candidate.evidenceRefs.length);
   const byRound = new Map<number, TeachingCandidate[]>();
-  for (const candidate of set.candidates.filter(canCompile)) byRound.set(candidate.roundNumber, [...(byRound.get(candidate.roundNumber) ?? []), candidate]);
+  for (const candidate of set.candidates.filter((candidate) => isPracticalTeachingCandidate(candidate) && canCompile(candidate))) byRound.set(candidate.roundNumber, [...(byRound.get(candidate.roundNumber) ?? []), candidate]);
   const accepted: TeachingCandidate[] = [];
   for (const group of byRound.values()) {
     const sorted = [...group].sort((left, right) => left.preRollStart - right.preRollStart || left.candidateId.localeCompare(right.candidateId));
@@ -262,7 +288,7 @@ export function deterministicDirectorFallback(
   reason = "DETERMINISTIC_FALLBACK",
   maxSelected = DEFAULT_MAX_CUES
 ): DirectorDecisionSet {
-  const limit = Math.max(0, Math.min(DEFAULT_MAX_CUES, Math.trunc(maxSelected)));
+  const limit = Math.max(0, Math.min(MAX_TEACHING_CUES, Math.trunc(maxSelected)));
   const accepted = legalCandidates(set);
   if (accepted.length === 0) {
     return {
@@ -273,7 +299,7 @@ export function deterministicDirectorFallback(
       manifest: {
         status: "DISABLED",
         provider: "DETERMINISTIC",
-        reason: set.status === "FAILED" ? "INDEX_FAILED" : "NO_CANDIDATES",
+        reason: set.status === "FAILED" ? "INDEX_FAILED" : reason,
         limitations: [...set.limitations]
       }
     };
@@ -315,6 +341,7 @@ export function deterministicDirectorFallback(
 
 export function collectDirectorDecisionIssues(set: CandidateSet, decisions: DirectorDecisionSet): string[] {
   const issues: string[] = [];
+  if (decisions.selected.length > MAX_TEACHING_CUES) issues.push(`Director selected more than the ${MAX_TEACHING_CUES}-cue route ceiling.`);
   if (decisions.candidateSetId !== set.id) issues.push("Director candidateSetId is unknown.");
   if (decisions.candidateSetVersion !== set.version) issues.push("Director candidateSetVersion is unknown.");
   if (decisions.candidateSetHash !== set.hash) issues.push("Director candidateSetHash does not match.");
@@ -331,6 +358,7 @@ export function collectDirectorDecisionIssues(set: CandidateSet, decisions: Dire
     if (!Number.isFinite(decision.confidence) || decision.confidence < 0 || decision.confidence > 1) issues.push(`Director candidate ${decision.candidateId} has invalid confidence.`);
     const candidate = candidates.get(decision.candidateId);
     if (!candidate) continue;
+    if (!isPracticalTeachingCandidate(candidate)) issues.push(`Director candidate ${decision.candidateId} has no practical negative outcome signal.`);
     const material = materials.get(candidate.candidateId);
     const hasDecisionFact = Boolean(material?.decisionFacts.some((fact) => candidate.factRefs.includes(fact.id) && fact.availability === "DECISION" && fact.observed_by_player));
     const hasPlayerAction = Boolean(material?.playerActionFacts.some((fact) => candidate.actionRefs.includes(fact.id) && Boolean(fact.actorPlayerId)));
@@ -571,9 +599,10 @@ export function compileReviewPlan(input: PlanCompilerInput): PlanCompilerResult 
     ...collectDirectorDecisionIssues(input.candidateSet, input.directorDecisionSet),
     ...collectSelectionWindowIssues(input.timeline, input.candidateSet, input.directorDecisionSet)
   ]);
-  const fallbackNeeded = issues.length > 0 || input.directorDecisionSet.selected.length > (input.maxCues ?? DEFAULT_MAX_CUES);
+  const maxCues = Math.max(0, Math.min(MAX_TEACHING_CUES, Math.trunc(input.maxCues ?? DEFAULT_MAX_CUES)));
+  const fallbackNeeded = issues.length > 0 || input.directorDecisionSet.selected.length > maxCues;
   const effectiveDirector = fallbackNeeded
-    ? deterministicDirectorFallback(input.candidateSet, issues.length > 0 ? `INVALID_DIRECTOR_OUTPUT:${issues.join("|")}` : "DIRECTOR_BUDGET")
+    ? deterministicDirectorFallback(input.candidateSet, issues.length > 0 ? `INVALID_DIRECTOR_OUTPUT:${issues.join("|")}` : "DIRECTOR_BUDGET", maxCues)
     : input.directorDecisionSet;
   const candidateMap = candidateById(input.candidateSet);
   const materials = materialById(input.candidateSet);

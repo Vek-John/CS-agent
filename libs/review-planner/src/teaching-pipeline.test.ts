@@ -19,6 +19,7 @@ import {
   assembleCandidateSet,
   mergeNarration
 } from "./teaching-pipeline";
+import { assertValidReviewPlan } from "./index";
 
 const manifest = {
   timelineVersion: "fixture-timeline/1.0.0",
@@ -121,6 +122,21 @@ function compile(set: CandidateSet) {
 }
 
 describe("CandidateGenerator → Director → PlanCompiler seam", () => {
+  it("rejects a ReviewPlan that exceeds the hard 50-cue route ceiling", () => {
+    const base = compile(setOf(candidate("base", 900, 1))).plan;
+    const firstCue = base.cues[0];
+    const extraCues = Array.from({ length: 51 }, (_, index) => ({ ...firstCue, id: index === 0 ? firstCue.id : `cap-${index}` }));
+    const firstSegment = base.segments[0];
+    const oversized = {
+      ...base,
+      cues: extraCues,
+      segments: base.segments.map((segment) => segment.id === firstSegment.id
+        ? { ...segment, cue_ids: extraCues.map((cue) => cue.id) }
+        : segment)
+    };
+    expect(() => assertValidReviewPlan(createSyntheticMirageTimeline(), oversized)).toThrow(/50-cue route ceiling/);
+  });
+
   it("sorts and fingerprints the same CandidateSet deterministically", () => {
     const first = setOf(candidate("b", 300), candidate("a", 300));
     const second = setOf(candidate("a", 300), candidate("b", 300));

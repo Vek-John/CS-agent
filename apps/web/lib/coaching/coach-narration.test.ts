@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSyntheticMirageTimeline } from "@cs-coach/demo-domain";
+import { MAX_TEACHING_CUES } from "@cs-coach/contracts";
 import {
   buildNarrationPayload,
   enrichReviewPlanWithNarration,
@@ -31,6 +32,20 @@ afterEach(() => {
 });
 
 describe("coach narration client", () => {
+  it("keeps the deprecated legacy payload at the 50-cue route ceiling", async () => {
+    const plan = fixturePlan();
+    const cue = plan.cues[0];
+    const oversized = {
+      ...plan,
+      id: "legacy-oversized-plan",
+      cues: Array.from({ length: MAX_TEACHING_CUES + 1 }, (_, index) => ({ ...cue, id: `legacy-cue-${index + 1}` }))
+    };
+    expect(() => buildNarrationPayload(oversized)).toThrow(/50 coaching cues/);
+    const fetcher = vi.fn();
+    expect(await enrichReviewPlanWithNarration(oversized, { fetcher })).toBe(oversized);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("builds an anonymous payload from decision-visible facts only", () => {
     const plan = fixturePlan();
     const planWithSensitiveText = structuredClone(plan);

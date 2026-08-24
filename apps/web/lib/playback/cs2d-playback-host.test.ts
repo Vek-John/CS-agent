@@ -7,6 +7,7 @@ import {
   acceptedPlaybackEvent,
   analysisEventMatchesSelectedPlayer,
   adjacentRoundIndex,
+  coachingCueProgress,
   cs2dHostConfig,
   HOST_SPEED_OPTIONS,
   hostCoachingCueSurface,
@@ -186,6 +187,30 @@ describe("cs2d localhost host boundary", () => {
     expect(timelinePercent(-10, 0, 100)).toBe(0);
     expect(timelinePercent(120, 0, 100)).toBe(100);
     expect(timelinePercent(10, 10, 10)).toBe(0);
+  });
+
+  it("counts only routed coaching cues in the coach progress badge", () => {
+    const fixture = createFixtureReviewPlan(createSyntheticMirageTimeline());
+    const [firstCue, secondCue] = fixture.cues;
+    const thirdCue = { ...secondCue, id: "cue-third" };
+    const segment = fixture.segments[0];
+    const plan = {
+      ...fixture,
+      cues: [firstCue, secondCue, thirdCue],
+      segments: [
+        { ...segment, id: "ordinary-1", mode: "BRIEF", cue_ids: [] },
+        { ...segment, id: "coach-1", mode: "DEEP_DIVE", cue_ids: [firstCue.id] },
+        { ...segment, id: "skip-1", mode: "SKIP", cue_ids: [] },
+        { ...segment, id: "coach-2", mode: "HABIT_CHECK", cue_ids: [secondCue.id] },
+        { ...segment, id: "coach-3", mode: "DEEP_DIVE", cue_ids: [thirdCue.id] },
+      ]
+    } satisfies ReviewPlan;
+
+    expect(coachingCueProgress(plan, 0)).toEqual({ current: 1, total: 3 });
+    expect(coachingCueProgress(plan, 1, firstCue.id)).toEqual({ current: 1, total: 3 });
+    expect(coachingCueProgress(plan, 2)).toEqual({ current: 2, total: 3 });
+    expect(coachingCueProgress(plan, 3, secondCue.id)).toEqual({ current: 2, total: 3 });
+    expect(coachingCueProgress(plan, plan.segments.length)).toEqual({ current: 3, total: 3 });
   });
 
   it("maps round and segment durations to proportional timeline ranges", () => {

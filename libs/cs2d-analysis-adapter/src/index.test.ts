@@ -148,6 +148,49 @@ function replayFixture(): Cs2dReplay {
   };
 }
 
+function negativeSelectedSideTimeline(tick: number, roundNumber = 1): WinProbabilityTimelineV1 {
+  return {
+    version: "win-probability-timeline.v1",
+    status: "AVAILABLE",
+    model: {
+      provider: "CS_NET",
+      revision: "fixture-negative-kill",
+      assetUrl: "/models/fixture.onnx",
+      assetSha256: "a".repeat(64),
+      assetBytes: 1,
+      quantization: "INT8",
+      temperature: 1,
+      sourceCommit: "fixture",
+      featureVersion: "fixture"
+    },
+    tickRate: 64,
+    rounds: [{
+      roundNumber,
+      startTick: 0,
+      endTick: 760,
+      winner: "T",
+      economy: { ct: "FULL", t: "FULL", ctValue: 20_000, tValue: 20_000 },
+      samples: [
+        { tick: Math.max(64, tick - 1), probability: 0.3, roundNumber, side: "CT", source: "CS_NET" },
+        { tick, probability: 0.6, roundNumber, side: "CT", source: "CS_NET" }
+      ]
+    }],
+    swings: [{
+      id: `negative-kill-${roundNumber}-${tick}`,
+      tick,
+      before: 0.3,
+      after: 0.6,
+      delta: 0.3,
+      direction: "UP",
+      cause: "PLAYER_DEATH",
+      selectedPlayerDeath: false,
+      victimSide: "CT",
+      economy: "FULL"
+    }],
+    limitations: []
+  };
+}
+
 describe("cs2d analysis adapter", () => {
   it("records the pinned structured-input boundary and supports every player selection", () => {
     const replay = replayFixture();
@@ -259,7 +302,8 @@ describe("cs2d analysis adapter", () => {
     const bundle = buildCs2dAnalysisBundle({
       replay: { ...replay, rounds: [{ ...replay.rounds[0], events }, replay.rounds[1]] },
       selectedSteamId: "p-t1",
-      demoId: "early-live-cue"
+      demoId: "early-live-cue",
+      winProbabilityTimeline: negativeSelectedSideTimeline(80)
     });
     const cue = bundle.review_plan.cues.find((candidate) => candidate.decision_tick === 64);
     expect(cue).toBeDefined();
@@ -275,10 +319,10 @@ describe("cs2d analysis adapter", () => {
     expect(session).toMatchObject({ phase: "PLAYING", current_tick: 64 });
   });
 
-  it("paces a full match to at most eight teaching stops and spreads them across the timeline", () => {
+  it("paces a full match to at most 50 teaching stops and spreads them across the timeline", () => {
     const base = replayFixture();
     const source = base.rounds[0];
-    const rounds = Array.from({ length: 12 }, (_, index) => {
+    const rounds = Array.from({ length: 60 }, (_, index) => {
       const offset = index * 1_000;
       return {
         ...source,
@@ -298,10 +342,10 @@ describe("cs2d analysis adapter", () => {
       selectedSteamId: "p-t1",
       demoId: "paced-full-match"
     });
-    expect(bundle.review_plan.cues).toHaveLength(8);
+    expect(bundle.review_plan.cues).toHaveLength(50);
     expect(bundle.review_plan.cues[0].decision_tick).toBeLessThan(1_000);
-    expect(bundle.review_plan.cues.at(-1)?.decision_tick).toBeGreaterThan(11_000);
-    expect(bundle.metadata.warnings.some((warning) => warning.includes("maximum 8"))).toBe(true);
+    expect(bundle.review_plan.cues.at(-1)?.decision_tick).toBeGreaterThan(59_000);
+    expect(bundle.metadata.warnings.some((warning) => warning.includes("maximum 50"))).toBe(true);
   });
 
   it("derives actionable coaching context only from the decision-time player state", () => {
@@ -420,11 +464,12 @@ describe("cs2d analysis adapter", () => {
         }))
       }))
     };
-    const outcomeFactFor = (round: Cs2dReplay["rounds"][number]) => {
+    const outcomeFactFor = (round: Cs2dReplay["rounds"][number], winProbabilityTimeline?: WinProbabilityTimelineV1) => {
       const bundle = buildCs2dAnalysisBundle({
         replay: { ...replay, rounds: [round, replay.rounds[1]] },
         selectedSteamId: "p-t1",
-        demoId: "outcome-fact-kind"
+        demoId: "outcome-fact-kind",
+        winProbabilityTimeline
       });
       return bundle.review_plan.cues[0].facts.find(
         (fact) => fact.availability === "OUTCOME"
@@ -441,7 +486,7 @@ describe("cs2d analysis adapter", () => {
     const killFact = outcomeFactFor({
       ...quietRound,
       events: [{ ...sourceKill, attackerSteamId: "p-t1", victimSteamId: "p-ct1" }]
-    });
+    }, negativeSelectedSideTimeline(sourceKill.tick));
     const bombFact = outcomeFactFor({ ...quietRound, events: [sourceBomb] });
     const utilityFact = outcomeFactFor({
       ...quietRound,
@@ -588,13 +633,14 @@ describe("cs2d analysis adapter", () => {
     const bundle = buildCs2dAnalysisBundle({
       replay: {
         ...replay,
-        rounds: [
-          { ...replay.rounds[0], frames: quietFrames, events: [endingKill], grenadePaths: [] },
-          replay.rounds[1]
-        ]
+      rounds: [
+        { ...replay.rounds[0], frames: quietFrames, events: [endingKill], grenadePaths: [] },
+        replay.rounds[1]
+      ]
       },
       selectedSteamId: "p-t1",
-      demoId: "round-ending-kill"
+      demoId: "round-ending-kill",
+      winProbabilityTimeline: negativeSelectedSideTimeline(endingKill.tick)
     });
     const cue = bundle.review_plan.cues.find((candidate) => candidate.reveal_tick === endingKill.tick);
 
