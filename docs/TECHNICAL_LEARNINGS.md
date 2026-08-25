@@ -873,9 +873,11 @@ GitHub Actions run `32836672732` 成功部署 Worker `cs2-ai-demo-coach`，Cloud
 
 固定任务 04 独立执行 9 个 Session、Controller、Host、Recovery 与 Agent 聚焦测试文件，共 98/98 通过；`pnpm typecheck`、一次 Next production build 与 `git diff --check` 通过。用例覆盖 PENDING 零调用、manual outcome/Gate、旧 ACK 失效、连续点播去重、Presented 默认经过、稳定边界恢复和返回默认顺序竞态；未运行 Falcons、cs2d/Cloudflare build 或无关全量测试。
 
+代码提交 `8a9af92` 后，Cloudflare production run `32844999809` 在 1 分 21 秒内成功，Worker version ID 为 `dadfe351-0b47-441c-ac38-b6d08f86aadb`。线上根页面与 `/cs2d/` 均为 HTTP 200 且隔离头完整；合成 DO smoke 返回 Agent state/graph v3、`DURABLE_OBJECT`、`recoverableAfterRefresh=true`，START 产生 1 个 effect，resume、重复 resume 与 COMPLETE_SESSION 均为 HTTP 200，重复 effect 为 0。DeepSeek Policy smoke 返回 `SUCCEEDED / DEEPSEEK / deepseek-v4-flash`，只选择请求白名单内的地图 capability。请求未包含 Demo、File、Replay、Prompt 或 CoT。
+
 **限制 / 下一步**
 
-本轮没有用真实 Demo 做长时间浏览器点播验收；发布后只做页面、Durable Object 与 DeepSeek 轻量 smoke。未完成 manual visit 仍是瞬时状态，刷新只回到此前稳定默认边界；这是刻意的恢复语义，不是跨 Demo 历史记录。
+本轮没有用真实 Demo 做长时间浏览器点播验收。首次线上 DO 探针因本机 Node `fetch` 未走当前网络代理而连接超时，改用已连通生产的 `curl` 后一次通过；这是本地探针传输限制，不是服务端失败。未完成 manual visit 仍是瞬时状态，刷新只回到此前稳定默认边界；这是刻意的恢复语义，不是跨 Demo 历史记录。GitHub Actions 另报告 Node 20 action runtime 弃用提醒，当前由 runner 强制使用 Node 24，后续应升级 action 版本。
 
 ## 5. 常用问题排查表
 
