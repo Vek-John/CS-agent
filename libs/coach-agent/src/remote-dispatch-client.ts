@@ -6,6 +6,11 @@ export {
   RemoteCoachAgentDispatchEnvelopeSchema,
 } from "./remote-dispatch";
 export {
+  COACH_AGENT_EVENT_VERSION,
+  COACH_AGENT_GRAPH_VERSION,
+  COACH_AGENT_RECOVERY_VERSION,
+  COACH_AGENT_SESSION_VERSION,
+  COACH_AGENT_STATE_VERSION,
   AgentToolRequestSchema,
   AgentToolResultSchema,
   CoachAgentEventSchema,
@@ -36,9 +41,36 @@ export {
   SessionWrapUpRequestSchema,
   SessionWrapUpResultSchema,
 } from "./session-wrap-up";
+export {
+  FrozenReviewPlanSchema,
+  HostToolLedgerSummarySchema,
+  PreparedNarrationArtifactSchema,
+  RecoveryBoundarySchema,
+  RecoveryStableBoundaryUpdateSchema,
+  ReplayAvailabilitySchema,
+  SessionRecoveryEventSchema,
+  SessionRecoveryRecordSchema,
+  SessionRecoveryResultSchema,
+  ReconnectToolDispositionSchema,
+  reconnectDispositionFromLedger,
+} from "./recovery-contract";
 export type {
   SessionWrapUpBuildInput,
   SessionWrapUpRequest,
   SessionWrapUpResult,
   PresentableSessionWrapUpCue,
 } from "./session-wrap-up";
+export type {
+  FrozenReviewPlan,
+  HostToolLedgerSummary,
+  RecoveryBoundaryProjection,
+  RecoveryIdentity,
+  RecoveryPostedToolLedgerEntry,
+  RecoveryReplayAvailability,
+  SessionRecoveryEvent,
+  SessionRecoveryRecord,
+  SessionRecoveryResult,
+  SessionRecoveryRuntime,
+  ReconnectToolDisposition,
+  PreparedNarrationArtifact,
+} from "./recovery-contract";

@@ -5,10 +5,12 @@ import {
   buildSessionSummary,
   canPresentOutcome,
   completeOutcomeGate,
+  captureSessionRecovery,
   createOutcomeCompletionGate,
   createCoachingSession,
   getCurrentCue,
-  reduceCoachingSession
+  reduceCoachingSession,
+  rehydrateSessionRecovery
 } from "./index";
 
 const timeline = createSyntheticMirageTimeline();
@@ -203,6 +205,78 @@ describe("CoachingSession deterministic safety kernel", () => {
     expect(canPresentOutcome(state.outcome_completion!)).toBe(true);
     state = reduceCoachingSession(plan, state, { type: "TICK", tick: cue.outcome_end_tick });
     expect(canPresentOutcome(state.outcome_completion!)).toBe(true);
+  });
+
+  it("captures and rehydrates a completed cue boundary with plan-derived coordinates", () => {
+    const state = reduceCoachingSession(plan, reachFirstCue(), {
+      type: "TICK",
+      tick: plan.cues[0]!.outcome_end_tick,
+    });
+    const snapshot = captureSessionRecovery(plan, state, "CUE_PAUSED");
+
+    expect(snapshot.boundary).toEqual({
+      kind: "CUE_PAUSED",
+      segmentId: plan.cues[0]!.segment_id,
+      segmentIndex: plan.segments.findIndex((segment) => segment.id === plan.cues[0]!.segment_id),
+      cueId: plan.cues[0]!.id,
+    });
+    expect(snapshot.boundary).not.toHaveProperty("current_tick");
+    expect(snapshot.boundary).not.toHaveProperty("outcomeEndTick");
+
+    const restored = rehydrateSessionRecovery(snapshot, plan);
+    expect(restored).toMatchObject({
+      id: state.id,
+      phase: "PAUSED_FOR_COACHING",
+      current_segment_index: state.current_segment_index,
+      current_cue_id: state.current_cue_id,
+      current_tick: plan.cues[0]!.decision_tick,
+      consumed_cue_ids: state.consumed_cue_ids,
+      revealed_cue_ids: state.revealed_cue_ids,
+    });
+    expect(restored.outcome_completion).toEqual({
+      cueId: plan.cues[0]!.id,
+      outcomeEndTick: plan.cues[0]!.outcome_end_tick,
+      status: "COMPLETE",
+      completedAtTick: plan.cues[0]!.outcome_end_tick,
+    });
+  });
+
+  it("accepts only the untouched route start and plan-derived wrap-up boundaries", () => {
+    const routeStart = captureSessionRecovery(plan, createCoachingSession(plan, "route-start"), "ROUTE_START");
+    expect(rehydrateSessionRecovery(routeStart, plan)).toMatchObject({
+      id: "route-start",
+      phase: "INTRO",
+      current_segment_index: 0,
+      current_tick: plan.segments[0]!.start_tick,
+    });
+
+    let state = reduceCoachingSession(plan, createCoachingSession(plan), { type: "START" });
+    let guard = 0;
+    while (state.phase !== "WRAP_UP" && guard < 50) {
+      guard += 1;
+      const cue = getCurrentCue(plan, state);
+      if (state.phase === "SKIPPING") state = reduceCoachingSession(plan, state, { type: "SKIP_SEGMENT" });
+      else if (state.phase === "PLAYING" && cue && !state.revealed_cue_ids.includes(cue.id)) state = reduceCoachingSession(plan, state, { type: "TICK", tick: cue.outcome_end_tick });
+      else if (state.phase === "PLAYING") state = reduceCoachingSession(plan, state, { type: "ADVANCE_SEGMENT" });
+      else if (state.phase === "REVEALING" && cue) state = reduceCoachingSession(plan, state, { type: "TICK", tick: cue.outcome_end_tick });
+      else if (state.phase === "PAUSED_FOR_COACHING") state = reduceCoachingSession(plan, state, { type: "ADVANCE_SEGMENT" });
+    }
+    const wrapUp = captureSessionRecovery(plan, state, "WRAP_UP");
+    expect(wrapUp.boundary).toEqual({ kind: "WRAP_UP", segmentIndex: plan.segments.length });
+    expect(rehydrateSessionRecovery(wrapUp, plan)).toMatchObject({ phase: "WRAP_UP", current_tick: plan.segments.at(-1)!.end_tick });
+  });
+
+  it("rejects an incomplete gate, route mismatch, and caller-supplied boundary coordinates", () => {
+    const state = reachFirstCue();
+    expect(() => captureSessionRecovery(plan, state, "CUE_PAUSED")).toThrow("completed outcome gate");
+
+    const completed = reduceCoachingSession(plan, state, { type: "TICK", tick: plan.cues[0]!.outcome_end_tick });
+    const snapshot = captureSessionRecovery(plan, completed, "CUE_PAUSED");
+    expect(() => rehydrateSessionRecovery(snapshot, { ...plan, id: "different-plan" })).toThrow("route hash");
+    expect(() => rehydrateSessionRecovery({
+      ...snapshot,
+      boundary: { kind: "WRAP_UP", segmentIndex: 99 },
+    } as never)).toThrow("wrap-up index");
   });
 
   it("resets the active cue route when manual return deliberately re-walks it", () => {

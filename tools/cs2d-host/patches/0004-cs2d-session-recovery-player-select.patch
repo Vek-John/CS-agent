@@ -1,0 +1,95 @@
+diff --git a/apps/app/src/viewer/player/hostBridge.ts b/apps/app/src/viewer/player/hostBridge.ts
+--- a/apps/app/src/viewer/player/hostBridge.ts
++++ b/apps/app/src/viewer/player/hostBridge.ts
+@@ -135,7 +135,8 @@
+ export type PlaybackCommand =
+   | { type: 'play' }
+   | { type: 'pause' }
+   | { type: 'seekCanonicalTick'; canonicalTick: number }
++  | { type: 'selectPlayer'; playerId: string }
+   | { type: 'selectRound'; roundIndex: number }
+   | { type: 'setSpeed'; speed: number }
+   | { type: 'setCamera'; mode: PlaybackCameraMode }
+@@ -263,9 +264,11 @@
+   switch (payload.type) {
+     case 'play':
+     case 'pause':
+       return Object.keys(payload).length === 1
+     case 'seekCanonicalTick':
+       return Object.keys(payload).length === 2 && isFiniteNumber(payload.canonicalTick)
++    case 'selectPlayer':
++      return hasExactKeys(payload, ['type', 'playerId']) && typeof payload.playerId === 'string' && !!payload.playerId.trim() && payload.playerId.length <= 160
+     case 'selectRound':
+       return Object.keys(payload).length === 2 && isFiniteNumber(payload.roundIndex) && Number.isInteger(payload.roundIndex) && payload.roundIndex >= 0
+     case 'setSpeed':
+@@ -333,6 +336,7 @@
+ 
+ export function listenForPlaybackCommands(
+   handlers: {
++    selectPlayer?: (playerId: string) => void
+     play: () => void
+     pause: () => void
+     seekCanonicalTick: (tick: number) => void
+@@ -358,6 +362,9 @@
+       case 'seekCanonicalTick':
+         handlers.seekCanonicalTick(command.canonicalTick)
+         break
++      case 'selectPlayer':
++        handlers.selectPlayer?.(command.playerId)
++        break
+       case 'selectRound':
+         handlers.selectRound(command.roundIndex)
+         break
+diff --git a/apps/app/src/viewer/DemoAnalyzerView.vue b/apps/app/src/viewer/DemoAnalyzerView.vue
+--- a/apps/app/src/viewer/DemoAnalyzerView.vue
++++ b/apps/app/src/viewer/DemoAnalyzerView.vue
+@@ -20,7 +20,7 @@
+ import { listenForExtensionDemo } from '@/viewer/ingest/extensionBridge'
+ import { fmtSize } from '@/viewer/domain/demoMeta'
+ import { useI18n } from '@/app/i18n'
+-import { emitPlaybackEvent, replayReadyMessage } from '@/viewer/player/hostBridge'
++import { emitPlaybackEvent, listenForPlaybackCommands, replayReadyMessage } from '@/viewer/player/hostBridge'
+ import {
+   buildCs2dAnalysisBundle,
+   serializeCs2dAnalysisBundle,
+@@ -161,7 +161,9 @@
+       const bundle = buildCs2dAnalysisBundle({
+         replay: replay as unknown as Cs2dReplay,
+         selectedSteamId: player.steamId,
+-        demoId: typeof routeId === 'string' && routeId.trim() ? routeId : 'cs2d-local-demo',
++        demoId: parser.demoContentHash.value
++          ? `cs2d-${parser.demoContentHash.value}`
++          : typeof routeId === 'string' && routeId.trim() ? routeId : 'cs2d-local-demo',
+         demoContentHash: parser.demoContentHash.value ?? undefined,
+         demoContentHashLatencyMs: parser.hashLatencyMs.value ?? undefined,
+         ...(winProbabilityTimeline ? { winProbabilityTimeline } : {}),
+@@ -584,7 +586,21 @@
+   return Math.round((d.loaded / d.total) * 100)
+ })
+ let stopExtensionBridge: (() => void) | null = null
++let stopHostSelectionBridge: (() => void) | null = null
+ onMounted(() => {
++  if (hostMode.value) {
++    stopHostSelectionBridge = listenForPlaybackCommands({
++      selectPlayer: (playerId) => { void selectHostPlayer(playerId) },
++      play: () => {},
++      pause: () => {},
++      seekCanonicalTick: () => {},
++      selectRound: () => {},
++      setSpeed: () => {},
++      setCamera: () => {},
++      teachingTool: () => {},
++      focusMapEvidence: () => {},
++    })
++  }
+   // Opened by the extension: show feedback before the first byte even arrives.
+   if (route.query.fromExtension) extDownload.value = { phase: 'connecting' }
+   stopExtensionBridge = listenForExtensionDemo({
+@@ -605,6 +621,7 @@
+   })
+ })
+ onUnmounted(() => {
++  stopHostSelectionBridge?.()
+   stopExtensionBridge?.()
+   winRateWorker?.terminate()
+   winRateWorker = null

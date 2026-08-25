@@ -20,10 +20,23 @@ function input(): Stage3HostAdapterInput {
 }
 
 function result(status: CoachAgentResult["status"], effects: unknown[] = []): CoachAgentResult {
-  return { status, effects } as unknown as CoachAgentResult;
+  return {
+    status,
+    effects,
+    checkpoint: { checkpointId: status === "WAITING_TOOL" ? "checkpoint-waiting" : "checkpoint-completed" },
+    state: { activeCueId: "cue-1", currentSessionPhase: "PAUSED_FOR_COACHING", routeCursor: 0 },
+  } as unknown as CoachAgentResult;
 }
 
-function harness(options: { bridgeAvailable?: boolean; dispatch?: (event: CoachAgentEvent) => Promise<CoachAgentResult>; capabilities?: unknown[]; command?: PlaybackCommand | undefined; callStatus?: "UNKNOWN" | "POSTED" | "RESULTED" | "RESUMED" } = {}) {
+function harness(options: {
+  bridgeAvailable?: boolean;
+  dispatch?: (event: CoachAgentEvent) => Promise<CoachAgentResult>;
+  capabilities?: unknown[];
+  command?: PlaybackCommand | undefined;
+  callStatus?: "UNKNOWN" | "POSTED" | "RESULTED" | "RESUMED";
+  onAgentResult?: (event: CoachAgentEvent, result: CoachAgentResult) => void;
+  onToolLedgerTransition?: import("./coach-agent-stage3-controller").Stage3ControllerOptions["onToolLedgerTransition"];
+} = {}) {
   const request = AgentToolRequestSchema.parse({
     callId: "call-1",
     runId: "run-1",
@@ -100,6 +113,8 @@ function harness(options: { bridgeAvailable?: boolean; dispatch?: (event: CoachA
     isLive: () => true,
     scheduler,
     onState: (state) => states.push(state.status),
+    onAgentResult: options.onAgentResult,
+    onToolLedgerTransition: options.onToolLedgerTransition,
   });
   return { controller, adapter, request, scheduled, posted, dispatched, states };
 }
@@ -145,6 +160,41 @@ describe("CoachAgentStage3Controller", () => {
     expect(h.adapter.createResumeEvent).toHaveBeenCalledTimes(1);
     expect(h.dispatched).toHaveLength(2);
     expect(h.controller.currentState.status).toBe("COMPLETED");
+  });
+
+  it("pairs POSTED/RESULTED with the waiting checkpoint and RESUMED with the completed checkpoint", async () => {
+    const persisted: string[] = [];
+    const h = harness({
+      onAgentResult: (event, agent) => persisted.push(`agent:${event.type}:${agent.checkpoint.checkpointId}`),
+      onToolLedgerTransition: (transition) => { persisted.push(`tool:${transition.status}:${transition.agentCheckpointId}`); },
+    });
+
+    h.controller.start(input());
+    await flush();
+    h.controller.acceptAck(ack);
+    await flush();
+
+    expect(persisted).toEqual([
+      "agent:START_CUE:checkpoint-waiting",
+      "tool:POSTED:checkpoint-waiting",
+      "tool:RESULTED:checkpoint-waiting",
+      "agent:RESUME_TOOL:checkpoint-completed",
+      "tool:RESUMED:checkpoint-completed",
+    ]);
+  });
+
+  it("does not post an external tool when POSTED persistence rejects", async () => {
+    const h = harness({
+      onToolLedgerTransition: async (transition) => {
+        if (transition.status === "POSTED") throw new Error("recovery store unavailable");
+      },
+    });
+
+    h.controller.start(input());
+    await flush();
+
+    expect(h.posted).toEqual([]);
+    expect(h.controller.currentState.status).toBe("FAILED");
   });
 
   it("synthesizes one FAILED resume on timeout while the bridge is reachable", async () => {
@@ -199,6 +249,25 @@ describe("CoachAgentStage3Controller", () => {
     expect(h.adapter.createTeachingToolCommand).toHaveBeenCalledTimes(1);
     expect(h.dispatched).toHaveLength(3);
     expect(h.controller.currentState.status).toBe("COMPLETED");
+  });
+
+  it("closes a pending takeover as RESUMED with the takeover checkpoint before returning", async () => {
+    const persisted: string[] = [];
+    const h = harness({
+      onAgentResult: (event, agent) => { persisted.push(`agent:${event.type}:${agent.checkpoint.checkpointId}`); },
+      onToolLedgerTransition: (transition) => { persisted.push(`tool:${transition.status}:${transition.result?.status ?? "NONE"}:${transition.agentCheckpointId}`); },
+    });
+    const current = input();
+    h.controller.start(current);
+    await flush();
+
+    await h.controller.takeover(current, "用户接管回放。", 1);
+
+    expect(persisted).toEqual([
+      "agent:START_CUE:checkpoint-waiting",
+      "tool:POSTED:NONE:checkpoint-waiting",
+      "tool:RESUMED:CANCELLED:checkpoint-completed",
+    ]);
   });
 
   it("re-enters an in-flight cue after takeover and closes its posted-unknown old call once", async () => {

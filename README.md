@@ -68,6 +68,7 @@ Replay / MatchTimeline / Win-rate timeline
 ### 回放与地图
 
 - 本地选择 `.dem`，在浏览器 Worker/WASM 中解析，不把 Demo 上传到 Next 或 Cloudflare Worker；
+- 刷新后若发现未完成复盘，先重新选择同一份本地 Demo：这是让 iframe 重新解析文件，不是上传，`File`、Demo bytes、Replay 与 frames 始终留在浏览器；
 - Mirage 真实雷达、多楼层基础、10 人位置/朝向/存活状态；
 - 炸弹、投掷物轨迹与落点、掉落武器、生命/护甲/头盔和当前手持装备；
 - 地图、两侧 5+5 HUD、回合条和整场进度保持同步；
@@ -220,7 +221,7 @@ pnpm cloudflare:assets
 - cs2d Frame 通常约 8 Hz，状态不是逐 tick 无损；投掷物时间也有采样精度限制；
 - 当前缺少可靠的逐次 HurtEvent、ShotEvent shooter、完整声学遮挡、队内语音和全部战术上下文；
 - 目前的候选主要围绕玩家死亡、接触、生命变化、持包和道具时机，还没有职业样本检索、复杂补枪模型或自由追问；
-- localhost Agent 使用进程内 MemorySaver，刷新后不能恢复；Cloudflare 生产使用 Durable Object checkpoint，但仍必须重新载入相同 Demo 并通过 demo/route hash 校验后才能恢复；
+- localhost Agent 使用进程内 MemorySaver，刷新后不能恢复；Cloudflare 生产使用 Durable Object checkpoint。Host 会保存有界恢复记录，但仍必须重新选择同一 Demo 并通过 hash、玩家、冻结 route、版本和稳定边界校验后才能恢复；
 - WebGPU/FP16 性能依浏览器、GPU 和 Worker 能力而异，失败时才回退 WASM，不把超时伪装成成功结果。
 
 ## 开源与第三方许可

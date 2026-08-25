@@ -210,6 +210,8 @@ export type PlaybackCommand =
   | { type: "play" }
   | { type: "pause" }
   | { type: "seekCanonicalTick"; canonicalTick: number }
+  /** Strict recovery/player-selection command; the iframe resolves the id locally. */
+  | { type: "selectPlayer"; playerId: string }
   | { type: "selectRound"; roundIndex: number }
   | { type: "setSpeed"; speed: number }
   | { type: "setCamera"; mode: PlaybackCameraMode }
@@ -363,6 +365,7 @@ export function isPlaybackCommandEnvelope(value: unknown): value is PlaybackComm
   if (!isRecord(payload) || typeof payload.type !== "string") return false;
   if (payload.type === "play" || payload.type === "pause") return exactKeys(payload, ["type"]);
   if (payload.type === "seekCanonicalTick") return exactKeys(payload, ["type", "canonicalTick"]) && finite(payload.canonicalTick);
+  if (payload.type === "selectPlayer") return exactKeys(payload, ["type", "playerId"]) && nonEmpty(payload.playerId) && payload.playerId.length <= 160;
   if (payload.type === "selectRound") return exactKeys(payload, ["type", "roundIndex"]) && safeIndex(payload.roundIndex);
   if (payload.type === "setSpeed") return exactKeys(payload, ["type", "speed"]) && finite(payload.speed) && payload.speed > 0 && payload.speed <= 16;
   if (payload.type === "setCamera") return exactKeys(payload, ["type", "mode"]) && (payload.mode === "full" || payload.mode === "target");

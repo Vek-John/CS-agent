@@ -45,6 +45,16 @@ export function canPresentOutcome(
   return gate?.status === "COMPLETE";
 }
 
+export {
+  captureSessionRecovery,
+  rehydrateSessionRecovery,
+  sessionRouteFingerprint,
+  SESSION_RECOVERY_SNAPSHOT_VERSION,
+  type SessionRecoveryBoundary,
+  type SessionRecoveryBoundaryKind,
+  type SessionRecoverySnapshot,
+} from "./recovery";
+
 function event(
   state: CoachingSessionState,
   type: SessionUserEvent["type"],

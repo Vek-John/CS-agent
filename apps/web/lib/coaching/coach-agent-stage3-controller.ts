@@ -55,7 +55,19 @@ export interface Stage3ControllerOptions {
   /** Live session/cue/gate check, called immediately before every external effect. */
   readonly isLive: (input: Stage3HostAdapterInput) => boolean;
   readonly onState?: (state: Stage3ControllerState) => void;
+  /** Emits every accepted Graph result before controller/UI state advances. */
+  readonly onAgentResult?: (event: CoachAgentEvent, result: CoachAgentResult) => Promise<void> | void;
+  /** Ordered durable ledger seam. Errors degrade recovery but never block playback. */
+  readonly onToolLedgerTransition?: (transition: Stage3ToolLedgerTransition) => Promise<void> | void;
   readonly scheduler?: Stage3ControllerScheduler;
+}
+
+export interface Stage3ToolLedgerTransition {
+  readonly status: "POSTED" | "RESULTED" | "RESUMED";
+  readonly request: AgentToolRequest;
+  readonly result: AgentToolResult | null;
+  readonly agentCheckpointId: string | null;
+  readonly agentState: Pick<CoachAgentResult["state"], "activeCueId" | "currentSessionPhase" | "routeCursor" | "sessionStatus">;
 }
 
 interface PendingTool {
@@ -64,6 +76,8 @@ interface PendingTool {
   readonly input: Stage3HostAdapterInput;
   readonly token: number;
   readonly commandGeneration: number;
+  readonly agentCheckpointId: string | null;
+  readonly agentState: Stage3ToolLedgerTransition["agentState"];
 }
 
 function shortError(error: unknown, fallback: string): string {
@@ -125,10 +139,30 @@ export class CoachAgentStage3Controller {
     return token === this.token && this.options.isLive(input) && this.adapter.isCurrent(input.generation);
   }
 
-  private dispatchSerial(event: CoachAgentEvent): Promise<CoachAgentResult> {
-    const next = this.lifecycleTail.then(() => this.options.dispatch(event));
+  private dispatchSerial(event: CoachAgentEvent, options: { notifyAgentResult?: boolean } = {}): Promise<CoachAgentResult> {
+    const next = this.lifecycleTail.then(async () => {
+      const result = await this.options.dispatch(event);
+      try {
+        if (options.notifyAgentResult !== false) await this.options.onAgentResult?.(event, result);
+      } catch {
+        // Checkpoint mirroring may degrade recovery, but a valid Graph result
+        // remains authoritative for the live coaching session.
+      }
+      return result;
+    });
     this.lifecycleTail = next.then(() => undefined, () => undefined);
     return next;
+  }
+
+  private async persistToolTransition(transition: Stage3ToolLedgerTransition): Promise<boolean> {
+    try {
+      await this.options.onToolLedgerTransition?.(transition);
+      return true;
+    } catch {
+      // Recovery persistence is best effort. The live playback/Agent dispatch
+      // remains usable and the Host callback exposes DEGRADED status.
+      return false;
+    }
   }
 
   private identityInput(input: Stage3HostAdapterInput): Stage3IdentityInput {
@@ -247,11 +281,25 @@ export class CoachAgentStage3Controller {
       return;
     }
     if (!event) return;
+    await this.persistToolTransition({
+      status: "RESULTED",
+      request: pending.request,
+      result,
+      agentCheckpointId: pending.agentCheckpointId,
+      agentState: pending.agentState,
+    });
     this.pending = undefined;
     this.setState({ status: "RESUMING", cueId: pending.input.cue.id, tool: pending.request.tool, presentation: this.state.presentation });
     try {
       const next = await this.dispatchSerial(event);
       if (!this.isCurrent(pending.input, pending.token)) return;
+      await this.persistToolTransition({
+        status: "RESUMED",
+        request: pending.request,
+        result,
+        agentCheckpointId: next.checkpoint.checkpointId,
+        agentState: next.state,
+      });
       await this.handleAgentResult(pending.input, pending.token, next);
     } catch (error) {
       if (tokenIsCurrent(this.token, pending.token)) {
@@ -296,6 +344,8 @@ export class CoachAgentStage3Controller {
         input,
         token,
         commandGeneration: this.adapter.commandGenerationFor(request) ?? 0,
+        agentCheckpointId: result.checkpoint.checkpointId,
+        agentState: result.state,
       };
       const finalResult = this.adapter.resultForCall(request);
       if (finalResult && callStatus === "RESULTED") {
@@ -314,10 +364,37 @@ export class CoachAgentStage3Controller {
       this.setState({ status: "FAILED", cueId: input.cue.id, tool: request.tool, error: "Host 返回了不匹配的教学命令；基础回放仍可继续。" });
       return;
     }
-    const pending: PendingTool = { request, context, input, token, commandGeneration: command.generation };
+    const pending: PendingTool = {
+      request,
+      context,
+      input,
+      token,
+      commandGeneration: command.generation,
+      agentCheckpointId: result.checkpoint.checkpointId,
+      agentState: result.state,
+    };
     this.pending = pending;
     this.armTimeout(pending);
     this.setState({ status: "FOCUSING", cueId: input.cue.id, tool: request.tool, presentation: command.args });
+    const postedPersisted = await this.persistToolTransition({
+      status: "POSTED",
+      request,
+      result: null,
+      agentCheckpointId: result.checkpoint.checkpointId,
+      agentState: result.state,
+    });
+    if (!postedPersisted) {
+      this.clearTimeout();
+      this.pending = undefined;
+      this.setState({
+        status: "FAILED",
+        cueId: input.cue.id,
+        tool: request.tool,
+        error: "工具调用未能写入恢复记录；为避免重复副作用，本次不发送外部命令。基础回放仍可继续。",
+      });
+      return;
+    }
+    if (!this.isCurrent(input, token) || this.pending?.token !== token) return;
     this.options.post(command);
   }
 
@@ -391,6 +468,7 @@ export class CoachAgentStage3Controller {
   /** Ordered user takeover: invalidate the visual effect before notifying Graph. */
   takeover(input: Stage3HostAdapterInput | undefined, reason = "用户接管了自由回放。", generation = input?.generation ?? 0): Promise<boolean> {
     const takeoverInput = input ?? this.activeInput;
+    const takeoverPending = this.pending;
     // A cue whose START/tool effect was still in flight was not consumed by
     // the Session reducer.  Allow that cue to re-enter after RETURN_TO_NEAREST
     // revokes its reveal; the run ledger will close the old posted call without
@@ -407,8 +485,25 @@ export class CoachAgentStage3Controller {
     if (!takeoverInput) return Promise.resolve(true);
     try {
       const event = this.adapter.createTakeoverEvent(takeoverInput, `stage3-takeover-${takeoverInput.cue.id}-${++this.resumeSequence}`.replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 160), reason);
-      this.takeoverPromise = this.dispatchSerial(event)
-        .then(() => true)
+      this.takeoverPromise = this.dispatchSerial(event, { notifyAgentResult: !takeoverPending })
+        .then(async (result) => {
+          if (takeoverPending) {
+            const cancelled = AgentToolResultSchema.parse({
+              callId: takeoverPending.request.callId,
+              status: "CANCELLED",
+              observation: { code: "UNAVAILABLE", completed: false },
+              limitations: ["USER_TAKEOVER_CANCELLED_PENDING_TOOL"],
+            });
+            await this.persistToolTransition({
+              status: "RESUMED",
+              request: takeoverPending.request,
+              result: cancelled,
+              agentCheckpointId: result.checkpoint.checkpointId,
+              agentState: result.state,
+            });
+          }
+          return true;
+        })
         .catch(() => {
           this.setState({ status: "RECOVERY_REQUIRED", cueId: takeoverInput.cue.id, error: "接管状态未能同步；恢复前不会重新派发教学工具。" });
           return false;
@@ -477,6 +572,18 @@ export class CoachAgentStage3Controller {
       this.adapter.releaseLifecycleEvent(eventId);
       return Promise.resolve(undefined);
     }
+  }
+
+  /** Recovery uses the same serialized dispatch/result seam as live cues. */
+  reconnect(event: Extract<CoachAgentEvent, { type: "RECONNECT_REPLAY" }>): Promise<CoachAgentResult> {
+    return this.dispatchSerial(event);
+  }
+
+  /** Adopt the already-reconciled paused cue without dispatching START_CUE again. */
+  adoptRecoveredCue(cueId: string, segmentIndex: number): void {
+    this.startedCueIds.add(cueId);
+    this.adapter.markLifecycleSynced(segmentIndex);
+    this.setState({ status: "COMPLETED", cueId });
   }
 
   /** Explicit recovery entry after a bridge-lost boundary. */

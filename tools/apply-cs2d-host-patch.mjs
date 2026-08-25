@@ -12,6 +12,7 @@ const patchFiles = [
   resolve(root, 'tools/cs2d-host/patches/0001-cs2d-playback-host.patch'),
   resolve(root, 'tools/cs2d-host/patches/0002-cs2d-cloudflare-base.patch'),
   resolve(root, 'tools/cs2d-host/patches/0003-cs2d-stage2-map-focus.patch'),
+  resolve(root, 'tools/cs2d-host/patches/0004-cs2d-session-recovery-player-select.patch'),
 ]
 
 export const CS2D_REUSE_DECISIONS = Object.freeze({
@@ -81,6 +82,16 @@ const REQUIRED_MARKERS = [
     name: 'stage2 teaching bridge command',
     path: 'apps/app/src/viewer/player/hostBridge.ts',
     pattern: /focusMapEvidence/,
+  },
+  {
+    name: 'strict recovery player selection command',
+    path: 'apps/app/src/viewer/player/hostBridge.ts',
+    pattern: /type:\s*['"]selectPlayer['"]/,
+  },
+  {
+    name: 'content-addressed local analysis identity',
+    path: 'apps/app/src/viewer/DemoAnalyzerView.vue',
+    pattern: /demoId:\s*parser\.demoContentHash\.value[\s\S]*?`cs2d-\$\{parser\.demoContentHash\.value\}`/,
   },
   {
     name: 'stage2 parser content hash',

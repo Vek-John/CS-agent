@@ -8,12 +8,17 @@ import {
   CoachAgentEventSchema,
   CoachAgentResultSchema,
   CoachAgentStateSchema,
+  COACH_AGENT_GRAPH_VERSION,
+  COACH_AGENT_RECOVERY_VERSION,
+  COACH_AGENT_SESSION_VERSION,
+  COACH_AGENT_STATE_VERSION,
   type AgentToolRequest,
   type CoachAgentEvent,
   type CoachAgentIdentity,
   type CoachAgentResult,
   type CoachAgentState,
   type FallbackReason,
+  type ReconnectReplayEvent,
 } from "./types";
 import { DeterministicPolicyAdapter, type PolicyAdapter } from "./adapters";
 import { createCueGraph } from "./graph";
@@ -45,6 +50,7 @@ interface RuntimeBackend {
 interface CheckpointRead {
   state?: CoachAgentState;
   incompatible: boolean;
+  checkpointId: string | null;
 }
 
 function identityFromState(state: CoachAgentState): CoachAgentIdentity {
@@ -116,6 +122,7 @@ function emptyState(identity: CoachAgentIdentity): CoachAgentState {
     activeFocus: null,
     activeNarrationPolicySummary: null,
     activeAllowedEvidenceSummary: [],
+    activePresentableCueSummary: null,
     observedSegmentIds: [],
     currentSessionPhase: "INTRO",
     outcomeGateStatus: "NOT_APPLICABLE",
@@ -171,6 +178,7 @@ function initialState(
       ? event.narrationSummary
       : null,
     activeAllowedEvidenceSummary: event.allowedEvidenceSummary,
+    activePresentableCueSummary: event.presentableSummary ?? null,
     currentSessionPhase: event.currentSessionPhase,
     outcomeGateStatus: event.outcomeGateStatus,
     narrationReadiness: event.narrationReadiness,
@@ -208,10 +216,10 @@ function dormantState(
 }
 
 function stateFromCheckpoint(value: unknown): CheckpointRead {
-  if (!value || typeof value !== "object") return { incompatible: false };
+  if (!value || typeof value !== "object") return { incompatible: false, checkpointId: null };
   const parsed = CoachAgentStateSchema.safeParse(value);
-  if (parsed.success) return { state: parsed.data, incompatible: false };
-  return { incompatible: true };
+  if (parsed.success) return { state: parsed.data, incompatible: false, checkpointId: null };
+  return { incompatible: true, checkpointId: null };
 }
 
 function graphStateFromOutput(value: unknown): CoachAgentState | undefined {
@@ -224,6 +232,7 @@ function resultForState(
   state: CoachAgentState,
   backend: RuntimeBackend,
   restored: CoachAgentResult["restored"],
+  checkpointId: string | null = null,
 ): CoachAgentResult {
   const result = {
     version: "coach-agent-result.v1" as const,
@@ -237,11 +246,35 @@ function resultForState(
     checkpoint: {
       backend: backend.kind,
       recoverableAfterRefresh: backend.recoverableAfterRefresh,
+      checkpointId,
       ...(backend.fallbackReason ? { fallbackReason: backend.fallbackReason } : {}),
     },
     restored,
   };
   return CoachAgentResultSchema.parse(result) as CoachAgentResult;
+}
+
+function recoveryVersionsMatch(state: CoachAgentState, event: ReconnectReplayEvent): boolean {
+  return event.versions.graph === COACH_AGENT_GRAPH_VERSION &&
+    event.versions.state === COACH_AGENT_STATE_VERSION &&
+    event.versions.session === COACH_AGENT_SESSION_VERSION &&
+    event.versions.recovery === COACH_AGENT_RECOVERY_VERSION &&
+    state.graphVersion === event.versions.graph &&
+    state.schemaVersion === event.versions.state;
+}
+
+function recoveryBoundaryMatches(state: CoachAgentState, boundary: ReconnectReplayEvent["boundary"]): boolean {
+  if (boundary.kind === "ROUTE_START") return state.routeCursor === boundary.segmentIndex;
+  if (boundary.kind === "CUE_PAUSED") {
+    return state.activeSegmentId === boundary.segmentId &&
+      state.routeCursor === boundary.segmentIndex &&
+      state.activeCueId === boundary.cueId &&
+      state.currentSessionPhase === boundary.sessionPhase &&
+      state.outcomeGateStatus === boundary.outcomeGateStatus;
+  }
+  return state.routeCursor === boundary.segmentIndex &&
+    state.sessionStatus === "COMPLETED" &&
+    state.runStatus === "COMPLETED";
 }
 
 function routeOrderMatches(
@@ -277,14 +310,20 @@ class CoachAgentRuntimeImpl implements CoachAgentRuntime {
     void previous.close?.();
   }
 
-  private async checkpointState(identity: CoachAgentIdentity): Promise<CheckpointRead> {
+  private async checkpointState(identity: CoachAgentIdentity, requestedCheckpointId?: string): Promise<CheckpointRead> {
     const tuple = await this.backend.saver.getTuple({
       configurable: {
         thread_id: threadIdForIdentity(identity),
         checkpoint_ns: "",
+        ...(requestedCheckpointId ? { checkpoint_id: requestedCheckpointId } : {}),
       },
     });
-    return stateFromCheckpoint(tuple?.checkpoint.channel_values.agent);
+    const read = stateFromCheckpoint(tuple?.checkpoint.channel_values.agent);
+    const checkpointId = tuple?.config.configurable?.checkpoint_id;
+    return {
+      ...read,
+      checkpointId: typeof checkpointId === "string" && checkpointId.length > 0 ? checkpointId : null,
+    };
   }
 
   private async invokeState(
@@ -294,30 +333,70 @@ class CoachAgentRuntimeImpl implements CoachAgentRuntime {
     restored: CoachAgentResult["restored"],
   ): Promise<CoachAgentResult> {
     const output = await this.graph.invoke({ agent: state, event }, config);
-    const nextState = graphStateFromOutput(output) ?? (await this.checkpointState(event.identity)).state;
+    const checkpointRead = await this.checkpointState(event.identity);
+    const nextState = graphStateFromOutput(output) ?? checkpointRead.state;
     if (!nextState) throw new Error("coach-agent graph returned no state");
-    return resultForState(nextState, this.backend, restored);
+    return resultForState(nextState, this.backend, restored, checkpointRead.checkpointId);
   }
 
   private async dispatchWithBackend(event: CoachAgentEvent): Promise<CoachAgentResult> {
     const threadId = threadIdForIdentity(event.identity);
-    const config = {
+    const latestConfig = {
       configurable: {
         thread_id: threadId,
         checkpoint_ns: "",
       },
     };
+    let config: {
+      configurable: {
+        thread_id: string;
+        checkpoint_ns: string;
+        checkpoint_id?: string;
+      };
+    } = latestConfig;
 
     if (event.type === "RESET") {
       await this.backend.saver.deleteThread(threadId);
       return resultForState(dormantState(event.identity, "RESET"), this.backend, "FRESH");
     }
 
-    const read = await this.checkpointState(event.identity);
+    const latestRead = await this.checkpointState(event.identity);
+    let read = latestRead;
+    if (
+      event.type === "RECONNECT_REPLAY" &&
+      latestRead.state &&
+      sameIdentity(identityFromState(latestRead.state), event.identity) &&
+      latestRead.state.processedEventIds.includes(event.eventId)
+    ) {
+      return resultForState(latestRead.state, this.backend, "MATCHED", latestRead.checkpointId);
+    }
+    if (event.type === "RECONNECT_REPLAY") {
+      const expectedRead = await this.checkpointState(event.identity, event.expectedCheckpointId);
+      if (expectedRead.checkpointId !== event.expectedCheckpointId) {
+        return resultForState(
+          dormantState(event.identity, "RECOVERY_CHECKPOINT_MISMATCH"),
+          this.backend,
+          "DORMANT_RECOVERY_MISMATCH",
+          latestRead.checkpointId,
+        );
+      }
+      read = expectedRead;
+      config = {
+        configurable: {
+          ...latestConfig.configurable,
+          checkpoint_id: event.expectedCheckpointId,
+        },
+      };
+    }
     let saved = read.state;
     if (read.incompatible) {
-      if (event.type === "RESUME_TOOL") {
-        return resultForState(dormantState(event.identity, "CHECKPOINT_VERSION_MISMATCH"), this.backend, "DORMANT_MISSING");
+      if (event.type === "RESUME_TOOL" || event.type === "RECONNECT_REPLAY") {
+        return resultForState(
+          dormantState(event.identity, event.type === "RECONNECT_REPLAY" ? "RECOVERY_VERSION_MISMATCH" : "CHECKPOINT_VERSION_MISMATCH"),
+          this.backend,
+          event.type === "RECONNECT_REPLAY" ? "DORMANT_RECOVERY_MISMATCH" : "DORMANT_MISSING",
+          event.type === "RECONNECT_REPLAY" ? latestRead.checkpointId : read.checkpointId,
+        );
       }
       await this.backend.saver.deleteThread(threadId);
       saved = undefined;
@@ -325,70 +404,107 @@ class CoachAgentRuntimeImpl implements CoachAgentRuntime {
 
     if (saved && !sameIdentity(identityFromState(saved), event.identity)) {
       const reason = saved.routeHash === event.identity.routeHash ? "IDENTITY_MISMATCH" : "ROUTE_HASH_MISMATCH";
-      if (event.type === "RESUME_TOOL") {
-        return resultForState(dormantState(event.identity, reason), this.backend, "DORMANT_IDENTITY_MISMATCH");
+      if (event.type === "RESUME_TOOL" || event.type === "RECONNECT_REPLAY") {
+        return resultForState(
+          dormantState(event.identity, reason),
+          this.backend,
+          event.type === "RECONNECT_REPLAY" ? "DORMANT_RECOVERY_MISMATCH" : "DORMANT_IDENTITY_MISMATCH",
+          event.type === "RECONNECT_REPLAY" ? latestRead.checkpointId : read.checkpointId,
+        );
       }
       await this.backend.saver.deleteThread(threadId);
       saved = undefined;
     }
 
-    if (event.type === "RESUME_TOOL") {
-      if (!saved) return resultForState(dormantState(event.identity, "STALE_RESUME"), this.backend, "DORMANT_MISSING");
-      if (saved.sessionStatus === "CANCELLED" || saved.sessionStatus === "COMPLETED" || saved.runStatus === "USER_TAKEOVER") {
-        return resultForState(saved, this.backend, "MATCHED");
+    if (event.type === "RECONNECT_REPLAY") {
+      if (!saved) return resultForState(dormantState(event.identity, "STALE_RESUME"), this.backend, "DORMANT_MISSING", read.checkpointId);
+      if (read.checkpointId !== event.expectedCheckpointId) {
+        return resultForState(dormantState(event.identity, "RECOVERY_CHECKPOINT_MISMATCH"), this.backend, "DORMANT_RECOVERY_MISMATCH", latestRead.checkpointId);
       }
-      if (saved.processedEventIds.includes(event.eventId)) return resultForState(saved, this.backend, "MATCHED");
-      if (saved.runStatus !== "WAITING_TOOL" || !saved.pendingToolCall) return resultForState(saved, this.backend, "MATCHED");
+      if (!recoveryVersionsMatch(saved, event)) {
+        return resultForState(dormantState(event.identity, "RECOVERY_VERSION_MISMATCH"), this.backend, "DORMANT_RECOVERY_MISMATCH", read.checkpointId);
+      }
+      if (!recoveryBoundaryMatches(saved, event.boundary)) {
+        return resultForState(dormantState(event.identity, "RECOVERY_BOUNDARY_MISMATCH"), this.backend, "DORMANT_RECOVERY_MISMATCH", read.checkpointId);
+      }
+      const disposition = event.pendingToolDisposition;
+      if (saved.runStatus === "WAITING_TOOL") {
+        if (!saved.pendingToolCall || disposition.status === "NONE" || disposition.callId !== saved.pendingToolCall.callId) {
+          return resultForState(dormantState(event.identity, "RECOVERY_TOOL_MISMATCH"), this.backend, "DORMANT_RECOVERY_MISMATCH", read.checkpointId);
+        }
+        if (disposition.status === "SUCCEEDED") {
+          const output = await this.graph.invoke(new Command({ resume: disposition.result }), config);
+          const resumedRead = await this.checkpointState(event.identity);
+          const nextState = graphStateFromOutput(output) ?? resumedRead.state;
+          if (!nextState) throw new Error("coach-agent graph returned no state after reconnect resume");
+          return this.invokeState(nextState, event, latestConfig, "MATCHED");
+        }
+        return this.invokeState(saved, event, config, "MATCHED");
+      }
+      if (disposition.status !== "NONE") {
+        return resultForState(dormantState(event.identity, "RECOVERY_TOOL_MISMATCH"), this.backend, "DORMANT_RECOVERY_MISMATCH", read.checkpointId);
+      }
+      return this.invokeState(saved, event, config, "MATCHED");
+    }
+
+    if (event.type === "RESUME_TOOL") {
+      if (!saved) return resultForState(dormantState(event.identity, "STALE_RESUME"), this.backend, "DORMANT_MISSING", read.checkpointId);
+      if (saved.sessionStatus === "CANCELLED" || saved.sessionStatus === "COMPLETED" || saved.runStatus === "USER_TAKEOVER") {
+        return resultForState(saved, this.backend, "MATCHED", read.checkpointId);
+      }
+      if (saved.processedEventIds.includes(event.eventId)) return resultForState(saved, this.backend, "MATCHED", read.checkpointId);
+      if (saved.runStatus !== "WAITING_TOOL" || !saved.pendingToolCall) return resultForState(saved, this.backend, "MATCHED", read.checkpointId);
       if (saved.pendingToolCall.callId !== event.result.callId) {
         return resultForState({
           ...saved,
           fallbackReasons: addFallbackReason(saved.fallbackReasons, "EXPIRED_EVENT"),
-        }, this.backend, "MATCHED");
+        }, this.backend, "MATCHED", read.checkpointId);
       }
       const output = await this.graph.invoke(new Command({ resume: event.result }), config);
-      const nextState = graphStateFromOutput(output) ?? (await this.checkpointState(event.identity)).state;
+      const resumedRead = await this.checkpointState(event.identity);
+      const nextState = graphStateFromOutput(output) ?? resumedRead.state;
       if (!nextState) throw new Error("coach-agent graph returned no state after resume");
-      return resultForState(nextState, this.backend, "MATCHED");
+      return resultForState(nextState, this.backend, "MATCHED", resumedRead.checkpointId);
     }
 
-    if (saved?.processedEventIds.includes(event.eventId)) return resultForState(saved, this.backend, "MATCHED");
+    if (saved?.processedEventIds.includes(event.eventId)) return resultForState(saved, this.backend, "MATCHED", read.checkpointId);
 
     if (event.type === "USER_TAKEOVER") {
       if (!saved || saved.sessionStatus === "CANCELLED" || saved.sessionStatus === "COMPLETED") {
-        return resultForState(saved ?? dormantState(event.identity, "STALE_RESUME"), this.backend, "DORMANT_MISSING");
+        return resultForState(saved ?? dormantState(event.identity, "STALE_RESUME"), this.backend, "DORMANT_MISSING", read.checkpointId);
       }
       return this.invokeState(saved, event, config, "MATCHED");
     }
 
     if (event.type === "CANCEL_RUN") {
-      if (!saved) return resultForState(dormantState(event.identity, "STALE_RESUME"), this.backend, "DORMANT_MISSING");
+      if (!saved) return resultForState(dormantState(event.identity, "STALE_RESUME"), this.backend, "DORMANT_MISSING", read.checkpointId);
       return this.invokeState(saved, event, config, "MATCHED");
     }
 
     if (event.type === "OBSERVE_SEGMENT") {
       if (saved?.sessionStatus === "CANCELLED" || saved?.sessionStatus === "COMPLETED" || saved?.runStatus === "WAITING_TOOL" || saved?.runStatus === "USER_TAKEOVER") {
-        return resultForState(saved!, this.backend, "MATCHED");
+        return resultForState(saved!, this.backend, "MATCHED", read.checkpointId);
       }
       return this.invokeState(saved ?? emptyState(event.identity), event, config, saved ? "MATCHED" : "FRESH");
     }
 
     if (event.type === "COMPLETE_SESSION") {
       if (!saved || saved.sessionStatus === "CANCELLED" || saved.runStatus === "WAITING_TOOL" || saved.runStatus === "USER_TAKEOVER") {
-        return resultForState(saved ?? dormantState(event.identity, "STALE_RESUME"), this.backend, "DORMANT_MISSING");
+        return resultForState(saved ?? dormantState(event.identity, "STALE_RESUME"), this.backend, "DORMANT_MISSING", read.checkpointId);
       }
-      if (saved.sessionStatus === "COMPLETED") return resultForState(saved, this.backend, "MATCHED");
+      if (saved.sessionStatus === "COMPLETED") return resultForState(saved, this.backend, "MATCHED", read.checkpointId);
       return this.invokeState(saved, event, config, "MATCHED");
     }
 
     // START_CUE is the sole cue preparation event. A takeover requires a new
     // host-provided cue marker; old READY/continue events remain inert.
     if (saved?.sessionStatus === "CANCELLED" || saved?.sessionStatus === "COMPLETED") {
-      return resultForState(saved, this.backend, "MATCHED");
+      return resultForState(saved, this.backend, "MATCHED", read.checkpointId);
     }
     if (saved?.runStatus === "USER_TAKEOVER" && !event.resumeFromTakeover) {
-      return resultForState(saved, this.backend, "MATCHED");
+      return resultForState(saved, this.backend, "MATCHED", read.checkpointId);
     }
-    if (saved?.runStatus === "WAITING_TOOL") return resultForState(saved, this.backend, "MATCHED");
+    if (saved?.runStatus === "WAITING_TOOL") return resultForState(saved, this.backend, "MATCHED", read.checkpointId);
     if (
       saved?.runStatus === "USER_TAKEOVER" &&
       event.resumeFromTakeover &&
@@ -398,12 +514,12 @@ class CoachAgentRuntimeImpl implements CoachAgentRuntime {
       // also guarantees zero Policy calls and zero new TeachingMove.
       return this.invokeState(saved, event, config, "MATCHED");
     }
-    if (saved && saved.completedCueIds.includes(event.cueId)) return resultForState(saved, this.backend, "MATCHED");
+    if (saved && saved.completedCueIds.includes(event.cueId)) return resultForState(saved, this.backend, "MATCHED", read.checkpointId);
     if (!routeOrderMatches(saved, event)) {
       return resultForState({
         ...(saved ?? emptyState(event.identity)),
         fallbackReasons: addFallbackReason((saved ?? emptyState(event.identity)).fallbackReasons, "ROUTE_ORDER_MISMATCH"),
-      }, this.backend, "MATCHED");
+      }, this.backend, "MATCHED", read.checkpointId);
     }
 
     return this.invokeState(

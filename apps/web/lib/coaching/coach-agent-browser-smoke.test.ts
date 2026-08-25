@@ -122,6 +122,7 @@ function fakeResult(
       backend: options.backend ?? "MEMORY",
       recoverableAfterRefresh:
         options.recoverableAfterRefresh ?? options.backend === "DURABLE_OBJECT",
+      checkpointId: null,
     },
     restored: isCompleted ? "MATCHED" : "FRESH",
   });

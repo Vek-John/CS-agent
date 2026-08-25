@@ -41,6 +41,7 @@ describe("cs2d playback bridge", () => {
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "play" }))).toBe(true);
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "pause" }))).toBe(true);
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "seekCanonicalTick", canonicalTick: 123 }))).toBe(true);
+    expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "selectPlayer", playerId: "p1" }))).toBe(true);
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "selectRound", roundIndex: 2 }))).toBe(true);
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "setSpeed", speed: 8 }))).toBe(true);
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "setCamera", mode: "full" }))).toBe(true);
@@ -86,6 +87,8 @@ describe("cs2d playback bridge", () => {
     })).toBe(false);
     expect(isPlaybackCommandEnvelope({ ...commandEnvelope({ type: "play" }), replay: {} })).toBe(false);
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "selectRound", roundIndex: -1 }))).toBe(false);
+    expect(isPlaybackCommandEnvelope({ ...commandEnvelope({ type: "selectPlayer", playerId: "p1" }), payload: { type: "selectPlayer", playerId: "p1", rawReplay: {} } })).toBe(false);
+    expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "selectPlayer", playerId: "" }))).toBe(false);
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "setSpeed", speed: Number.NaN }))).toBe(false);
     expect(isPlaybackCommandEnvelope({
       channel: PLAYBACK_BRIDGE_CHANNEL,

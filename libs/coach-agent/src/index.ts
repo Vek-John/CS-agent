@@ -9,6 +9,7 @@ export * from "./deterministic-policy";
 export * from "./stage2-cue-fixture";
 export * from "./checkpoint-compaction";
 export * from "./session-wrap-up";
+export * from "./recovery-contract";
 export * from "./durable-object-checkpoint";
 export * from "./remote-dispatch";
 export { IndexedDbCheckpointSaver } from "./indexeddb-checkpoint";

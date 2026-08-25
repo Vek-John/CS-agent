@@ -1,8 +1,8 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：3.5.4
-> 最后更新：2026-08-24
+> 版本：3.6.0
+> 最后更新：2026-08-25
 > 适用范围：Web 2D 到桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
 > 当前产品范围：[MVP_SCOPE.md](./MVP_SCOPE.md)
@@ -137,6 +137,18 @@ Coach Agent 只在 `ReviewPlan` 已冻结、完整 outcome 已播放、`OutcomeC
 确定性的 `CapabilityBuilder` 根据当前 cue 与合法证据预先绑定 `TeachingCapability` 的全部参数；Policy 只能返回已有 `capabilityId` 或 `FINISH_CUE`。普通回合、`FREEZE_TIME`、确定性 `SKIP`、播放器自然推进和只有规则能唯一决定的动作不调用 Policy LLM。每个 cue 默认最多一个成功 `TeachingMove`；工具失败后最多尝试一个不同的合法替代，预算耗尽后确定性结束 cue。
 
 Graph 通过 `AgentEffect` 请求 Host 执行外部动作。Host 必须重新校验当前 session/cue/gate/播放事实、按稳定 `callId` 去重并把结构化 `ToolObservation` 返回 Graph；Graph 不直接操作 iframe。播放桥丢失、用户自由跳转或取消时停在自然边界，旧 ToolResult、Narration 或 READY 事件不得继续推进已经失效的 run。Agent 失败永远不能阻断基础回放。
+
+### 2.13 重新选择同一 Demo 后恢复
+
+页面刷新或关闭不会持久化 Replay；用户重新进入时，浏览器如果找到未完成 `SessionRecoveryRecord`，只能先进入 `DORMANT` 并提示重新选择同一 Demo。`ReplayAvailability=ABSENT/LOADING` 时不得调用 Director、Narrator、Coach Policy 或推进 Graph。用户选择的 File 继续只进入 cs2d iframe/Worker，由它在浏览器内计算 SHA-256 并解析；File、Demo bytes、raw Replay 与 frames 不进入 Host record、Durable Object 或网络请求。
+
+恢复采用双状态 `RecoveryHandshake`：浏览器 Host Recovery Store 拥有冻结 `ReviewPlan`、合法 Session 进度、讲解产物和工具 ledger 摘要；每 session 一个 Durable Object 只拥有 LangGraph Agent checkpoint。两侧以会话唯一 `sessionId/runId`、Demo hash、selected player、route id/hash、parser/planner/graph/state/session/recovery 版本、`RecoveryBoundary` 与最近 checkpoint id 精确校验。任一项不匹配都拒绝恢复，用户可以重选文件或创建具有新身份的新复盘。
+
+`RecoveryBoundary` 只允许 `ROUTE_START`、`CUE_PAUSED` 和 `WRAP_UP`。`CUE_PAUSED` 必须对应已完成的 OutcomeCompletionGate，并在冻结 cue 的 decision point 呈现；播放、结果、重播、缓冲、工具执行和自由跳转只更新瞬时状态，不覆盖最近稳定边界。`libs/session` 是 boundary capture/rehydrate 的唯一 seam，Host 不得直接写 phase、current tick、revealed/consumed cue 或 gate。恢复 seek 由 Session 从冻结计划推导并通过 Playback bridge 确认，成功后停在稳定教学画面等待用户继续。
+
+工具 ledger 必须先持久化 `POSTED` 再产生 iframe 副作用。刷新时只有 `POSTED` 的调用按 `CANCELLED` 收敛且不重发；已持久化合法成功结果只 resume Graph；`RESUMED` 调用保持去重。旧页面的 effect epoch、ACK、Narration 和 READY 事件不能推进新页面。IndexedDB 或 Durable Object 恢复失败只使恢复降级，基础回放始终可用。
+
+当前实现把这些规则收敛在 `SessionRecoveryRuntime`、`libs/session` capture/rehydrate seam 与 Host Recovery Adapter：本地分析的 `demo_id` 由 Demo content hash 稳定派生，新会话另行生成并保留随机 `recoveryId/sessionId/runId`；`POSTED` 以一次稳定边界更新原子写入 waiting checkpoint，`RESULTED/RESUMED` 分别写回结构化结果与完成 checkpoint。checkpoint 只有与当前 frozen cue/phase/route cursor 精确匹配时才可绑定 boundary；前一 cue 的活动 checkpoint 不能复用到下一 cue 或 `WRAP_UP`，`WRAP_UP` 只接受同 route cursor 的完成态 session checkpoint。记录仅保留当前 cue 与后两个 narration 摘要；恢复后由 narration-only 队列补齐后续 cue，绝不重新调用 Director/PlanCompiler。
 
 ## 3. 系统上下文与演进
 
@@ -1084,11 +1096,17 @@ Coach Agent 活动只显示简短玩家状态，例如“正在看完整处理�
 
 生产使用 Cloudflare Durable Object storage 的自定义 LangGraph `BaseCheckpointSaver`；每个 session 一个 Durable Object，保存紧凑版本化 state、pending writes 与有限 trace，默认 retention 20。localhost Next adapter 使用 process-local MemorySaver 并明确 `recoverableAfterRefresh=false`。IndexedDB saver 只保留为未选中的 Stage 0 能力实验，不进入默认产品路径。
 
-### 10.5 本地记忆库
+### 10.5 Host Recovery Store
+
+浏览器原生 IndexedDB 保存有界 `SessionRecoveryRecord`，只用于少量未完成复盘的恢复，不是 LangGraph saver、Replay cache 或历史列表。默认最多 3 条未完成记录、TTL 7 天、单条 JSON 不超过 1 MiB；完成会话立即删除。记录可包含会话身份与版本、冻结 ReviewPlan、最近 RecoveryBoundary、cue 摘要、最近 Agent checkpoint id、最多 64 条工具 ledger 摘要，以及当前 cue 与随后最多两个合法讲解产物。
+
+禁止保存 raw Demo、File/ArrayBuffer、Replay、frames、完整 AnalysisBundle、地图纹理、模型权重、Prompt、chain-of-thought、API Key 或任意浏览器外可执行工具参数。IndexedDB 不可用时，当前标签页继续回放并明确提示刷新后不可恢复。
+
+### 10.6 本地记忆库
 
 桌面端 SQLite 保存个人习惯和本地证据映射。敏感字段加密，密钥材料通过操作系统 Keychain/Credential Manager 管理。用户可一键导出 JSON、清空单项或整个记忆库。
 
-### 10.6 分层缓存
+### 10.7 分层缓存
 
 缓存键必须包含内容哈希和所有影响语义的版本，不能只用文件名或 Demo ID：
 
@@ -1203,6 +1221,8 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 
 Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 capability”，不能把合法 capability 出现在列表中误算成 Policy 选对。首版维护约 20 个手工 fixture，记录是否需要工具、首选/可接受替代、禁止 capability 与必需 evidence refs，并覆盖 gate、空间/轨迹/measurement 缺失、列表外工具、boundArgs 不可变、失败最多一次替代、每 cue 一个成功 move、takeover、interrupt 幂等、checkpoint/route hash、SessionTheme、Provider 全失败和预算终止。
 
+恢复回归必须覆盖：Replay 缺失时 DORMANT 且零 LLM；同 Demo/player/route/version 在第三个 cue 后回到相同 `CUE_PAUSED`；错误 Demo/player/route/version 拒绝；工具中刷新不重复副作用；成功 callId 继续去重；takeover 回到最近合法边界；IndexedDB/DO 失败时基础回放可用；网络 envelope 不含 File、ArrayBuffer、raw Replay 或 frames。
+
 初始门槛：非法工具、route/tick 修改、决策/结果引用串线和重复副作用均为 0；是否需要工具一致率至少 90%；需要工具时首选 capability 一致率至少 80%；全场路线完成率 100%；每 cue Policy LLM 至多一次、成功视觉工具默认至多一个；`SKIP/FREEZE` Policy 调用为 0。
 
 所有模型、规则、Director、PlanCompiler 和 Narrator 版本上线前必须跑固定黄金集；关键指标退化则阻止发布。
@@ -1309,6 +1329,8 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 | CoachAgentRuntime 深接口 | Accepted | 调用方只依赖 `dispatch(event)`；Graph node、checkpoint、Policy 次数、重试与工具循环封装在 `libs/coach-agent` |
 | TeachingCapability | Accepted | CapabilityBuilder 绑定全部参数与合法 evidence；Policy 只能选择 capabilityId 或 FINISH_CUE，每 cue 默认最多一个成功视觉工具 |
 | AgentEffect / Host 工具 | Accepted | Graph 用 interrupt 发 ToolRequest，Host 校验 Session/Playback、按稳定 callId 去重并 Command resume；Graph 不直接写 React/iframe/reducer |
+| Session Recovery | Accepted | 浏览器 IndexedDB 只保存有界 SessionRecoveryRecord，DO 只保存 Agent checkpoint；重新选择同一 Demo 后以 RecoveryBoundary 和精确 identity/version/checkpoint 双状态握手恢复，不重启 Director |
+| Recovery 状态权威 | Accepted | ReplayAvailability 由 Host/bridge 拥有，Session rehydrate 只经 `libs/session`，canonical seek 只经 Playback bridge；ABSENT/LOADING 时 Agent 保持 DORMANT且零 LLM |
 | Graph 与确定性底座边界 | Accepted | Director/PlanCompiler/Narrator/CoachingSession 继续权威；Graph 只编排已冻结 route 上的受限教学动作、失败恢复和会话主题 |
 | 模型数据访问 | Accepted | Director/Narrator/Question 只通过强类型领域工具和白名单包访问数据，不授予 LLM 任意 SQL 或数据库连接 |
 | 职业行为路线 | Accepted | 结构化数据库/规则提供可追溯证据，Director 可使用其结果；监督排序与行为先验只替换明确子模块 |
@@ -1353,3 +1375,4 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 | 3.5.2 | 2026-08-24 | Stage 3B 在显式试验入口扩展五种受约束 Host 工具与多 cue lifecycle observer：稳定 capability/call identity、PENDING/CONFIRMED recovery ledger、takeover epoch、v2 presentable summary 与受控 cs2d bridge；普通入口和 Stage 2 v1 入口保持不变。 |
 | 3.5.3 | 2026-08-24 | 完成 Stage 3 整场切片：多 cue、takeover/resume、五种证据绑定教学工具、SessionTheme、三主题全场总结、完成态 checkpoint 压缩与真实 DeepSeek Policy Adapter；`test_demo` 14/14 全场通过，Falcons/Spirit 按发布范围保留 29/49 有界验证，显式 Stage 3 入口继续作为发布回退边界。 |
 | 3.5.4 | 2026-08-25 | 将 Stage 3 Coach Agent 切换为 localhost 与 Cloudflare 的默认产品入口；不增加部署变量或重定向，`coachAgent=stage2` 仅保留为单 cue 回归入口。 |
+| 3.6.0 | 2026-08-25 | 接受“浏览器 SessionRecoveryRecord＋Durable Object Agent checkpoint”的双状态恢复：重新选择同一 Demo 后按稳定 RecoveryBoundary 恢复冻结路线、Session 与 Agent；IndexedDB 不重新承载 LangGraph，File/Replay 不上传，工具 ledger 先持久化并在刷新后确定性收敛。 |

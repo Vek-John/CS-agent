@@ -41,6 +41,8 @@ export interface RouteSnapshot {
 export interface PreparedNarrationState {
   readiness?: Readonly<Record<string, CueReadiness>>;
   narrationByCue?: Readonly<Record<string, NarrationBundle>>;
+  /** Recovery-only: already consumed cues need no artifact and are never regenerated. */
+  skipCueIds?: readonly string[];
 }
 
 export interface NarrationPreparationRequest {
@@ -266,6 +268,7 @@ export function createReviewPreparationOrchestrator(
   let active = true;
   let compiledPlan: ReviewPlan | undefined;
   let routeState: CoachingRouteState | undefined;
+  const skippedNarrationCueIds = new Set(prepared.skipCueIds ?? []);
 
   const resultIssue = (cue: ReviewPlan["cues"][number], result: PreparedNarrationResult): string | undefined => {
     if (result.narration.cueId !== cue.id || result.narration.candidateId !== cue.candidate_id || result.narration.primaryFocusCode !== cue.primary_focus_code) {
@@ -283,6 +286,7 @@ export function createReviewPreparationOrchestrator(
   };
 
   const prepareOne = async (cueId: string, onEvent: (event: ReviewPreparationEvent) => void): Promise<void> => {
+    if (skippedNarrationCueIds.has(cueId)) return;
     if (!active || controller.signal.aborted || !routeState || !compiledPlan || routeState.readiness[cueId] !== "PENDING") return;
     const requestRouteState = routeState;
     const cue = compiledPlan.cues.find((candidate) => candidate.id === cueId);

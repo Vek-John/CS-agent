@@ -6,6 +6,8 @@ export const COACH_AGENT_STATE_VERSION = "coach-agent-state.v2" as const;
 export const COACH_AGENT_EVENT_VERSION = "coach-agent-event.v2" as const;
 export const COACH_AGENT_RESULT_VERSION = "coach-agent-result.v1" as const;
 export const COACH_AGENT_GRAPH_VERSION = "coach-agent-graph.v2" as const;
+export const COACH_AGENT_SESSION_VERSION = "coaching-session.v1" as const;
+export const COACH_AGENT_RECOVERY_VERSION = "session-recovery-record.v1" as const;
 
 const CoachAgentEventVersionSchema = z.union([
   z.literal(LEGACY_COACH_AGENT_EVENT_VERSION),
@@ -493,6 +495,70 @@ export const CompleteSessionEventSchema = z
   .strict();
 export type CompleteSessionEvent = z.infer<typeof CompleteSessionEventSchema>;
 
+export const ReplayAvailabilitySchema = z.enum(["ABSENT", "LOADING", "READY"]);
+export type ReplayAvailability = z.infer<typeof ReplayAvailabilitySchema>;
+
+export const RecoveryBoundarySchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("ROUTE_START"),
+    boundaryId: Id,
+    segmentIndex: z.literal(0),
+  }).strict(),
+  z.object({
+    kind: z.literal("CUE_PAUSED"),
+    boundaryId: Id,
+    segmentId: Id,
+    segmentIndex: z.number().int().nonnegative().max(512),
+    cueId: Id,
+    sessionPhase: z.literal("PAUSED_FOR_COACHING"),
+    outcomeGateStatus: z.literal("COMPLETE"),
+  }).strict(),
+  z.object({
+    kind: z.literal("WRAP_UP"),
+    boundaryId: Id,
+    segmentIndex: z.number().int().nonnegative().max(512),
+  }).strict(),
+]);
+export type RecoveryBoundary = z.infer<typeof RecoveryBoundarySchema>;
+
+export const ReconnectToolDispositionSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("NONE") }).strict(),
+  z.object({
+    status: z.literal("SUCCEEDED"),
+    callId: Id,
+    result: AgentToolResultSchema,
+  }).strict().superRefine((value, context) => {
+    if (value.result.callId !== value.callId || value.result.status !== "SUCCEEDED") {
+      context.addIssue({ code: "custom", path: ["result"], message: "A SUCCEEDED reconnect disposition requires the matching successful result." });
+    }
+  }),
+  z.object({
+    status: z.enum(["POSTED", "FAILED", "REJECTED", "CANCELLED"]),
+    callId: Id,
+  }).strict(),
+]);
+export type ReconnectToolDisposition = z.infer<typeof ReconnectToolDispositionSchema>;
+
+export const ReconnectReplayEventSchema = z
+  .object({
+    version: z.literal(COACH_AGENT_EVENT_VERSION),
+    type: z.literal("RECONNECT_REPLAY"),
+    eventId: Id,
+    identity: CoachAgentIdentitySchema,
+    replayAvailability: z.literal("READY"),
+    expectedCheckpointId: Id,
+    versions: z.object({
+      graph: Id,
+      state: Id,
+      session: Id,
+      recovery: Id,
+    }).strict(),
+    boundary: RecoveryBoundarySchema,
+    pendingToolDisposition: ReconnectToolDispositionSchema,
+  })
+  .strict();
+export type ReconnectReplayEvent = z.infer<typeof ReconnectReplayEventSchema>;
+
 export const CoachAgentEventSchema = z.discriminatedUnion("type", [
   StartCueEventSchema,
   ResumeToolEventSchema,
@@ -501,6 +567,7 @@ export const CoachAgentEventSchema = z.discriminatedUnion("type", [
   UserTakeoverEventSchema,
   CancelRunEventSchema,
   CompleteSessionEventSchema,
+  ReconnectReplayEventSchema,
 ]);
 export type CoachAgentEvent = z.infer<typeof CoachAgentEventSchema>;
 
@@ -587,6 +654,12 @@ export const FallbackReasonSchema = z.enum([
   "TOOL_CANCELLED",
   "INVALID_EVENT",
   "RESET",
+  "RECOVERY_CHECKPOINT_MISMATCH",
+  "RECOVERY_BOUNDARY_MISMATCH",
+  "RECOVERY_VERSION_MISMATCH",
+  "RECOVERY_REPLAY_NOT_READY",
+  "RECOVERY_TOOL_CANCELLED",
+  "RECOVERY_TOOL_MISMATCH",
 ]);
 export type FallbackReason = z.infer<typeof FallbackReasonSchema>;
 
@@ -626,6 +699,7 @@ export const CoachAgentStateSchema = z
     activeFocus: Id.nullable(),
     activeNarrationPolicySummary: NarrationPolicySummarySchema.nullable(),
     activeAllowedEvidenceSummary: z.array(AllowedEvidenceSummarySchema).max(6),
+    activePresentableCueSummary: PresentableCueSummarySchema.nullable().optional(),
     observedSegmentIds: z.array(Id).max(128),
     currentSessionPhase: SessionPhaseSchema,
     outcomeGateStatus: OutcomeGateStatusSchema,
@@ -655,6 +729,7 @@ export const CheckpointInfoSchema = z
   .object({
     backend: z.enum(["MEMORY", "INDEXEDDB", "DURABLE_OBJECT"]),
     recoverableAfterRefresh: z.boolean(),
+    checkpointId: Id.nullable(),
     fallbackReason: z.enum(["NONE", "CHECKPOINT_UNAVAILABLE", "IDB_FALLBACK"]).optional(),
   })
   .strict();
@@ -674,6 +749,7 @@ const CurrentCoachAgentResultSchema = z
       "MATCHED",
       "DORMANT_IDENTITY_MISMATCH",
       "DORMANT_MISSING",
+      "DORMANT_RECOVERY_MISMATCH",
     ]),
   })
   .strict();

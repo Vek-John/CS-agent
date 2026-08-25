@@ -127,11 +127,13 @@ function presentableCueSummaryFor(event: StartCueEvent): PresentableCueSummary |
   return PresentableCueSummarySchema.parse(event.presentableSummary);
 }
 
-function completeCueState(state: CoachAgentState, event: StartCueEvent): CoachAgentState {
+function completeCueWithSummary(
+  state: CoachAgentState,
+  summary: PresentableCueSummary | null | undefined,
+): CoachAgentState {
   const completedCueIds = state.activeCueId
     ? [...new Set([...state.completedCueIds, state.activeCueId])].slice(-64)
     : state.completedCueIds;
-  const summary = presentableCueSummaryFor(event);
   if (!summary || state.completedCueSummaries.some((item) => item.cueId === summary.cueId)) {
     return {
       ...state,
@@ -149,6 +151,10 @@ function completeCueState(state: CoachAgentState, event: StartCueEvent): CoachAg
     completedCueSummaries,
     sessionThemes: aggregateSessionThemes(completedCueSummaries),
   };
+}
+
+function completeCueState(state: CoachAgentState, event: StartCueEvent): CoachAgentState {
+  return completeCueWithSummary(state, presentableCueSummaryFor(event));
 }
 
 function withWaitingTool(
@@ -481,6 +487,89 @@ async function policyNode(
       ),
     };
   }
+  if (event.type === "RECONNECT_REPLAY") {
+    const processedEventIds = [...state.agent.processedEventIds, event.eventId].slice(-64);
+    if (
+      state.agent.runStatus === "USER_TAKEOVER" &&
+      event.boundary.kind === "CUE_PAUSED" &&
+      event.pendingToolDisposition.status === "NONE"
+    ) {
+      const completed = completeCueWithSummary(
+        {
+          ...state.agent,
+          sessionStatus: "ACTIVE",
+          selectedTeachingMove: null,
+          pendingToolCall: null,
+          processedEventIds,
+        },
+        state.agent.activePresentableCueSummary,
+      );
+      return {
+        agent: appendTrace(completed, "RUNTIME", event.eventId, {
+          input: event,
+          finalStatus: "CUE_COMPLETED",
+        }),
+      };
+    }
+    if (event.pendingToolDisposition.status === "SUCCEEDED") {
+      return {
+        agent: appendTrace(
+          { ...state.agent, processedEventIds },
+          "RUNTIME",
+          event.eventId,
+          { input: event, finalStatus: state.agent.runStatus },
+        ),
+      };
+    }
+    if (state.agent.runStatus === "WAITING_TOOL" && state.agent.pendingToolCall) {
+      const pending = state.agent.pendingToolCall;
+      const cancelled = AgentToolResultSchema.parse({
+        callId: pending.callId,
+        status: "CANCELLED",
+        observation: { code: "UNAVAILABLE", completed: false },
+        limitations: ["RECOVERY_PENDING_TOOL_CANCELLED"],
+      });
+      const historyItem = {
+        callId: pending.callId,
+        cueId: pending.cueId,
+        tool: pending.tool,
+        capabilityId: pending.capabilityId,
+        status: "CANCELLED" as const,
+        observationCode: cancelled.observation.code,
+        limitationCount: cancelled.limitations.length,
+      };
+      const next = completeCueWithSummary(
+        {
+          ...state.agent,
+          runStatus: "CUE_COMPLETED" as const,
+          selectedTeachingMove: null,
+          pendingToolCall: null,
+          lastToolResult: cancelled,
+          toolHistory: [...state.agent.toolHistory, historyItem].slice(-16),
+          fallbackReasons: addFallbackReason(state.agent.fallbackReasons, "RECOVERY_TOOL_CANCELLED"),
+          processedEventIds,
+        },
+        state.agent.activePresentableCueSummary,
+      );
+      return {
+        agent: appendTrace(next, "RUNTIME", event.eventId, {
+          input: event,
+          selectedCapabilityId: pending.capabilityId,
+          evidenceRefs: pending.evidenceRefs,
+          toolResultStatus: "CANCELLED",
+          finalStatus: "CUE_COMPLETED",
+        }),
+      };
+    }
+    return {
+      agent: appendTrace(
+        { ...state.agent, processedEventIds },
+        "RUNTIME",
+        event.eventId,
+        { input: event, finalStatus: state.agent.runStatus },
+      ),
+    };
+  }
   if (event.type !== "START_CUE") {
     throw new Error("the coach graph starts with START_CUE, OBSERVE_SEGMENT, or COMPLETE_SESSION");
   }
@@ -536,6 +625,7 @@ async function policyNode(
     activeFocus: event.focus,
     activeNarrationPolicySummary: normalizeNarrationSummary(event.narrationSummary),
     activeAllowedEvidenceSummary: event.allowedEvidenceSummary,
+    activePresentableCueSummary: event.presentableSummary ?? null,
     routeCursor: event.routeSegmentIndex ?? state.agent.routeCursor,
     currentSessionPhase: event.currentSessionPhase,
     outcomeGateStatus: event.outcomeGateStatus,

@@ -745,6 +745,94 @@ Stage 3 改为 localhost 与 Cloudflare 的无参数默认入口，不增加 Clo
 
 `coachAgent=stage2` 仅保留给开发回归，不是用户产品模式。旧发布版本在新提交完成 Cloudflare 部署前仍需要显式参数。
 
+### 4.33 2026-08-25：恢复握手必须以 saver checkpoint 为事实
+
+**触发**
+
+真实恢复需要在页面重新获得同一 Demo 后接回 Durable Object Agent。原 runtime 结果没有暴露 saver tuple 的最新 `checkpoint_id`，且等待工具时若只看 Host ledger，可能重复发布 effect 或错误进入替代工具路径。
+
+**决定**
+
+增加严格的 `RECONNECT_REPLAY` 事件：只接受 `ReplayAvailability=READY`，逐项校验 identity、graph/state/recovery 版本、RecoveryBoundary 和 saver 的精确 checkpoint id。成功的持久化工具结果只走一次 `Command({ resume })`；`POSTED/FAILED/REJECTED` 确定性收敛为 `CANCELLED`，不调用 Policy、不发新 effect、不改路线或 Session phase。重复同一已处理 event 可以带旧 checkpoint id 返回当前状态，其他旧 id 仍拒绝。
+
+**落点**
+
+`libs/coach-agent/src/types.ts` 暴露 reconnect/recovery boundary 与实际 `checkpointId`；`runtime.ts` 读取 saver tuple config；`graph.ts` 负责无 Policy 的 reconnect lifecycle 收敛；`recovery-contract.ts` 提供有界 schema-only Host contract。Recovery record 不承载 File、Replay、frames、模型权重、Prompt、CoT 或 Secret。
+
+**验证**
+
+定向 reconnect 覆盖成功 resume、POSTED/FAILED/REJECTED 收敛、duplicate event、identity/version/boundary/checkpoint mismatch、READY-only、实际 saver checkpoint id，以及从持久化完整 `AgentToolResult` ledger 无猜测构造 reconnect disposition。Recovery lifecycle contract 另覆盖 `BOOT → SESSION_STARTED → STABLE_BOUNDARY_REACHED → TOOL_LEDGER_UPDATED → RECOVERY_HANDSHAKE_COMPLETED/FAILED`，并校验 ledger observation 一致性；stable boundary 可原子携带唯一 POSTED ledger entry。Runtime 还验证了 latest 已前进时按同 thread 的精确历史 checkpoint 恢复，以及 takeover checkpoint 在合法 CUE_PAUSED/NONE 握手下零 Policy、零 effect 收敛当前 cue。完整 `libs/coach-agent` 与 Stage3 integration、typecheck、diff check 继续通过。
+
+**限制 / 下一步**
+
+本轮没有实现 Host Recovery Store、`libs/session` rehydrate、IndexedDB 或 Playback seek；Host 仍需在 Session seam 完成 boundary 后发送严格事件。Agent 只负责 checkpoint 侧握手，基础回放继续独立可用。
+
+### 4.34 2026-08-25：Host Recovery Store 只保存恢复事实，不承担 Replay 或 Graph checkpoint
+
+**触发**
+
+Gate C 需要在刷新后发现未完成复盘，并等待用户重新选择同一 Demo；浏览器不能保存或上传 raw Replay，也不能把 IndexedDB 误当成 LangGraph saver。
+
+**决定**
+
+新增 `SessionRecoveryRuntime.dispatch(event)` 深 seam。原生 IndexedDB 内部负责 TTL 7 天、最多 3 条未完成记录、单条 1 MiB、原子 boundary/tool ledger 更新和 schema/plain-JSON 校验；open/transaction/blocked 失败切到当前 tab memory，并返回明确 DEGRADED/刷新不可恢复状态。`REPLAY_READY` 只接受 hash 与 player IDs；匹配后才产生 SELECT_PLAYER，分析版本匹配后才产生 rehydrate/seek/reconnect effects。
+
+**落点**
+
+`apps/web/lib/recovery/host-recovery-store.ts`、`session-recovery-runtime.ts`、`cs2d-session-recovery.ts`、`apps/web/components/playback/session-recovery-status.*`、`cs2d-playback-host.tsx` 与 client-safe recovery contract export。`libs/session` 是唯一 capture/rehydrate seam；Host 只执行 runtime effects。Host 把现有 iframe 文件入口带回视野，用户以 iframe 内的受信任点击选择文件；严格 `selectPlayer` bridge command 只传玩家 ID，File 不回到 Host。
+
+**验证**
+
+Recovery Adapter、Session、bridge、Controller、DO saver 与 reconnect 聚焦测试共 75 个通过；`CI=true pnpm typecheck`、Next production build、cs2d typecheck/build、Cloudflare OpenNext build与source/bundle secret scan 通过。覆盖 stable+POSTED 原子写入、RESULTED/RESUMED、takeover CANCELLED 收敛、历史 checkpoint 不串 cue、hash/player/route/version/tick mismatch 拒绝、DO runtime A/B 重建与一次 resume。
+
+**限制 / 下一步**
+
+本轮 `pnpm dev` 在 Watchpack `EMFILE` 后反复重启并最终缺少 `@swc/helpers`，因此没有运行真实 `test_demo` 第三 cue→刷新→重选→恢复 smoke，不能把它写成浏览器验收通过。该 dev/watch seam 已是第二次失败，未继续切换浏览器或服务 harness；下一次先重设 localhost watcher/harness，再执行唯一的真实恢复流程。Wrangler dry-run 另受现有 `wrangler.jsonc` 指向缺失 `.open-next/assets` 影响，OpenNext build、资产准备与 secret scan 已通过。
+
+### 4.35 2026-08-25：Recovery Host 只在稳定边界绑定历史 checkpoint
+
+**触发**
+
+刷新恢复同时跨越 Host IndexedDB、iframe 播放落位和 Durable Object checkpoint；若将“最新” Agent checkpoint 绑定到下一 cue 或 wrap-up，会让 exact historical reconnect 读取到错误路线位置。
+
+**决定**
+
+Session capture/rehydrate 只接受 `ROUTE_START`、完成 gate 的 `CUE_PAUSED` 与 `WRAP_UP`。cs2d 在本地 hash 完成后用 `cs2d-${demoContentHash}` 作为稳定分析身份，避免同一文件重选时随机 route id 改写 Demo identity。Host Recovery Adapter 校验 hash、player、冻结 route、版本与 candidate/tick 绑定；checkpoint 仅在 Agent 的 active cue/phase/route cursor 与该 stable boundary 全部一致时持久化。`POSTED` 与 waiting checkpoint 通过一次 `STABLE_BOUNDARY_REACHED` 原子写入，`RESULTED/RESUMED` 保留结构化结果；POSTED 写入不能确认时不发送 iframe 副作用。恢复时已保存的 narration 摘要立即可用，后续只走 narration-only 队列，不重跑 Director/PlanCompiler。
+
+**落点**
+
+`cs2d-session-recovery.ts` 是 Host Recovery Adapter；`CoachAgentStage3Controller` 只用 `onAgentResult(event, result)` 与 tool ledger callback 暴露时机。桥接只新增严格 `selectPlayer`；文件选择继续由 iframe 内已有 input 的受信任用户点击承接，避免跨 frame `postMessage` 丢失 user activation。0004 patch 与上游 marker 同步。
+
+**验证**
+
+真实 `test_demo.dem` 在无 watcher 的 production harness 中完成本地解析并选择 Dog，生成 14 个 cue；会话推进到 3/14、完成教学工具后刷新，页面正确进入 DORMANT，未加载 Replay、未推进 Graph。重新选择同一文件已实际到达恢复身份校验，并暴露 cs2d 随机 `demo_id`；源头改为 `cs2d-${demoContentHash}` 后，Recovery、Session、bridge、Controller、DO saver/reconnect 的最终定向回归为 11 files / 81 tests，DO 重建相关为 3 files / 16 tests。typecheck、Next production build、cs2d typecheck/build、Cloudflare OpenNext build、364 个资产准备和 source/bundle secret scan 均通过。服务端 DeepSeek Policy smoke 实际返回 `DEEPSEEK` / `deepseek-v4-flash`，结构化 Schema 有效且未输出 Key、Prompt 或 CoT。
+
+**限制 / 下一步**
+
+稳定 `demo_id` 修复后的最后一次“同文件重选 → Dog / frozen route / 3/14 → `CUE_PAUSED`”没有再次自动执行：in-app Browser 无法捕获系统文件选择器，Edge 扩展未获本地文件权限，Mac 当时锁屏。没有切换第三套 harness，也没有伪称最终落位已验证；已有结构化回归证明错误 Demo/player/route/version 拒绝、pending tool 收敛和重复副作用为 0。下一次人工可操作文件选择器时只补这一条 smoke，不跑 Falcons。
+
+### 4.36 2026-08-25：完成态 checkpoint 才能绑定 WRAP_UP 恢复边界
+
+**触发**
+
+Graph 完成 `COMPLETE_SESSION` 时保留最后一个 cue 的 `currentSessionPhase`，只把 `sessionStatus/runStatus` 置为 `COMPLETED`。如果 Host 仅按 phase 绑定 checkpoint，合法的 `WRAP_UP` record 会丢失 Agent checkpoint，刷新后只能降级。
+
+**决定**
+
+Host checkpoint metadata 显式携带 `sessionStatus`。`CUE_PAUSED` 仍要求 cue、phase、gate 与 route cursor 全部匹配；`WRAP_UP` 只接受 `sessionStatus=COMPLETED` 且 route cursor 匹配的 checkpoint。Agent reconnect 同样只接受 `sessionStatus/runStatus` 均为 `COMPLETED` 的完成态，运行中 checkpoint 不能冒充全场总结边界。
+
+**落点**
+
+`cs2d-session-recovery.ts` 负责 Host boundary/checkpoint 绑定，`cs2d-playback-host.tsx` 从 Agent result 和工具 transition 传递完成态元数据；`CoachAgentRuntime` 继续负责 checkpoint 内状态校验，Session reducer 的 phase 与 tick 权威不变。
+
+**验证**
+
+定向回归覆盖完成态 checkpoint 恢复 `WRAP_UP`、ACTIVE/错 cursor 拒绝、完成态 reconnect 零 Policy/零工具/零旧 effect，以及上一 cue checkpoint 不串线；这些用例包含在最终 81 个 Recovery/Session/bridge/Controller 测试与通过的 typecheck、生产构建中。
+
+**限制 / 下一步**
+
+浏览器文件选择权限仍是唯一未补的端到端证据；它不改变完成态 checkpoint 的领域约束，也不影响基础回放。
+
 ## 5. 常用问题排查表
 
 | 现象 | 首先检查 | 常见根因 | 不要做什么 |

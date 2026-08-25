@@ -42,7 +42,12 @@ import type {
   AnalysisTelemetryEvent
 } from "@cs-coach/contracts";
 import type {
+  AgentToolResult,
   AgentToolRequest,
+  CoachAgentResult,
+  HostToolLedgerSummary,
+  SessionRecoveryRecord,
+  SessionRecoveryResult,
   SessionSummaryInput,
   SessionWrapUpRequest,
   SessionWrapUpResult
@@ -60,6 +65,21 @@ import {
   reduceCoachingSession,
   type SessionAction
 } from "@cs-coach/session";
+import {
+  buildSessionRecoveryRecord,
+  buildReconnectReplayEvent,
+  createRecoverySessionIdentity,
+  createRecoveryReviewPreparationDependencies,
+  checkpointForRecoveryBoundary,
+  normalizeRecoveryAnalysis,
+  reconciledRecoveryLedger,
+  restoreRecoveryArtifacts,
+  shouldReconnectRecoveryAgent,
+  isPreAgentRouteStartRecovery,
+  type RecoveryAgentCheckpointMeta,
+  type RecoverySessionIdentity,
+} from "../../lib/recovery/cs2d-session-recovery";
+import { createSessionRecoveryRuntime } from "../../lib/recovery/session-recovery-runtime";
 import {
   createReviewPreparationOrchestrator,
   createCs2dReviewPreparationDependencies,
@@ -101,8 +121,13 @@ import {
 } from "../../lib/coaching/coach-agent-stage3-host-adapter";
 import {
   CoachAgentStage3Controller,
-  type Stage3ControllerState
+  type Stage3ControllerState,
+  type Stage3ToolLedgerTransition,
 } from "../../lib/coaching/coach-agent-stage3-controller";
+import {
+  SessionRecoveryStatus,
+  type SessionRecoveryStatusKind,
+} from "./session-recovery-status";
 import {
   acceptedPlaybackEvent,
   adjacentRoundIndex,
@@ -187,6 +212,18 @@ type Stage2PendingTool = {
 
 type Stage3WrapUpStatus = "IDLE" | "LOADING" | "READY" | "FALLBACK" | "ERROR";
 
+type RecoveryLanding = {
+  readonly recoveryId: string;
+  readonly targetTick: number;
+  readonly staged: ReturnType<typeof restoreRecoveryArtifacts>;
+  readonly record: SessionRecoveryRecord;
+  readonly analysis: Cs2dAnalysisBundle;
+};
+
+function recoveryEventId(prefix: string): string {
+  return `${prefix}-${crypto.randomUUID()}`.slice(0, 160);
+}
+
 export function Cs2dPlaybackHost({
   reviewPreparationDependencies
 }: Cs2dPlaybackHostProps = {}) {
@@ -236,6 +273,20 @@ export function Cs2dPlaybackHost({
   const [narrationByCue, setNarrationByCue] = useState<Readonly<Record<string, NarrationBundle>>>({});
   const preparationRef = useRef<ReturnType<typeof createReviewPreparationOrchestrator> | undefined>(undefined);
   const generationRef = useRef(0);
+  const recoveryRuntimeRef = useRef<ReturnType<typeof createSessionRecoveryRuntime> | undefined>(undefined);
+  const recoveryRecordRef = useRef<SessionRecoveryRecord | undefined>(undefined);
+  const recoveryModeRef = useRef(false);
+  const recoveryHandshakeReadyRef = useRef(true);
+  const recoveryLandingRef = useRef<RecoveryLanding | undefined>(undefined);
+  const recoveryLandingTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const stableRecoveryKeyRef = useRef<string | undefined>(undefined);
+  const completedRecoveryRef = useRef<string | undefined>(undefined);
+  const latestAgentCheckpointRef = useRef<RecoveryAgentCheckpointMeta | undefined>(undefined);
+  const [recoveryResult, setRecoveryResult] = useState<SessionRecoveryResult>();
+  const [recoveryIdentity, setRecoveryIdentity] = useState<RecoverySessionIdentity>();
+  const recoveryIdentityRef = useRef<RecoverySessionIdentity | undefined>(undefined);
+  const bundleRef = useRef<Cs2dAnalysisBundle | undefined>(undefined);
+  const narrationByCueRef = useRef<Readonly<Record<string, NarrationBundle>>>({});
   const [session, setSession] = useState<CoachingSessionState>();
   const [analysisError, setAnalysisError] = useState<string>();
   const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgressEvent>();
@@ -286,6 +337,164 @@ export function Cs2dPlaybackHost({
     return () => { active = false; };
   }, []);
 
+  const acceptRecoveryResult = useCallback((result: SessionRecoveryResult) => {
+    if (result.record) recoveryRecordRef.current = result.record;
+    else if (result.recoveryId === null) recoveryRecordRef.current = undefined;
+    setRecoveryResult(result);
+  }, []);
+
+  const currentStableRecoveryRecord = useCallback((checkpoint: RecoveryAgentCheckpointMeta | undefined): SessionRecoveryRecord | undefined => {
+    const current = recoveryRecordRef.current;
+    const identity = recoveryIdentityRef.current;
+    const analysis = bundleRef.current;
+    const activePlan = planRef.current;
+    const activeRoute = routeStateRef.current;
+    const activeSession = liveSessionRef.current;
+    if (!current || !identity || !analysis || !activePlan || !activeRoute || !activeSession) return undefined;
+    const boundaryKind = activeSession.phase === "PAUSED_FOR_COACHING" && activeSession.outcome_completion?.status === "COMPLETE"
+      ? "CUE_PAUSED" as const
+      : activeSession.phase === "WRAP_UP"
+        ? "WRAP_UP" as const
+        : undefined;
+    if (!boundaryKind) return undefined;
+    const baseInput = {
+      identity,
+      demoContentHash: current.demoContentHash,
+      selectedPlayerId: current.selectedPlayerId,
+      plan: activePlan,
+      routeState: activeRoute,
+      session: activeSession,
+      boundaryKind,
+      narrationByCue: narrationByCueRef.current,
+      analysis,
+      agentCheckpointId: null,
+      toolLedger: current.toolLedger,
+      createdAt: current.createdAt,
+      updatedAt: Date.now(),
+    } as const;
+    const withoutCheckpoint = buildSessionRecoveryRecord(baseInput);
+    const checkpointId = checkpointForRecoveryBoundary(checkpoint, withoutCheckpoint.boundary);
+    return checkpointId
+      ? buildSessionRecoveryRecord({ ...baseInput, agentCheckpointId: checkpointId })
+      : withoutCheckpoint;
+  }, []);
+
+  useEffect(() => {
+    const runtime = createSessionRecoveryRuntime();
+    recoveryRuntimeRef.current = runtime;
+    let active = true;
+    void runtime.dispatch({ type: "BOOT", eventId: recoveryEventId("recovery-boot") }).then((result) => {
+      if (!active) return;
+      acceptRecoveryResult(result);
+      if (result.record) {
+        recoveryModeRef.current = true;
+        const identity = {
+          recoveryId: result.record.recoveryId,
+          sessionId: result.record.sessionId,
+          runId: result.record.runId,
+        };
+        recoveryIdentityRef.current = identity;
+        setRecoveryIdentity(identity);
+      }
+    });
+    return () => {
+      active = false;
+      recoveryRuntimeRef.current = undefined;
+    };
+  }, [acceptRecoveryResult]);
+
+  const mirrorAgentResult = useCallback(async (event: import("@cs-coach/coach-agent/client").CoachAgentEvent, result: CoachAgentResult) => {
+    if (result.status === "WAITING_TOOL" || event.type === "RESUME_TOOL" || event.type === "RECONNECT_REPLAY") return;
+    const checkpoint: RecoveryAgentCheckpointMeta = {
+      checkpointId: result.checkpoint.checkpointId,
+      activeCueId: result.state.activeCueId,
+      currentSessionPhase: result.state.currentSessionPhase,
+      routeCursor: result.state.routeCursor,
+      sessionStatus: result.state.sessionStatus,
+    };
+    latestAgentCheckpointRef.current = checkpoint;
+    const runtime = recoveryRuntimeRef.current;
+    const record = recoveryRecordRef.current;
+    if (!runtime || !record || result.identity.runId !== record.runId || result.identity.sessionId !== record.sessionId || result.identity.routeHash !== record.routeHash) return;
+    const stable = currentStableRecoveryRecord(checkpoint);
+    if (!stable || stable.agentCheckpointId !== checkpoint.checkpointId) return;
+    const persisted = await runtime.dispatch({
+      type: "STABLE_BOUNDARY_REACHED",
+      eventId: recoveryEventId("recovery-checkpoint"),
+      recoveryId: record.recoveryId,
+      boundary: stable.boundary,
+      cueProgress: stable.cueProgress,
+      routeReadiness: stable.routeReadiness,
+      narrationArtifacts: stable.narrationArtifacts,
+      agentCheckpointId: result.checkpoint.checkpointId,
+      updatedAt: Date.now(),
+    });
+    acceptRecoveryResult(persisted);
+  }, [acceptRecoveryResult, currentStableRecoveryRecord]);
+
+  const persistToolTransition = useCallback(async (transition: Stage3ToolLedgerTransition) => {
+    const runtime = recoveryRuntimeRef.current;
+    const record = recoveryRecordRef.current;
+    if (!runtime || !record || transition.request.runId !== record.runId) return;
+    const result = transition.result;
+    const entry: HostToolLedgerSummary = {
+      callId: transition.request.callId,
+      cueId: transition.request.cueId,
+      capabilityId: transition.request.capabilityId,
+      status: transition.status,
+      observationCode: result?.observation.code ?? null,
+      result,
+    };
+    const persisted = transition.status === "POSTED"
+      ? await runtime.dispatch({
+          type: "STABLE_BOUNDARY_REACHED",
+          eventId: recoveryEventId("recovery-tool-posted"),
+          recoveryId: record.recoveryId,
+          ...(() => {
+            const checkpoint = {
+              checkpointId: transition.agentCheckpointId,
+              activeCueId: transition.agentState.activeCueId,
+              currentSessionPhase: transition.agentState.currentSessionPhase,
+              routeCursor: transition.agentState.routeCursor,
+              sessionStatus: transition.agentState.sessionStatus,
+            } satisfies RecoveryAgentCheckpointMeta;
+            const stable = currentStableRecoveryRecord(checkpoint);
+            if (!stable || stable.boundary.kind !== "CUE_PAUSED" || stable.agentCheckpointId !== transition.agentCheckpointId) throw new Error("POSTED requires a matching live CUE_PAUSED recovery boundary.");
+            return {
+              boundary: stable.boundary,
+              cueProgress: stable.cueProgress,
+              routeReadiness: stable.routeReadiness,
+              narrationArtifacts: stable.narrationArtifacts,
+            };
+          })(),
+          toolLedgerEntry: entry,
+          agentCheckpointId: transition.agentCheckpointId,
+          updatedAt: Date.now(),
+        } as Parameters<typeof runtime.dispatch>[0])
+      : await runtime.dispatch({
+          type: "TOOL_LEDGER_UPDATED",
+          eventId: recoveryEventId(`recovery-tool-${transition.status.toLowerCase()}`),
+          recoveryId: record.recoveryId,
+          entry,
+          agentCheckpointId: transition.agentCheckpointId,
+          updatedAt: Date.now(),
+        });
+    if (transition.status === "POSTED") {
+      const persistedEntry = persisted.record?.toolLedger.find((candidate) => candidate.callId === transition.request.callId);
+      if (persistedEntry?.status !== "POSTED" || persisted.record?.agentCheckpointId !== transition.agentCheckpointId) {
+        throw new Error("POSTED tool ledger was not durably recorded with its waiting checkpoint.");
+      }
+    }
+    latestAgentCheckpointRef.current = {
+      checkpointId: transition.agentCheckpointId,
+      activeCueId: transition.agentState.activeCueId,
+      currentSessionPhase: transition.agentState.currentSessionPhase,
+      routeCursor: transition.agentState.routeCursor,
+      sessionStatus: transition.agentState.sessionStatus,
+    };
+    acceptRecoveryResult(persisted);
+  }, [acceptRecoveryResult, currentStableRecoveryRecord]);
+
   const invalidateGeneration = useCallback(() => {
     stage2AckTimeoutRef.current.clear();
     stage2AdapterRef.current.cancel(generationRef.current);
@@ -318,6 +527,46 @@ export function Cs2dPlaybackHost({
     iframeRef.current?.contentWindow?.postMessage(playbackCommandMessage(command), config.origin);
   }, [config.origin]);
 
+  const chooseRecoveryDemo = useCallback(() => {
+    const runtime = recoveryRuntimeRef.current;
+    const record = recoveryRecordRef.current;
+    if (!runtime || !record) return;
+    // File pickers require a trusted click inside the iframe. Bring that
+    // existing local picker into view without moving File/FileList into Host.
+    iframeRef.current?.scrollIntoView({ block: "center", behavior: "auto" });
+    iframeRef.current?.focus();
+    void runtime.dispatch({
+      type: "REPLAY_LOADING",
+      eventId: recoveryEventId("recovery-replay-loading"),
+      recoveryId: record.recoveryId,
+    }).then(acceptRecoveryResult);
+  }, [acceptRecoveryResult]);
+
+  const clearRecoveryLandingTimeout = useCallback(() => {
+    if (recoveryLandingTimeoutRef.current === undefined) return;
+    clearTimeout(recoveryLandingTimeoutRef.current);
+    recoveryLandingTimeoutRef.current = undefined;
+  }, []);
+
+  const discardRecovery = useCallback(() => {
+    const runtime = recoveryRuntimeRef.current;
+    const record = recoveryRecordRef.current;
+    if (!runtime || !record) return;
+    void runtime.dispatch({
+      type: "DISCARD_RECOVERY",
+      eventId: recoveryEventId("recovery-discard"),
+      recoveryId: record.recoveryId,
+    }).then((result) => {
+      recoveryModeRef.current = false;
+      recoveryLandingRef.current = undefined;
+      clearRecoveryLandingTimeout();
+      latestAgentCheckpointRef.current = undefined;
+      recoveryIdentityRef.current = undefined;
+      setRecoveryIdentity(undefined);
+      acceptRecoveryResult(result);
+    });
+  }, [acceptRecoveryResult, clearRecoveryLandingTimeout]);
+
   const isStage3InputLive = useCallback((input: Stage3HostAdapterInput): boolean => {
     const liveSession = liveSessionRef.current;
     const liveCue = liveCueRef.current;
@@ -339,6 +588,8 @@ export function Cs2dPlaybackHost({
       bridgeAvailable: () => Boolean(iframeRef.current?.contentWindow),
       isLive: isStage3InputLive,
       onState: setStage3State,
+      onAgentResult: mirrorAgentResult,
+      onToolLedgerTransition: persistToolTransition,
     });
   }
 
@@ -503,6 +754,8 @@ export function Cs2dPlaybackHost({
   }, []);
 
   const resetAnalysis = useCallback(() => {
+    clearRecoveryLandingTimeout();
+    recoveryLandingRef.current = undefined;
     invalidateGeneration();
     invalidateGuidedSeek();
     planRef.current = undefined;
@@ -523,11 +776,259 @@ export function Cs2dPlaybackHost({
     setTimelinePanning(false);
     userTookOverRef.current = false;
     setUserTookOver(false);
-  }, [invalidateGeneration, invalidateGuidedSeek]);
+  }, [clearRecoveryLandingTimeout, invalidateGeneration, invalidateGuidedSeek]);
 
   useEffect(() => () => {
+    clearRecoveryLandingTimeout();
     invalidateGeneration();
-  }, [invalidateGeneration]);
+  }, [clearRecoveryLandingTimeout, invalidateGeneration]);
+
+  const handleRecoveryReplayReady = useCallback((payload: ReplayReadyEvent) => {
+    const runtime = recoveryRuntimeRef.current;
+    const record = recoveryRecordRef.current;
+    if (!runtime || !record || !recoveryModeRef.current) return false;
+    recoveryHandshakeReadyRef.current = false;
+    if (!payload.demoContentHash) {
+      void runtime.dispatch({
+        type: "RECOVERY_HANDSHAKE_FAILED",
+        eventId: recoveryEventId("recovery-hash-missing"),
+        recoveryId: record.recoveryId,
+        reason: "当前 Demo 没有可验证内容哈希；基础回放仍可继续。",
+        degraded: false,
+      }).then(acceptRecoveryResult);
+      return true;
+    }
+    void runtime.dispatch({
+      type: "REPLAY_READY",
+      eventId: recoveryEventId("recovery-replay-ready"),
+      recoveryId: record.recoveryId,
+      replayAvailability: "READY",
+      demoContentHash: payload.demoContentHash,
+      availablePlayerIds: payload.players.map((player) => player.playerId),
+    }).then((result) => {
+      acceptRecoveryResult(result);
+      const select = result.effects.find((effect) => effect.type === "SELECT_PLAYER");
+      if (select?.type === "SELECT_PLAYER") send({ type: "selectPlayer", playerId: select.playerId });
+    });
+    return true;
+  }, [acceptRecoveryResult, send]);
+
+  const startRecoveryNarrationQueue = useCallback((landing: RecoveryLanding, analysis: Cs2dAnalysisBundle) => {
+    const dependencies = createRecoveryReviewPreparationDependencies(analysis, landing.record);
+    const generation = generationRef.current;
+    const generationId = `recovery-narration-${landing.record.recoveryId}-${generation}`;
+    const preparation = createReviewPreparationOrchestrator(
+      generationId,
+      landing.staged.plan,
+      {
+        narrationByCue: landing.staged.narrationByCue,
+        readiness: landing.staged.routeState.readiness,
+        skipCueIds: landing.record.cueProgress.consumedCueIds,
+      },
+      dependencies,
+    );
+    preparationRef.current?.cancel();
+    preparationRef.current = preparation;
+    void preparation.run((event) => {
+      if (event.generationId !== generationId || generationRef.current !== generation) return;
+      if (event.type === "NARRATION_UPDATE") {
+        const recoveredRouteState = {
+          ...event.routeState,
+          consumedCueIds: landing.staged.routeState.consumedCueIds,
+        };
+        routeStateRef.current = recoveredRouteState;
+        setRouteState(recoveredRouteState);
+        const nextNarration = { ...narrationByCueRef.current, [event.cueId]: event.result.narration };
+        narrationByCueRef.current = nextNarration;
+        setNarrationByCue(nextNarration);
+        setSession((current) => current
+          ? reduceCoachingSession(landing.staged.plan, current, {
+              type: "NARRATION_READY",
+              cueId: event.cueId,
+              readiness: event.result.readiness,
+            })
+          : current);
+        return;
+      }
+      if (event.type === "NARRATION_REJECTED") {
+        setReviewPreparationStatus({ phase: "ERROR", detail: `后续讲解准备失败：${event.reason.slice(0, 200)}` });
+      }
+    });
+  }, []);
+
+  const completeRecoveryLanding = useCallback(async (landing: RecoveryLanding) => {
+    const runtime = recoveryRuntimeRef.current;
+    if (!runtime) return;
+    try {
+      let currentRecord = recoveryRecordRef.current ?? landing.record;
+      if (!shouldReconnectRecoveryAgent(currentRecord) && !isPreAgentRouteStartRecovery(currentRecord)) {
+        recoveryHandshakeReadyRef.current = false;
+        setSession(landing.staged.session);
+        const failed = await runtime.dispatch({
+          type: "RECOVERY_HANDSHAKE_FAILED",
+          eventId: recoveryEventId("recovery-agent-checkpoint-missing"),
+          recoveryId: currentRecord.recoveryId,
+          reason: "Agent状态未协调；基础回放仍可继续。",
+          degraded: true,
+        });
+        acceptRecoveryResult(failed);
+        setReviewPreparationStatus({ phase: "ERROR", detail: "Agent状态未协调；基础回放仍可继续。" });
+        return;
+      }
+      if (shouldReconnectRecoveryAgent(currentRecord)) {
+        const reconnect = buildReconnectReplayEvent(currentRecord);
+        const agent = await stage3ControllerRef.current!.reconnect(reconnect);
+        if (agent.status === "DORMANT" || agent.restored !== "MATCHED") throw new Error("Agent checkpoint 与恢复记录不匹配。");
+        latestAgentCheckpointRef.current = {
+          checkpointId: agent.checkpoint.checkpointId,
+          activeCueId: agent.state.activeCueId,
+          currentSessionPhase: agent.state.currentSessionPhase,
+          routeCursor: agent.state.routeCursor,
+          sessionStatus: agent.state.sessionStatus,
+        };
+        const reconciled = reconciledRecoveryLedger(currentRecord);
+        if (reconciled) {
+          const ledgerResult = await runtime.dispatch({
+            type: "TOOL_LEDGER_UPDATED",
+            eventId: recoveryEventId("recovery-tool-reconciled"),
+            recoveryId: currentRecord.recoveryId,
+            entry: reconciled,
+            agentCheckpointId: agent.checkpoint.checkpointId,
+            updatedAt: Date.now(),
+          });
+          acceptRecoveryResult(ledgerResult);
+          currentRecord = ledgerResult.record ?? currentRecord;
+        } else {
+          const checkpointResult = await runtime.dispatch({
+            type: "STABLE_BOUNDARY_REACHED",
+            eventId: recoveryEventId("recovery-reconnect-checkpoint"),
+            recoveryId: currentRecord.recoveryId,
+            boundary: currentRecord.boundary,
+            cueProgress: currentRecord.cueProgress,
+            routeReadiness: currentRecord.routeReadiness,
+            narrationArtifacts: currentRecord.narrationArtifacts,
+            agentCheckpointId: agent.checkpoint.checkpointId,
+            updatedAt: Date.now(),
+          });
+          acceptRecoveryResult(checkpointResult);
+          currentRecord = checkpointResult.record ?? currentRecord;
+        }
+      }
+      const completed = await runtime.dispatch({
+        type: "RECOVERY_HANDSHAKE_COMPLETED",
+        eventId: recoveryEventId("recovery-handshake-complete"),
+        recoveryId: currentRecord.recoveryId,
+      });
+      acceptRecoveryResult(completed);
+      recoveryModeRef.current = false;
+      recoveryHandshakeReadyRef.current = true;
+      if (landing.record.boundary.kind === "CUE_PAUSED") {
+        stage3ControllerRef.current?.adoptRecoveredCue(
+          landing.record.boundary.cueId,
+          landing.record.boundary.segmentIndex,
+        );
+      }
+      setSession(landing.record.boundary.kind === "ROUTE_START"
+        ? reduceCoachingSession(landing.staged.plan, landing.staged.session, { type: "START" })
+        : landing.staged.session);
+      setReviewPreparationStatus({ phase: "READY", detail: "已恢复到最近教学点，后续讲解在后台继续准备。" });
+      startRecoveryNarrationQueue({ ...landing, record: currentRecord }, landing.analysis);
+    } catch (error) {
+      recoveryHandshakeReadyRef.current = false;
+      setSession(landing.staged.session);
+      const reason = error instanceof Error ? error.message.slice(0, 180) : "Agent 恢复失败；基础回放仍可继续。";
+      const failed = await runtime.dispatch({
+        type: "RECOVERY_HANDSHAKE_FAILED",
+        eventId: recoveryEventId("recovery-handshake-failed"),
+        recoveryId: landing.record.recoveryId,
+        reason,
+        degraded: true,
+      });
+      acceptRecoveryResult(failed);
+      setReviewPreparationStatus({ phase: "ERROR", detail: "Agent 状态未恢复；基础回放仍可继续。" });
+    }
+  }, [acceptRecoveryResult, startRecoveryNarrationQueue]);
+
+  const handleRecoveryAnalysisReady = useCallback((payload: Extract<PlaybackBridgeEvent, { type: "ANALYSIS_READY" }>) => {
+    const runtime = recoveryRuntimeRef.current;
+    const record = recoveryRecordRef.current;
+    const replayHash = replayHashRef.current;
+    if (!runtime || !record || !recoveryModeRef.current || !replayHash) return false;
+    try {
+      const rebuilt = deserializeCs2dAnalysisBundle(payload.bundleJson);
+      const normalized = normalizeRecoveryAnalysis(rebuilt, record);
+      const staged = restoreRecoveryArtifacts(record);
+      void runtime.dispatch({
+        type: "ANALYSIS_READY",
+        eventId: recoveryEventId("recovery-analysis-ready"),
+        recoveryId: record.recoveryId,
+        demoContentHash: replayHash,
+        selectedPlayerId: payload.selectedPlayerId,
+        routeId: record.routeId,
+        routeHash: record.routeHash,
+        versions: {
+          parser: rebuilt.review_plan.generation_manifest.parser_version,
+          analysisAdapter: rebuilt.metadata.adapter_version,
+          planner: rebuilt.review_plan.planner_version,
+        },
+      }).then((result) => {
+        acceptRecoveryResult(result);
+        if (result.status === "REJECTED") return;
+        const boundary = record.boundary;
+        const targetTick = boundary.kind === "CUE_PAUSED"
+          ? staged.plan.cues.find((cue) => cue.id === boundary.cueId)!.decision_tick
+          : boundary.kind === "WRAP_UP"
+            ? staged.plan.segments.at(-1)?.end_tick ?? 0
+            : staged.plan.segments[0]?.start_tick ?? 0;
+        const landing: RecoveryLanding = { recoveryId: record.recoveryId, targetTick, staged, record, analysis: normalized };
+        recoveryLandingRef.current = landing;
+        clearRecoveryLandingTimeout();
+        recoveryLandingTimeoutRef.current = setTimeout(() => {
+          if (recoveryLandingRef.current !== landing) return;
+          recoveryLandingRef.current = undefined;
+          recoveryLandingTimeoutRef.current = undefined;
+          recoveryHandshakeReadyRef.current = false;
+          planRef.current = undefined;
+          routeStateRef.current = undefined;
+          setPlan(undefined);
+          setRouteState(undefined);
+          setNarrationByCue({});
+          setSession(undefined);
+          setReviewPreparationStatus({ phase: "ERROR", detail: "回放未能落到恢复位置；基础回放仍可继续。" });
+          void runtime.dispatch({
+            type: "RECOVERY_HANDSHAKE_FAILED",
+            eventId: recoveryEventId("recovery-landing-timeout"),
+            recoveryId: record.recoveryId,
+            reason: "PLAYBACK_LANDING_TIMEOUT",
+            degraded: true,
+          }).then(acceptRecoveryResult);
+        }, 10_000);
+        bundleRef.current = normalized;
+        planRef.current = staged.plan;
+        routeStateRef.current = staged.routeState;
+        setBundle(normalized);
+        setPlan(staged.plan);
+        setRouteState(staged.routeState);
+        setNarrationByCue(staged.narrationByCue);
+        setAnalysisError(undefined);
+        setAnalysisProgress(undefined);
+        setReviewPreparationStatus({ phase: "NARRATION", detail: "冻结路线已验证，正在回到最近教学点。" });
+        send({ type: "pause" });
+        send({ type: "seekCanonicalTick", canonicalTick: targetTick });
+      });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message.slice(0, 180) : "恢复分析校验失败。";
+      void runtime.dispatch({
+        type: "RECOVERY_HANDSHAKE_FAILED",
+        eventId: recoveryEventId("recovery-analysis-rejected"),
+        recoveryId: record.recoveryId,
+        reason,
+        degraded: false,
+      }).then(acceptRecoveryResult);
+      setAnalysisError(reason);
+    }
+    return true;
+  }, [acceptRecoveryResult, clearRecoveryLandingTimeout, send]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>) => {
@@ -546,6 +1047,7 @@ export function Cs2dPlaybackHost({
         setPlayback(undefined);
         resetAnalysis();
         setPhase("READY");
+        handleRecoveryReplayReady(payload);
         return;
       }
       if (payload.type === "PLAYER_SELECTED") {
@@ -598,6 +1100,7 @@ export function Cs2dPlaybackHost({
       }
       if (payload.type === "ANALYSIS_READY") {
         if (!analysisEventMatchesSelectedPlayer(selectedPlayerIdRef.current, payload.selectedPlayerId)) return;
+        if (handleRecoveryAnalysisReady(payload)) return;
         invalidateGeneration();
         invalidateGuidedSeek();
         try {
@@ -669,7 +1172,9 @@ export function Cs2dPlaybackHost({
             if (preparationEvent.type === "NARRATION_UPDATE") {
               routeStateRef.current = preparationEvent.routeState;
               setRouteState(preparationEvent.routeState);
-              setNarrationByCue((current) => ({ ...current, [preparationEvent.cueId]: preparationEvent.result.narration }));
+              const nextNarration = { ...narrationByCueRef.current, [preparationEvent.cueId]: preparationEvent.result.narration };
+              narrationByCueRef.current = nextNarration;
+              setNarrationByCue(nextNarration);
               const finalPlan = planRef.current;
               const readyCount = Object.values(preparationEvent.routeState.readiness).filter((value) => value !== "PENDING").length;
               setReviewPreparationStatus({
@@ -703,11 +1208,48 @@ export function Cs2dPlaybackHost({
               setRouteState(preparationEvent.routeState);
               setAnalysisProgress(undefined);
               setReviewPreparationStatus({ phase: "READY", detail: "教学路线与前两个讲解包已就绪。" });
-              setSession(reduceCoachingSession(
+              const identity = createRecoverySessionIdentity();
+              recoveryIdentityRef.current = identity;
+              setRecoveryIdentity(identity);
+              recoveryModeRef.current = false;
+              recoveryHandshakeReadyRef.current = true;
+              latestAgentCheckpointRef.current = undefined;
+              const initialSession = createCoachingSession(
                 preparationEvent.plan,
-                createCoachingSession(preparationEvent.plan, `session-${preparationEvent.plan.id}`, preparationEvent.routeState),
-                { type: "START" }
+                identity.sessionId,
+                preparationEvent.routeState,
+              );
+              const record = buildSessionRecoveryRecord({
+                identity,
+                demoContentHash: nextBundle.metadata.demo_content_hash ?? replayHashRef.current ?? "",
+                selectedPlayerId: nextBundle.selected_steam_id,
+                plan: preparationEvent.plan,
+                routeState: preparationEvent.routeState,
+                session: initialSession,
+                boundaryKind: "ROUTE_START",
+                narrationByCue: narrationByCueRef.current,
+                analysis: nextBundle,
+                agentCheckpointId: null,
+              });
+              recoveryRecordRef.current = record;
+              const startSession = () => setSession(reduceCoachingSession(
+                preparationEvent.plan,
+                initialSession,
+                { type: "START" },
               ));
+              const runtime = recoveryRuntimeRef.current;
+              if (!runtime) {
+                startSession();
+                return;
+              }
+              void runtime.dispatch({
+                type: "SESSION_STARTED",
+                eventId: recoveryEventId("recovery-session-started"),
+                record,
+              }).then((result) => {
+                acceptRecoveryResult(result);
+                startSession();
+              });
             }
           });
         } catch (error) {
@@ -788,6 +1330,16 @@ export function Cs2dPlaybackHost({
         }
         guidedSeekGateRef.current = undefined;
       }
+      const recoveryLanding = recoveryLandingRef.current;
+      if (recoveryLanding) {
+        const tolerance = Math.max(1, Math.round((replay?.tickRate ?? 64) / 64));
+        if (Math.abs(payload.canonicalTick - recoveryLanding.targetTick) > tolerance || payload.playing) return;
+        recoveryLandingRef.current = undefined;
+        clearRecoveryLandingTimeout();
+        setPlayback(payload);
+        void completeRecoveryLanding(recoveryLanding);
+        return;
+      }
       setPlayback(payload);
       if (userTookOverRef.current) return;
       const activePlan = planRef.current;
@@ -802,7 +1354,7 @@ export function Cs2dPlaybackHost({
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [config.origin, invalidateGeneration, invalidateGuidedSeek, resetAnalysis, reviewPreparationDependencies, stage2Mode, stage3Mode]);
+  }, [clearRecoveryLandingTimeout, completeRecoveryLanding, config.origin, handleRecoveryAnalysisReady, handleRecoveryReplayReady, invalidateGeneration, invalidateGuidedSeek, replay?.tickRate, resetAnalysis, reviewPreparationDependencies, stage2Mode, stage3Mode]);
 
   const transition = useCallback((action: SessionAction) => {
     const activePlan = planRef.current;
@@ -936,7 +1488,7 @@ export function Cs2dPlaybackHost({
   const stage2Busy = stage2Status === "STARTING" || stage2Status === "FOCUSING" || stage2Status === "RESUMING";
   const stage3Busy = stage3State.status === "STARTING" || stage3State.status === "FOCUSING" || stage3State.status === "RESUMING";
   const agentToolBusy = stage2Busy || stage3Busy;
-  const stage3IdentityContext: Stage3IdentityInput | undefined = activePlan && routeState && replay?.demoContentHash
+  const stage3IdentityContext: Stage3IdentityInput | undefined = activePlan && routeState && replay?.demoContentHash && recoveryIdentity
     ? {
         plan: activePlan,
         routeState,
@@ -947,15 +1499,61 @@ export function Cs2dPlaybackHost({
         },
         demoContentHash: replay.demoContentHash,
         selectedPlayerId: selected?.playerId ?? activePlan.player_id,
-        sessionId: `stage3-session-${stableStage3IdentityToken(replay.demoContentHash, activePlan.id, routeState.routeFingerprint, selected?.playerId ?? activePlan.player_id)}`,
-        runId: `stage3-run-${stableStage3IdentityToken(replay.demoContentHash, activePlan.id, routeState.routeFingerprint, selected?.playerId ?? activePlan.player_id)}`,
+        sessionId: recoveryIdentity.sessionId,
+        runId: recoveryIdentity.runId,
       }
     : undefined;
   // Async Stage2 work must consult these refs immediately before postMessage or
   // remote resume; the PAUSED values captured when START began are not authority.
   replayHashRef.current = replay?.demoContentHash;
+  bundleRef.current = bundle;
+  narrationByCueRef.current = narrationByCue;
+  recoveryIdentityRef.current = recoveryIdentity;
   liveSessionRef.current = session;
   liveCueRef.current = cue;
+
+  useEffect(() => {
+    const runtime = recoveryRuntimeRef.current;
+    const current = recoveryRecordRef.current;
+    if (!runtime || !current || !session || userTookOverRef.current) return;
+    if (session.phase === "COMPLETED") {
+      if (completedRecoveryRef.current === current.recoveryId) return;
+      completedRecoveryRef.current = current.recoveryId;
+      void runtime.dispatch({
+        type: "SESSION_COMPLETED",
+        eventId: recoveryEventId("recovery-session-completed"),
+        recoveryId: current.recoveryId,
+      }).then((result) => {
+        latestAgentCheckpointRef.current = undefined;
+        recoveryIdentityRef.current = undefined;
+        setRecoveryIdentity(undefined);
+        acceptRecoveryResult(result);
+      });
+      return;
+    }
+    const stable = currentStableRecoveryRecord(latestAgentCheckpointRef.current);
+    if (!stable) return;
+    const key = JSON.stringify([
+      stable.boundary,
+      stable.cueProgress,
+      stable.routeReadiness,
+      stable.narrationArtifacts.map((artifact) => [artifact.cueId, artifact.readiness, artifact.presentation]),
+      stable.agentCheckpointId,
+    ]);
+    if (stableRecoveryKeyRef.current === key) return;
+    stableRecoveryKeyRef.current = key;
+    void runtime.dispatch({
+      type: "STABLE_BOUNDARY_REACHED",
+      eventId: recoveryEventId("recovery-stable-boundary"),
+      recoveryId: current.recoveryId,
+      boundary: stable.boundary,
+      cueProgress: stable.cueProgress,
+      routeReadiness: stable.routeReadiness,
+      narrationArtifacts: stable.narrationArtifacts,
+      agentCheckpointId: stable.agentCheckpointId,
+      updatedAt: stable.updatedAt,
+    }).then(acceptRecoveryResult);
+  }, [acceptRecoveryResult, currentStableRecoveryRecord, narrationByCue, routeState, session, userTookOver]);
 
   useEffect(() => {
     if (!stage2Mode || !activePlan || !routeState || !session || !cue || !stage2Cue) return;
@@ -965,6 +1563,8 @@ export function Cs2dPlaybackHost({
       session.phase !== "PAUSED_FOR_COACHING" ||
       !cueRevealed ||
       !presentableNarration ||
+      !recoveryIdentity ||
+      !recoveryHandshakeReadyRef.current ||
       !session.outcome_completion ||
       session.outcome_completion.status !== "COMPLETE"
     ) return;
@@ -1085,6 +1685,8 @@ export function Cs2dPlaybackHost({
       !cue ||
       !stage3Cue ||
       !presentableNarration ||
+      !recoveryIdentity ||
+      !recoveryHandshakeReadyRef.current ||
       !cueRevealed ||
       userTookOverRef.current ||
       session.phase !== "PAUSED_FOR_COACHING" ||
@@ -1100,7 +1702,6 @@ export function Cs2dPlaybackHost({
       return;
     }
     const selectedIdentity = selected?.playerId ?? activePlan.player_id;
-    const identityToken = stableStage3IdentityToken(replay.demoContentHash, activePlan.id, routeState.routeFingerprint, selectedIdentity);
     const candidate = cue.candidate_id
       ? bundle?.candidate_set.candidates.find((item) => item.candidateId === cue.candidate_id)
       : undefined;
@@ -1118,8 +1719,8 @@ export function Cs2dPlaybackHost({
       },
       demoContentHash: replay.demoContentHash,
       selectedPlayerId: selected?.playerId ?? activePlan.player_id,
-      sessionId: `stage3-session-${identityToken}`,
-      runId: `stage3-run-${identityToken}`,
+      sessionId: recoveryIdentity.sessionId,
+      runId: recoveryIdentity.runId,
       generation: generationRef.current,
       tickRate: replay.tickRate,
       evidence: {
@@ -1132,7 +1733,7 @@ export function Cs2dPlaybackHost({
     const lifecycleInput = stage3ControllerRef.current?.resumeInputFor(stage3Input) ?? stage3Input;
     stage3InputRef.current = lifecycleInput;
     stage3ControllerRef.current?.start(lifecycleInput);
-  }, [activePlan, bundle, candidateMaterial, cue, cueRevealed, outcomeImpact, presentableNarration, replay, routeState, selected?.playerId, session, stage2Mode, stage3Cue, stage3Mode]);
+  }, [activePlan, bundle, candidateMaterial, cue, cueRevealed, outcomeImpact, presentableNarration, recoveryIdentity, replay, routeState, selected?.playerId, session, stage2Mode, stage3Cue, stage3Mode]);
 
   useEffect(() => {
     if (!stage3Mode || !stage3IdentityContext || !activePlan || !session || !segment || userTookOverRef.current) return;
@@ -1205,6 +1806,12 @@ export function Cs2dPlaybackHost({
     });
   }, [requestStage3WrapUp, session, stage3IdentityContext, stage3Mode]);
 
+  const recoveryStatusKind: SessionRecoveryStatusKind | undefined = recoveryResult?.record
+    ? recoveryResult.status === "READY"
+      ? recoveryModeRef.current ? "REBUILDING" : undefined
+      : recoveryResult.status
+    : undefined;
+
   return (
     <main className="cs2d-host-shell">
       <header className="cs2d-host-header">
@@ -1250,6 +1857,15 @@ export function Cs2dPlaybackHost({
               <span>手动复查中</span>
               <button type="button" onClick={resumeGuidedRoute}>返回教练路线</button>
             </div>
+          ) : null}
+
+          {recoveryStatusKind ? (
+            <SessionRecoveryStatus
+              status={recoveryStatusKind}
+              detail={recoveryResult?.reason ?? undefined}
+              onChooseDemo={chooseRecoveryDemo}
+              onDiscard={discardRecovery}
+            />
           ) : null}
 
           {analysisError ? (

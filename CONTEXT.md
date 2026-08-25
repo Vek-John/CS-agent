@@ -19,8 +19,27 @@
 - SessionWrapUpRequest：由 SessionSummaryInput 和已展示 cue 的核心问题、改进方式、Advice 文本及引用组成的总结输入。
 - SessionWrapUpBundle：逐个对应反复主题、带合法 cue/evidence 引用和 Advice 引用的全场总结结果。
 
+## Recovery terms
+
+**SessionRecoveryRecord**:
+一场未完成复盘在浏览器本地留下的有界恢复描述，关联原会话身份、冻结路线和最近稳定教学进度；它不是 Demo、Replay 或历史记录。
+_Avoid_: AgentCheckpoint、Replay cache、history entry
+
+**RecoveryBoundary**:
+Host、CoachingSession 与 Coach Agent 都能验证的稳定教学边界；瞬时播放画面、执行中的工具和任意自由跳转位置都不是 RecoveryBoundary。
+_Avoid_: current tick、resume point、UI snapshot
+
+**ReplayAvailability**:
+当前页面是否重新拥有可执行 Replay 的三态事实：`ABSENT`、`LOADING` 或 `READY`；只有 `READY` 才允许恢复握手继续。
+_Avoid_: loaded、connected、Agent status
+
+**RecoveryHandshake**:
+同一 Demo、玩家、冻结路线、版本、Session boundary 与 Agent checkpoint 共同匹配后，恢复原 CoachRun 的一次受校验协调。
+_Avoid_: reload、rehydrate、checkpoint restore
+
 ## Avoid
 
 - 用“建议”代替 TeachingCapability；建议是教学内容，能力是可执行的教学方式。
 - 用“动作”代替 TeachingMove；动作可能没有教学选择或依据。
 - 用“结果”代替 ToolObservation；结果可能丢失工具限制和观察范围。
+- 用“恢复 checkpoint”代替 RecoveryHandshake；Agent checkpoint 只覆盖恢复所需状态的一部分。
