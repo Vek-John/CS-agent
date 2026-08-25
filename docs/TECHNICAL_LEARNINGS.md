@@ -727,6 +727,24 @@ DeepSeek Policy 使用项目私密 env 启动后的同源 `/api/coaching/policy`
 
 Falcons/Spirit 没有完成 49/49，真实 Demo 尚未命中 `SHOW_ECONOMY_CONTEXT`；该工具只有 fixture、Host 和 UI 回归证据。Stage 3 继续由 `?coachAgent=stage3` 显式启用，默认入口保留为快速回退。发布后仍需用轻量线上请求确认 Durable Object binding、Policy Provider 和静态 Viewer，不上传大 Demo。
 
+### 4.32 2026-08-25：部署能力与产品默认入口是两个独立开关
+
+**触发**
+
+Cloudflare 已部署 Coach Agent Durable Object、Policy API 和完整 Stage 3 前端代码，但访问根路径仍需要 `?coachAgent=stage3`。Wrangler binding 和 Secret 只提供服务端能力，不能改变 React Host 中按 URL 查询参数选择运行模式的逻辑。
+
+**决定**
+
+Stage 3 改为 localhost 与 Cloudflare 的无参数默认入口，不增加 Cloudflare 重定向、环境变量或 `off` 回退。入口解析只有两个结果：无参数、`stage3` 或其他值都进入 Stage 3；仅 `coachAgent=stage2` 进入现有单 cue 回归 harness。Host 使用单一模式状态，避免 Stage 2/Stage 3 两个布尔状态短暂不一致。
+
+**验证**
+
+入口回归覆盖空查询、显式 `stage3`、不存在的 `off` 和显式 `stage2`；Host 与 Stage 3 定向回归 2 files / 20 tests、TypeScript 检查和 Next production build 通过。该变化不新增 UI、动画、Cloudflare binding 或 Provider 调用。
+
+**限制 / 下一步**
+
+`coachAgent=stage2` 仅保留给开发回归，不是用户产品模式。旧发布版本在新提交完成 Cloudflare 部署前仍需要显式参数。
+
 ## 5. 常用问题排查表
 
 | 现象 | 首先检查 | 常见根因 | 不要做什么 |

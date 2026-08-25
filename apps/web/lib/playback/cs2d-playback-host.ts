@@ -15,6 +15,13 @@ import { buildCoachingCueView, type CoachingCueView } from "../coaching/cs2d-coa
 export const DEFAULT_CS2D_HOST_URL = "http://localhost:5174/?host=1";
 export const CLOUDFLARE_CS2D_HOST_PATH = "/cs2d/?host=1";
 
+export type CoachAgentEntryMode = "STAGE2" | "STAGE3";
+
+/** Stage 3 is the product default; Stage 2 remains an explicit regression harness. */
+export function coachAgentEntryMode(search: string): CoachAgentEntryMode {
+  return new URLSearchParams(search).get("coachAgent") === "stage2" ? "STAGE2" : "STAGE3";
+}
+
 export interface Cs2dHostConfig {
   url: string;
   origin: string;

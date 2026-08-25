@@ -91,7 +91,7 @@ Replay / MatchTimeline / Win-rate timeline
 - 每 cue 默认最多一个成功工具，失败后最多一次合法替代；自由跳转会暂停 Agent，返回路线后恢复；
 - 全场结束只从已完成 cue 聚合最多三个重复主题，并保留 cue/evidence 引用。
 
-当前发布通过 <http://localhost:3000/?coachAgent=stage3> 显式启用整场 Agent；无参数入口保留为基础回放回退，`?coachAgent=stage2` 只用于单 cue 回归。
+当前发布直接通过 <http://localhost:3000> 启用整场 Agent；`?coachAgent=stage2` 只用于单 cue 回归。
 
 ### 讲解风格
 
@@ -221,7 +221,6 @@ pnpm cloudflare:assets
 - 当前缺少可靠的逐次 HurtEvent、ShotEvent shooter、完整声学遮挡、队内语音和全部战术上下文；
 - 目前的候选主要围绕玩家死亡、接触、生命变化、持包和道具时机，还没有职业样本检索、复杂补枪模型或自由追问；
 - localhost Agent 使用进程内 MemorySaver，刷新后不能恢复；Cloudflare 生产使用 Durable Object checkpoint，但仍必须重新载入相同 Demo 并通过 demo/route hash 校验后才能恢复；
-- Stage 3 当前通过 `?coachAgent=stage3` 显式启用，默认无参数入口暂时保留为发布回退；
 - WebGPU/FP16 性能依浏览器、GPU 和 Worker 能力而异，失败时才回退 WASM，不把超时伪装成成功结果。
 
 ## 开源与第三方许可

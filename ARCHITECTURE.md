@@ -1,7 +1,7 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：3.5.3
+> 版本：3.5.4
 > 最后更新：2026-08-24
 > 适用范围：Web 2D 到桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
@@ -293,7 +293,7 @@ Host 只保留一套教练控制和一条整场时间轴；用户可自由接管
 
 Stage 0 已验证 `@langchain/langgraph` 的 TypeScript Graph 在 Cloudflare `nodejs_compat` 环境可 invoke、checkpoint、interrupt 并用 `Command` resume；Durable Object 的真实 HTTP smoke 验证 START 产生一个 effect、resume 完成且重复 resume 不产生第二次 effect。浏览器内 Graph 方案在同一 async-context/interrupt seam 连续两次失败后被否决：IndexedDB saver 的隔离测试仍保留为实验事实，但默认浏览器 bundle 只导入 `@cs-coach/coach-agent/client`，不加载 LangGraph runtime。详细证据和取舍见 ADR-0003。
 
-当前 Stage 3 产品切片通过 `?coachAgent=stage3` 显式启用：Host 在冻结路线和 `OutcomeCompletionGate` 之后把当前 cue 的白名单摘要交给 CoachAgentRuntime；Graph 可从慢放、地图证据、投掷物轨迹、胜率影响和经济语境中选择至多一个合法工具，也可直接结束 cue。多 cue 进度、用户接管、稳定 callId 去重、工具失败恢复、会话主题和最多三个有引用的全场总结均已接入；完成会话只保留最近三个压缩 checkpoint，活动会话最多保留二十个。默认无参数入口仍保留为发布回退，Stage 2 单 cue 入口只用于回归。
+当前默认产品入口直接启用 Stage 3：Host 在冻结路线和 `OutcomeCompletionGate` 之后把当前 cue 的白名单摘要交给 CoachAgentRuntime；Graph 可从慢放、地图证据、投掷物轨迹、胜率影响和经济语境中选择至多一个合法工具，也可直接结束 cue。多 cue 进度、用户接管、稳定 callId 去重、工具失败恢复、会话主题和最多三个有引用的全场总结均已接入；完成会话只保留最近三个压缩 checkpoint，活动会话最多保留二十个。`coachAgent=stage2` 单 cue 入口只用于回归，不是产品模式。
 
 `ReviewSegment` 继续使用半开区间 `[start_tick, end_tick)` 并完整覆盖正式回合、冻结时间、回合判定后区间与回合间隙。cs2d 的 `Round 0` 刀局/初始化段不伪装成正式第 1 回合；`winner: null` 不被猜测。cue 只允许位于 live/decided 边界之前；GrenadePath 的 0.1 秒时间只作为近似，精确 canonical tick 优先取 Round、Frame 与 GameEvent。
 
@@ -452,7 +452,7 @@ LLM 只能选择 `capabilityId`；速度、cue 范围、actor/annotation/callout
 
 Stage 2 的首个 visual tool `FOCUS_MAP_EVIDENCE` 只在 `coachAgent=stage2` 试验入口选择 frozen route 的首个含 WORLD point annotation 的 cue。`CoachAgentHostAdapter` 从已 presentable 的 Narration、COMPLETE outcome gate、allowlisted AnalysisBundle 与 parser Worker 返回的 `demoContentHash` 构造 `START_CUE`；Capability registry 持有 annotation→world point 绑定，Agent request 只能选择 capability ID。Host 以带 generation/run/cue/callId 的严格 command 驱动 cs2d 既有 `focusWorld` camera seam，Viewer 返回严格 `TEACHING_TOOL_ACK` 后 Host 才 `Command resume`。bridge 丢失、ACK 超时或用户接管不会推进 Session，基础回放仍可继续。
 
-Stage 3B 只在显式 `coachAgent=stage3` 入口扩展同一 frozen route 的多 cue Host 工具层，不改变 `CoachingSession` reducer、canonical tick 或 Director/Compiler/Narrator 的权威。v2 `START_CUE` 仅携带已 presentable 的三段 Narration 白名单摘要、route segment index/mode 与稳定身份；Host registry 绑定五种工具的合法 evidence/ref 参数，Agent request 不携带坐标、tick、player 或速度。`REPLAY_CUE_SLOW`、`FOCUS_MAP_EVIDENCE`、`SHOW_GRENADE_TRACE`、`SHOW_WIN_RATE_IMPACT`、`SHOW_ECONOMY_CONTEXT` 只有满足各自 gate/ref/可靠性条件才可用，失败停在自然边界。按 run 保存 PENDING/CONFIRMED lifecycle ledger，网络失败释放后可用同 eventId 幂等重试；观察事件按 frozen route cursor 串行补齐，只有匹配结果确认后推进 cursor。Host effect epoch 拒绝晚 ACK，takeover 取消旧副作用并以新 lifecycle event 恢复，基础播放始终可用；Stage 2 v1 入口继续独立回归。
+Stage 3B 是默认入口的多 cue Host 工具层，不改变 `CoachingSession` reducer、canonical tick 或 Director/Compiler/Narrator 的权威。v2 `START_CUE` 仅携带已 presentable 的三段 Narration 白名单摘要、route segment index/mode 与稳定身份；Host registry 绑定五种工具的合法 evidence/ref 参数，Agent request 不携带坐标、tick、player 或速度。`REPLAY_CUE_SLOW`、`FOCUS_MAP_EVIDENCE`、`SHOW_GRENADE_TRACE`、`SHOW_WIN_RATE_IMPACT`、`SHOW_ECONOMY_CONTEXT` 只有满足各自 gate/ref/可靠性条件才可用，失败停在自然边界。按 run 保存 PENDING/CONFIRMED lifecycle ledger，网络失败释放后可用同 eventId 幂等重试；观察事件按 frozen route cursor 串行补齐，只有匹配结果确认后推进 cursor。Host effect epoch 拒绝晚 ACK，takeover 取消旧副作用并以新 lifecycle event 恢复，基础播放始终可用；Stage 2 v1 入口继续独立回归。
 
 用户界面不提供 `PLAYER_KNOWLEDGE` renderer。`ObservableState` 是教练内部证据边界；renderer 不根据它隐藏敌人，教练也不得因为地图上显示全知事实而读取这些事实。当前投掷物只显示播放位置以前的轨迹，C4/HUD 只能读取 `t <= currentT` 的状态，禁止用数组首项或未来落点补值。
 
@@ -1352,3 +1352,4 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 | 3.5.1 | 2026-08-24 | Stage 2 只在显式试验入口接入首个 `FOCUS_MAP_EVIDENCE`：Host registry 绑定 frozen cue 的 WORLD annotation，严格 bridge ACK/generation/callId/超时保护副作用；parser Worker 返回 raw Demo SHA-256 身份，默认入口与 Director/PlanCompiler/Narrator 语义不变。 |
 | 3.5.2 | 2026-08-24 | Stage 3B 在显式试验入口扩展五种受约束 Host 工具与多 cue lifecycle observer：稳定 capability/call identity、PENDING/CONFIRMED recovery ledger、takeover epoch、v2 presentable summary 与受控 cs2d bridge；普通入口和 Stage 2 v1 入口保持不变。 |
 | 3.5.3 | 2026-08-24 | 完成 Stage 3 整场切片：多 cue、takeover/resume、五种证据绑定教学工具、SessionTheme、三主题全场总结、完成态 checkpoint 压缩与真实 DeepSeek Policy Adapter；`test_demo` 14/14 全场通过，Falcons/Spirit 按发布范围保留 29/49 有界验证，显式 Stage 3 入口继续作为发布回退边界。 |
+| 3.5.4 | 2026-08-25 | 将 Stage 3 Coach Agent 切换为 localhost 与 Cloudflare 的默认产品入口；不增加部署变量或重定向，`coachAgent=stage2` 仅保留为单 cue 回归入口。 |

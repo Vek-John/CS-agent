@@ -107,6 +107,7 @@ import {
   acceptedPlaybackEvent,
   adjacentRoundIndex,
   analysisEventMatchesSelectedPlayer,
+  coachAgentEntryMode,
   coachingCueProgress,
   clampCanonicalTick,
   cs2dHostConfig,
@@ -118,7 +119,8 @@ import {
   timelineRange,
   timelinePercent,
   HOST_SPEED_OPTIONS,
-  hostCoachingCueSurface
+  hostCoachingCueSurface,
+  type CoachAgentEntryMode
 } from "../../lib/playback/cs2d-playback-host";
 
 type HostPhase = "BOOTING" | "WAITING_FOR_DEMO" | "READY" | "ERROR";
@@ -191,8 +193,7 @@ export function Cs2dPlaybackHost({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const planRef = useRef<ReviewPlan | undefined>(undefined);
   const [benchmarkQuery, setBenchmarkQuery] = useState("");
-  const [stage2Mode, setStage2Mode] = useState(false);
-  const [stage3Mode, setStage3Mode] = useState(false);
+  const [coachAgentMode, setCoachAgentMode] = useState<CoachAgentEntryMode>("STAGE3");
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
     const query = new URLSearchParams(window.location.search);
@@ -208,9 +209,10 @@ export function Cs2dPlaybackHost({
     }
   }, []);
   useEffect(() => {
-    setStage2Mode(new URLSearchParams(window.location.search).get("coachAgent") === "stage2");
-    setStage3Mode(new URLSearchParams(window.location.search).get("coachAgent") === "stage3");
+    setCoachAgentMode(coachAgentEntryMode(window.location.search));
   }, []);
+  const stage2Mode = coachAgentMode === "STAGE2";
+  const stage3Mode = coachAgentMode === "STAGE3";
   const config = useMemo(() => {
     const base = cs2dHostConfig();
     // Keep the host URL deterministic during Next SSR; the browser origin is

@@ -7,6 +7,7 @@ import {
   acceptedPlaybackEvent,
   analysisEventMatchesSelectedPlayer,
   adjacentRoundIndex,
+  coachAgentEntryMode,
   coachingCueProgress,
   cs2dHostConfig,
   HOST_SPEED_OPTIONS,
@@ -34,6 +35,13 @@ const event = {
 } as const;
 
 describe("cs2d localhost host boundary", () => {
+  it("uses the full Coach Agent by default and keeps only Stage 2 as an explicit harness", () => {
+    expect(coachAgentEntryMode("")).toBe("STAGE3");
+    expect(coachAgentEntryMode("?coachAgent=stage3")).toBe("STAGE3");
+    expect(coachAgentEntryMode("?coachAgent=off")).toBe("STAGE3");
+    expect(coachAgentEntryMode("?coachAgent=stage2")).toBe("STAGE2");
+  });
+
   it("filters stale analysis events by the current selected player", () => {
     expect(analysisEventMatchesSelectedPlayer("player-new", "player-old")).toBe(false);
     expect(analysisEventMatchesSelectedPlayer("player-new", "player-new")).toBe(true);
