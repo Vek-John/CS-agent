@@ -833,6 +833,28 @@ Host checkpoint metadata 显式携带 `sessionStatus`。`CUE_PAUSED` 仍要求 c
 
 浏览器文件选择权限仍是唯一未补的端到端证据；它不改变完成态 checkpoint 的领域约束，也不影响基础回放。
 
+### 4.37 2026-08-25：Session Recovery 已发布并通过线上 DO / DeepSeek smoke
+
+**触发**
+
+Gate D 的代码、构建和服务端 Provider 已通过，但发布决定还需要确认 Cloudflare 静态入口、Durable Object binding 与线上 DeepSeek Secret 确实属于同一版本。
+
+**决定**
+
+将 `a8dcf9d` 推送到 `main`，只通过仓库现有 `Cloudflare production` workflow 发布；线上 smoke 只发送合成、白名单 Agent/Policy fixture，不上传 Demo、File、Replay 或真实 trace。
+
+**落点**
+
+GitHub Actions run `32836672732` 成功部署 Worker `cs2-ai-demo-coach`，Cloudflare version ID 为 `23a45d60-327d-492c-8161-79f8fba71ad9`。
+
+**验证**
+
+生产根页面与 `/cs2d/` 均返回 HTTP 200，并包含 COOP `same-origin`、COEP `require-corp`、CORP `cross-origin`。线上 Durable Object 以 HTTP 200 完成 START/interrupt、resume、重复 resume 与 COMPLETE_SESSION：backend 为 `DURABLE_OBJECT`、`recoverableAfterRefresh=true`、首次 effect 为 1、重复 effect 为 0。线上 Policy route 返回 HTTP 200、`SUCCEEDED`、provider `DEEPSEEK`、model `deepseek-v4-flash`，只选择请求内合法 capability。
+
+**限制 / 下一步**
+
+线上没有上传真实 Demo；稳定 Demo identity 修复后的“重新选择同一文件并回到 3/14 cue”仍等待一次可操作系统文件选择器的人工 smoke。
+
 ## 5. 常用问题排查表
 
 | 现象 | 首先检查 | 常见根因 | 不要做什么 |
