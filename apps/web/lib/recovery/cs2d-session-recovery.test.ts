@@ -15,6 +15,7 @@ import {
   restoreRecoveryArtifacts,
   isPreAgentRouteStartRecovery,
   shouldReconnectRecoveryAgent,
+  shouldPersistToolTransitionToRecovery,
 } from "./cs2d-session-recovery";
 
 const HASH = "8".repeat(64);
@@ -116,6 +117,10 @@ function fixture() {
 }
 
 describe("cs2d recovery Host Adapter", () => {
+  it("keeps manual tool transitions out of the stable RecoveryBoundary store", () => {
+    expect(shouldPersistToolTransitionToRecovery("MANUAL")).toBe(false);
+    expect(shouldPersistToolTransitionToRecovery("DEFAULT")).toBe(true);
+  });
   it("builds and restores a bounded route-start record", () => {
     const input = fixture();
     const record = buildSessionRecoveryRecord({
@@ -264,6 +269,27 @@ describe("cs2d recovery Host Adapter", () => {
       routeCursor: 4,
       sessionStatus: "ACTIVE",
     }, boundary)).toBe("checkpoint-cue-2");
+  });
+
+  it("round-trips presented cues independently from consumed/completed progress", () => {
+    const input = fixture();
+    const cue = input.analysis.review_plan.cues[0]!;
+    const session = {
+      ...input.session,
+      presented_cue_ids: [cue.id],
+      consumed_cue_ids: [],
+    };
+    const record = buildSessionRecoveryRecord({
+      ...input,
+      session,
+      plan: input.analysis.review_plan,
+      boundaryKind: "ROUTE_START",
+      demoContentHash: HASH,
+      selectedPlayerId: "dog",
+      agentCheckpointId: null,
+    });
+    expect(record.cueProgress).toMatchObject({ presentedCueIds: [cue.id], completedCueIds: [], consumedCueIds: [] });
+    expect(restoreRecoveryArtifacts(record).session.presented_cue_ids).toEqual([cue.id]);
   });
 
   it("binds WRAP_UP only to the completed checkpoint at the matching route cursor", () => {

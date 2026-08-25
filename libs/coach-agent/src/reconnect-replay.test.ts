@@ -22,8 +22,8 @@ function reconnectEvent(overrides: Record<string, unknown> = {}): CoachAgentEven
     versions: {
       graph: COACH_AGENT_GRAPH_VERSION,
       state: COACH_AGENT_STATE_VERSION,
-      session: "coaching-session.v1",
-      recovery: "session-recovery-record.v1",
+      session: "coaching-session.v2",
+      recovery: "session-recovery-record.v2",
     },
     boundary: {
       kind: "CUE_PAUSED",
@@ -199,7 +199,7 @@ describe("Coach Agent replay reconnect", () => {
     const versionMismatch = await runtime.dispatch(reconnectWithCheckpoint(
       checkpointId(started),
       disposition,
-      { versions: { graph: "coach-agent-graph.v999", state: COACH_AGENT_STATE_VERSION, session: "coaching-session.v1", recovery: "session-recovery-record.v1" } },
+      { versions: { graph: "coach-agent-graph.v999", state: COACH_AGENT_STATE_VERSION, session: "coaching-session.v2", recovery: "session-recovery-record.v2" } },
     ));
     expect(versionMismatch.status).toBe("DORMANT");
     expect(versionMismatch.state.fallbackReasons).toContain("RECOVERY_VERSION_MISMATCH");

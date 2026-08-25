@@ -11,7 +11,7 @@ import {
   type RecoveryBoundary,
 } from "./types";
 
-export const SESSION_RECOVERY_RECORD_VERSION = "session-recovery-record.v1" as const;
+export const SESSION_RECOVERY_RECORD_VERSION = "session-recovery-record.v2" as const;
 export const SESSION_RECOVERY_RUNTIME_VERSION = "session-recovery-runtime.v1" as const;
 export const MAX_RECOVERY_RECORD_BYTES = 1 * 1024 * 1024;
 export const MAX_RECOVERY_TOOL_LEDGER = 64;
@@ -84,6 +84,7 @@ export const RecoveryRouteReadinessSchema = z
 
 export const RecoveryCueProgressSchema = z.object({
   completedCueIds: z.array(Id).max(64),
+  presentedCueIds: z.array(Id).max(64),
   consumedCueIds: z.array(Id).max(64),
   revealedCueIds: z.array(Id).max(64),
 }).strict();

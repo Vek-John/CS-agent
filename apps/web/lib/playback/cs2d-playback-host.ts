@@ -2,6 +2,7 @@ import {
   commandEnvelope,
   isPlaybackEventEnvelope,
   type CoachCue,
+  type CoachingSessionState,
   type CoachingSessionPhase,
   type OutcomeCompletionState,
   type PlaybackCommand,
@@ -141,6 +142,55 @@ export function reviewSegmentLabel(segment: ReviewPlan["segments"][number]): str
   if (segment.mode === "SKIP") return "低价值片段";
   if (segment.mode === "OBSERVE") return "观察片段";
   return "普通比赛";
+}
+
+export interface NearestCoachingCue {
+  readonly cue: CoachCue;
+  readonly segmentIndex: number;
+}
+
+/** Stable nearest-cue selection over the frozen route; ties prefer the cue ahead. */
+export function nearestCoachingCue(plan: ReviewPlan, canonicalTick: number): NearestCoachingCue | undefined {
+  if (!Number.isFinite(canonicalTick)) return undefined;
+  const candidates = plan.cues.flatMap((cue, cueIndex) => {
+    const segmentIndex = plan.segments.findIndex((segment) => segment.id === cue.segment_id && segment.cue_ids.includes(cue.id));
+    return segmentIndex < 0 ? [] : [{ cue, cueIndex, segmentIndex }];
+  });
+  candidates.sort((left, right) => {
+    const distance = Math.abs(left.cue.decision_tick - canonicalTick) - Math.abs(right.cue.decision_tick - canonicalTick);
+    if (distance !== 0) return distance;
+    const leftAhead = left.cue.decision_tick >= canonicalTick;
+    const rightAhead = right.cue.decision_tick >= canonicalTick;
+    if (leftAhead !== rightAhead) return leftAhead ? -1 : 1;
+    return left.cue.decision_tick - right.cue.decision_tick || left.cueIndex - right.cueIndex;
+  });
+  const nearest = candidates[0];
+  return nearest ? { cue: nearest.cue, segmentIndex: nearest.segmentIndex } : undefined;
+}
+
+export function canBeginManualCueVisit(
+  readiness: "PENDING" | "READY" | "FALLBACK",
+  hasNearestCue: boolean,
+  manualVisitActive: boolean,
+): boolean {
+  return hasNearestCue && !manualVisitActive && (readiness === "READY" || readiness === "FALLBACK");
+}
+
+export function cuePresentedActionForTerminal(
+  session: Pick<CoachingSessionState, "current_cue_id" | "manual_cue_visit" | "presented_cue_ids">,
+  terminal: { readonly status: string; readonly source?: "DEFAULT" | "MANUAL"; readonly cueId?: string; readonly visitId?: string },
+): { type: "CUE_PRESENTED"; cueId: string; visitId?: string } | undefined {
+  const cueId = session.current_cue_id;
+  if (terminal.status !== "COMPLETED" || !cueId || terminal.cueId !== cueId || session.presented_cue_ids.includes(cueId)) return undefined;
+  if (terminal.source === "MANUAL") {
+    const visit = session.manual_cue_visit;
+    return visit && visit.cue_id === cueId && terminal.visitId === visit.visit_id
+      ? { type: "CUE_PRESENTED", cueId, visitId: visit.visit_id }
+      : undefined;
+  }
+  return terminal.source === "DEFAULT" && !session.manual_cue_visit
+    ? { type: "CUE_PRESENTED", cueId }
+    : undefined;
 }
 
 export interface CoachingCueProgress {

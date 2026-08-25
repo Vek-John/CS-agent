@@ -37,9 +37,24 @@ _Avoid_: loaded、connected、Agent status
 同一 Demo、玩家、冻结路线、版本、Session boundary 与 Agent checkpoint 共同匹配后，恢复原 CoachRun 的一次受校验协调。
 _Avoid_: reload、rehydrate、checkpoint restore
 
+## Route presentation terms
+
+**DefaultRouteCursor**:
+冻结 ReviewPlan 按原顺序推进到的位置；用户自由查看或点播后置 cue 不会改变它。
+_Avoid_: current playback tick、ManualCueVisit target、Agent active cue
+
+**ManualCueVisit**:
+用户在手动复查中主动点播一个 frozen cue 的临时讲解过程；它有独立身份和生命周期，但不重排默认路线。
+_Avoid_: SKIP_CUE、seek、route jump
+
+**PresentedCue**:
+已经完成真实 outcome、OutcomeCompletionGate、可呈现 Narration 和 Agent 收敛的 cue；同一 cue 在一场 CoachRun 中只形成一次该事实。
+_Avoid_: revealed cue、visited segment、consumed route position
+
 ## Avoid
 
 - 用“建议”代替 TeachingCapability；建议是教学内容，能力是可执行的教学方式。
 - 用“动作”代替 TeachingMove；动作可能没有教学选择或依据。
 - 用“结果”代替 ToolObservation；结果可能丢失工具限制和观察范围。
 - 用“恢复 checkpoint”代替 RecoveryHandshake；Agent checkpoint 只覆盖恢复所需状态的一部分。
+- 用“跳到 cue”代替 ManualCueVisit；普通 seek 只改变播放位置，不产生教学完成事实。

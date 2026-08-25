@@ -21,6 +21,7 @@ import type { Cs2dAnalysisBundle } from "@cs-coach/cs2d-analysis-adapter";
 import {
   captureSessionRecovery,
   rehydrateSessionRecovery,
+  SESSION_RECOVERY_SNAPSHOT_VERSION,
   type SessionRecoveryBoundaryKind,
   type SessionRecoverySnapshot,
 } from "@cs-coach/session";
@@ -44,6 +45,10 @@ export interface RecoveryAgentCheckpointMeta {
   readonly currentSessionPhase: string;
   readonly routeCursor: number;
   readonly sessionStatus: "ACTIVE" | "TAKEN_OVER" | "CANCELLED" | "COMPLETED";
+}
+
+export function shouldPersistToolTransitionToRecovery(source: "DEFAULT" | "MANUAL"): boolean {
+  return source === "DEFAULT";
 }
 
 export function checkpointForRecoveryBoundary(
@@ -82,7 +87,7 @@ export interface RecoveryRecordInput {
 export function assertCurrentRecoveryRecord(record: SessionRecoveryRecord): ReviewPlan {
   const plan = record.frozenReviewPlan as unknown as ReviewPlan;
   const directorVersion = plan.director_decision_set?.manifest.promptVersion ?? plan.generation_manifest.prompt_version;
-  if (record.schemaVersion !== "session-recovery-record.v1" ||
+  if (record.schemaVersion !== COACH_AGENT_RECOVERY_VERSION ||
     record.versions.graph !== COACH_AGENT_GRAPH_VERSION ||
     record.versions.agentState !== COACH_AGENT_STATE_VERSION ||
     record.versions.sessionSchema !== COACH_AGENT_SESSION_VERSION ||
@@ -189,7 +194,7 @@ export function buildSessionRecoveryRecord(input: RecoveryRecordInput): SessionR
   const snapshot = captureSessionRecovery(input.plan, input.session, input.boundaryKind, input.routeState);
   const now = input.updatedAt ?? Date.now();
   return SessionRecoveryRecordSchema.parse({
-    schemaVersion: "session-recovery-record.v1",
+    schemaVersion: COACH_AGENT_RECOVERY_VERSION,
     status: "INCOMPLETE",
     createdAt: input.createdAt ?? now,
     updatedAt: now,
@@ -206,6 +211,7 @@ export function buildSessionRecoveryRecord(input: RecoveryRecordInput): SessionR
     boundary: projectRecoveryBoundary(input.identity.recoveryId, snapshot.boundary),
     cueProgress: {
       completedCueIds: [...input.session.consumed_cue_ids],
+      presentedCueIds: [...input.session.presented_cue_ids],
       consumedCueIds: [...input.session.consumed_cue_ids],
       revealedCueIds: [...input.session.revealed_cue_ids],
     },
@@ -259,7 +265,7 @@ export function restoreRecoveryArtifacts(record: SessionRecoveryRecord): {
     consumedCueIds: [...record.cueProgress.consumedCueIds],
   };
   const snapshot: SessionRecoverySnapshot = {
-    schemaVersion: "session-recovery-session.v1",
+    schemaVersion: SESSION_RECOVERY_SNAPSHOT_VERSION,
     sessionId: record.sessionId,
     routeFingerprint: record.routeHash,
     frozenPlan: plan,
@@ -275,6 +281,7 @@ export function restoreRecoveryArtifacts(record: SessionRecoveryRecord): {
           },
     consumedCueIds: [...record.cueProgress.consumedCueIds],
     revealedCueIds: [...record.cueProgress.revealedCueIds],
+    presentedCueIds: [...record.cueProgress.presentedCueIds],
     expandedSegmentIds: [],
     narrationReadiness: { ...routeState.readiness },
   };

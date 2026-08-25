@@ -281,12 +281,29 @@ export interface SessionUserEvent {
     | "NARRATION_READY"
     | "OUTCOME_REVEALED"
     | "OUTCOME_REPLAYED"
+    | "CUE_PRESENTED"
     | "QUESTION_ASKED"
     | "SESSION_COMPLETED";
   segment_id?: string;
   cue_id?: string;
   at_tick: number;
   detail?: string;
+}
+
+/** Reducer-owned progress for the frozen route, never a Host playback target. */
+export interface DefaultRouteCursor {
+  segment_index: number;
+  cue_id?: string;
+  phase: CoachingSessionPhase;
+  current_tick: number;
+  outcome_completion?: OutcomeCompletionState;
+  buffered_from_phase?: "PLAYING" | "SKIPPING";
+}
+
+/** A temporary, frozen-cue teaching visit which never advances the default route. */
+export interface ManualCueVisit {
+  visit_id: string;
+  cue_id: string;
 }
 
 export interface CoachingSessionState {
@@ -298,6 +315,12 @@ export interface CoachingSessionState {
   current_tick: number;
   consumed_cue_ids: string[];
   revealed_cue_ids: string[];
+  /** Successfully presented cues are distinct from default-route consumption. */
+  presented_cue_ids: string[];
+  /** Always reducer-derived; retained unchanged while a manual visit is active. */
+  default_route_cursor: DefaultRouteCursor;
+  /** Present only while the session is playing a temporary manual cue visit. */
+  manual_cue_visit?: ManualCueVisit;
   expanded_segment_ids: string[];
   /** Per-cue narration readiness; absent entries are treated as already available for legacy plans. */
   narration_readiness?: Readonly<Record<string, CueReadiness>>;

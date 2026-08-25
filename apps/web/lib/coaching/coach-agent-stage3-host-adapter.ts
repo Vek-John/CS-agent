@@ -99,6 +99,10 @@ export interface Stage3PreparedStart {
   readonly narrationSummary: Stage3NarrationSummary;
 }
 
+export interface Stage3PreparedManualStart extends Omit<Stage3PreparedStart, "event"> {
+  readonly event: Extract<CoachAgentEvent, { type: "START_MANUAL_CUE_VISIT" }>;
+}
+
 interface WorldPointAnnotation {
   readonly id: string;
   readonly point: { readonly x: number; readonly y: number };
@@ -610,6 +614,20 @@ export class CoachAgentStage3HostAdapter {
     return prepared;
   }
 
+  prepareManualStart(input: Stage3HostAdapterInput, visitId: string): Stage3PreparedManualStart {
+    const prepared = this.prepareStart(input);
+    const { routeSegmentIndex, resumeFromTakeover, ...base } = prepared.event;
+    const targetSegmentIndex = input.plan.segments.findIndex((segment) => segment.id === input.cue.segment_id);
+    const event = CoachAgentEventSchema.parse({
+      ...base,
+      type: "START_MANUAL_CUE_VISIT",
+      eventId: `stage3-manual-${visitId}`.replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 160),
+      visitId: visitId.slice(0, 160),
+      targetSegmentIndex,
+    }) as Extract<CoachAgentEvent, { type: "START_MANUAL_CUE_VISIT" }>;
+    return { ...prepared, event };
+  }
+
   get capabilityCount(): number { return this.registry.size; }
   get successfulCueCount(): number {
     return this.activeIdentity ? this.ledgerFor(this.activeIdentity.runId).successfulCueIds.size : 0;
@@ -643,6 +661,17 @@ export class CoachAgentStage3HostAdapter {
       eventId: eventId.slice(0, 160),
       identity: prepared.event.identity,
       cueId: input.cue.id,
+      reason: reason.slice(0, 160),
+    }) as Extract<CoachAgentEvent, { type: "USER_TAKEOVER" }>;
+  }
+
+  /** Starts a takeover before any default cue has created a tool-capable input. */
+  createIdentityTakeoverEvent(input: Stage3IdentityInput, eventId: string, reason: string): Extract<CoachAgentEvent, { type: "USER_TAKEOVER" }> {
+    return CoachAgentEventSchema.parse({
+      version: STAGE3_EVENT_VERSION,
+      type: "USER_TAKEOVER",
+      eventId: eventId.slice(0, 160),
+      identity: buildStage3Identity(input),
       reason: reason.slice(0, 160),
     }) as Extract<CoachAgentEvent, { type: "USER_TAKEOVER" }>;
   }
@@ -698,6 +727,25 @@ export class CoachAgentStage3HostAdapter {
       mode,
       currentSessionPhase,
     }) as Extract<CoachAgentEvent, { type: "OBSERVE_SEGMENT" }>;
+  }
+
+  createObservePresentedCueEvent(
+    input: Stage3IdentityInput,
+    cueId: string,
+    segmentId: string,
+    segmentIndex: number,
+    eventId: string,
+  ): Extract<CoachAgentEvent, { type: "OBSERVE_PRESENTED_CUE" }> {
+    return CoachAgentEventSchema.parse({
+      version: STAGE3_EVENT_VERSION,
+      type: "OBSERVE_PRESENTED_CUE",
+      eventId: eventId.slice(0, 160),
+      identity: buildStage3Identity(input),
+      segmentId,
+      segmentIndex,
+      cueId,
+      currentSessionPhase: "PLAYING",
+    }) as Extract<CoachAgentEvent, { type: "OBSERVE_PRESENTED_CUE" }>;
   }
 
   createCompleteSessionEvent(input: Stage3IdentityInput, eventId: string): Extract<CoachAgentEvent, { type: "COMPLETE_SESSION" }> {

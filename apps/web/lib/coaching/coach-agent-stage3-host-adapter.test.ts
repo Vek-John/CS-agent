@@ -467,4 +467,20 @@ describe("CoachAgentStage3HostAdapter", () => {
     expect(store.lifecycleEventIds.get(events[1]?.eventId ?? "")).toBe("CONFIRMED");
     expect(store.lastSyncedCursor).toBe(3);
   });
+
+  it("builds a stable manual visit event without a default route index", () => {
+    const input = fixtureInput();
+    const adapter = new CoachAgentStage3HostAdapter();
+    const first = adapter.prepareManualStart(input, "visit-cue-4");
+    const second = adapter.prepareManualStart(input, "visit-cue-4");
+    expect(first.event).toMatchObject({
+      type: "START_MANUAL_CUE_VISIT",
+      visitId: "visit-cue-4",
+      targetSegmentIndex: input.plan.segments.findIndex((segment) => segment.id === input.cue.segment_id),
+    });
+    expect(first.event.eventId).toBe(second.event.eventId);
+    expect("routeSegmentIndex" in first.event).toBe(false);
+    expect(first.capabilities.map((capability) => capability.capabilityId)).toEqual(second.capabilities.map((capability) => capability.capabilityId));
+    expect(adapter.lifecycleCursor).toBe(-1);
+  });
 });

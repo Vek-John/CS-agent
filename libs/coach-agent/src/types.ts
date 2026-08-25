@@ -2,12 +2,12 @@ import { z } from "zod";
 
 export const LEGACY_COACH_AGENT_STATE_VERSION = "coach-agent-state.v1" as const;
 export const LEGACY_COACH_AGENT_EVENT_VERSION = "coach-agent-event.v1" as const;
-export const COACH_AGENT_STATE_VERSION = "coach-agent-state.v2" as const;
+export const COACH_AGENT_STATE_VERSION = "coach-agent-state.v3" as const;
 export const COACH_AGENT_EVENT_VERSION = "coach-agent-event.v2" as const;
 export const COACH_AGENT_RESULT_VERSION = "coach-agent-result.v1" as const;
-export const COACH_AGENT_GRAPH_VERSION = "coach-agent-graph.v2" as const;
-export const COACH_AGENT_SESSION_VERSION = "coaching-session.v1" as const;
-export const COACH_AGENT_RECOVERY_VERSION = "session-recovery-record.v1" as const;
+export const COACH_AGENT_GRAPH_VERSION = "coach-agent-graph.v3" as const;
+export const COACH_AGENT_SESSION_VERSION = "coaching-session.v2" as const;
+export const COACH_AGENT_RECOVERY_VERSION = "session-recovery-record.v2" as const;
 
 const CoachAgentEventVersionSchema = z.union([
   z.literal(LEGACY_COACH_AGENT_EVENT_VERSION),
@@ -382,10 +382,9 @@ export const SessionSummaryInputSchema = z
   .strict();
 export type SessionSummaryInput = z.infer<typeof SessionSummaryInputSchema>;
 
-export const StartCueEventSchema = z
+const CueStartPayloadSchema = z
   .object({
     version: CoachAgentEventVersionSchema,
-    type: z.literal("START_CUE"),
     eventId: Id,
     identity: CoachAgentIdentitySchema,
     segmentId: Id,
@@ -401,11 +400,13 @@ export const StartCueEventSchema = z
     capabilities: z.array(TeachingCapabilitySchema).max(8),
     presentableSummary: PresentableCueSummarySchema.optional(),
     segmentMode: SegmentModeSchema.optional(),
-    routeSegmentIndex: z.number().int().nonnegative().max(512).optional(),
-    resumeFromTakeover: z.boolean().optional(),
   })
-  .strict()
-  .superRefine((event, context) => {
+  .strict();
+
+function validateCueStartPayload(
+  event: z.infer<typeof CueStartPayloadSchema>,
+  context: z.RefinementCtx,
+): void {
     if (event.version === COACH_AGENT_EVENT_VERSION && !event.presentableSummary) {
       context.addIssue({ code: "custom", path: ["presentableSummary"], message: "v2 START_CUE requires a strict presentable summary." });
     }
@@ -424,8 +425,24 @@ export const StartCueEventSchema = z
         context.addIssue({ code: "custom", path: ["presentableSummary", "adviceRefs"], message: "presentable summary advice must be allowlisted by START_CUE." });
       }
     }
-  });
+}
+
+export const StartCueEventSchema = CueStartPayloadSchema.extend({
+  type: z.literal("START_CUE"),
+  routeSegmentIndex: z.number().int().nonnegative().max(512).optional(),
+  resumeFromTakeover: z.boolean().optional(),
+}).strict().superRefine(validateCueStartPayload);
 export type StartCueEvent = z.infer<typeof StartCueEventSchema>;
+
+export const StartManualCueVisitEventSchema = CueStartPayloadSchema.extend({
+  version: z.literal(COACH_AGENT_EVENT_VERSION),
+  type: z.literal("START_MANUAL_CUE_VISIT"),
+  visitId: Id,
+  targetSegmentIndex: z.number().int().nonnegative().max(512),
+  outcomeGateStatus: z.literal("COMPLETE"),
+  narrationReadiness: z.enum(["READY", "FALLBACK"]),
+}).strict().superRefine(validateCueStartPayload);
+export type StartManualCueVisitEvent = z.infer<typeof StartManualCueVisitEventSchema>;
 
 export const ResumeToolEventSchema = z
   .object({
@@ -461,6 +478,20 @@ export const ObserveSegmentEventSchema = z
   })
   .strict();
 export type ObserveSegmentEvent = z.infer<typeof ObserveSegmentEventSchema>;
+
+export const ObservePresentedCueEventSchema = z
+  .object({
+    version: z.literal(COACH_AGENT_EVENT_VERSION),
+    type: z.literal("OBSERVE_PRESENTED_CUE"),
+    eventId: Id,
+    identity: CoachAgentIdentitySchema,
+    segmentId: Id,
+    segmentIndex: z.number().int().nonnegative().max(512),
+    cueId: Id,
+    currentSessionPhase: SessionPhaseSchema,
+  })
+  .strict();
+export type ObservePresentedCueEvent = z.infer<typeof ObservePresentedCueEventSchema>;
 
 export const UserTakeoverEventSchema = z
   .object({
@@ -561,9 +592,11 @@ export type ReconnectReplayEvent = z.infer<typeof ReconnectReplayEventSchema>;
 
 export const CoachAgentEventSchema = z.discriminatedUnion("type", [
   StartCueEventSchema,
+  StartManualCueVisitEventSchema,
   ResumeToolEventSchema,
   ResetEventSchema,
   ObserveSegmentEventSchema,
+  ObservePresentedCueEventSchema,
   UserTakeoverEventSchema,
   CancelRunEventSchema,
   CompleteSessionEventSchema,
@@ -671,6 +704,15 @@ export const LastStableCheckpointSchema = z
   .strict();
 export type LastStableCheckpoint = z.infer<typeof LastStableCheckpointSchema>;
 
+export const PresentedCueBindingSchema = z
+  .object({
+    cueId: Id,
+    segmentId: Id,
+    segmentIndex: z.number().int().nonnegative().max(512),
+  })
+  .strict();
+export type PresentedCueBinding = z.infer<typeof PresentedCueBindingSchema>;
+
 export const CoachAgentStateSchema = z
   .object({
     schemaVersion: z.literal(COACH_AGENT_STATE_VERSION),
@@ -694,6 +736,9 @@ export const CoachAgentStateSchema = z
     ]),
     activeSegmentId: Id.nullable(),
     activeCueId: Id.nullable(),
+    activeCueSource: z.enum(["DEFAULT", "MANUAL"]).nullable(),
+    activeManualVisitId: Id.nullable(),
+    activeTargetSegmentIndex: z.number().int().nonnegative().max(512).nullable(),
     routeCursor: z.number().int().min(-1).max(512),
     currentSegmentMode: SegmentModeSchema.nullable(),
     activeFocus: Id.nullable(),
@@ -710,6 +755,7 @@ export const CoachAgentStateSchema = z
     toolHistory: z.array(ToolHistorySummarySchema).max(16),
     completedCueIds: z.array(Id).max(64),
     completedCueSummaries: z.array(PresentableCueSummarySchema).max(64),
+    presentedCueBindings: z.array(PresentedCueBindingSchema).max(64),
     sessionThemes: z.array(SessionThemeSchema).max(16),
     summaryThemes: z.array(SessionThemeSchema).max(3),
     sessionSummaryInput: SessionSummaryInputSchema.nullable(),

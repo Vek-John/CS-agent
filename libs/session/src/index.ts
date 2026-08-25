@@ -3,6 +3,7 @@ import type {
   CoachingRouteState,
   CoachingSessionState,
   CueReadiness,
+  DefaultRouteCursor,
   QuestionAnswer,
   ReviewPlan,
   ReviewSegment,
@@ -15,6 +16,10 @@ export type SessionAction =
   | { type: "TICK"; tick: number }
   | { type: "SEEK"; tick: number }
   | { type: "RETURN_TO_NEAREST_CUE"; tick: number }
+  | { type: "BEGIN_MANUAL_CUE_VISIT"; visitId: string; cueId: string }
+  | { type: "CANCEL_MANUAL_CUE_VISIT" }
+  | { type: "RETURN_TO_DEFAULT_ROUTE" }
+  | { type: "CUE_PRESENTED"; cueId: string; visitId?: string }
   | { type: "NARRATION_READY"; cueId: string; readiness: Exclude<CueReadiness, "PENDING"> }
   | { type: "SKIP_SEGMENT" }
   | { type: "EXPAND_SKIP" }
@@ -73,7 +78,7 @@ export function createCoachingSession(
   sessionId = "session-local-fixture",
   routeState?: Pick<CoachingRouteState, "routeFingerprint" | "readiness">
 ): CoachingSessionState {
-  return {
+  const state: CoachingSessionState = {
     id: sessionId,
     review_plan_id: plan.id,
     phase: "INTRO",
@@ -81,12 +86,64 @@ export function createCoachingSession(
     current_tick: plan.segments[0]?.start_tick ?? 0,
     consumed_cue_ids: [],
     revealed_cue_ids: [],
+    presented_cue_ids: [],
+    default_route_cursor: {
+      segment_index: 0,
+      phase: "INTRO",
+      current_tick: plan.segments[0]?.start_tick ?? 0,
+    },
     expanded_segment_ids: [],
     ...(routeState ? {
       narration_readiness: { ...routeState.readiness },
       route_fingerprint: routeState.routeFingerprint
     } : {}),
     user_events: []
+  };
+  return synchronizeDefaultRouteCursor(state);
+}
+
+function defaultCursorFor(state: CoachingSessionState): DefaultRouteCursor {
+  return {
+    segment_index: state.current_segment_index,
+    ...(state.current_cue_id ? { cue_id: state.current_cue_id } : {}),
+    phase: state.phase,
+    current_tick: state.current_tick,
+    ...(state.outcome_completion ? { outcome_completion: state.outcome_completion } : {}),
+    ...(state.buffered_from_phase ? { buffered_from_phase: state.buffered_from_phase } : {}),
+  };
+}
+
+function sameDefaultCursor(left: DefaultRouteCursor, right: DefaultRouteCursor): boolean {
+  return left.segment_index === right.segment_index &&
+    left.cue_id === right.cue_id &&
+    left.phase === right.phase &&
+    left.current_tick === right.current_tick &&
+    left.buffered_from_phase === right.buffered_from_phase &&
+    left.outcome_completion?.cueId === right.outcome_completion?.cueId &&
+    left.outcome_completion?.status === right.outcome_completion?.status &&
+    left.outcome_completion?.completedAtTick === right.outcome_completion?.completedAtTick;
+}
+
+/** Keeps the default cursor reducer-owned while preserving it during a manual visit. */
+export function synchronizeDefaultRouteCursor(state: CoachingSessionState): CoachingSessionState {
+  if (state.manual_cue_visit) return state;
+  const cursor = defaultCursorFor(state);
+  return state.default_route_cursor && sameDefaultCursor(state.default_route_cursor, cursor)
+    ? state
+    : { ...state, default_route_cursor: cursor };
+}
+
+function restoreDefaultRouteCursor(state: CoachingSessionState): CoachingSessionState {
+  const cursor = state.default_route_cursor;
+  return {
+    ...state,
+    phase: cursor.phase,
+    current_segment_index: cursor.segment_index,
+    ...(cursor.cue_id ? { current_cue_id: cursor.cue_id } : { current_cue_id: undefined }),
+    current_tick: cursor.current_tick,
+    ...(cursor.outcome_completion ? { outcome_completion: cursor.outcome_completion } : { outcome_completion: undefined }),
+    ...(cursor.buffered_from_phase ? { buffered_from_phase: cursor.buffered_from_phase } : { buffered_from_phase: undefined }),
+    manual_cue_visit: undefined,
   };
 }
 
@@ -230,12 +287,12 @@ function finishOutcome(
     current_tick: cue.decision_tick,
     outcome_completion: completeOutcomeGate(createOutcomeCompletionGate(cue), cue.outcome_end_tick),
     revealed_cue_ids:
-      isFirstReveal && !state.revealed_cue_ids.includes(cue.id)
+      !state.manual_cue_visit && isFirstReveal && !state.revealed_cue_ids.includes(cue.id)
         ? [...state.revealed_cue_ids, cue.id]
         : state.revealed_cue_ids,
     user_events: [
       ...state.user_events,
-      event(state, isFirstReveal ? "OUTCOME_REVEALED" : "OUTCOME_REPLAYED", {
+      event(state, !state.manual_cue_visit && isFirstReveal ? "OUTCOME_REVEALED" : "OUTCOME_REPLAYED", {
         segment_id: segment.id,
         cue_id: cue.id,
         at_tick: cue.outcome_end_tick
@@ -269,6 +326,16 @@ function nearestCueRoute(
 }
 
 export function reduceCoachingSession(
+  plan: ReviewPlan,
+  state: CoachingSessionState,
+  action: SessionAction
+): CoachingSessionState {
+  const normalized = synchronizeDefaultRouteCursor(state);
+  const reduced = reduceCoachingSessionInner(plan, normalized, action);
+  return synchronizeDefaultRouteCursor(reduced);
+}
+
+function reduceCoachingSessionInner(
   plan: ReviewPlan,
   state: CoachingSessionState,
   action: SessionAction
@@ -330,6 +397,46 @@ export function reduceCoachingSession(
       };
     }
 
+    case "BEGIN_MANUAL_CUE_VISIT": {
+      if (!action.visitId.trim() || !action.cueId.trim() || ["INTRO", "WRAP_UP", "COMPLETED"].includes(state.phase)) return state;
+      const targetCue = plan.cues.find((candidate) => candidate.id === action.cueId);
+      const targetSegmentIndex = targetCue
+        ? plan.segments.findIndex((candidate) => candidate.id === targetCue.segment_id && candidate.cue_ids.includes(targetCue.id))
+        : -1;
+      if (!targetCue || targetSegmentIndex < 0 || isPendingNarration(state, targetCue.id)) return state;
+      const targetSegment = plan.segments[targetSegmentIndex];
+      return {
+        ...state,
+        phase: "PLAYING",
+        current_segment_index: targetSegmentIndex,
+        current_cue_id: targetCue.id,
+        current_tick: targetSegment.start_tick,
+        outcome_completion: undefined,
+        buffered_from_phase: undefined,
+        manual_cue_visit: { visit_id: action.visitId, cue_id: targetCue.id },
+      };
+    }
+
+    case "CANCEL_MANUAL_CUE_VISIT":
+    case "RETURN_TO_DEFAULT_ROUTE": {
+      return state.manual_cue_visit ? restoreDefaultRouteCursor(state) : state;
+    }
+
+    case "CUE_PRESENTED": {
+      const visit = state.manual_cue_visit;
+      const belongsToVisit = visit
+        ? visit.cue_id === action.cueId && action.visitId === visit.visit_id
+        : action.visitId === undefined;
+      if (!belongsToVisit || !cue || cue.id !== action.cueId || state.phase !== "PAUSED_FOR_COACHING" ||
+        !canPresentOutcome(state.outcome_completion) || narrationReadiness(state, cue.id) === "PENDING") return state;
+      if (state.presented_cue_ids.includes(cue.id)) return state;
+      const presented = { ...state, presented_cue_ids: [...state.presented_cue_ids, cue.id] };
+      return {
+        ...presented,
+        user_events: [...state.user_events, event(presented, "CUE_PRESENTED", { segment_id: cue.segment_id, cue_id: cue.id })],
+      };
+    }
+
     case "SKIP_SEGMENT": {
       if (state.phase !== "SKIPPING" || !segment) return state;
       const skipped = {
@@ -359,6 +466,13 @@ export function reduceCoachingSession(
       }
 
       if (state.phase === "PLAYING") {
+        const hasAlreadyBeenPresented = Boolean(!state.manual_cue_visit && cue && state.presented_cue_ids.includes(cue.id));
+        if (hasAlreadyBeenPresented) {
+          if (action.tick >= segment.end_tick) {
+            return enterSegment(plan, consumeCurrentCue(state, cue), state.current_segment_index + 1);
+          }
+          return { ...state, current_tick: Math.max(segment.start_tick, action.tick) };
+        }
         const cueNeedsReveal = cue && !state.revealed_cue_ids.includes(cue.id);
         if (cueNeedsReveal && action.tick >= cue.decision_tick) {
           if (action.tick >= cue.outcome_end_tick) {
@@ -452,6 +566,7 @@ export function reduceCoachingSession(
 
     case "ADVANCE_SEGMENT": {
       if (!segment || !["PLAYING", "PAUSED_FOR_COACHING"].includes(state.phase)) return state;
+      if (state.manual_cue_visit) return state;
       if (cue && !state.revealed_cue_ids.includes(cue.id)) return state;
       const consumed = consumeCurrentCue(state, cue);
       return enterSegment(plan, consumed, state.current_segment_index + 1);

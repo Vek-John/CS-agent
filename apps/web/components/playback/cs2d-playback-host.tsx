@@ -13,10 +13,12 @@ import {
   ArrowUpDown,
   Bomb,
   CircleDollarSign,
+  CornerUpLeft,
   Crosshair,
   Heart,
   Lightbulb,
   MapPin,
+  MessageSquareText,
   PackageOpen,
   Pause,
   Play,
@@ -75,6 +77,7 @@ import {
   reconciledRecoveryLedger,
   restoreRecoveryArtifacts,
   shouldReconnectRecoveryAgent,
+  shouldPersistToolTransitionToRecovery,
   isPreAgentRouteStartRecovery,
   type RecoveryAgentCheckpointMeta,
   type RecoverySessionIdentity,
@@ -145,6 +148,9 @@ import {
   timelinePercent,
   HOST_SPEED_OPTIONS,
   hostCoachingCueSurface,
+  canBeginManualCueVisit,
+  cuePresentedActionForTerminal,
+  nearestCoachingCue,
   type CoachAgentEntryMode
 } from "../../lib/playback/cs2d-playback-host";
 
@@ -310,6 +316,9 @@ export function Cs2dPlaybackHost({
   const stage3ControllerRef = useRef<CoachAgentStage3Controller | undefined>(undefined);
   const stage3BlockedCueRef = useRef(new Set<string>());
   const stage3InputRef = useRef<Stage3HostAdapterInput | undefined>(undefined);
+  const stage3DefaultInputRef = useRef<Stage3HostAdapterInput | undefined>(undefined);
+  const stage3IdentityRef = useRef<Stage3IdentityInput | undefined>(undefined);
+  const manualVisitSequenceRef = useRef(0);
   const replayHashRef = useRef<string | undefined>(undefined);
   const liveSessionRef = useRef<CoachingSessionState | undefined>(undefined);
   const liveCueRef = useRef<ReviewPlan["cues"][number] | undefined>(undefined);
@@ -350,7 +359,7 @@ export function Cs2dPlaybackHost({
     const activePlan = planRef.current;
     const activeRoute = routeStateRef.current;
     const activeSession = liveSessionRef.current;
-    if (!current || !identity || !analysis || !activePlan || !activeRoute || !activeSession) return undefined;
+    if (!current || !identity || !analysis || !activePlan || !activeRoute || !activeSession || activeSession.manual_cue_visit) return undefined;
     const boundaryKind = activeSession.phase === "PAUSED_FOR_COACHING" && activeSession.outcome_completion?.status === "COMPLETE"
       ? "CUE_PAUSED" as const
       : activeSession.phase === "WRAP_UP"
@@ -433,6 +442,11 @@ export function Cs2dPlaybackHost({
   }, [acceptRecoveryResult, currentStableRecoveryRecord]);
 
   const persistToolTransition = useCallback(async (transition: Stage3ToolLedgerTransition) => {
+    if (!shouldPersistToolTransitionToRecovery(transition.source)) {
+      // Manual visits use the HostAdapter's current-tab ledger only. They are
+      // intentionally excluded from the persisted stable RecoveryBoundary.
+      return;
+    }
     const runtime = recoveryRuntimeRef.current;
     const record = recoveryRecordRef.current;
     if (!runtime || !record || transition.request.runId !== record.runId) return;
@@ -570,7 +584,7 @@ export function Cs2dPlaybackHost({
   const isStage3InputLive = useCallback((input: Stage3HostAdapterInput): boolean => {
     const liveSession = liveSessionRef.current;
     const liveCue = liveCueRef.current;
-    return !userTookOverRef.current &&
+    return (!userTookOverRef.current || liveSession?.manual_cue_visit?.cue_id === input.cue.id) &&
       replayHashRef.current === input.demoContentHash &&
       liveSession?.phase === "PAUSED_FOR_COACHING" &&
       liveSession.current_cue_id === input.cue.id &&
@@ -603,7 +617,18 @@ export function Cs2dPlaybackHost({
     stage2AckTimeoutRef.current.clear();
     stage2AdapterRef.current.cancel(generationRef.current);
     stage2PendingRef.current = undefined;
-    void stage3ControllerRef.current?.takeover(stage3InputRef.current, "已由你接管，当前 Agent 工具已取消；基础回放仍可继续。", generationRef.current);
+    const activePlan = planRef.current;
+    if (activePlan) {
+      setSession((current) => current?.manual_cue_visit
+        ? reduceCoachingSession(activePlan, current, { type: "CANCEL_MANUAL_CUE_VISIT" })
+        : current);
+    }
+    const reason = "已由你接管，当前 Agent 工具已取消；基础回放仍可继续。";
+    if (stage3InputRef.current) {
+      void stage3ControllerRef.current?.takeover(stage3InputRef.current, reason, generationRef.current);
+    } else if (stage3IdentityRef.current) {
+      void stage3ControllerRef.current?.takeoverIdentity(stage3IdentityRef.current, reason, generationRef.current);
+    }
     if (stage2Status === "STARTING" || stage2Status === "FOCUSING" || stage2Status === "RESUMING") {
       setStage2Status("CANCELLED");
       setStage2Error("已由你接管，地图标注已取消；基础回放仍可继续。");
@@ -619,22 +644,22 @@ export function Cs2dPlaybackHost({
     setUserTookOver(false);
   }, [invalidateGuidedSeek]);
 
-  const resumeGuidedRoute = useCallback(() => {
+  const resumeGuidedRoute = useCallback(async () => {
     const activePlan = planRef.current;
-    const currentTick = playback?.canonicalTick;
-    if (activePlan && currentTick !== undefined && Number.isFinite(currentTick)) {
+    if (activePlan) {
       setSession((current) => current
-        ? reduceCoachingSession(activePlan, current, {
-            type: "RETURN_TO_NEAREST_CUE",
-            tick: currentTick
-          })
+        ? reduceCoachingSession(activePlan, current, { type: "RETURN_TO_DEFAULT_ROUTE" })
         : current);
     }
-    clearUserTakeover();
-    if (stage3Mode && stage3InputRef.current) {
-      void stage3ControllerRef.current?.resumeAfterTakeover(stage3InputRef.current);
+    const defaultInput = stage3Mode ? stage3DefaultInputRef.current : undefined;
+    if (defaultInput) {
+      const resumed = await stage3ControllerRef.current?.resumeAfterTakeover(defaultInput);
+      if (!resumed) return;
     }
-  }, [clearUserTakeover, playback?.canonicalTick, stage3Mode]);
+    // Keep the takeover guard active while the Graph checkpoint is reconciled.
+    // The normal default-cue effect consumes the armed resume sequence once.
+    clearUserTakeover();
+  }, [clearUserTakeover, stage3Mode]);
 
   const issueUserCommand = useCallback((command: PlaybackCommand) => {
     if (session) markUserTookOver();
@@ -1341,7 +1366,7 @@ export function Cs2dPlaybackHost({
         return;
       }
       setPlayback(payload);
-      if (userTookOverRef.current) return;
+      if (userTookOverRef.current && !liveSessionRef.current?.manual_cue_visit) return;
       const activePlan = planRef.current;
       if (!activePlan) return;
       setSession((current) => {
@@ -1366,7 +1391,7 @@ export function Cs2dPlaybackHost({
   const transitionKey = session ? guidedTransitionKey(session) : "idle";
   useEffect(() => {
     const activePlan = planRef.current;
-    if (!activePlan || !session || !playback || userTookOverRef.current) return;
+    if (!activePlan || !session || !playback || (userTookOverRef.current && !session.manual_cue_visit)) return;
     const directive = guidedPlaybackDirective(activePlan, session, replay?.tickRate);
     const seek = directive.commands.find((command): command is Extract<PlaybackCommand, { type: "seekCanonicalTick" }> => command.type === "seekCanonicalTick");
     if (seek) {
@@ -1418,6 +1443,10 @@ export function Cs2dPlaybackHost({
     : undefined;
   const positionLabel = playbackPositionLabel(playback, replay);
   const freeViewPosition = reviewPositionAtTick(playback, replay, activePlan);
+  const nearestManualCue = activePlan && userTookOver ? nearestCoachingCue(activePlan, tick) : undefined;
+  const nearestManualReadiness = nearestManualCue && routeState
+    ? routeState.readiness[nearestManualCue.cue.id] ?? "PENDING"
+    : "PENDING";
   const timelineSegments = activePlan?.segments.map((planSegment) => {
     const range = timelineRange(planSegment.start_tick, planSegment.end_tick, tickMin, tickMax);
     return { planSegment, ...range };
@@ -1503,6 +1532,7 @@ export function Cs2dPlaybackHost({
         runId: recoveryIdentity.runId,
       }
     : undefined;
+  stage3IdentityRef.current = stage3IdentityContext;
   // Async Stage2 work must consult these refs immediately before postMessage or
   // remote resume; the PAUSED values captured when START began are not authority.
   replayHashRef.current = replay?.demoContentHash;
@@ -1732,8 +1762,49 @@ export function Cs2dPlaybackHost({
     };
     const lifecycleInput = stage3ControllerRef.current?.resumeInputFor(stage3Input) ?? stage3Input;
     stage3InputRef.current = lifecycleInput;
+    stage3DefaultInputRef.current = lifecycleInput;
     stage3ControllerRef.current?.start(lifecycleInput);
   }, [activePlan, bundle, candidateMaterial, cue, cueRevealed, outcomeImpact, presentableNarration, recoveryIdentity, replay, routeState, selected?.playerId, session, stage2Mode, stage3Cue, stage3Mode]);
+
+  useEffect(() => {
+    const visit = session?.manual_cue_visit;
+    if (!stage3Mode || !visit || !activePlan || !routeState || !cue || cue.id !== visit.cue_id ||
+      !presentableNarration || !recoveryIdentity || !replay?.demoContentHash || !session.outcome_completion ||
+      session.outcome_completion.status !== "COMPLETE" || session.phase !== "PAUSED_FOR_COACHING" ||
+      session.presented_cue_ids.includes(cue.id) || stage3State.visitId === visit.visit_id) return;
+    const candidate = cue.candidate_id ? bundle?.candidate_set.candidates.find((item) => item.candidateId === cue.candidate_id) : undefined;
+    const input: Stage3HostAdapterInput = {
+      plan: activePlan, routeState, cue, narration: presentableNarration, outcomeGate: session.outcome_completion,
+      currentSessionPhase: "PAUSED_FOR_COACHING",
+      analysis: { demo_id: bundle?.demo_id ?? activePlan.demo_id, selected_steam_id: bundle?.selected_steam_id ?? selected?.playerId ?? activePlan.player_id, metadata: bundle?.metadata },
+      demoContentHash: replay.demoContentHash, selectedPlayerId: selected?.playerId ?? activePlan.player_id,
+      sessionId: recoveryIdentity.sessionId, runId: recoveryIdentity.runId, generation: generationRef.current, tickRate: replay.tickRate,
+      evidence: { candidate, material: candidateMaterial, outcomeImpact, winProbabilityTimeline: bundle?.win_probability_timeline },
+    };
+    stage3InputRef.current = input;
+    stage3ControllerRef.current?.startManualCueVisit(input, visit.visit_id);
+  }, [activePlan, bundle, candidateMaterial, cue, outcomeImpact, presentableNarration, recoveryIdentity, replay, routeState, selected?.playerId, session, stage3Mode, stage3State.visitId]);
+
+  useEffect(() => {
+    if (!activePlan || !session) return;
+    const action = cuePresentedActionForTerminal(session, stage3State);
+    if (!action) return;
+    setSession((current) => current ? reduceCoachingSession(activePlan, current, action) : current);
+  }, [activePlan, cue, session, stage3State]);
+
+  useEffect(() => {
+    if (!stage3Mode || !stage3IdentityContext || !session || session.manual_cue_visit || !cue || !segment ||
+      !session.presented_cue_ids.includes(cue.id) || session.phase !== "PLAYING") return;
+    stage3ControllerRef.current?.observePresentedCue(stage3IdentityContext, cue.id, segment.id, session.current_segment_index);
+  }, [cue, segment, session, stage3IdentityContext, stage3Mode]);
+
+  const beginNearestManualVisit = useCallback(() => {
+    const activePlan = planRef.current;
+    const currentSession = liveSessionRef.current;
+    if (!activePlan || !currentSession || !nearestManualCue || !canBeginManualCueVisit(nearestManualReadiness, true, Boolean(currentSession.manual_cue_visit))) return;
+    const visitId = `manual-${currentSession.id}-${nearestManualCue.cue.id}-${++manualVisitSequenceRef.current}`.replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 160);
+    setSession((current) => current ? reduceCoachingSession(activePlan, current, { type: "BEGIN_MANUAL_CUE_VISIT", visitId, cueId: nearestManualCue.cue.id }) : current);
+  }, [nearestManualCue, nearestManualReadiness]);
 
   useEffect(() => {
     if (!stage3Mode || !stage3IdentityContext || !activePlan || !session || !segment || userTookOverRef.current) return;
@@ -1854,8 +1925,14 @@ export function Cs2dPlaybackHost({
 
           {session && userTookOver ? (
             <div className="cs2d-coach-takeover" role="status">
-              <span>手动复查中</span>
-              <button type="button" onClick={resumeGuidedRoute}>返回教练路线</button>
+              <div>
+                <span>手动复查中</span>
+                {nearestManualCue ? <small>{nearestManualReadiness === "PENDING" ? "这个教练点还在准备" : nearestManualCue.cue.title}</small> : null}
+              </div>
+              <div className="cs2d-coach-takeover-actions">
+                <button type="button" onClick={resumeGuidedRoute}><CornerUpLeft size={14} aria-hidden="true" />回到默认顺序</button>
+                <button type="button" disabled={!canBeginManualCueVisit(nearestManualReadiness, Boolean(nearestManualCue), Boolean(session.manual_cue_visit))} onClick={beginNearestManualVisit}><MessageSquareText size={14} aria-hidden="true" />讲解最近教练点</button>
+              </div>
             </div>
           ) : null}
 
@@ -1905,7 +1982,7 @@ export function Cs2dPlaybackHost({
             </section>
           ) : null}
 
-          {session && !userTookOver && cue && cueRevealed && coachingView && presentableNarration && threeStageCoaching && session.phase === "PAUSED_FOR_COACHING" ? (
+          {session && (!userTookOver || Boolean(session.manual_cue_visit)) && cue && (cueRevealed || session.manual_cue_visit?.cue_id === cue.id) && coachingView && presentableNarration && threeStageCoaching && session.phase === "PAUSED_FOR_COACHING" ? (
             <section className="cs2d-coach-cue" aria-live="polite">
               <div className="cs2d-coach-cue-heading">
                 <small>第 {segment?.round_number ?? ""} 回合 · 处理看完了</small>
@@ -1987,10 +2064,10 @@ export function Cs2dPlaybackHost({
                   ) : null}
                 </section>
               ) : null}
-              <div className="cs2d-coach-result-actions">
+              {!session.manual_cue_visit ? <div className="cs2d-coach-result-actions">
                 <button type="button" disabled={agentToolBusy} onClick={() => transition({ type: "REPLAY_OUTCOME" })}>再看一遍</button>
                 <button className="cs2d-coach-primary" type="button" disabled={agentToolBusy} onClick={() => transition({ type: "ADVANCE_SEGMENT" })}>继续下一段</button>
-              </div>
+              </div> : null}
             </section>
           ) : null}
 

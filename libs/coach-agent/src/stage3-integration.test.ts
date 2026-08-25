@@ -299,7 +299,7 @@ describe("Stage 3 Durable Object checkpoint integration", () => {
     expect(retained).toHaveLength(20);
   });
 
-  it("rejects v1 state for resume, starts a fresh v2 run, and exposes the completion compaction seam", async () => {
+  it("rejects v2 state for resume, starts a fresh v3 run, and exposes the completion compaction seam", async () => {
     const storage = new FakeStorage();
     const saver = new DurableObjectCheckpointSaver({ storage, retention: 20 });
     const legacyConfig = { configurable: { thread_id: threadIdForIdentity(identity), checkpoint_ns: "" } };
@@ -307,7 +307,7 @@ describe("Stage 3 Durable Object checkpoint integration", () => {
       v: 4,
       id: "legacy-0001",
       ts: "2026-08-24T00:00:00Z",
-      channel_values: { agent: { schemaVersion: "coach-agent-state.v1", runStatus: "WAITING_TOOL" } },
+      channel_values: { agent: { schemaVersion: "coach-agent-state.v2", graphVersion: "coach-agent-graph.v2", runStatus: "WAITING_TOOL" } },
       channel_versions: { agent: "legacy" },
       versions_seen: {},
     } as never, { source: "input", step: 1, parents: {} }, {});
@@ -328,14 +328,14 @@ describe("Stage 3 Durable Object checkpoint integration", () => {
     expect(stale.state.fallbackReasons).toContain("CHECKPOINT_VERSION_MISMATCH");
 
     const fresh = await runtime.dispatch(cueEvent(0, { cueId: "cue-fresh", eventId: "fresh-start" }));
-    expect(fresh.state.schemaVersion).toBe("coach-agent-state.v2");
+    expect(fresh.state.schemaVersion).toBe("coach-agent-state.v3");
     expect(fresh.state.runStatus).toBe("WAITING_TOOL");
     const compacted = compactCompletedCoachRunState(await runtime.dispatch(resumeEvent(fresh.effects[0]!, { identity, eventId: "fresh-resume" })).then((result) => ({
       ...result.state,
       sessionStatus: "COMPLETED" as const,
       runStatus: "COMPLETED" as const,
     })));
-    expect(compacted.schemaVersion).toBe("coach-agent-state.v2");
+    expect(compacted.schemaVersion).toBe("coach-agent-state.v3");
     expect(compacted.trace.length).toBeLessThanOrEqual(8);
   });
 });

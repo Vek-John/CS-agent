@@ -12,7 +12,7 @@ const HASH = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 function record(id: string, updatedAt: number): SessionRecoveryRecord {
   return SessionRecoveryRecordSchema.parse({
-    schemaVersion: "session-recovery-record.v1",
+    schemaVersion: "session-recovery-record.v2",
     status: "INCOMPLETE",
     createdAt: updatedAt,
     updatedAt,
@@ -142,7 +142,7 @@ describe("SessionRecoveryRuntime browser store seam", () => {
       eventId: "stable-posted",
       recoveryId: "record-4",
       boundary: record("record-4", now).boundary,
-      cueProgress: { completedCueIds: [], consumedCueIds: [], revealedCueIds: ["cue-1"] },
+      cueProgress: { completedCueIds: [], presentedCueIds: [], consumedCueIds: [], revealedCueIds: ["cue-1"] },
       routeReadiness: { "cue-1": "READY" },
       narrationArtifacts: [],
       toolLedgerEntry: {

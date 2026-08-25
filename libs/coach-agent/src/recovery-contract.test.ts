@@ -31,7 +31,7 @@ function plan(overrides: Record<string, unknown> = {}) {
 
 function record(overrides: Record<string, unknown> = {}) {
   return {
-    schemaVersion: "session-recovery-record.v1",
+    schemaVersion: "session-recovery-record.v2",
     status: "INCOMPLETE" as const,
     createdAt: 1,
     updatedAt: 2,
@@ -50,13 +50,13 @@ function record(overrides: Record<string, unknown> = {}) {
       planCompiler: "planner.v1",
       reviewPlanSchema: "review-plan.v1",
       sessionSchema: "session.v1",
-      graph: "coach-agent-graph.v2",
-      agentState: "coach-agent-state.v2",
+      graph: "coach-agent-graph.v3",
+      agentState: "coach-agent-state.v3",
     },
     frozenReviewPlan: plan(),
     routeReadiness: { "cue-1": "READY" },
     boundary: { kind: "CUE_PAUSED" as const, boundaryId: "boundary-1", segmentId: "segment-1", segmentIndex: 0, cueId: "cue-1", sessionPhase: "PAUSED_FOR_COACHING" as const, outcomeGateStatus: "COMPLETE" as const },
-    cueProgress: { completedCueIds: [], consumedCueIds: [], revealedCueIds: [] },
+    cueProgress: { completedCueIds: [], presentedCueIds: [], consumedCueIds: [], revealedCueIds: [] },
     agentCheckpointId: "checkpoint-1",
     toolLedger: [],
     narrationArtifacts: [{
@@ -81,11 +81,12 @@ function record(overrides: Record<string, unknown> = {}) {
 }
 
 describe("schema-only Session Recovery contracts", () => {
-  it("accepts the bounded v1 record and strict reconnect lifecycle effects", () => {
+  it("accepts the bounded v2 record and strict reconnect lifecycle effects", () => {
     const initial = SessionRecoveryRecordSchema.parse(record());
     expect(initial).toMatchObject({
-      schemaVersion: "session-recovery-record.v1",
+      schemaVersion: "session-recovery-record.v2",
       agentCheckpointId: "checkpoint-1",
+      cueProgress: { presentedCueIds: [] },
     });
     expect(SessionRecoveryEventSchema.parse({ type: "BOOT", eventId: "event-boot" })).toBeTruthy();
     expect(SessionRecoveryEventSchema.parse({ type: "SESSION_STARTED", eventId: "event-session-started", record: initial })).toBeTruthy();

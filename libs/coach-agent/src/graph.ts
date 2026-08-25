@@ -23,9 +23,11 @@ import {
   type CoachAgentState,
   type FallbackReason,
   type ObserveSegmentEvent,
+  type ObservePresentedCueEvent,
   type PolicyInput,
   type PresentableCueSummary,
   type StartCueEvent,
+  type StartManualCueVisitEvent,
   type TeachingCapability,
   type TeachingCapabilityId,
   type TraceEntry,
@@ -41,6 +43,7 @@ export const CoachAgentGraphState = Annotation.Root({
 });
 
 export type CoachAgentGraphStateValue = typeof CoachAgentGraphState.State;
+type CueStartEvent = StartCueEvent | StartManualCueVisitEvent;
 
 function identityFromState(state: CoachAgentState): CoachAgentIdentity {
   return {
@@ -85,7 +88,7 @@ function appendTrace(
 ): CoachAgentState {
   const traceEntry: TraceEntry = {
     runId: state.runId,
-    graphVersion: "coach-agent-graph.v2",
+    graphVersion: "coach-agent-graph.v3",
     node,
     cueId: state.activeCueId,
     inputHash: stableInputHash(options.input ?? {
@@ -119,7 +122,7 @@ function appendTrace(
   };
 }
 
-function presentableCueSummaryFor(event: StartCueEvent): PresentableCueSummary | undefined {
+function presentableCueSummaryFor(event: CueStartEvent): PresentableCueSummary | undefined {
   if (event.outcomeGateStatus !== "COMPLETE" || !["READY", "FALLBACK"].includes(event.narrationReadiness)) {
     return undefined;
   }
@@ -134,12 +137,19 @@ function completeCueWithSummary(
   const completedCueIds = state.activeCueId
     ? [...new Set([...state.completedCueIds, state.activeCueId])].slice(-64)
     : state.completedCueIds;
+  const activeBinding = summary && state.activeCueId && state.activeSegmentId && state.activeTargetSegmentIndex !== null
+    ? { cueId: state.activeCueId, segmentId: state.activeSegmentId, segmentIndex: state.activeTargetSegmentIndex }
+    : null;
+  const presentedCueBindings = activeBinding && !state.presentedCueBindings.some((item) => item.cueId === activeBinding.cueId)
+    ? [...state.presentedCueBindings, activeBinding].slice(-64)
+    : state.presentedCueBindings;
   if (!summary || state.completedCueSummaries.some((item) => item.cueId === summary.cueId)) {
     return {
       ...state,
       runStatus: "CUE_COMPLETED",
       sessionStatus: "ACTIVE",
       completedCueIds,
+      presentedCueBindings,
     };
   }
   const completedCueSummaries = [...state.completedCueSummaries, summary].slice(-64);
@@ -149,12 +159,23 @@ function completeCueWithSummary(
     sessionStatus: "ACTIVE",
     completedCueIds,
     completedCueSummaries,
+    presentedCueBindings,
     sessionThemes: aggregateSessionThemes(completedCueSummaries),
   };
 }
 
-function completeCueState(state: CoachAgentState, event: StartCueEvent): CoachAgentState {
-  return completeCueWithSummary(state, presentableCueSummaryFor(event));
+function completeCueState(state: CoachAgentState, event: CueStartEvent): CoachAgentState {
+  const completed = completeCueWithSummary(state, presentableCueSummaryFor(event));
+  if (event.type !== "START_MANUAL_CUE_VISIT") return completed;
+  return {
+    ...completed,
+    sessionStatus: "TAKEN_OVER",
+    runStatus: "USER_TAKEOVER",
+    activeCueSource: null,
+    activeManualVisitId: null,
+    selectedTeachingMove: null,
+    pendingToolCall: null,
+  };
 }
 
 function withWaitingTool(
@@ -218,7 +239,7 @@ function finishWithoutTool(
   policyCalls: number,
   alternativeAttempts: number,
   evidenceRefs: string[] = [],
-  event?: StartCueEvent,
+  event?: CueStartEvent,
   markCompleted = true,
   input?: unknown,
   traceMeta?: PolicyTraceMeta | null,
@@ -237,6 +258,15 @@ function finishWithoutTool(
     processedEventIds: [...state.processedEventIds, eventId].slice(-64),
   };
   if (markCompleted && event) nextState = completeCueState(nextState, event);
+  else if (event?.type === "START_MANUAL_CUE_VISIT") {
+    nextState = {
+      ...nextState,
+      sessionStatus: "TAKEN_OVER",
+      runStatus: "USER_TAKEOVER",
+      activeCueSource: null,
+      activeManualVisitId: null,
+    };
+  }
   return appendTrace(nextState, "POLICY", eventId, {
     input,
     evidenceRefs,
@@ -273,7 +303,7 @@ function matchingAllowedEvidenceRefs(outputRefs: string[], input: PolicyInput): 
 }
 
 function policyInputFor(
-  event: StartCueEvent,
+  event: CueStartEvent,
   state: CoachAgentState,
   capabilities = event.capabilities,
 ): PolicyInput {
@@ -298,6 +328,33 @@ function policyInputFor(
     budget: state.policyBudget,
     maxMoves: 1,
   });
+}
+
+function observePresentedCueState(
+  state: CoachAgentState,
+  event: ObservePresentedCueEvent,
+): CoachAgentState {
+  return appendTrace(
+    {
+      ...state,
+      sessionStatus: "ACTIVE",
+      runStatus: "CUE_COMPLETED",
+      currentSessionPhase: event.currentSessionPhase,
+      activeSegmentId: event.segmentId,
+      activeCueId: event.cueId,
+      activeCueSource: "DEFAULT",
+      activeManualVisitId: null,
+      activeTargetSegmentIndex: event.segmentIndex,
+      routeCursor: event.segmentIndex,
+      observedSegmentIds: [...new Set([...state.observedSegmentIds, event.segmentId])].slice(-128),
+      selectedTeachingMove: null,
+      pendingToolCall: null,
+      processedEventIds: [...state.processedEventIds, event.eventId].slice(-64),
+    },
+    "ROUTE",
+    event.eventId,
+    { input: event, finalStatus: "CUE_COMPLETED" },
+  );
 }
 
 function policyInputForState(
@@ -448,6 +505,9 @@ async function policyNode(
   if (event.type === "OBSERVE_SEGMENT") {
     return { agent: observeSegmentState(state.agent, event) };
   }
+  if (event.type === "OBSERVE_PRESENTED_CUE") {
+    return { agent: observePresentedCueState(state.agent, event) };
+  }
   if (event.type === "COMPLETE_SESSION") {
     return { agent: completeSessionState(state.agent, event.eventId, event) };
   }
@@ -458,6 +518,8 @@ async function policyNode(
           ...state.agent,
           sessionStatus: "TAKEN_OVER",
           runStatus: "USER_TAKEOVER",
+          activeCueSource: null,
+          activeManualVisitId: null,
           selectedTeachingMove: null,
           pendingToolCall: null,
           lastToolResult: null,
@@ -476,6 +538,8 @@ async function policyNode(
           ...state.agent,
           sessionStatus: "CANCELLED",
           runStatus: "CANCELLED",
+          activeCueSource: null,
+          activeManualVisitId: null,
           selectedTeachingMove: null,
           pendingToolCall: null,
           processedEventIds: [...state.agent.processedEventIds, event.eventId].slice(-64),
@@ -570,12 +634,12 @@ async function policyNode(
       ),
     };
   }
-  if (event.type !== "START_CUE") {
-    throw new Error("the coach graph starts with START_CUE, OBSERVE_SEGMENT, or COMPLETE_SESSION");
+  if (event.type !== "START_CUE" && event.type !== "START_MANUAL_CUE_VISIT") {
+    throw new Error("the coach graph requires a cue start or lifecycle event");
   }
 
   if (
-    event.resumeFromTakeover &&
+    event.type === "START_CUE" && event.resumeFromTakeover &&
     state.agent.runStatus === "USER_TAKEOVER" &&
     state.agent.completedCueIds.includes(event.cueId)
   ) {
@@ -611,7 +675,7 @@ async function policyNode(
   const baseState: CoachAgentState = {
     ...state.agent,
     runStatus: "RUNNING",
-    sessionStatus: "ACTIVE",
+    sessionStatus: event.type === "START_MANUAL_CUE_VISIT" ? "TAKEN_OVER" : "ACTIVE",
     runId: event.identity.runId,
     sessionId: event.identity.sessionId,
     demoId: event.identity.demoId,
@@ -621,12 +685,19 @@ async function policyNode(
     routeHash: event.identity.routeHash,
     activeSegmentId: event.segmentId,
     activeCueId: event.cueId,
+    activeCueSource: event.type === "START_MANUAL_CUE_VISIT" ? "MANUAL" : "DEFAULT",
+    activeManualVisitId: event.type === "START_MANUAL_CUE_VISIT" ? event.visitId : null,
+    activeTargetSegmentIndex: event.type === "START_MANUAL_CUE_VISIT"
+      ? event.targetSegmentIndex
+      : event.routeSegmentIndex ?? null,
     currentSegmentMode: event.segmentMode ?? state.agent.currentSegmentMode,
     activeFocus: event.focus,
     activeNarrationPolicySummary: normalizeNarrationSummary(event.narrationSummary),
     activeAllowedEvidenceSummary: event.allowedEvidenceSummary,
     activePresentableCueSummary: event.presentableSummary ?? null,
-    routeCursor: event.routeSegmentIndex ?? state.agent.routeCursor,
+    routeCursor: event.type === "START_CUE"
+      ? event.routeSegmentIndex ?? state.agent.routeCursor
+      : state.agent.routeCursor,
     currentSessionPhase: event.currentSessionPhase,
     outcomeGateStatus: event.outcomeGateStatus,
     narrationReadiness: event.narrationReadiness,
@@ -755,7 +826,9 @@ function playbackNode(
   state: CoachAgentGraphStateValue,
 ): Partial<CoachAgentGraphStateValue> {
   const request = state.agent.pendingToolCall;
-  const event = state.event.type === "START_CUE" ? state.event : undefined;
+  const event = state.event.type === "START_CUE" || state.event.type === "START_MANUAL_CUE_VISIT"
+    ? state.event
+    : undefined;
   if (!request) {
     const next = event
       ? completeCueState({

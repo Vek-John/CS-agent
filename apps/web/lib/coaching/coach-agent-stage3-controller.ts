@@ -34,6 +34,8 @@ export interface Stage3ControllerState {
   readonly tool?: AgentToolRequest["tool"];
   readonly presentation?: TeachingToolCommandArgs;
   readonly error?: string;
+  readonly source?: "DEFAULT" | "MANUAL";
+  readonly visitId?: string;
 }
 
 export interface Stage3ControllerScheduler {
@@ -68,6 +70,8 @@ export interface Stage3ToolLedgerTransition {
   readonly result: AgentToolResult | null;
   readonly agentCheckpointId: string | null;
   readonly agentState: Pick<CoachAgentResult["state"], "activeCueId" | "currentSessionPhase" | "routeCursor" | "sessionStatus">;
+  readonly source: "DEFAULT" | "MANUAL";
+  readonly manualVisitId?: string;
 }
 
 interface PendingTool {
@@ -78,6 +82,7 @@ interface PendingTool {
   readonly commandGeneration: number;
   readonly agentCheckpointId: string | null;
   readonly agentState: Stage3ToolLedgerTransition["agentState"];
+  readonly manualVisitId?: string;
 }
 
 function shortError(error: unknown, fallback: string): string {
@@ -287,6 +292,8 @@ export class CoachAgentStage3Controller {
       result,
       agentCheckpointId: pending.agentCheckpointId,
       agentState: pending.agentState,
+      source: pending.manualVisitId ? "MANUAL" : "DEFAULT",
+      ...(pending.manualVisitId ? { manualVisitId: pending.manualVisitId } : {}),
     });
     this.pending = undefined;
     this.setState({ status: "RESUMING", cueId: pending.input.cue.id, tool: pending.request.tool, presentation: this.state.presentation });
@@ -299,8 +306,10 @@ export class CoachAgentStage3Controller {
         result,
         agentCheckpointId: next.checkpoint.checkpointId,
         agentState: next.state,
+        source: pending.manualVisitId ? "MANUAL" : "DEFAULT",
+        ...(pending.manualVisitId ? { manualVisitId: pending.manualVisitId } : {}),
       });
-      await this.handleAgentResult(pending.input, pending.token, next);
+      await this.handleAgentResult(pending.input, pending.token, next, pending.manualVisitId);
     } catch (error) {
       if (tokenIsCurrent(this.token, pending.token)) {
         this.setState({ status: "FAILED", cueId: pending.input.cue.id, tool: pending.request.tool, error: shortError(error, "工具结果未能回到教练状态；基础回放仍可继续。") });
@@ -308,12 +317,18 @@ export class CoachAgentStage3Controller {
     }
   }
 
-  private async handleAgentResult(input: Stage3HostAdapterInput, token: number, result: CoachAgentResult): Promise<void> {
+  private async handleAgentResult(input: Stage3HostAdapterInput, token: number, result: CoachAgentResult, manualVisitId?: string): Promise<void> {
     if (!this.isCurrent(input, token)) return;
-    if (isTerminal(result)) {
+    const manualTerminal = Boolean(
+      manualVisitId &&
+      result.status === "USER_TAKEOVER" &&
+      result.state.activeManualVisitId === null &&
+      result.state.completedCueIds.includes(input.cue.id),
+    );
+    if (isTerminal(result) || manualTerminal) {
       const cueSegmentIndex = input.plan?.segments?.findIndex((segment) => segment.id === input.cue.segment_id) ?? -1;
-      if (cueSegmentIndex >= 0) this.adapter.markLifecycleSynced(cueSegmentIndex);
-      this.setState({ status: "COMPLETED", cueId: input.cue.id, presentation: this.state.presentation });
+      if (!manualVisitId && cueSegmentIndex >= 0) this.adapter.markLifecycleSynced(cueSegmentIndex);
+      this.setState({ status: "COMPLETED", cueId: input.cue.id, presentation: this.state.presentation, source: manualVisitId ? "MANUAL" : "DEFAULT", ...(manualVisitId ? { visitId: manualVisitId } : {}) });
       return;
     }
     if (result.status !== "WAITING_TOOL" || !result.effects[0]) {
@@ -346,6 +361,7 @@ export class CoachAgentStage3Controller {
         commandGeneration: this.adapter.commandGenerationFor(request) ?? 0,
         agentCheckpointId: result.checkpoint.checkpointId,
         agentState: result.state,
+        ...(manualVisitId ? { manualVisitId } : {}),
       };
       const finalResult = this.adapter.resultForCall(request);
       if (finalResult && callStatus === "RESULTED") {
@@ -372,6 +388,7 @@ export class CoachAgentStage3Controller {
       commandGeneration: command.generation,
       agentCheckpointId: result.checkpoint.checkpointId,
       agentState: result.state,
+      ...(manualVisitId ? { manualVisitId } : {}),
     };
     this.pending = pending;
     this.armTimeout(pending);
@@ -382,6 +399,8 @@ export class CoachAgentStage3Controller {
       result: null,
       agentCheckpointId: result.checkpoint.checkpointId,
       agentState: result.state,
+      source: manualVisitId ? "MANUAL" : "DEFAULT",
+      ...(manualVisitId ? { manualVisitId } : {}),
     });
     if (!postedPersisted) {
       this.clearTimeout();
@@ -439,6 +458,65 @@ export class CoachAgentStage3Controller {
       if (!tokenIsCurrent(this.token, token)) return;
       this.setState({ status: "FAILED", cueId: input.cue.id, error: shortError(error, "教练工具不可用；基础回放仍可继续。") });
     });
+  }
+
+  startManualCueVisit(input: Stage3HostAdapterInput, visitId: string): void {
+    if (this.busy || !visitId.trim() || !this.options.isLive(input)) return;
+    this.activeInput = input;
+    const token = ++this.token;
+    this.pending = undefined;
+    this.clearTimeout();
+    this.setState({ status: "STARTING", cueId: input.cue.id, source: "MANUAL", visitId });
+    let prepared: ReturnType<CoachAgentStage3HostAdapter["prepareManualStart"]>;
+    try {
+      prepared = this.adapter.prepareManualStart(input, visitId);
+    } catch (error) {
+      this.setState({ status: "FAILED", cueId: input.cue.id, source: "MANUAL", visitId, error: shortError(error, "当前教练点校验失败；基础回放仍可继续。") });
+      return;
+    }
+    if (!this.isCurrent(input, token)) return;
+    void this.dispatchSerial(prepared.event).then((result) => {
+      if (!this.isCurrent(input, token)) return;
+      return this.handleAgentResult(input, token, result, visitId);
+    }).catch((error) => {
+      if (!tokenIsCurrent(this.token, token)) return;
+      this.setState({ status: "FAILED", cueId: input.cue.id, source: "MANUAL", visitId, error: shortError(error, "教练点未能完成；基础回放仍可继续。") });
+    });
+  }
+
+  observePresentedCue(input: Stage3IdentityInput, cueId: string, segmentId: string, segmentIndex: number): void {
+    const eventId = `stage3-presented-${input.runId}-${segmentIndex}-${cueId}`.replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 160);
+    try {
+      this.adapter.reserveLifecycleCursor(segmentIndex);
+      const event = this.adapter.createObservePresentedCueEvent(input, cueId, segmentId, segmentIndex, eventId);
+      const claim = this.adapter.beginLifecycleEvent(eventId);
+      if (claim === "CONFIRMED") {
+        this.adapter.markLifecycleSynced(segmentIndex);
+        return;
+      }
+      const existing = this.lifecyclePromises.get(eventId);
+      if (existing) return;
+      const dispatch = this.dispatchSerial(event).then((result) => {
+        if (!["DORMANT", "USER_TAKEOVER", "WAITING_TOOL"].includes(result.status)) {
+          this.adapter.confirmLifecycleEvent(eventId);
+          this.adapter.markLifecycleSynced(segmentIndex);
+          return result;
+        }
+        this.adapter.releaseLifecycleEvent(eventId);
+        this.adapter.resetLifecycleQueue();
+        return undefined;
+      }).catch(() => {
+        this.adapter.releaseLifecycleEvent(eventId);
+        this.adapter.resetLifecycleQueue();
+        this.adapter.markLifecycleDegraded();
+        return undefined;
+      }).finally(() => this.lifecyclePromises.delete(eventId));
+      this.lifecyclePromises.set(eventId, dispatch);
+    } catch {
+      this.adapter.releaseLifecycleEvent(eventId);
+      this.adapter.resetLifecycleQueue();
+      this.adapter.markLifecycleDegraded();
+    }
   }
 
   acceptAck(ack: TeachingToolAckEvent): void {
@@ -500,6 +578,8 @@ export class CoachAgentStage3Controller {
               result: cancelled,
               agentCheckpointId: result.checkpoint.checkpointId,
               agentState: result.state,
+              source: takeoverPending.manualVisitId ? "MANUAL" : "DEFAULT",
+              ...(takeoverPending.manualVisitId ? { manualVisitId: takeoverPending.manualVisitId } : {}),
             });
           }
           return true;
@@ -515,20 +595,38 @@ export class CoachAgentStage3Controller {
     }
   }
 
+  /** Establishes USER_TAKEOVER before the first default cue has an active input. */
+  takeoverIdentity(input: Stage3IdentityInput, reason = "用户接管了自由回放。", generation = 0): Promise<boolean> {
+    this.token += 1;
+    this.clearTimeout();
+    this.pending = undefined;
+    this.pendingResumeSequence = undefined;
+    this.adapter.cancel(generation);
+    try {
+      const event = this.adapter.createIdentityTakeoverEvent(
+        input,
+        `stage3-takeover-identity-${input.runId}-${++this.resumeSequence}`.replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 160),
+        reason,
+      );
+      this.takeoverPromise = this.dispatchSerial(event)
+        .then((result) => result.status === "USER_TAKEOVER")
+        .catch(() => false);
+      return this.takeoverPromise;
+    } catch {
+      return Promise.resolve(false);
+    }
+  }
+
   /**
    * Waits for USER_TAKEOVER to be checkpointed, then prepares a new lifecycle
-   * START_CUE. If React has not landed in the paused cue yet, the input is held
-   * for `resumeInputFor` instead of racing the session reducer.
+   * START_CUE. The Host owns the final React landing and must consume this
+   * sequence through `resumeInputFor`; this method never starts a cue itself.
    */
   async resumeAfterTakeover(input: Stage3HostAdapterInput): Promise<boolean> {
     const takeoverOk = this.takeoverPromise ? await this.takeoverPromise : true;
     if (!takeoverOk) return false;
     this.startedCueIds.delete(input.cue.id);
     this.pendingResumeSequence = ++this.resumeSequence;
-    if (this.options.isLive(input)) {
-      const restored = this.resumeInputFor(input);
-      this.start(restored);
-    }
     return true;
   }
 

@@ -131,4 +131,21 @@ describe("cs2d guided session synchronization", () => {
     state = reduceCoachingSession(plan, state, { type: "TICK", tick: state.current_tick + 32 });
     expect(guidedTransitionKey(state)).toBe(before);
   });
+
+  it("uses the manual visit identity while preserving the default cursor for a full outcome pass", () => {
+    const target = plan.cues[1]!;
+    let state = reduceCoachingSession(plan, createCoachingSession(plan), { type: "START" });
+    state = reduceCoachingSession(plan, state, { type: "BEGIN_MANUAL_CUE_VISIT", cueId: target.id, visitId: "guided-manual" });
+
+    expect(guidedTransitionKey(state)).toContain("guided-manual");
+    expect(guidedPlaybackDirective(plan, state, 64).commands).toContainEqual({
+      type: "seekCanonicalTick",
+      canonicalTick: Math.max(plan.segments.find((segment) => segment.id === target.segment_id)!.start_tick, target.decision_tick - 64),
+    });
+    state = reduceCoachingSession(plan, state, { type: "TICK", tick: target.outcome_end_tick });
+    expect(guidedPlaybackDirective(plan, state).commands).toContainEqual({
+      type: "seekCanonicalTick",
+      canonicalTick: target.decision_tick,
+    });
+  });
 });

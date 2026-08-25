@@ -855,6 +855,28 @@ GitHub Actions run `32836672732` 成功部署 Worker `cs2-ai-demo-coach`，Cloud
 
 线上没有上传真实 Demo；稳定 Demo identity 修复后的“重新选择同一文件并回到 3/14 cue”仍等待一次可操作系统文件选择器的人工 smoke。
 
+### 4.38 2026-08-25：乱序 cue 点播不能借用默认路线追平逻辑
+
+**触发**
+
+用户从默认复盘中跳到后置 cue 时，Controller 的 `queueObserversUntil` 会尝试沿默认路线补齐中间 segment；遇到尚未观看的 teaching segment 后把正常点播误判为 lifecycle degraded，并进入 `RECOVERY_REQUIRED`。
+
+**决定**
+
+把 `DefaultRouteCursor`、`ManualCueVisit` 和 `PresentedCue` 分开建模。Manual visit 通过独立 Session/Agent 事件引用 frozen cue，不修改默认 cursor，也不补齐前置 teaching segment；只有完整 outcome、Gate、Narration 和 Agent 收敛后才记录 Presented。默认路线以后经过 Presented cue 时保留原时间线，但以确定性事件推进，零 Narrator、Policy 和教学工具重复调用。返回默认路线时先协调 takeover checkpoint，再解除 Host guard，避免无 `resumeFromTakeover` 的 `START_CUE` 抢跑。
+
+**落点**
+
+`libs/session` 拥有 manual visit、默认 cursor、Gate 与 Presented 恢复；`libs/coach-agent` 拥有显式 manual/observe-presented 事件和有界状态；Stage 3 Controller/Host Adapter 负责旧 ACK、effect epoch、当前标签页工具 ledger 与 identity-only takeover；Web Host 只从 frozen plan 选择最近 cue。架构决策记录在 ADR-0005，Recovery Record 与 Session snapshot 分别升级到 v2，Agent state/graph 升级到 v3。
+
+**验证**
+
+固定任务 04 独立执行 9 个 Session、Controller、Host、Recovery 与 Agent 聚焦测试文件，共 98/98 通过；`pnpm typecheck`、一次 Next production build 与 `git diff --check` 通过。用例覆盖 PENDING 零调用、manual outcome/Gate、旧 ACK 失效、连续点播去重、Presented 默认经过、稳定边界恢复和返回默认顺序竞态；未运行 Falcons、cs2d/Cloudflare build 或无关全量测试。
+
+**限制 / 下一步**
+
+本轮没有用真实 Demo 做长时间浏览器点播验收；发布后只做页面、Durable Object 与 DeepSeek 轻量 smoke。未完成 manual visit 仍是瞬时状态，刷新只回到此前稳定默认边界；这是刻意的恢复语义，不是跨 Demo 历史记录。
+
 ## 5. 常用问题排查表
 
 | 现象 | 首先检查 | 常见根因 | 不要做什么 |

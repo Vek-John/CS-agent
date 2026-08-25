@@ -104,8 +104,8 @@ function emptyTraceSummary(): CoachAgentState["traceSummary"] {
 
 function emptyState(identity: CoachAgentIdentity): CoachAgentState {
   return CoachAgentStateSchema.parse({
-    schemaVersion: "coach-agent-state.v2",
-    graphVersion: "coach-agent-graph.v2",
+    schemaVersion: "coach-agent-state.v3",
+    graphVersion: "coach-agent-graph.v3",
     runId: identity.runId,
     sessionId: identity.sessionId,
     demoId: identity.demoId,
@@ -117,6 +117,9 @@ function emptyState(identity: CoachAgentIdentity): CoachAgentState {
     runStatus: "RUNNING",
     activeSegmentId: null,
     activeCueId: null,
+    activeCueSource: null,
+    activeManualVisitId: null,
+    activeTargetSegmentIndex: null,
     routeCursor: -1,
     currentSegmentMode: null,
     activeFocus: null,
@@ -133,6 +136,7 @@ function emptyState(identity: CoachAgentIdentity): CoachAgentState {
     toolHistory: [],
     completedCueIds: [],
     completedCueSummaries: [],
+    presentedCueBindings: [],
     sessionThemes: [],
     summaryThemes: [],
     sessionSummaryInput: null,
@@ -158,8 +162,8 @@ function initialState(
     : base.fallbackReasons;
   return CoachAgentStateSchema.parse({
     ...base,
-    schemaVersion: "coach-agent-state.v2",
-    graphVersion: "coach-agent-graph.v2",
+    schemaVersion: "coach-agent-state.v3",
+    graphVersion: "coach-agent-graph.v3",
     runId: event.identity.runId,
     sessionId: event.identity.sessionId,
     demoId: event.identity.demoId,
@@ -171,6 +175,9 @@ function initialState(
     runStatus: "RUNNING",
     activeSegmentId: event.segmentId,
     activeCueId: event.cueId,
+    activeCueSource: "DEFAULT",
+    activeManualVisitId: null,
+    activeTargetSegmentIndex: event.routeSegmentIndex ?? null,
     routeCursor: event.routeSegmentIndex ?? base.routeCursor,
     currentSegmentMode: event.segmentMode ?? base.currentSegmentMode,
     activeFocus: event.focus,
@@ -195,14 +202,44 @@ function initialState(
   });
 }
 
+function initialManualVisitState(
+  event: Extract<CoachAgentEvent, { type: "START_MANUAL_CUE_VISIT" }>,
+  previous: CoachAgentState,
+): CoachAgentState {
+  return CoachAgentStateSchema.parse({
+    ...previous,
+    runStatus: "RUNNING",
+    sessionStatus: "TAKEN_OVER",
+    activeSegmentId: event.segmentId,
+    activeCueId: event.cueId,
+    activeCueSource: "MANUAL",
+    activeManualVisitId: event.visitId,
+    activeTargetSegmentIndex: event.targetSegmentIndex,
+    currentSegmentMode: event.segmentMode ?? previous.currentSegmentMode,
+    activeFocus: event.focus,
+    activeNarrationPolicySummary: "fields" in event.narrationSummary ? event.narrationSummary : null,
+    activeAllowedEvidenceSummary: event.allowedEvidenceSummary,
+    activePresentableCueSummary: event.presentableSummary ?? null,
+    currentSessionPhase: event.currentSessionPhase,
+    outcomeGateStatus: event.outcomeGateStatus,
+    narrationReadiness: event.narrationReadiness,
+    availableCapabilities: event.capabilities,
+    selectedTeachingMove: null,
+    pendingToolCall: null,
+    policyBudget: policyBudget(),
+    lastToolResult: null,
+    processedEventIds: [...previous.processedEventIds, event.eventId].slice(-64),
+  });
+}
+
 function dormantState(
   identity: CoachAgentIdentity,
   reason: FallbackReason,
 ): CoachAgentState {
   return CoachAgentStateSchema.parse({
     ...emptyState(identity),
-    schemaVersion: "coach-agent-state.v2",
-    graphVersion: "coach-agent-graph.v2",
+    schemaVersion: "coach-agent-state.v3",
+    graphVersion: "coach-agent-graph.v3",
     runStatus: "DORMANT",
     sessionStatus: "ACTIVE",
     activeSegmentId: null,
@@ -233,6 +270,7 @@ function resultForState(
   backend: RuntimeBackend,
   restored: CoachAgentResult["restored"],
   checkpointId: string | null = null,
+  includeEffects = true,
 ): CoachAgentResult {
   const result = {
     version: "coach-agent-result.v1" as const,
@@ -241,7 +279,7 @@ function resultForState(
     status: state.runStatus === "CUE_COMPLETED" ? "COMPLETED" : state.runStatus,
     identity: identityFromState(state),
     state,
-    effects: state.pendingToolCall ? [state.pendingToolCall] : [],
+    effects: includeEffects && state.pendingToolCall ? [state.pendingToolCall] : [],
     trace: state.trace,
     checkpoint: {
       backend: backend.kind,
@@ -458,7 +496,7 @@ class CoachAgentRuntimeImpl implements CoachAgentRuntime {
         return resultForState({
           ...saved,
           fallbackReasons: addFallbackReason(saved.fallbackReasons, "EXPIRED_EVENT"),
-        }, this.backend, "MATCHED", read.checkpointId);
+        }, this.backend, "MATCHED", read.checkpointId, false);
       }
       const output = await this.graph.invoke(new Command({ resume: event.result }), config);
       const resumedRead = await this.checkpointState(event.identity);
@@ -470,8 +508,9 @@ class CoachAgentRuntimeImpl implements CoachAgentRuntime {
     if (saved?.processedEventIds.includes(event.eventId)) return resultForState(saved, this.backend, "MATCHED", read.checkpointId);
 
     if (event.type === "USER_TAKEOVER") {
-      if (!saved || saved.sessionStatus === "CANCELLED" || saved.sessionStatus === "COMPLETED") {
-        return resultForState(saved ?? dormantState(event.identity, "STALE_RESUME"), this.backend, "DORMANT_MISSING", read.checkpointId);
+      if (!saved) return this.invokeState(emptyState(event.identity), event, config, "FRESH");
+      if (saved.sessionStatus === "CANCELLED" || saved.sessionStatus === "COMPLETED") {
+        return resultForState(saved, this.backend, "MATCHED", read.checkpointId);
       }
       return this.invokeState(saved, event, config, "MATCHED");
     }
@@ -488,12 +527,37 @@ class CoachAgentRuntimeImpl implements CoachAgentRuntime {
       return this.invokeState(saved ?? emptyState(event.identity), event, config, saved ? "MATCHED" : "FRESH");
     }
 
+    if (event.type === "OBSERVE_PRESENTED_CUE") {
+      if (!saved || saved.sessionStatus === "CANCELLED" || saved.sessionStatus === "COMPLETED" || saved.runStatus === "WAITING_TOOL") {
+        return resultForState(saved ?? dormantState(event.identity, "STALE_RESUME"), this.backend, saved ? "MATCHED" : "DORMANT_MISSING", read.checkpointId);
+      }
+      const binding = saved.presentedCueBindings.find((item) => item.cueId === event.cueId);
+      const isNext = event.segmentIndex === saved.routeCursor + 1;
+      if (!binding || !isNext || binding.segmentId !== event.segmentId || binding.segmentIndex !== event.segmentIndex) {
+        return resultForState({
+          ...saved,
+          fallbackReasons: addFallbackReason(saved.fallbackReasons, "ROUTE_ORDER_MISMATCH"),
+        }, this.backend, "MATCHED", read.checkpointId);
+      }
+      return this.invokeState(saved, event, config, "MATCHED");
+    }
+
     if (event.type === "COMPLETE_SESSION") {
       if (!saved || saved.sessionStatus === "CANCELLED" || saved.runStatus === "WAITING_TOOL" || saved.runStatus === "USER_TAKEOVER") {
         return resultForState(saved ?? dormantState(event.identity, "STALE_RESUME"), this.backend, "DORMANT_MISSING", read.checkpointId);
       }
       if (saved.sessionStatus === "COMPLETED") return resultForState(saved, this.backend, "MATCHED", read.checkpointId);
       return this.invokeState(saved, event, config, "MATCHED");
+    }
+
+
+    if (event.type === "START_MANUAL_CUE_VISIT") {
+      if (!saved || saved.sessionStatus === "CANCELLED" || saved.sessionStatus === "COMPLETED") {
+        return resultForState(saved ?? dormantState(event.identity, "STALE_RESUME"), this.backend, saved ? "MATCHED" : "DORMANT_MISSING", read.checkpointId);
+      }
+      if (saved.runStatus !== "USER_TAKEOVER") return resultForState(saved, this.backend, "MATCHED", read.checkpointId);
+      if (saved.completedCueIds.includes(event.cueId)) return resultForState(saved, this.backend, "MATCHED", read.checkpointId);
+      return this.invokeState(initialManualVisitState(event, saved), event, config, "MATCHED");
     }
 
     // START_CUE is the sole cue preparation event. A takeover requires a new

@@ -24,7 +24,7 @@ function result(status: CoachAgentResult["status"], effects: unknown[] = []): Co
     status,
     effects,
     checkpoint: { checkpointId: status === "WAITING_TOOL" ? "checkpoint-waiting" : "checkpoint-completed" },
-    state: { activeCueId: "cue-1", currentSessionPhase: "PAUSED_FOR_COACHING", routeCursor: 0 },
+    state: { activeCueId: "cue-1", activeManualVisitId: null, completedCueIds: [], currentSessionPhase: "PAUSED_FOR_COACHING", routeCursor: 0, sessionStatus: "ACTIVE" },
   } as unknown as CoachAgentResult;
 }
 
@@ -58,6 +58,7 @@ function harness(options: {
   const resumeEvent = {} as CoachAgentEvent;
   const adapter = {
     prepareStart: vi.fn(() => ({ event: { type: "START_CUE" } as CoachAgentEvent, capabilities: options.capabilities ?? [{}] })),
+    prepareManualStart: vi.fn((_input, visitId: string) => ({ event: { type: "START_MANUAL_CUE_VISIT", visitId } as CoachAgentEvent, capabilities: options.capabilities ?? [{}] })),
     isCurrent: vi.fn(() => true),
     createTeachingToolCommand: vi.fn(() => options.command === undefined && Object.prototype.hasOwnProperty.call(options, "command") ? undefined : command),
     acceptTeachingToolAck: vi.fn(() => ({
@@ -68,7 +69,10 @@ function harness(options: {
     })),
     createResumeEvent: vi.fn(() => ({ ...resumeEvent, type: "RESUME_TOOL" } as CoachAgentEvent)),
     createTakeoverEvent: vi.fn(() => ({ type: "USER_TAKEOVER" } as CoachAgentEvent)),
+    createIdentityTakeoverEvent: vi.fn(() => ({ type: "USER_TAKEOVER" } as CoachAgentEvent)),
     createCompleteSessionEvent: vi.fn(() => ({} as CoachAgentEvent)),
+    createObserveSegmentEvent: vi.fn(() => ({ type: "OBSERVE_SEGMENT" } as CoachAgentEvent)),
+    createObservePresentedCueEvent: vi.fn(() => ({ type: "OBSERVE_PRESENTED_CUE" } as CoachAgentEvent)),
     beginLifecycleEvent: vi.fn((eventId: string) => {
       const current = lifecycle.get(eventId);
       if (current === "CONFIRMED") return "CONFIRMED";
@@ -80,6 +84,9 @@ function harness(options: {
     releaseLifecycleEvent: vi.fn((eventId: string) => lifecycle.delete(eventId)),
     lifecycleEventStatus: vi.fn((eventId: string) => lifecycle.get(eventId) ?? "NONE"),
     markLifecycleSynced: vi.fn(),
+    markLifecycleDegraded: vi.fn(),
+    reserveLifecycleCursor: vi.fn(),
+    resetLifecycleQueue: vi.fn(),
     lifecycleCursor: -1,
     lifecycleQueueCursor: -1,
     lifecycleDegraded: false,
@@ -148,6 +155,143 @@ describe("CoachAgentStage3Controller", () => {
     await flush();
     expect(h.dispatched).toHaveLength(1);
     expect(h.controller.currentState.status).toBe("COMPLETED");
+  });
+
+  it("starts a manual cue directly without default-route observer catch-up", async () => {
+    const h = harness({ capabilities: [], dispatch: async (event) => {
+      h.dispatched.push(event);
+      return result("COMPLETED");
+    } });
+    h.controller.startManualCueVisit(input(), "visit-cue-4");
+    await flush();
+    expect(h.dispatched.map((event) => event.type)).toEqual(["START_MANUAL_CUE_VISIT"]);
+    expect(h.adapter.createObserveSegmentEvent).not.toHaveBeenCalled();
+    expect(h.adapter.markLifecycleDegraded).not.toHaveBeenCalled();
+    expect(h.controller.hasStartedCue("cue-1")).toBe(false);
+    expect(h.controller.currentState).toMatchObject({ status: "COMPLETED", source: "MANUAL", visitId: "visit-cue-4" });
+  });
+
+  it("arms exactly one resumed start after takeover checkpointing instead of starting early", async () => {
+    let releaseTakeover: ((value: CoachAgentResult) => void) | undefined;
+    const h = harness({ dispatch: (event) => {
+      h.dispatched.push(event);
+      if (event.type === "USER_TAKEOVER") return new Promise<CoachAgentResult>((resolve) => { releaseTakeover = resolve; });
+      return Promise.resolve(result("COMPLETED"));
+    } });
+    const current = input();
+    void h.controller.takeover(current, "用户接管回放。", 1);
+    const armed = h.controller.resumeAfterTakeover(current);
+    await flush();
+    expect(h.dispatched.map((event) => event.type)).toEqual(["USER_TAKEOVER"]);
+
+    releaseTakeover?.(result("USER_TAKEOVER"));
+    await expect(armed).resolves.toBe(true);
+    expect(h.dispatched.map((event) => event.type)).toEqual(["USER_TAKEOVER"]);
+    const restored = h.controller.resumeInputFor(current);
+    expect(restored.resumeFromTakeover).toBe(true);
+    h.controller.start(restored);
+    h.controller.start(h.controller.resumeInputFor(current));
+    await flush();
+    expect(h.dispatched.map((event) => event.type)).toEqual(["USER_TAKEOVER", "START_CUE"]);
+  });
+
+  it("persists identity-only takeover before the first cue input exists", async () => {
+    const h = harness({ dispatch: async (event) => {
+      h.dispatched.push(event);
+      return result("USER_TAKEOVER");
+    } });
+    await expect(h.controller.takeoverIdentity({ runId: "run-1" } as Stage3IdentityInput, "先手动复查。", 1)).resolves.toBe(true);
+    expect(h.dispatched.map((event) => event.type)).toEqual(["USER_TAKEOVER"]);
+    expect(h.adapter.createIdentityTakeoverEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts USER_TAKEOVER as a manual terminal only when that visit completed its cue", async () => {
+    const completedManual = {
+      ...result("USER_TAKEOVER"),
+      state: {
+        ...result("USER_TAKEOVER").state,
+        activeManualVisitId: null,
+        completedCueIds: ["cue-1"],
+      },
+    } as CoachAgentResult;
+    const h = harness({ capabilities: [], dispatch: async (event) => {
+      h.dispatched.push(event);
+      return completedManual;
+    } });
+    h.controller.startManualCueVisit(input(), "visit-cue-4");
+    await flush();
+    expect(h.controller.currentState).toMatchObject({ status: "COMPLETED", source: "MANUAL", visitId: "visit-cue-4" });
+
+    const ordinary = harness({ capabilities: [], dispatch: async () => result("USER_TAKEOVER") });
+    ordinary.controller.startManualCueVisit(input(), "visit-not-complete");
+    await flush();
+    expect(ordinary.controller.currentState.status).toBe("FAILED");
+  });
+
+  it("observes a presented default cue without Policy or a teaching command", async () => {
+    const h = harness({ dispatch: async (event) => {
+      h.dispatched.push(event);
+      return result("COMPLETED");
+    } });
+    h.controller.observePresentedCue({ runId: "run-1" } as unknown as Stage3IdentityInput, "cue-4", "segment-4", 4);
+    await flush();
+    await flush();
+    expect(h.dispatched.map((event) => event.type)).toEqual(["OBSERVE_PRESENTED_CUE"]);
+    expect(h.adapter.createTeachingToolCommand).not.toHaveBeenCalled();
+    expect(h.adapter.reserveLifecycleCursor).toHaveBeenCalledWith(4);
+    expect(h.adapter.markLifecycleSynced).toHaveBeenCalledWith(4);
+  });
+
+  it("degrades presented-cue bookkeeping only on a real dispatch failure", async () => {
+    const network = harness({ dispatch: async () => { throw new Error("network down"); } });
+    network.controller.observePresentedCue({ runId: "run-1" } as unknown as Stage3IdentityInput, "cue-4", "segment-4", 4);
+    await flush();
+    expect(network.adapter.releaseLifecycleEvent).toHaveBeenCalled();
+    expect(network.adapter.resetLifecycleQueue).toHaveBeenCalled();
+    expect(network.adapter.markLifecycleDegraded).toHaveBeenCalledTimes(1);
+
+    const dormant = harness({ dispatch: async (event) => {
+      dormant.dispatched.push(event);
+      return result("DORMANT");
+    } });
+    dormant.controller.observePresentedCue({ runId: "run-1" } as unknown as Stage3IdentityInput, "cue-4", "segment-4", 4);
+    await flush();
+    expect(dormant.adapter.resetLifecycleQueue).toHaveBeenCalled();
+    expect(dormant.adapter.markLifecycleDegraded).not.toHaveBeenCalled();
+  });
+
+  it("marks manual tool persistence as current-tab only", async () => {
+    const transitions: import("./coach-agent-stage3-controller").Stage3ToolLedgerTransition[] = [];
+    const h = harness({ onToolLedgerTransition: (transition) => { transitions.push(transition); } });
+    h.controller.startManualCueVisit(input(), "visit-tool");
+    await flush();
+    expect(h.posted).toHaveLength(1);
+    expect(transitions[0]).toMatchObject({ status: "POSTED", source: "MANUAL", manualVisitId: "visit-tool" });
+  });
+
+  it("cancels an old manual effect before a second visit without RECOVERY_REQUIRED or duplicate post", async () => {
+    let starts = 0;
+    let h!: ReturnType<typeof harness>;
+    h = harness({ dispatch: async (event) => {
+      h.dispatched.push(event);
+      if (event.type === "USER_TAKEOVER") return result("USER_TAKEOVER");
+      if (event.type === "START_MANUAL_CUE_VISIT" && starts++ === 0) return result("WAITING_TOOL", [h.request]);
+      return {
+        ...result("USER_TAKEOVER"),
+        state: { ...result("USER_TAKEOVER").state, activeManualVisitId: null, completedCueIds: ["cue-3"] },
+      } as CoachAgentResult;
+    } });
+    const cue1 = input();
+    h.controller.startManualCueVisit(cue1, "visit-1");
+    await flush();
+    expect(h.posted).toHaveLength(1);
+    await h.controller.takeover(cue1, "用户继续跳转。", 1);
+    const cue3 = { ...cue1, cue: { id: "cue-3" }, outcomeGate: { ...cue1.outcomeGate, cueId: "cue-3" }, generation: 2 } as Stage3HostAdapterInput;
+    h.controller.startManualCueVisit(cue3, "visit-3");
+    await flush();
+    expect(h.posted).toHaveLength(1);
+    expect(h.states).not.toContain("RECOVERY_REQUIRED");
+    expect(h.controller.currentState).toMatchObject({ status: "COMPLETED", cueId: "cue-3", visitId: "visit-3" });
   });
 
   it("resumes the Graph with FAILED when an ACK explicitly fails, instead of leaving WAITING_TOOL", async () => {
@@ -244,6 +388,7 @@ describe("CoachAgentStage3Controller", () => {
     await h.controller.takeover(current, "用户接管回放。", 1);
     h.controller.acceptAck(ack);
     await h.controller.resumeAfterTakeover(current);
+    h.controller.start(h.controller.resumeInputFor(current));
     await flush();
     expect(h.adapter.createTakeoverEvent).toHaveBeenCalledTimes(1);
     expect(h.adapter.createTeachingToolCommand).toHaveBeenCalledTimes(1);
@@ -312,6 +457,7 @@ describe("CoachAgentStage3Controller", () => {
     expect(h.controller.currentState.status).toBe("COMPLETED");
     await h.controller.takeover(current, "用户接管回放。", 1);
     await h.controller.resumeAfterTakeover(current);
+    h.controller.start(h.controller.resumeInputFor(current));
     await flush();
     expect(h.adapter.createTeachingToolCommand).not.toHaveBeenCalled();
     expect(h.dispatched).toHaveLength(3);

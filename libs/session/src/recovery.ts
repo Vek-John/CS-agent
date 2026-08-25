@@ -1,6 +1,7 @@
 import type {
   CoachingRouteState,
   CoachingSessionState,
+  DefaultRouteCursor,
   OutcomeCompletionState,
   ReviewPlan,
 } from "@cs-coach/contracts";
@@ -9,10 +10,12 @@ import {
   completeOutcomeGate,
   createCoachingSession,
   createOutcomeCompletionGate,
+  synchronizeDefaultRouteCursor,
 } from "./index";
 
 /** The only stable points a browser session is allowed to persist. */
-export const SESSION_RECOVERY_SNAPSHOT_VERSION = "session-recovery-session.v1" as const;
+/** v2 adds presentedCueIds; v1 snapshots are deliberately incompatible. */
+export const SESSION_RECOVERY_SNAPSHOT_VERSION = "session-recovery-session.v2" as const;
 export type SessionRecoveryBoundaryKind = "ROUTE_START" | "CUE_PAUSED" | "WRAP_UP";
 
 export type SessionRecoveryBoundary =
@@ -39,6 +42,7 @@ export interface SessionRecoverySnapshot {
   readonly boundary: SessionRecoveryBoundary;
   readonly consumedCueIds: readonly string[];
   readonly revealedCueIds: readonly string[];
+  readonly presentedCueIds: readonly string[];
   readonly expandedSegmentIds: readonly string[];
   readonly narrationReadiness?: Readonly<Record<string, "PENDING" | "READY" | "FALLBACK">>;
 }
@@ -170,11 +174,27 @@ function validateStateLists(plan: ReviewPlan, state: CoachingSessionState): void
   const segmentIds = new Set(plan.segments.map((segment) => segment.id));
   assertIdList("consumedCueIds", state.consumed_cue_ids, cueIds);
   assertIdList("revealedCueIds", state.revealed_cue_ids, cueIds);
+  assertIdList("presentedCueIds", state.presented_cue_ids, cueIds);
   assertIdList("expandedSegmentIds", state.expanded_segment_ids, segmentIds);
   if (state.current_cue_id && !cueIds.has(state.current_cue_id)) throw new Error("Session current cue is not in the frozen plan.");
   if (!Number.isInteger(state.current_segment_index) || state.current_segment_index < 0 || state.current_segment_index > plan.segments.length) {
     throw new Error("Session current segment index is outside the frozen route.");
   }
+}
+
+function stateAtDefaultRouteCursor(state: CoachingSessionState): CoachingSessionState {
+  if (!state.manual_cue_visit) return state;
+  const cursor: DefaultRouteCursor = state.default_route_cursor;
+  return {
+    ...state,
+    current_segment_index: cursor.segment_index,
+    current_cue_id: cursor.cue_id,
+    phase: cursor.phase,
+    current_tick: cursor.current_tick,
+    outcome_completion: cursor.outcome_completion,
+    buffered_from_phase: cursor.buffered_from_phase,
+    manual_cue_visit: undefined,
+  };
 }
 
 function boundaryForState(
@@ -226,6 +246,7 @@ function assertSnapshot(snapshot: SessionRecoverySnapshot): void {
   const segmentIds = new Set(snapshot.frozenPlan.segments.map((segment) => segment.id));
   assertIdList("consumedCueIds", snapshot.consumedCueIds, cueIds);
   assertIdList("revealedCueIds", snapshot.revealedCueIds, cueIds);
+  assertIdList("presentedCueIds", snapshot.presentedCueIds, cueIds);
   assertIdList("expandedSegmentIds", snapshot.expandedSegmentIds, segmentIds);
   if (snapshot.routeFingerprint !== sessionRouteFingerprint(snapshot.frozenPlan)) {
     throw new Error("Recovery snapshot route fingerprint does not match the frozen plan.");
@@ -258,17 +279,21 @@ export function captureSessionRecovery(
   routeState?: Pick<CoachingRouteState, "readiness">,
 ): SessionRecoverySnapshot {
   if (!["ROUTE_START", "CUE_PAUSED", "WRAP_UP"].includes(kind)) throw new Error("Unsupported recovery boundary.");
-  const boundary = boundaryForState(plan, state, kind);
+  // An unfinished manual visit is transient. Only its saved default cursor
+  // may be captured, and only when that cursor is itself a legal boundary.
+  const stableState = stateAtDefaultRouteCursor(state);
+  const boundary = boundaryForState(plan, stableState, kind);
   const snapshot: SessionRecoverySnapshot = {
     schemaVersion: SESSION_RECOVERY_SNAPSHOT_VERSION,
-    sessionId: state.id,
+    sessionId: stableState.id,
     routeFingerprint: sessionRouteFingerprint(plan),
     frozenPlan: freezeDeep(cloneJson(plan)),
     boundary,
-    consumedCueIds: [...state.consumed_cue_ids],
-    revealedCueIds: [...state.revealed_cue_ids],
-    expandedSegmentIds: [...state.expanded_segment_ids],
-    ...(routeState ? { narrationReadiness: { ...routeState.readiness } } : state.narration_readiness ? { narrationReadiness: { ...state.narration_readiness } } : {}),
+    consumedCueIds: [...stableState.consumed_cue_ids],
+    revealedCueIds: [...stableState.revealed_cue_ids],
+    presentedCueIds: [...stableState.presented_cue_ids],
+    expandedSegmentIds: [...stableState.expanded_segment_ids],
+    ...(routeState ? { narrationReadiness: { ...routeState.readiness } } : stableState.narration_readiness ? { narrationReadiness: { ...stableState.narration_readiness } } : {}),
   };
   assertSnapshot(snapshot);
   return freezeDeep(snapshot);
@@ -297,7 +322,7 @@ export function rehydrateSessionRecovery(
     readiness: routeStateReadiness(snapshot),
   });
   if (boundary.kind === "ROUTE_START") {
-    return {
+    return synchronizeDefaultRouteCursor({
       ...base,
       current_segment_index: 0,
       current_cue_id: undefined,
@@ -305,12 +330,13 @@ export function rehydrateSessionRecovery(
       phase: "INTRO",
       consumed_cue_ids: [...snapshot.consumedCueIds],
       revealed_cue_ids: [...snapshot.revealedCueIds],
+      presented_cue_ids: [...snapshot.presentedCueIds],
       expanded_segment_ids: [...snapshot.expandedSegmentIds],
-    };
+    });
   }
   if (boundary.kind === "WRAP_UP") {
     const last = plan.segments.at(-1);
-    return {
+    return synchronizeDefaultRouteCursor({
       ...base,
       current_segment_index: plan.segments.length,
       current_cue_id: undefined,
@@ -318,13 +344,14 @@ export function rehydrateSessionRecovery(
       phase: "WRAP_UP",
       consumed_cue_ids: [...snapshot.consumedCueIds],
       revealed_cue_ids: [...snapshot.revealedCueIds],
+      presented_cue_ids: [...snapshot.presentedCueIds],
       expanded_segment_ids: [...snapshot.expandedSegmentIds],
-    };
+    });
   }
   const cue = plan.cues.find((candidate) => candidate.id === boundary.cueId);
   if (!cue) throw new Error("Recovery cue is missing from the frozen plan.");
   const gate: OutcomeCompletionState = completeOutcomeGate(createOutcomeCompletionGate(cue), cue.outcome_end_tick);
-  return {
+  return synchronizeDefaultRouteCursor({
     ...base,
     current_segment_index: boundary.segmentIndex,
     current_cue_id: cue.id,
@@ -332,7 +359,8 @@ export function rehydrateSessionRecovery(
     phase: "PAUSED_FOR_COACHING",
     consumed_cue_ids: [...snapshot.consumedCueIds],
     revealed_cue_ids: [...snapshot.revealedCueIds],
+    presented_cue_ids: [...snapshot.presentedCueIds],
     expanded_segment_ids: [...snapshot.expandedSegmentIds],
     outcome_completion: gate,
-  };
+  });
 }

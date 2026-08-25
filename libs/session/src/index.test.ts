@@ -277,6 +277,10 @@ describe("CoachingSession deterministic safety kernel", () => {
       ...snapshot,
       boundary: { kind: "WRAP_UP", segmentIndex: 99 },
     } as never)).toThrow("wrap-up index");
+    expect(() => rehydrateSessionRecovery({
+      ...snapshot,
+      schemaVersion: "session-recovery-session.v1",
+    } as never)).toThrow("envelope");
   });
 
   it("resets the active cue route when manual return deliberately re-walks it", () => {

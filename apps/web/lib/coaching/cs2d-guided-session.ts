@@ -149,6 +149,7 @@ export function guidedTransitionKey(state: CoachingSessionState): string {
     state.phase,
     state.current_segment_index,
     state.current_cue_id ?? "-",
+    state.manual_cue_visit?.visit_id ?? "default",
     state.revealed_cue_ids.length
   ].join(":");
 }

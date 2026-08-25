@@ -1,7 +1,7 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：3.6.0
+> 版本：3.7.0
 > 最后更新：2026-08-25
 > 适用范围：Web 2D 到桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
@@ -149,6 +149,16 @@ Graph 通过 `AgentEffect` 请求 Host 执行外部动作。Host 必须重新校
 工具 ledger 必须先持久化 `POSTED` 再产生 iframe 副作用。刷新时只有 `POSTED` 的调用按 `CANCELLED` 收敛且不重发；已持久化合法成功结果只 resume Graph；`RESUMED` 调用保持去重。旧页面的 effect epoch、ACK、Narration 和 READY 事件不能推进新页面。IndexedDB 或 Durable Object 恢复失败只使恢复降级，基础回放始终可用。
 
 当前实现把这些规则收敛在 `SessionRecoveryRuntime`、`libs/session` capture/rehydrate seam 与 Host Recovery Adapter：本地分析的 `demo_id` 由 Demo content hash 稳定派生，新会话另行生成并保留随机 `recoveryId/sessionId/runId`；`POSTED` 以一次稳定边界更新原子写入 waiting checkpoint，`RESULTED/RESUMED` 分别写回结构化结果与完成 checkpoint。checkpoint 只有与当前 frozen cue/phase/route cursor 精确匹配时才可绑定 boundary；前一 cue 的活动 checkpoint 不能复用到下一 cue 或 `WRAP_UP`，`WRAP_UP` 只接受同 route cursor 的完成态 session checkpoint。记录仅保留当前 cue 与后两个 narration 摘要；恢复后由 narration-only 队列补齐后续 cue，绝不重新调用 Director/PlanCompiler。
+
+### 2.14 默认顺序路线与用户点播 cue
+
+默认带看与用户点播是两种不同的会话意图。`DefaultRouteCursor` 只表示冻结 `ReviewPlan` 按 segment 顺序推进的进度；用户自由 seek、切换回合或发起 `ManualCueVisit` 都不能修改它。`ManualCueVisit` 是一个带稳定 visit ID 的临时讲解过程，只能引用 frozen cue ID；Host 从当前播放头和 frozen plan 选择最近 cue，`CoachingSession` 再从 plan 推导合法 pre-roll、outcome window、decision point 与 Gate，调用方不能提供任意播放 tick。
+
+`PresentedCue` 与默认路线消费进度分开记录。只有 cue 已完整播放 outcome、完成 `OutcomeCompletionGate`、展示既有 `NarrationBundle` 且 Coach Agent 正常收敛，才形成一次 `PresentedCue`；取消中的 visit、PENDING narration、自由 seek 和仅到达时间段都不算。Manual visit 成功后，SessionTheme 与 Agent 完成摘要只聚合一次；默认路线以后经过这个 cue 时仍保留完整时间线，但通过确定性“已呈现 cue 经过”事件推进 `DefaultRouteCursor`，不得再次调用 Narrator、Coach Policy 或教学工具。重看 PresentedCue 复用已有 Narration 和结果。
+
+Coach Agent 对 manual visit 使用独立的结构化事件和 visit ID。该事件可以在 `USER_TAKEOVER` 后处理一个合法 frozen cue，但不能写 `routeCursor`；默认 `START_CUE` 与普通 segment observer 继续执行严格顺序校验。Controller 不得调用 `queueObserversUntil` 为 manual target 补齐前置路线，也不得因中间存在尚未观看的教练 cue 设置 `lifecycleDegraded`。默认路线恢复和 manual visit 结束后，只有显式返回默认路线才能重新启用顺序事件。
+
+用户每次自由跳转都会立即使当前 manual visit、工具请求、ACK、ToolResult、Narration 更新与 effect epoch 失效；pending 工具按 Host ledger 收敛。目标 cue narration 为 `PENDING` 时只在手动复查界面等待，零 Agent/Policy/工具调用。刷新发生在未完成 manual visit 中时不创建新的 RecoveryBoundary，也不把该 visit 标记为 Presented；恢复仍落到最近合法稳定边界。
 
 ## 3. 系统上下文与演进
 
@@ -1314,7 +1324,8 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 | Narrator 与证据防火墙 | Accepted | Narrator 可提前读取严格分离的 CoachingPackage＋OutcomePackage，输出带字段级 refs 的五字段密封 NarrationBundle；不能改 route/focus/Advice |
 | OutcomeCompletionGate | Accepted | Gate 只把密封 NarrationBundle 从 PREPARED 变为 PRESENTABLE；必须确认播放到 outcome_end，且不裁剪全场常显胜率曲线 |
 | Web 2D cs2d 底座 | Accepted | 浏览器 Worker/WASM 单次解析与真实地图 renderer；具体 revision、可重放 patch 和权利状态记录在 ADR；源码不入仓库，MVP 由 CI 生成 `/cs2d/` 构建物随 Cloudflare 发布，权利解决前不扩大再分发 |
-| Host 控制与接管 | Implementation | 当前 Web Host 只保留一套中文控制和一条整场时间轴；手动接管暂停 Graph/Session，恢复到当前播放头最近 cue；用户 UI 不显示 tick |
+| Host 控制与接管 | Implementation | 当前 Web Host 只保留一套中文控制和一条整场时间轴；手动接管暂停 Agent effect，用户可返回原 DefaultRouteCursor 或显式点播当前播放头附近 cue；用户 UI 不显示 tick |
+| 默认顺序与 cue 点播 | Accepted | DefaultRouteCursor 保持冻结路线顺序；ManualCueVisit 使用独立 Session/Agent seam 且不改 cursor；PresentedCue 与默认消费进度分离并全场去重 |
 | 地图镜头与目标主体 | Accepted | Renderer 与 Session 共享播放头；普通状态保持稳定全图，未揭示 cue 可聚焦，结果只推进同一全知地图；分析主体锁定且标为“你” |
 | 中文报点事实 | Accepted | 同次 cs2d 解析保留 `m_szLastPlaceName`，由版本化精确词典本地化；未知不猜测，不二次解析 |
 | 自研 PixiJS renderer | Superseded | `/pixi-poc` 与旧 renderer 只保留回归；默认产品不再扩展第二套 renderer |
@@ -1376,3 +1387,4 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 | 3.5.3 | 2026-08-24 | 完成 Stage 3 整场切片：多 cue、takeover/resume、五种证据绑定教学工具、SessionTheme、三主题全场总结、完成态 checkpoint 压缩与真实 DeepSeek Policy Adapter；`test_demo` 14/14 全场通过，Falcons/Spirit 按发布范围保留 29/49 有界验证，显式 Stage 3 入口继续作为发布回退边界。 |
 | 3.5.4 | 2026-08-25 | 将 Stage 3 Coach Agent 切换为 localhost 与 Cloudflare 的默认产品入口；不增加部署变量或重定向，`coachAgent=stage2` 仅保留为单 cue 回归入口。 |
 | 3.6.0 | 2026-08-25 | 接受“浏览器 SessionRecoveryRecord＋Durable Object Agent checkpoint”的双状态恢复：重新选择同一 Demo 后按稳定 RecoveryBoundary 恢复冻结路线、Session 与 Agent；IndexedDB 不重新承载 LangGraph，File/Replay 不上传，工具 ledger 先持久化并在刷新后确定性收敛。 |
+| 3.7.0 | 2026-08-25 | 增加默认顺序路线＋用户点播 frozen cue：分离 DefaultRouteCursor、ManualCueVisit 与 PresentedCue；manual visit 不追平或改写默认 cursor，已呈现 cue 在默认路线中零模型重复经过。 |

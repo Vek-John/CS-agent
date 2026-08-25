@@ -2096,6 +2096,11 @@ button:disabled {
   color: #ffd48a;
   font-size: 0.61rem;
 }
+.cs2d-coach-takeover > div:first-child { min-width: 0; }
+.cs2d-coach-takeover span,
+.cs2d-coach-takeover small { display: block; }
+.cs2d-coach-takeover small { margin-top: 0.2rem; overflow-wrap: anywhere; color: var(--text-secondary); line-height: 1.35; }
+.cs2d-coach-takeover-actions { display: flex; justify-content: flex-end; gap: 0.4rem; flex-wrap: wrap; }
 .cs2d-coach-takeover button {
   min-height: 2rem;
   padding: 0.35rem 0.55rem;
@@ -2106,7 +2111,12 @@ button:disabled {
   cursor: pointer;
   font-size: 0.59rem;
   font-weight: 680;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  transition: transform 120ms var(--ease-out), background-color 140ms ease, border-color 140ms ease;
 }
+.cs2d-coach-takeover button:active:not(:disabled) { transform: scale(0.97); }
 .cs2d-coach-free-view {
   margin-top: 0.8rem;
   padding: 0.85rem;
@@ -2442,6 +2452,7 @@ button:disabled {
   .cs2d-timeline-round-button:hover:not(:disabled),
   .cs2d-coach-result-actions button:hover { border-color: rgba(255,255,255,0.25); background: rgba(255,255,255,0.085); color: var(--text); }
   .cs2d-coach-primary:hover { border-color: rgba(141,194,255,0.76); background: #1284f3; }
+  .cs2d-coach-takeover button:hover:not(:disabled) { border-color: rgba(255,224,163,0.7); background: rgba(255,255,255,0.1); }
 }
 @media (max-width: 70rem) {
   .cs2d-host-workspace { grid-template-columns: 1fr; overflow-y: auto; }
@@ -2466,6 +2477,9 @@ button:disabled {
   .cs2d-speed-controls button { flex: 0 0 auto; }
   .cs2d-round-position { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
   .cs2d-timeline-heading { gap: 0.5rem; }
+  .cs2d-coach-takeover { align-items: stretch; flex-direction: column; }
+  .cs2d-coach-takeover-actions { justify-content: stretch; }
+  .cs2d-coach-takeover-actions button { flex: 1 1 10rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   .cs2d-host-icon-button,
@@ -2473,12 +2487,14 @@ button:disabled {
   .cs2d-speed-controls button,
   .cs2d-timeline-round-button,
   .cs2d-coach-primary,
-  .cs2d-coach-result-actions button { transition: none; }
+  .cs2d-coach-result-actions button,
+  .cs2d-coach-takeover button { transition: none; }
   .cs2d-host-icon-button:active:not(:disabled),
   .cs2d-host-play:active:not(:disabled),
   .cs2d-speed-controls button:active:not(:disabled),
   .cs2d-coach-primary:active,
-  .cs2d-coach-result-actions button:active { transform: none; }
+  .cs2d-coach-result-actions button:active,
+  .cs2d-coach-takeover button:active { transform: none; }
 }
 @media (prefers-reduced-transparency: reduce) {
   .cs2d-host-header,
@@ -2486,11 +2502,14 @@ button:disabled {
   .cs2d-host-coach,
   .cs2d-coach-cue,
   .cs2d-coaching-band,
-  .cs2d-coach-summary { background: #111317; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .cs2d-coach-summary,
+  .cs2d-coach-takeover { background: #111317; backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
 @media (prefers-contrast: more) {
   .cs2d-host-header,
   .cs2d-host-stage,
   .cs2d-host-coach,
-  .cs2d-host-timeline { border-color: rgba(255,255,255,0.55); }
+  .cs2d-host-timeline,
+  .cs2d-coach-takeover,
+  .cs2d-coach-takeover button { border-color: rgba(255,255,255,0.72); }
 }

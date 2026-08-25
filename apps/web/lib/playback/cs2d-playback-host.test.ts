@@ -5,6 +5,8 @@ import { PLAYBACK_BRIDGE_CHANNEL, type ReviewPlan } from "@cs-coach/contracts";
 import { createOutcomeCompletionGate, completeOutcomeGate } from "@cs-coach/session";
 import {
   acceptedPlaybackEvent,
+  canBeginManualCueVisit,
+  cuePresentedActionForTerminal,
   analysisEventMatchesSelectedPlayer,
   adjacentRoundIndex,
   coachAgentEntryMode,
@@ -12,6 +14,7 @@ import {
   cs2dHostConfig,
   HOST_SPEED_OPTIONS,
   hostCoachingCueSurface,
+  nearestCoachingCue,
   playbackCommandMessage,
   playbackPositionLabel,
   reviewPositionAtTick,
@@ -46,6 +49,27 @@ describe("cs2d localhost host boundary", () => {
     expect(analysisEventMatchesSelectedPlayer("player-new", "player-old")).toBe(false);
     expect(analysisEventMatchesSelectedPlayer("player-new", "player-new")).toBe(true);
     expect(analysisEventMatchesSelectedPlayer(undefined, "player-new")).toBe(false);
+  });
+
+  it("selects the nearest frozen cue with a stable ahead-first tie break", () => {
+    const plan = createFixtureReviewPlan(createSyntheticMirageTimeline());
+    const first = plan.cues[0]!;
+    const second = plan.cues[1]!;
+    expect(nearestCoachingCue(plan, first.decision_tick)?.cue.id).toBe(first.id);
+    expect(nearestCoachingCue(plan, (first.decision_tick + second.decision_tick) / 2)?.cue.id).toBe(second.id);
+  });
+
+  it("keeps PENDING manual cues inert and maps only matching terminals to CUE_PRESENTED", () => {
+    expect(canBeginManualCueVisit("PENDING", true, false)).toBe(false);
+    expect(canBeginManualCueVisit("READY", true, false)).toBe(true);
+    expect(canBeginManualCueVisit("FALLBACK", true, false)).toBe(true);
+    const base = { current_cue_id: "cue-4", presented_cue_ids: [] as string[] };
+    expect(cuePresentedActionForTerminal(base, { status: "COMPLETED", source: "DEFAULT", cueId: "cue-4" }))
+      .toEqual({ type: "CUE_PRESENTED", cueId: "cue-4" });
+    expect(cuePresentedActionForTerminal({ ...base, manual_cue_visit: { visit_id: "visit-4", cue_id: "cue-4" } }, { status: "COMPLETED", source: "MANUAL", cueId: "cue-4", visitId: "visit-4" }))
+      .toEqual({ type: "CUE_PRESENTED", cueId: "cue-4", visitId: "visit-4" });
+    expect(cuePresentedActionForTerminal({ ...base, manual_cue_visit: { visit_id: "visit-4", cue_id: "cue-4" } }, { status: "COMPLETED", source: "MANUAL", cueId: "cue-4", visitId: "old-visit" }))
+      .toBeUndefined();
   });
 
   it("keeps the Host coaching bands locked until the full outcome is paused", () => {

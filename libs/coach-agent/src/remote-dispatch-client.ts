@@ -16,6 +16,8 @@ export {
   CoachAgentEventSchema,
   CoachAgentIdentitySchema,
   CoachAgentResultSchema,
+  ObservePresentedCueEventSchema,
+  StartManualCueVisitEventSchema,
   TeachingToolNameSchema,
   TeachingCapabilitySchema,
 } from "./types";
@@ -25,6 +27,8 @@ export type {
   CoachAgentEvent,
   CoachAgentIdentity,
   CoachAgentResult,
+  ObservePresentedCueEvent,
+  StartManualCueVisitEvent,
   TeachingToolName,
   TeachingCapability,
   SessionSummaryInput,
@@ -42,6 +46,7 @@ export {
   SessionWrapUpResultSchema,
 } from "./session-wrap-up";
 export {
+  SESSION_RECOVERY_RECORD_VERSION,
   FrozenReviewPlanSchema,
   HostToolLedgerSummarySchema,
   PreparedNarrationArtifactSchema,
