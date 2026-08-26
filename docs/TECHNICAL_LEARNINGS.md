@@ -899,7 +899,7 @@ GitHub Actions run `32836672732` 成功部署 Worker `cs2-ai-demo-coach`，Cloud
 
 **限制 / 下一步**
 
-本轮只做了一个 9 回合小 Demo 的短浏览器 smoke，没有声称完成整场长时间验收；真实语音、逐玩家 LOS、阻挡和精确接触窗口仍不可验证。另修复了旧恢复记录在 IDB request 回调中抛错导致的开发态 issue overlay，以及手动 cue visit 下提交反思被 takeover guard 静默丢弃的问题。线上部署 smoke 待本次 push 后由现有 Cloudflare Actions 完成。
+本轮只做了一个 9 回合小 Demo 的短浏览器 smoke，没有声称完成整场长时间验收；真实语音、逐玩家 LOS、阻挡和精确接触窗口仍不可验证。另修复了旧恢复记录在 IDB request 回调中抛错导致的开发态 issue overlay，以及手动 cue visit 下提交反思被 takeover guard 静默丢弃的问题。push 后 Cloudflare Actions `32978616087` 成功部署 Worker，线上首页 HTTP 200、`/api/coaching/diagnose` POST 返回 `SUCCEEDED`，`/api/coaching/agent` 的 Reflection smoke 返回 `CUE_COMPLETED`、`DURABLE_OBJECT` 且 `recoverableAfterRefresh=true`；线上 IAB 页面加载超过 30 秒，未将其记作浏览器通过，curl/API 结果是当前可复核证据。
 
 ## 5. 常用问题排查表
 
