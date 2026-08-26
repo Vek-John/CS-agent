@@ -879,6 +879,28 @@ GitHub Actions run `32836672732` 成功部署 Worker `cs2-ai-demo-coach`，Cloud
 
 本轮没有用真实 Demo 做长时间浏览器点播验收。首次线上 DO 探针因本机 Node `fetch` 未走当前网络代理而连接超时，改用已连通生产的 `curl` 后一次通过；这是本地探针传输限制，不是服务端失败。未完成 manual visit 仍是瞬时状态，刷新只回到此前稳定默认边界；这是刻意的恢复语义，不是跨 Demo 历史记录。GitHub Actions 另报告 Node 20 action runtime 弃用提醒，当前由 runner 强制使用 Node 24，后续应升级 action 版本。
 
+### 4.39 2026-08-26：Reflection Gate 让用户意图进入有界教学诊断
+
+**触发**
+
+固定讲解不能把未确认的玩家意图当成 Demo 事实，也需要在用户补充队友语音或战术背景时保留不可验证边界；本轮要把反思接入会话学习主线而不改变冻结路线和结果前门控。
+
+**决定**
+
+独立 Feature Flag 开启时，cue 只在 `OutcomeCompletionGate=COMPLETE` 后展示 Reflection Gate。用户回答先解析为 `USER` claim，不写入 Demo facts；再由确定性 Hinge 选择预绑定 Diagnostic Capability，本轮完整使用 `VERIFY_RISK_BUDGET`，`TRADE` 在没有明确覆盖事实时返回 `UNVERIFIABLE`，只有 Demo 明确记录空间/时机缺口时返回 `PARTIALLY_SUPPORTED`，不伪造 LOS/语音。远端 Graph 不接收 Host 的 rich `DecisionState`（身份、坐标、朝向等）；资源诊断使用无身份 `DecisionResources` 投影，事实数组仍是 parser-owned 的有界确定性证据（保留验证时序/动作归属字段，不由 LLM 生成）。确定性执行器生成 result，再形成 Verdict/TransferRule 并合并 session `LearningThread`。跳过或失败走 Baseline fallback；Graph 只允许经过 identity/gate 校验的首个 reflection bootstrap 和完成诊断后的连续 cue 过渡，不创建 route/tick/播放器状态；异议最多一次并降低置信度。
+
+**落点**
+
+`apps/web/lib/playback/cs2d-playback-host.ts` 的 `teachingDiagnosticsEnabled`（查询参数/环境变量）、`TeachingDiagnosisPanel` 与 `teaching-diagnosis-host.ts`；`libs/contracts/src/teaching-diagnosis.ts`、`libs/coach-agent/src/teaching-diagnosis.ts` 及 Graph/runtime 的诊断事件、state 和 schema；会话保存 `cueCases` 与 `learningThreads`。关闭 flag 时保留 Baseline narration 与既有 Stage 3 路径。
+
+**验证**
+
+已执行教学诊断、Graph、API、Host、Session、Recovery 定向测试（8 个文件、66/66），`pnpm typecheck`、`pnpm build` 和 `git diff --check` 均通过。覆盖资源投影 schema、USER claim 边界、资源诊断、TRADE 不可验证/部分支持、LearningThread 更新、Graph bootstrap/连续 cue、跳过幂等、一次异议预算、API seam、Feature Flag 解析和旧 IndexedDB 记录清理。localhost 浏览器用 `demoTests/test_demo.dem` 完成了上传 → 选 Dog → 路线准备 → Reflection Gate → 选择“给队友补枪” → 诊断结论 → 异议“有队友语音”改判 → 继续 → 下一 cue → 跳过并回到 Baseline 的 smoke；提交后约 1.2 秒出现“诊断完成”，该流程无新的控制台错误。
+
+**限制 / 下一步**
+
+本轮只做了一个 9 回合小 Demo 的短浏览器 smoke，没有声称完成整场长时间验收；真实语音、逐玩家 LOS、阻挡和精确接触窗口仍不可验证。另修复了旧恢复记录在 IDB request 回调中抛错导致的开发态 issue overlay，以及手动 cue visit 下提交反思被 takeover guard 静默丢弃的问题。线上部署 smoke 待本次 push 后由现有 Cloudflare Actions 完成。
+
 ## 5. 常用问题排查表
 
 | 现象 | 首先检查 | 常见根因 | 不要做什么 |

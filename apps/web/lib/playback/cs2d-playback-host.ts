@@ -23,6 +23,21 @@ export function coachAgentEntryMode(search: string): CoachAgentEntryMode {
   return new URLSearchParams(search).get("coachAgent") === "stage2" ? "STAGE2" : "STAGE3";
 }
 
+/**
+ * The adaptive teaching-diagnosis slice is independently reversible.  The
+ * frozen review route, baseline narration and Stage 3 visual tools remain
+ * available when this flag is off.
+ */
+export function teachingDiagnosticsEnabled(
+  search: string,
+  configured = process.env.NEXT_PUBLIC_TEACHING_DIAGNOSTICS,
+): boolean {
+  const queryValue = new URLSearchParams(search).get("teachingDiagnostics")?.trim().toLowerCase();
+  if (["0", "false", "off"].includes(queryValue ?? "")) return false;
+  if (["1", "true", "on"].includes(queryValue ?? "")) return true;
+  return !["0", "false", "off"].includes(configured?.trim().toLowerCase() ?? "");
+}
+
 export interface Cs2dHostConfig {
   url: string;
   origin: string;

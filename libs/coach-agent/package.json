@@ -10,6 +10,7 @@
   "dependencies": {
     "@langchain/core": "1.2.9",
     "@langchain/langgraph": "1.4.12",
+    "@cs-coach/contracts": "workspace:*",
     "zod": "4.4.3"
   },
   "devDependencies": {

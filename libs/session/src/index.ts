@@ -27,6 +27,14 @@ export type SessionAction =
   | { type: "REPLAY_OUTCOME" }
   | { type: "ADVANCE_SEGMENT" }
   | { type: "QUESTION_ASKED"; question: string }
+  | {
+      type: "RECORD_TEACHING_CASE";
+      cueCase: import("@cs-coach/contracts").CueCase;
+      /** Optional latest reflection for fallback cases whose case has no reflection yet. */
+      reflection?: import("@cs-coach/contracts").UserReflection;
+      learningThread?: import("@cs-coach/contracts").LearningThread;
+    }
+  | { type: "CONFIRM_TEACHING_CASE"; cueId: string }
   | { type: "COMPLETE_SESSION" };
 
 /** Session owns this one-way authorization; PlanCompiler only owns route/tick shape. */
@@ -584,6 +592,71 @@ function reduceCoachingSessionInner(
             detail: action.question.trim()
           })
         ]
+      };
+    }
+
+    case "RECORD_TEACHING_CASE": {
+      if (!action.cueCase.cueId) return state;
+      const reflection = action.reflection ?? action.cueCase.reflection;
+      const cueCase = reflection && !action.cueCase.reflection
+        ? { ...action.cueCase, reflection }
+        : action.cueCase;
+      const cueCases = { ...(state.cue_cases ?? {}), [cueCase.cueId]: cueCase };
+      const priorThreads = state.learning_threads ?? [];
+      const learning_threads = action.learningThread
+        ? [...priorThreads.filter((thread) => thread.threadId !== action.learningThread!.threadId), action.learningThread].slice(-16)
+        : priorThreads;
+      const reflectionEventType = reflection?.response === "SKIPPED"
+        ? "REFLECTION_SKIPPED" as const
+        : reflection
+          ? "REFLECTION_SUBMITTED" as const
+          : undefined;
+      const priorEvents = state.user_events ?? [];
+      const appendedEvents: SessionUserEvent[] = [];
+      const appendEvent = (type: SessionUserEvent["type"], details: Partial<SessionUserEvent> = {}) => {
+        appendedEvents.push(event({ ...state, user_events: [...priorEvents, ...appendedEvents] }, type, details));
+      };
+      if (reflectionEventType) {
+        appendEvent(reflectionEventType, {
+          cue_id: cueCase.cueId,
+          detail: reflection?.rawText?.slice(0, 240),
+        });
+      }
+      if (cueCase.status === "DISAGREED") {
+        appendEvent("USER_DISAGREED", {
+          cue_id: cueCase.cueId,
+          detail: reflection?.rawText?.slice(0, 240),
+        });
+      }
+      if (cueCase.diagnosticResult || cueCase.verdict) {
+        appendEvent("DIAGNOSTIC_COMPLETED", {
+          cue_id: cueCase.cueId,
+          detail: cueCase.verdict?.type ?? cueCase.status,
+        });
+      }
+      const recorded = {
+        ...state,
+        cue_cases: cueCases,
+        ...(action.learningThread || state.learning_threads !== undefined ? { learning_threads } : {}),
+        user_events: [
+          ...priorEvents,
+          ...appendedEvents,
+        ],
+      };
+      return recorded;
+    }
+
+    case "CONFIRM_TEACHING_CASE": {
+      const currentCase = state.cue_cases?.[action.cueId];
+      if (!currentCase) return state;
+      const cue_cases = {
+        ...(state.cue_cases ?? {}),
+        [action.cueId]: { ...currentCase, status: "COMPLETED" as const },
+      };
+      return {
+        ...state,
+        cue_cases,
+        user_events: [...state.user_events, event(state, "VERDICT_CONFIRMED", { cue_id: action.cueId })],
       };
     }
 

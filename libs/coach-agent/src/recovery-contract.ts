@@ -84,7 +84,9 @@ export const RecoveryRouteReadinessSchema = z
 
 export const RecoveryCueProgressSchema = z.object({
   completedCueIds: z.array(Id).max(64),
-  presentedCueIds: z.array(Id).max(64),
+  // Older v2 host records predate manual-cue presentation tracking. Treat a
+  // missing list as an empty history, while keeping the list itself strict.
+  presentedCueIds: z.array(Id).max(64).default([]),
   consumedCueIds: z.array(Id).max(64),
   revealedCueIds: z.array(Id).max(64),
 }).strict();

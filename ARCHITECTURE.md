@@ -1,8 +1,8 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：3.7.0
-> 最后更新：2026-08-25
+> 版本：3.8.0
+> 最后更新：2026-08-26
 > 适用范围：Web 2D 到桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
 > 当前产品范围：[MVP_SCOPE.md](./MVP_SCOPE.md)
@@ -1339,6 +1339,7 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 | Graph Checkpoint | Accepted | Durable Object storage 自定义 BaseCheckpointSaver，紧凑 JSON state、identity/hash 恢复校验、retention 20；localhost MemorySaver 不承诺刷新恢复 |
 | CoachAgentRuntime 深接口 | Accepted | 调用方只依赖 `dispatch(event)`；Graph node、checkpoint、Policy 次数、重试与工具循环封装在 `libs/coach-agent` |
 | TeachingCapability | Accepted | CapabilityBuilder 绑定全部参数与合法 evidence；Policy 只能选择 capabilityId 或 FINISH_CUE，每 cue 默认最多一个成功视觉工具 |
+| Reflection Gate 与教学诊断 | Accepted | 由 `teachingDiagnostics` Feature Flag 独立控制；`OutcomeCompletionGate=COMPLETE` 后先收集反思，按 `USER Claim → Hinge →` 预绑定 Diagnostic Capability（本轮 `VERIFY_RISK_BUDGET`；`TRADE` 在无明确覆盖事实时保守 `UNVERIFIABLE`，有明确空间/时机缺口时仅 `PARTIALLY_SUPPORTED`）→ deterministic result → Verdict/TransferRule → session `LearningThread`；远端不接收 Host 的 rich `DecisionState`，资源诊断使用无身份 `DecisionResources` 投影，其他 fact/action/outcome 仍是 parser-owned 的有界确定性证据包；跳过/失败回退 Baseline，Graph bootstrap/连续 cue 只绑定合法 cue，不改变 route/tick/播放器；异议最多一次 |
 | AgentEffect / Host 工具 | Accepted | Graph 用 interrupt 发 ToolRequest，Host 校验 Session/Playback、按稳定 callId 去重并 Command resume；Graph 不直接写 React/iframe/reducer |
 | Session Recovery | Accepted | 浏览器 IndexedDB 只保存有界 SessionRecoveryRecord，DO 只保存 Agent checkpoint；重新选择同一 Demo 后以 RecoveryBoundary 和精确 identity/version/checkpoint 双状态握手恢复，不重启 Director |
 | Recovery 状态权威 | Accepted | ReplayAvailability 由 Host/bridge 拥有，Session rehydrate 只经 `libs/session`，canonical seek 只经 Playback bridge；ABSENT/LOADING 时 Agent 保持 DORMANT且零 LLM |
@@ -1388,3 +1389,4 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 | 3.5.4 | 2026-08-25 | 将 Stage 3 Coach Agent 切换为 localhost 与 Cloudflare 的默认产品入口；不增加部署变量或重定向，`coachAgent=stage2` 仅保留为单 cue 回归入口。 |
 | 3.6.0 | 2026-08-25 | 接受“浏览器 SessionRecoveryRecord＋Durable Object Agent checkpoint”的双状态恢复：重新选择同一 Demo 后按稳定 RecoveryBoundary 恢复冻结路线、Session 与 Agent；IndexedDB 不重新承载 LangGraph，File/Replay 不上传，工具 ledger 先持久化并在刷新后确定性收敛。 |
 | 3.7.0 | 2026-08-25 | 增加默认顺序路线＋用户点播 frozen cue：分离 DefaultRouteCursor、ManualCueVisit 与 PresentedCue；manual visit 不追平或改写默认 cursor，已呈现 cue 在默认路线中零模型重复经过。 |
+| 3.8.0 | 2026-08-26 | 增加受 Feature Flag 控制的 Reflection Gate 教学诊断链：USER Claim、Hinge、预绑定 Diagnostic Capability、deterministic result、Verdict/TransferRule 与 session LearningThread；`VERIFY_RISK_BUDGET` 完整接入，`VERIFY_TRADE_ASSUMPTION` 只对明确空间/时机事实做部分验证；保留 Baseline fallback、Outcome Gate、Graph bootstrap/连续 cue 过渡及一次异议预算。 |

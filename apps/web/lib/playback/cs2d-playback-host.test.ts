@@ -21,6 +21,7 @@ import {
   reviewSegmentLabel,
   reviewSegmentTone,
   seekCanonicalBySeconds,
+  teachingDiagnosticsEnabled,
   timelinePercent,
   timelineRange
 } from "./cs2d-playback-host";
@@ -43,6 +44,13 @@ describe("cs2d localhost host boundary", () => {
     expect(coachAgentEntryMode("?coachAgent=stage3")).toBe("STAGE3");
     expect(coachAgentEntryMode("?coachAgent=off")).toBe("STAGE3");
     expect(coachAgentEntryMode("?coachAgent=stage2")).toBe("STAGE2");
+  });
+
+  it("keeps teaching diagnosis independently reversible", () => {
+    expect(teachingDiagnosticsEnabled("", undefined)).toBe(true);
+    expect(teachingDiagnosticsEnabled("?teachingDiagnostics=off", "on")).toBe(false);
+    expect(teachingDiagnosticsEnabled("?teachingDiagnostics=on", "off")).toBe(true);
+    expect(teachingDiagnosticsEnabled("", "false")).toBe(false);
   });
 
   it("filters stale analysis events by the current selected player", () => {

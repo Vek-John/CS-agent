@@ -19,6 +19,7 @@ import {
   type CoachAgentState,
   type FallbackReason,
   type ReconnectReplayEvent,
+  type SubmitReflectionEvent,
 } from "./types";
 import { DeterministicPolicyAdapter, type PolicyAdapter } from "./adapters";
 import { createCueGraph } from "./graph";
@@ -324,6 +325,34 @@ function routeOrderMatches(
   return event.routeSegmentIndex === cursor || event.routeSegmentIndex === cursor + 1;
 }
 
+/**
+ * A first reflection may arrive before the host has persisted START_CUE.  In
+ * that narrow race there is no checkpoint token to compare, so the event must
+ * carry the structural proof that it came from a completed cue: a cue-bound
+ * presentable packet with at least one outcome fact strictly after the
+ * decision facts.  This is intentionally stricter than trusting the wire
+ * `outcomeGateStatus` flag alone.  A future version can replace this derived
+ * proof with an opaque Host-issued gate token without changing the bootstrap
+ * branch.
+ */
+function canBootstrapReflection(event: CoachAgentEvent): event is SubmitReflectionEvent {
+  if (event.type !== "SUBMIT_REFLECTION" || event.outcomeGateStatus !== "COMPLETE") return false;
+  const identityValues = Object.values(event.identity);
+  if (!identityValues.every((value) => typeof value === "string" && value.trim().length > 0)) return false;
+  if (event.input.cueId !== event.cueId || event.reflection.cueId !== event.cueId) return false;
+  if ("reflection" in event.input && event.input.reflection.cueId !== event.cueId) return false;
+  if (event.input.candidateId && event.input.material && event.input.material.candidateId !== event.input.candidateId) return false;
+  if (event.input.decisionState !== undefined) return false;
+
+  const cue = event.input.cue;
+  if (!cue || cue.id !== event.cueId || event.input.outcomeFacts.length === 0) return false;
+  const latestDecisionTick = event.input.decisionFacts.reduce(
+    (latest, fact) => Math.max(latest, fact.available_at_tick),
+    -1,
+  );
+  return event.input.outcomeFacts.every((fact) => fact.availableAtTick > latestDecisionTick);
+}
+
 class CoachAgentRuntimeImpl implements CoachAgentRuntime {
   private readonly policy: PolicyAdapter;
   private backend: RuntimeBackend;
@@ -442,7 +471,12 @@ class CoachAgentRuntimeImpl implements CoachAgentRuntime {
 
     if (saved && !sameIdentity(identityFromState(saved), event.identity)) {
       const reason = saved.routeHash === event.identity.routeHash ? "IDENTITY_MISMATCH" : "ROUTE_HASH_MISMATCH";
-      if (event.type === "RESUME_TOOL" || event.type === "RECONNECT_REPLAY") {
+      if (
+        event.type === "RESUME_TOOL" ||
+        event.type === "RECONNECT_REPLAY" ||
+        event.type === "SUBMIT_REFLECTION" ||
+        event.type === "SUBMIT_DISAGREEMENT"
+      ) {
         return resultForState(
           dormantState(event.identity, reason),
           this.backend,
@@ -481,6 +515,30 @@ class CoachAgentRuntimeImpl implements CoachAgentRuntime {
       }
       if (disposition.status !== "NONE") {
         return resultForState(dormantState(event.identity, "RECOVERY_TOOL_MISMATCH"), this.backend, "DORMANT_RECOVERY_MISMATCH", read.checkpointId);
+      }
+      return this.invokeState(saved, event, config, "MATCHED");
+    }
+
+    if (event.type === "SUBMIT_REFLECTION" || event.type === "SUBMIT_DISAGREEMENT") {
+      // Reflection submissions are ordinary checkpointed graph events, but
+      // they must never manufacture a session or revive a taken-over run.
+      // The graph repeats cue/gate/attempt checks so direct graph callers and
+      // runtime callers share the same trust boundary.
+      if (!saved) {
+        if (canBootstrapReflection(event)) {
+          // Keep route/tick ownership in Host/Session.  The diagnosis graph
+          // only fills the three fields it needs to bind this reflection;
+          // it never receives or invents a playback position and never enters
+          // the visual Policy route.
+          return this.invokeState(emptyState(event.identity), event, config, "FRESH");
+        }
+        return resultForState(dormantState(event.identity, "STALE_RESUME"), this.backend, "DORMANT_MISSING", read.checkpointId);
+      }
+      if (saved.sessionStatus === "CANCELLED" || saved.sessionStatus === "COMPLETED" || saved.runStatus === "USER_TAKEOVER") {
+        return resultForState(saved, this.backend, "MATCHED", read.checkpointId);
+      }
+      if (saved.processedEventIds.includes(event.eventId)) {
+        return resultForState(saved, this.backend, "MATCHED", read.checkpointId);
       }
       return this.invokeState(saved, event, config, "MATCHED");
     }
@@ -558,6 +616,10 @@ class CoachAgentRuntimeImpl implements CoachAgentRuntime {
       if (saved.runStatus !== "USER_TAKEOVER") return resultForState(saved, this.backend, "MATCHED", read.checkpointId);
       if (saved.completedCueIds.includes(event.cueId)) return resultForState(saved, this.backend, "MATCHED", read.checkpointId);
       return this.invokeState(initialManualVisitState(event, saved), event, config, "MATCHED");
+    }
+
+    if (event.type !== "START_CUE") {
+      throw new Error("the coach agent runtime requires a recognized lifecycle event");
     }
 
     // START_CUE is the sole cue preparation event. A takeover requires a new

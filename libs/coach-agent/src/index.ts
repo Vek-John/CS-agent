@@ -12,5 +12,6 @@ export * from "./session-wrap-up";
 export * from "./recovery-contract";
 export * from "./durable-object-checkpoint";
 export * from "./remote-dispatch";
+export * from "./teaching-diagnosis";
 export { IndexedDbCheckpointSaver } from "./indexeddb-checkpoint";
 export type { IndexedDbCheckpointSaverOptions } from "./indexeddb-checkpoint";

@@ -5,7 +5,11 @@ import {
   SessionRecoveryRecordSchema,
   type SessionRecoveryRecord,
 } from "@cs-coach/coach-agent/client";
-import { HOST_RECOVERY_TTL_MS } from "./host-recovery-store";
+import {
+  HOST_RECOVERY_DB_VERSION,
+  HOST_RECOVERY_OBJECT_STORE,
+  HOST_RECOVERY_TTL_MS,
+} from "./host-recovery-store";
 import { createSessionRecoveryRuntime } from "./session-recovery-runtime";
 
 const HASH = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -92,6 +96,52 @@ function deleteDatabase(name: string): Promise<void> {
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
     request.onblocked = () => reject(new Error("database cleanup blocked"));
+  });
+}
+
+function putRawRecord(name: string, value: unknown): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = fakeIndexedDB.open(name, HOST_RECOVERY_DB_VERSION);
+    request.onupgradeneeded = () => {
+      const database = request.result;
+      if (!database.objectStoreNames.contains(HOST_RECOVERY_OBJECT_STORE)) {
+        database.createObjectStore(HOST_RECOVERY_OBJECT_STORE, { keyPath: "recoveryId" });
+      }
+    };
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction(HOST_RECOVERY_OBJECT_STORE, "readwrite");
+      transaction.objectStore(HOST_RECOVERY_OBJECT_STORE).put(value);
+      transaction.onerror = () => {
+        database.close();
+        reject(transaction.error);
+      };
+      transaction.oncomplete = () => {
+        database.close();
+        resolve();
+      };
+    };
+  });
+}
+
+function readRawRecord(name: string, recoveryId: string): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const request = fakeIndexedDB.open(name, HOST_RECOVERY_DB_VERSION);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction(HOST_RECOVERY_OBJECT_STORE, "readonly");
+      const read = transaction.objectStore(HOST_RECOVERY_OBJECT_STORE).get(recoveryId);
+      read.onerror = () => {
+        database.close();
+        reject(read.error);
+      };
+      read.onsuccess = () => {
+        database.close();
+        resolve(read.result);
+      };
+    };
   });
 }
 
@@ -193,5 +243,26 @@ describe("SessionRecoveryRuntime browser store seam", () => {
     const started = await runtime.dispatch(event("SESSION_STARTED", "start-broken", record("memory-only", Date.now())));
     expect(started.status).toBe("DEGRADED");
     expect(started.record?.recoveryId).toBe("memory-only");
+  });
+
+  it("drops malformed persisted records while retaining a valid recovery", async () => {
+    const databaseName = `recovery-test-${Date.now()}-malformed`;
+    const now = HOST_RECOVERY_TTL_MS * 20;
+    const runtime = createSessionRecoveryRuntime({ indexedDB: fakeIndexedDB, databaseName, now: () => now });
+    await runtime.dispatch(event("SESSION_STARTED", "start-valid", record("valid", now + 1)));
+    await putRawRecord(databaseName, {
+      recoveryId: "malformed",
+      schemaVersion: "session-recovery-record.v1",
+      status: "INCOMPLETE",
+    });
+
+    const rebuilt = createSessionRecoveryRuntime({ indexedDB: fakeIndexedDB, databaseName, now: () => now + 2 });
+    const boot = await rebuilt.dispatch(event("BOOT", "boot-malformed"));
+
+    expect(boot.status).toBe("DORMANT");
+    expect(boot.recoveryId).toBe("valid");
+    expect(await readRawRecord(databaseName, "malformed")).toBeUndefined();
+
+    await deleteDatabase(databaseName);
   });
 });

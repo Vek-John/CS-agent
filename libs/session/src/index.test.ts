@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { CueCase, LearningThread, UserReflection } from "@cs-coach/contracts";
 import { createSyntheticMirageTimeline } from "@cs-coach/demo-domain";
 import { createFixtureReviewPlan } from "@cs-coach/review-planner";
 import {
@@ -15,6 +16,49 @@ import {
 
 const timeline = createSyntheticMirageTimeline();
 const plan = createFixtureReviewPlan(timeline);
+
+function fixtureReflection(cueId: string, response: UserReflection["response"]): UserReflection {
+  return { cueId, response, source: "USER", limitations: [] };
+}
+
+function fixtureCueCase(cueId: string, overrides: Partial<CueCase> = {}): CueCase {
+  return {
+    schemaVersion: "cue-case.v1",
+    caseId: `case-${cueId}`,
+    cueId,
+    pedagogyMode: "DEFER",
+    status: "FALLBACK",
+    claims: [],
+    capabilities: [],
+    baselineNarrationAvailable: true,
+    attemptBudget: { reflection: 1, diagnostic: 1, disagreement: 0, alternateDiagnostic: 0 },
+    limitations: [],
+    ...overrides,
+  };
+}
+
+function fixtureLearningThread(cueId: string): LearningThread {
+  return {
+    threadId: `thread-${cueId}`,
+    scope: "SESSION",
+    hingeCode: `hinge-${cueId}`,
+    trigger: { situation: "fixture situation", conditions: ["fixture condition"] },
+    userModel: { goal: "fixture goal" },
+    diagnosis: { type: "INFORMATION_MODEL", summary: "fixture diagnosis", confidence: 0.8 },
+    transferRule: {
+      ruleId: `rule-${cueId}`,
+      when: "fixture trigger",
+      do: "fixture action",
+      refs: [],
+      confidence: 0.8,
+      limitations: [],
+    },
+    evidenceCueIds: [cueId],
+    successfulCueIds: [],
+    conflictingCueIds: [],
+    status: "TAUGHT",
+  };
+}
 
 function reachFirstCue() {
   let state = createCoachingSession(plan);
@@ -426,5 +470,58 @@ describe("CoachingSession deterministic safety kernel", () => {
 
     state = reduceCoachingSession(plan, state, { type: "COMPLETE_SESSION" });
     expect(state.phase).toBe("COMPLETED");
+  });
+
+  it("records a fallback case with a skipped reflection but no diagnostic completion", () => {
+    const cueId = plan.cues[0]!.id;
+    const cueCase = fixtureCueCase(cueId);
+    const reflection = fixtureReflection(cueId, "SKIPPED");
+    const state = reduceCoachingSession(plan, createCoachingSession(plan), {
+      type: "RECORD_TEACHING_CASE",
+      cueCase,
+      reflection,
+    });
+
+    expect(state.cue_cases).toEqual({ [cueId]: { ...cueCase, reflection } });
+    expect(state.user_events.map((entry) => entry.type)).toEqual(["REFLECTION_SKIPPED"]);
+    expect(state.user_events.some((entry) => entry.type === "DIAGNOSTIC_COMPLETED")).toBe(false);
+    expect(new Set(state.user_events.map((entry) => entry.id)).size).toBe(state.user_events.length);
+  });
+
+  it("records a diagnosed case and LearningThread with submitted and completed events", () => {
+    const cueId = plan.cues[1]!.id;
+    const resultId = `diagnostic-${cueId}`;
+    const hingeId = `hinge-${cueId}`;
+    const reflection = fixtureReflection(cueId, "ANSWERED");
+    const cueCase = fixtureCueCase(cueId, {
+      caseId: `case-diagnosed-${cueId}`,
+      status: "AWAITING_CONFIRMATION",
+      reflection,
+      diagnosticResult: {
+        resultId,
+        capabilityId: "VERIFY_INFORMATION_ASSUMPTION",
+        cueId,
+        hingeId,
+        status: "SUPPORTED",
+        evidenceRefs: [],
+        measurements: [],
+        explanation: "fixture diagnostic",
+        limitations: [],
+      },
+    });
+    const learningThread = fixtureLearningThread(cueId);
+    const state = reduceCoachingSession(plan, createCoachingSession(plan), {
+      type: "RECORD_TEACHING_CASE",
+      cueCase,
+      learningThread,
+    });
+
+    expect(state.cue_cases).toEqual({ [cueId]: cueCase });
+    expect(state.learning_threads).toEqual([learningThread]);
+    expect(state.user_events.map((entry) => entry.type)).toEqual([
+      "REFLECTION_SUBMITTED",
+      "DIAGNOSTIC_COMPLETED",
+    ]);
+    expect(new Set(state.user_events.map((entry) => entry.id)).size).toBe(state.user_events.length);
   });
 });

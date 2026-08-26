@@ -74,6 +74,18 @@ export interface Stage3ToolLedgerTransition {
   readonly manualVisitId?: string;
 }
 
+function agentStateSummary(
+  input: Stage3HostAdapterInput,
+  state: CoachAgentResult["state"] | undefined,
+): Stage3ToolLedgerTransition["agentState"] {
+  return {
+    activeCueId: state?.activeCueId === undefined ? input.cue.id : state.activeCueId,
+    currentSessionPhase: state?.currentSessionPhase ?? input.currentSessionPhase,
+    routeCursor: state?.routeCursor ?? -1,
+    sessionStatus: state?.sessionStatus ?? "ACTIVE",
+  };
+}
+
 interface PendingTool {
   readonly request: AgentToolRequest;
   readonly context: Stage3ToolContext;
@@ -159,10 +171,13 @@ export class CoachAgentStage3Controller {
     return next;
   }
 
-  private async persistToolTransition(transition: Stage3ToolLedgerTransition): Promise<boolean> {
+  private persistToolTransition(transition: Stage3ToolLedgerTransition): boolean | Promise<boolean> {
+    const persist = this.options.onToolLedgerTransition;
+    if (!persist) return true;
     try {
-      await this.options.onToolLedgerTransition?.(transition);
-      return true;
+      const result = persist(transition);
+      if (result === undefined) return true;
+      return Promise.resolve(result).then(() => true, () => false);
     } catch {
       // Recovery persistence is best effort. The live playback/Agent dispatch
       // remains usable and the Host callback exposes DEGRADED status.
@@ -286,7 +301,7 @@ export class CoachAgentStage3Controller {
       return;
     }
     if (!event) return;
-    await this.persistToolTransition({
+    const resultedPersistence = this.persistToolTransition({
       status: "RESULTED",
       request: pending.request,
       result,
@@ -295,20 +310,22 @@ export class CoachAgentStage3Controller {
       source: pending.manualVisitId ? "MANUAL" : "DEFAULT",
       ...(pending.manualVisitId ? { manualVisitId: pending.manualVisitId } : {}),
     });
+    if (typeof resultedPersistence !== "boolean") await resultedPersistence;
     this.pending = undefined;
     this.setState({ status: "RESUMING", cueId: pending.input.cue.id, tool: pending.request.tool, presentation: this.state.presentation });
     try {
       const next = await this.dispatchSerial(event);
       if (!this.isCurrent(pending.input, pending.token)) return;
-      await this.persistToolTransition({
+      const resumedPersistence = this.persistToolTransition({
         status: "RESUMED",
         request: pending.request,
         result,
-        agentCheckpointId: next.checkpoint.checkpointId,
-        agentState: next.state,
+        agentCheckpointId: next.checkpoint?.checkpointId ?? null,
+        agentState: agentStateSummary(pending.input, next.state),
         source: pending.manualVisitId ? "MANUAL" : "DEFAULT",
         ...(pending.manualVisitId ? { manualVisitId: pending.manualVisitId } : {}),
       });
+      if (typeof resumedPersistence !== "boolean") await resumedPersistence;
       await this.handleAgentResult(pending.input, pending.token, next, pending.manualVisitId);
     } catch (error) {
       if (tokenIsCurrent(this.token, pending.token)) {
@@ -359,8 +376,8 @@ export class CoachAgentStage3Controller {
         input,
         token,
         commandGeneration: this.adapter.commandGenerationFor(request) ?? 0,
-        agentCheckpointId: result.checkpoint.checkpointId,
-        agentState: result.state,
+        agentCheckpointId: result.checkpoint?.checkpointId ?? null,
+        agentState: agentStateSummary(input, result.state),
         ...(manualVisitId ? { manualVisitId } : {}),
       };
       const finalResult = this.adapter.resultForCall(request);
@@ -386,22 +403,23 @@ export class CoachAgentStage3Controller {
       input,
       token,
       commandGeneration: command.generation,
-      agentCheckpointId: result.checkpoint.checkpointId,
-      agentState: result.state,
+      agentCheckpointId: result.checkpoint?.checkpointId ?? null,
+      agentState: agentStateSummary(input, result.state),
       ...(manualVisitId ? { manualVisitId } : {}),
     };
     this.pending = pending;
     this.armTimeout(pending);
     this.setState({ status: "FOCUSING", cueId: input.cue.id, tool: request.tool, presentation: command.args });
-    const postedPersisted = await this.persistToolTransition({
+    const postedPersistence = this.persistToolTransition({
       status: "POSTED",
       request,
       result: null,
-      agentCheckpointId: result.checkpoint.checkpointId,
-      agentState: result.state,
+      agentCheckpointId: result.checkpoint?.checkpointId ?? null,
+      agentState: agentStateSummary(input, result.state),
       source: manualVisitId ? "MANUAL" : "DEFAULT",
       ...(manualVisitId ? { manualVisitId } : {}),
     });
+    const postedPersisted = typeof postedPersistence === "boolean" ? postedPersistence : await postedPersistence;
     if (!postedPersisted) {
       this.clearTimeout();
       this.pending = undefined;
@@ -572,15 +590,16 @@ export class CoachAgentStage3Controller {
               observation: { code: "UNAVAILABLE", completed: false },
               limitations: ["USER_TAKEOVER_CANCELLED_PENDING_TOOL"],
             });
-            await this.persistToolTransition({
+            const takeoverPersistence = this.persistToolTransition({
               status: "RESUMED",
               request: takeoverPending.request,
               result: cancelled,
-              agentCheckpointId: result.checkpoint.checkpointId,
-              agentState: result.state,
+              agentCheckpointId: result.checkpoint?.checkpointId ?? null,
+              agentState: agentStateSummary(takeoverInput, result.state),
               source: takeoverPending.manualVisitId ? "MANUAL" : "DEFAULT",
               ...(takeoverPending.manualVisitId ? { manualVisitId: takeoverPending.manualVisitId } : {}),
             });
+            if (typeof takeoverPersistence !== "boolean") await takeoverPersistence;
           }
           return true;
         })

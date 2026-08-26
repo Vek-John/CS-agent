@@ -28,13 +28,25 @@ import {
   type PresentableCueSummary,
   type StartCueEvent,
   type StartManualCueVisitEvent,
+  type SubmitDisagreementEvent,
+  type SubmitReflectionEvent,
   type TeachingCapability,
   type TeachingCapabilityId,
   type TraceEntry,
 } from "./types";
+import { z } from "zod";
+import {
+  CueCaseSchema,
+  LearningThreadSchema,
+  TeachingDiagnosisInputSchema,
+  TeachingDiagnosisOutputSchema,
+  UserReflectionSchema,
+  diagnoseTeachingCue,
+  reviseTeachingDiagnosis,
+} from "./teaching-diagnosis";
 import { aggregateSessionThemes } from "./session-theme-aggregator";
 import type { PolicyAdapter, PolicyTraceMeta } from "./adapters";
-import { identityFingerprint, moveId, playbackCallId, stableInputHash } from "./identity";
+import { moveId, playbackCallId, stableInputHash } from "./identity";
 import { deterministicPolicyOutput } from "./deterministic-policy";
 
 export const CoachAgentGraphState = Annotation.Root({
@@ -55,6 +67,18 @@ function identityFromState(state: CoachAgentState): CoachAgentIdentity {
     routeId: state.routeId,
     routeHash: state.routeHash,
   };
+}
+
+function sameIdentity(left: CoachAgentIdentity, right: CoachAgentIdentity): boolean {
+  return (
+    left.runId === right.runId &&
+    left.sessionId === right.sessionId &&
+    left.demoId === right.demoId &&
+    left.demoContentHash === right.demoContentHash &&
+    left.selectedPlayerId === right.selectedPlayerId &&
+    left.routeId === right.routeId &&
+    left.routeHash === right.routeHash
+  );
 }
 
 function unique(values: readonly string[]): string[] {
@@ -423,6 +447,381 @@ function observeSegmentState(
   );
 }
 
+type DiagnosisSubmissionEvent = SubmitReflectionEvent | SubmitDisagreementEvent;
+
+/**
+ * Reflection can be the first event observed by the graph when the Host's
+ * START_CUE checkpoint was lost or was never written.  Only the exact state
+ * emitted by runtime.emptyState is eligible: no route progress, cue case,
+ * tool, or playback metadata may be revived by this path.
+ */
+function isFreshDiagnosisState(
+  state: CoachAgentState,
+  event: SubmitReflectionEvent,
+): boolean {
+  if (!sameIdentity(identityFromState(state), event.identity)) return false;
+  return (
+    state.sessionStatus === "ACTIVE" &&
+    state.runStatus === "RUNNING" &&
+    state.activeSegmentId === null &&
+    state.activeCueId === null &&
+    state.activeCueSource === null &&
+    state.activeManualVisitId === null &&
+    state.activeTargetSegmentIndex === null &&
+    state.routeCursor === -1 &&
+    state.currentSegmentMode === null &&
+    state.activeFocus === null &&
+    state.activeNarrationPolicySummary === null &&
+    state.activeAllowedEvidenceSummary.length === 0 &&
+    state.activePresentableCueSummary == null &&
+    state.observedSegmentIds.length === 0 &&
+    state.currentSessionPhase === "INTRO" &&
+    state.outcomeGateStatus === "NOT_APPLICABLE" &&
+    state.narrationReadiness === "NOT_REQUIRED" &&
+    state.availableCapabilities.length === 0 &&
+    state.selectedTeachingMove === null &&
+    state.pendingToolCall === null &&
+    state.toolHistory.length === 0 &&
+    state.completedCueIds.length === 0 &&
+    state.completedCueSummaries.length === 0 &&
+    state.presentedCueBindings.length === 0 &&
+    Object.keys(state.cueCases).length === 0 &&
+    state.learningThreads.length === 0 &&
+    state.sessionThemes.length === 0 &&
+    state.summaryThemes.length === 0 &&
+    state.sessionSummaryInput === null &&
+    state.sessionSummaryFallback === null &&
+    state.policyBudget.policyCalls === 0 &&
+    state.policyBudget.alternativeAttempts === 0 &&
+    (state.fallbackReasons.length === 0 || state.fallbackReasons.every((reason) => reason === "IDB_FALLBACK")) &&
+    state.lastStableCheckpoint.checkpointId === null &&
+    state.lastStableCheckpoint.sequence === 0 &&
+    state.traceSummary.entryCount === 0 &&
+    state.traceSummary.lastNode === null &&
+    state.traceSummary.lastInputHash === null &&
+    state.traceSummary.lastFinalStatus === null &&
+    state.processedEventIds.length === 0 &&
+    state.trace.length === 0 &&
+    state.lastToolResult === null
+  );
+}
+
+function bootstrapDiagnosisState(
+  state: CoachAgentState,
+  event: DiagnosisSubmissionEvent,
+): CoachAgentState {
+  if (
+    event.type !== "SUBMIT_REFLECTION" ||
+    event.outcomeGateStatus !== "COMPLETE" ||
+    event.input.cueId !== event.cueId ||
+    event.reflection.cueId !== event.cueId ||
+    ("reflection" in event.input && event.input.reflection.cueId !== event.cueId) ||
+    !isFreshDiagnosisState(state, event)
+  ) {
+    return state;
+  }
+  return {
+    ...state,
+    // These are the only session fields a diagnosis submission may establish.
+    // In particular, do not copy route indices, segment IDs, ticks, or visual
+    // capabilities from the diagnosis packet.
+    activeCueId: event.cueId,
+    currentSessionPhase: "PAUSED_FOR_COACHING",
+    outcomeGateStatus: "COMPLETE",
+  };
+}
+
+/**
+ * A Host may move directly from one completed diagnosis to the next one
+ * without sending a visual START_CUE.  This is deliberately a narrow state
+ * transition: only a fully completed, non-taken-over cue may be rebound, and
+ * only the diagnosis-owned cue/phase fields are established.  Route position,
+ * ticks, segments, players and playback capabilities remain Host-owned and
+ * are never copied from the reflection packet.
+ */
+function transitionCompletedDiagnosisCue(
+  state: CoachAgentState,
+  event: DiagnosisSubmissionEvent,
+): CoachAgentState {
+  if (event.type !== "SUBMIT_REFLECTION") return state;
+  if (
+    state.sessionStatus !== "ACTIVE" ||
+    state.runStatus !== "CUE_COMPLETED" ||
+    state.pendingToolCall !== null ||
+    state.outcomeGateStatus !== "COMPLETE" ||
+    event.outcomeGateStatus !== "COMPLETE" ||
+    !sameIdentity(identityFromState(state), event.identity) ||
+    !state.activeCueId ||
+    event.cueId === state.activeCueId ||
+    state.completedCueIds.includes(event.cueId) ||
+    Object.prototype.hasOwnProperty.call(state.cueCases, event.cueId) ||
+    (event.input.cue !== undefined && event.input.cue.id !== event.cueId)
+  ) {
+    return state;
+  }
+
+  return {
+    ...state,
+    // Diagnosis does not own a route marker or playback position.  Clear all
+    // visual cue-local fields before binding the next reflection cue.
+    activeSegmentId: null,
+    activeCueId: event.cueId,
+    activeCueSource: null,
+    activeManualVisitId: null,
+    activeTargetSegmentIndex: null,
+    currentSegmentMode: null,
+    activeFocus: null,
+    activeNarrationPolicySummary: null,
+    activeAllowedEvidenceSummary: [],
+    activePresentableCueSummary: null,
+    currentSessionPhase: "PAUSED_FOR_COACHING",
+    outcomeGateStatus: "COMPLETE",
+    narrationReadiness: "NOT_REQUIRED",
+    availableCapabilities: [],
+    selectedTeachingMove: null,
+    pendingToolCall: null,
+    lastToolResult: null,
+    policyBudget: {
+      ...state.policyBudget,
+      policyCalls: 0,
+      alternativeAttempts: 0,
+    },
+  };
+}
+
+function storeCueCase(
+  state: CoachAgentState,
+  cueCase: CoachAgentState["cueCases"][string],
+): CoachAgentState["cueCases"] {
+  const entries = [
+    ...Object.entries(state.cueCases).filter(([cueId]) => cueId !== cueCase.cueId),
+    [cueCase.cueId, cueCase] as const,
+  ].slice(-64);
+  const next: CoachAgentState["cueCases"] = {};
+  for (const [cueId, value] of entries) next[cueId] = value;
+  return next;
+}
+
+function storeLearningThread(
+  state: CoachAgentState,
+  thread: CoachAgentState["learningThreads"][number],
+): CoachAgentState["learningThreads"] {
+  return [
+    ...state.learningThreads.filter((item) => item.threadId !== thread.threadId),
+    thread,
+  ].slice(-16);
+}
+
+function markDiagnosisEvent(
+  state: CoachAgentState,
+  eventId: string,
+): string[] {
+  return [...state.processedEventIds, eventId].slice(-64);
+}
+
+function diagnosisInputFor(
+  event: DiagnosisSubmissionEvent,
+  state: CoachAgentState,
+  reflection: z.infer<typeof UserReflectionSchema>,
+): Parameters<typeof diagnoseTeachingCue>[0] {
+  // The session's bounded threads are authoritative.  Host-provided thread
+  // snapshots are intentionally not trusted to replace checkpoint state.
+  const parsed = TeachingDiagnosisInputSchema.parse({
+    ...event.input,
+    reflection,
+    existingThreads: state.learningThreads,
+  });
+  // The schema intentionally accepts the identity-free DecisionResources
+  // projection while the domain contract may carry additional observable
+  // fields.  The parse above is the trust boundary; the pure module consumes
+  // the parsed packet.
+  return parsed as unknown as Parameters<typeof diagnoseTeachingCue>[0];
+}
+
+function diagnosisFallbackCase(
+  state: CoachAgentState,
+  event: DiagnosisSubmissionEvent,
+  limitations: readonly string[],
+): CoachAgentState["cueCases"][string] {
+  const previous = state.cueCases[event.cueId];
+  const attemptBudget = previous?.attemptBudget ?? {
+    reflection: 0,
+    diagnostic: 0,
+    disagreement: 0,
+    alternateDiagnostic: 0,
+  };
+  return CueCaseSchema.parse({
+    ...(previous ?? {
+      schemaVersion: "cue-case.v1",
+      caseId: `case-${event.cueId}`.slice(0, 160),
+      cueId: event.cueId,
+      ...(event.input.candidateId ? { candidateId: event.input.candidateId } : {}),
+      pedagogyMode: "DEFER",
+      claims: [],
+      capabilities: [],
+      baselineNarrationAvailable: true,
+    }),
+    status: "FALLBACK",
+    // Keep the latest USER input visible even when a diagnostic/revision
+    // attempt fails; it remains a claim and is never promoted to a Demo fact.
+    reflection: event.reflection,
+    attemptBudget: {
+      ...attemptBudget,
+      ...(event.type === "SUBMIT_REFLECTION" ? { reflection: 1 } : { disagreement: 1 }),
+    },
+    limitations: unique([...((previous?.limitations ?? []) as readonly string[]), ...limitations]).slice(0, 12),
+  });
+}
+
+function rejectDiagnosisSubmission(
+  state: CoachAgentState,
+  event: DiagnosisSubmissionEvent,
+  reason: FallbackReason,
+): CoachAgentState {
+  return appendTrace(
+    {
+      ...state,
+      fallbackReasons: addFallbackReason(state.fallbackReasons, reason),
+      processedEventIds: markDiagnosisEvent(state, event.eventId),
+    },
+    "SESSION",
+    event.eventId,
+    { input: event, finalStatus: state.runStatus },
+  );
+}
+
+function diagnosisState(
+  state: CoachAgentState,
+  event: DiagnosisSubmissionEvent,
+): CoachAgentState {
+  const bootstrapped = transitionCompletedDiagnosisCue(
+    bootstrapDiagnosisState(state, event),
+    event,
+  );
+  if (
+    !sameIdentity(identityFromState(bootstrapped), event.identity) ||
+    bootstrapped.activeCueId !== event.cueId ||
+    bootstrapped.outcomeGateStatus !== "COMPLETE" ||
+    bootstrapped.sessionStatus !== "ACTIVE" ||
+    bootstrapped.runStatus === "WAITING_TOOL" ||
+    bootstrapped.runStatus === "USER_TAKEOVER" ||
+    bootstrapped.runStatus === "CANCELLED" ||
+    bootstrapped.runStatus === "COMPLETED"
+  ) {
+    return rejectDiagnosisSubmission(bootstrapped, event, "DIAGNOSIS_GATE_LOCKED");
+  }
+
+  const previous = bootstrapped.cueCases[event.cueId];
+  if (event.type === "SUBMIT_REFLECTION" && previous?.attemptBudget.reflection >= 1) {
+    return rejectDiagnosisSubmission(bootstrapped, event, "DIAGNOSIS_ATTEMPT_EXHAUSTED");
+  }
+  if (event.type === "SUBMIT_DISAGREEMENT" &&
+    (!previous || !previous.verdict || previous.attemptBudget.disagreement >= 1)) {
+    return rejectDiagnosisSubmission(bootstrapped, event, "DIAGNOSIS_ATTEMPT_EXHAUSTED");
+  }
+
+  // Skip is a first-class baseline path.  It records the user's choice but
+  // never invokes a diagnostic capability or turns baseline text into a
+  // user-supported claim.
+  if (event.reflection.response === "SKIPPED") {
+    const cueCase = diagnosisFallbackCase(bootstrapped, event, [
+      "用户跳过了反思；保留 Baseline 讲解，不生成自适应诊断。",
+    ]);
+    return appendTrace(
+      {
+        ...bootstrapped,
+        runStatus: "CUE_COMPLETED",
+        sessionStatus: "ACTIVE",
+        cueCases: storeCueCase(bootstrapped, cueCase),
+        selectedTeachingMove: null,
+        pendingToolCall: null,
+        processedEventIds: markDiagnosisEvent(bootstrapped, event.eventId),
+      },
+      "SESSION",
+      event.eventId,
+      { input: event, finalStatus: "CUE_COMPLETED" },
+    );
+  }
+
+  try {
+    if (event.type === "SUBMIT_REFLECTION") {
+      const input = diagnosisInputFor(event, bootstrapped, event.reflection);
+      const output = TeachingDiagnosisOutputSchema.parse(diagnoseTeachingCue(input));
+      const cueCase = CueCaseSchema.parse(output.cueCase);
+      const thread = LearningThreadSchema.parse(output.learningThread);
+      const nextState: CoachAgentState = {
+        ...bootstrapped,
+        runStatus: "CUE_COMPLETED",
+        sessionStatus: "ACTIVE",
+        cueCases: storeCueCase(bootstrapped, cueCase),
+        learningThreads: storeLearningThread(bootstrapped, thread),
+        selectedTeachingMove: null,
+        pendingToolCall: null,
+        processedEventIds: markDiagnosisEvent(bootstrapped, event.eventId),
+      };
+      return appendTrace(nextState, "SESSION", event.eventId, {
+        input: event,
+        evidenceRefs: cueCase.verdict?.evidenceRefs ?? [],
+        finalStatus: "CUE_COMPLETED",
+      });
+    }
+
+    const priorThread = bootstrapped.learningThreads.find((thread) =>
+      thread.evidenceCueIds.includes(event.cueId),
+    );
+    if (!previous || !priorThread || !previous.reflection) {
+      return rejectDiagnosisSubmission(bootstrapped, event, "DIAGNOSIS_FAILED");
+    }
+    const input = diagnosisInputFor(event, bootstrapped, previous.reflection);
+    const output = TeachingDiagnosisOutputSchema.parse(reviseTeachingDiagnosis({
+      previous: { cueCase: previous, learningThread: priorThread },
+      input,
+      disagreement: UserReflectionSchema.parse(event.reflection),
+    }));
+    // A disagreement is a revision of one cue case, not a second case.  Keep
+    // the case identity stable while allowing the pure module to update its
+    // bounded claims, evidence, verdict and transfer rule.
+    const cueCase = CueCaseSchema.parse({
+      ...output.cueCase,
+      caseId: previous.caseId,
+    });
+    const thread = LearningThreadSchema.parse(output.learningThread);
+    const nextState: CoachAgentState = {
+      ...bootstrapped,
+      runStatus: "CUE_COMPLETED",
+      sessionStatus: "ACTIVE",
+      cueCases: storeCueCase(bootstrapped, cueCase),
+      learningThreads: storeLearningThread(bootstrapped, thread),
+      selectedTeachingMove: null,
+      pendingToolCall: null,
+      processedEventIds: markDiagnosisEvent(state, event.eventId),
+    };
+    return appendTrace(nextState, "SESSION", event.eventId, {
+      input: event,
+      evidenceRefs: cueCase.verdict?.evidenceRefs ?? [],
+      finalStatus: "CUE_COMPLETED",
+    });
+  } catch {
+    const cueCase = diagnosisFallbackCase(bootstrapped, event, [
+      "教学诊断模块失败；回退到 Baseline 讲解。",
+    ]);
+    const nextState: CoachAgentState = {
+      ...bootstrapped,
+      runStatus: "CUE_COMPLETED",
+      sessionStatus: "ACTIVE",
+      cueCases: storeCueCase(bootstrapped, cueCase),
+      selectedTeachingMove: null,
+      pendingToolCall: null,
+      fallbackReasons: addFallbackReason(bootstrapped.fallbackReasons, "DIAGNOSIS_FAILED"),
+      processedEventIds: markDiagnosisEvent(bootstrapped, event.eventId),
+    };
+    return appendTrace(nextState, "SESSION", event.eventId, {
+      input: event,
+      finalStatus: "CUE_COMPLETED",
+    });
+  }
+}
+
 function completeSessionState(
   state: CoachAgentState,
   eventId: string,
@@ -502,6 +901,9 @@ async function policyNode(
   policy: PolicyAdapter,
 ): Promise<Partial<CoachAgentGraphStateValue>> {
   const event = CoachAgentEventSchema.parse(state.event);
+  if (event.type === "SUBMIT_REFLECTION" || event.type === "SUBMIT_DISAGREEMENT") {
+    return { agent: diagnosisState(state.agent, event) };
+  }
   if (event.type === "OBSERVE_SEGMENT") {
     return { agent: observeSegmentState(state.agent, event) };
   }

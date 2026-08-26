@@ -37,6 +37,35 @@ function parseRecord(value: unknown): SessionRecoveryRecord {
   return SessionRecoveryRecordSchema.parse(value);
 }
 
+interface StoredRecordRow {
+  readonly key?: string;
+  readonly record?: SessionRecoveryRecord;
+}
+
+function storedRecoveryId(value: unknown): string | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const recoveryId = (value as { recoveryId?: unknown }).recoveryId;
+  return typeof recoveryId === "string" && recoveryId.length > 0 && recoveryId.length <= 160
+    ? recoveryId
+    : undefined;
+}
+
+/** Parse IDB values inside the request callback; never throw out of an event. */
+function storedRecordRow(value: unknown): StoredRecordRow {
+  const key = storedRecoveryId(value);
+  try {
+    return { key, record: parseRecord(value) };
+  } catch {
+    // The caller removes this key in the same read-write transaction. A
+    // malformed key cannot be recovered safely, so it is simply ignored.
+    return { key };
+  }
+}
+
+function storedRecordRows(values: readonly unknown[]): StoredRecordRow[] {
+  return values.map(storedRecordRow);
+}
+
 function sortAndLimit(records: readonly SessionRecoveryRecord[], now: number): SessionRecoveryRecord[] {
   const cutoff = now - HOST_RECOVERY_TTL_MS;
   return records
@@ -189,10 +218,20 @@ class IndexedDbRecordStore implements RecordStoreBackend {
   }
 
   get(recoveryId: string): Promise<SessionRecoveryRecord | undefined> {
-    return this.transaction<SessionRecoveryRecord | undefined>("readonly", (objectStore, resolveValue) => {
+    return this.transaction<SessionRecoveryRecord | undefined>("readwrite", (objectStore, resolveValue) => {
       const request = objectStore.get(recoveryId);
-      request.onsuccess = () => resolveValue(request.result ? parseRecord(request.result) : undefined);
-      request.onerror = () => { throw request.error ?? new Error("IndexedDB read failed"); };
+      request.onsuccess = () => {
+        if (!request.result) {
+          resolveValue(undefined);
+          return;
+        }
+        const row = storedRecordRow(request.result);
+        if (!row.record) objectStore.delete(recoveryId);
+        resolveValue(row.record);
+      };
+      // Let the transaction-level handler reject the operation. Throwing from
+      // an IDB request callback can escape the Promise boundary in browsers.
+      request.onerror = () => undefined;
     });
   }
 
@@ -200,15 +239,16 @@ class IndexedDbRecordStore implements RecordStoreBackend {
     return this.transaction<SessionRecoveryRecord | undefined>("readwrite", (objectStore, resolveValue) => {
       const request = objectStore.getAll();
       request.onsuccess = () => {
-        const records = request.result.map(parseRecord);
+        const rows = storedRecordRows(request.result);
+        const records = rows.flatMap((row) => row.record ? [row.record] : []);
         const kept = sortAndLimit(records, now);
         const keepIds = new Set(kept.map((record) => record.recoveryId));
-        records.forEach((record) => {
-          if (!keepIds.has(record.recoveryId)) objectStore.delete(record.recoveryId);
+        rows.forEach((row) => {
+          if (row.key && (!row.record || !keepIds.has(row.key))) objectStore.delete(row.key);
         });
         resolveValue(kept[0]);
       };
-      request.onerror = () => { throw request.error ?? new Error("IndexedDB cleanup failed"); };
+      request.onerror = () => undefined;
     });
   }
 
@@ -216,17 +256,18 @@ class IndexedDbRecordStore implements RecordStoreBackend {
     return this.transaction<SessionRecoveryRecord>("readwrite", (objectStore, resolveValue) => {
       const request = objectStore.getAll();
       request.onsuccess = () => {
-        const records = request.result.map(parseRecord).filter((entry) => entry.recoveryId !== record.recoveryId);
+        const rows = storedRecordRows(request.result);
+        const records = rows.flatMap((row) => row.record && row.record.recoveryId !== record.recoveryId ? [row.record] : []);
         records.push(record);
         const kept = sortAndLimit(records, now);
         const keepIds = new Set(kept.map((entry) => entry.recoveryId));
-        request.result.map(parseRecord).forEach((entry) => {
-          if (!keepIds.has(entry.recoveryId)) objectStore.delete(entry.recoveryId);
+        rows.forEach((row) => {
+          if (row.key && (!row.record || !keepIds.has(row.key))) objectStore.delete(row.key);
         });
         if (keepIds.has(record.recoveryId)) objectStore.put(record);
         resolveValue(record);
       };
-      request.onerror = () => { throw request.error ?? new Error("IndexedDB write failed"); };
+      request.onerror = () => undefined;
     });
   }
 
@@ -234,28 +275,30 @@ class IndexedDbRecordStore implements RecordStoreBackend {
     return this.transaction<SessionRecoveryRecord | undefined>("readwrite", (objectStore, resolveValue) => {
       const request = objectStore.get(recoveryId);
       request.onsuccess = () => {
-        const current = request.result ? parseRecord(request.result) : undefined;
+        const current = request.result ? storedRecordRow(request.result).record : undefined;
+        if (request.result && !current) objectStore.delete(recoveryId);
         const next = update(current);
         if (next) {
           const allRequest = objectStore.getAll();
           allRequest.onsuccess = () => {
-            const records = allRequest.result.map(parseRecord).filter((entry) => entry.recoveryId !== recoveryId);
+            const rows = storedRecordRows(allRequest.result);
+            const records = rows.flatMap((row) => row.record && row.record.recoveryId !== recoveryId ? [row.record] : []);
             records.push(next);
             const kept = sortAndLimit(records, now);
             const keepIds = new Set(kept.map((entry) => entry.recoveryId));
-            allRequest.result.map(parseRecord).forEach((entry) => {
-              if (!keepIds.has(entry.recoveryId)) objectStore.delete(entry.recoveryId);
+            rows.forEach((row) => {
+              if (row.key && (!row.record || !keepIds.has(row.key))) objectStore.delete(row.key);
             });
             if (keepIds.has(recoveryId)) objectStore.put(next);
             resolveValue(next);
           };
-          allRequest.onerror = () => { throw allRequest.error ?? new Error("IndexedDB update read failed"); };
+          allRequest.onerror = () => undefined;
         } else {
           objectStore.delete(recoveryId);
           resolveValue(undefined);
         }
       };
-      request.onerror = () => { throw request.error ?? new Error("IndexedDB update failed"); };
+      request.onerror = () => undefined;
     });
   }
 

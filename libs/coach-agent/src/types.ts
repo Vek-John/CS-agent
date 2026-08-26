@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  CueCaseSchema,
+  LearningThreadSchema,
+  TeachingDiagnosisInputSchema,
+  UserReflectionSchema,
+} from "./teaching-diagnosis";
 
 export const LEGACY_COACH_AGENT_STATE_VERSION = "coach-agent-state.v1" as const;
 export const LEGACY_COACH_AGENT_EVENT_VERSION = "coach-agent-event.v1" as const;
@@ -9,6 +15,30 @@ export const COACH_AGENT_GRAPH_VERSION = "coach-agent-graph.v3" as const;
 export const COACH_AGENT_SESSION_VERSION = "coaching-session.v2" as const;
 export const COACH_AGENT_RECOVERY_VERSION = "session-recovery-record.v2" as const;
 
+const LEGACY_COACH_AGENT_STATE_V2_VERSION = "coach-agent-state.v2" as const;
+const LEGACY_COACH_AGENT_GRAPH_V1_VERSION = "coach-agent-graph.v1" as const;
+const LEGACY_COACH_AGENT_GRAPH_V2_VERSION = "coach-agent-graph.v2" as const;
+
+/**
+ * State checkpoints are read at several boundaries (including old browser
+ * fixtures).  Keep the object schema strict while translating only versions
+ * that are known predecessors of the current v3 contract.
+ */
+const CoachAgentStateVersionSchema = z.preprocess(
+  (value) =>
+    value === LEGACY_COACH_AGENT_STATE_VERSION || value === LEGACY_COACH_AGENT_STATE_V2_VERSION
+      ? COACH_AGENT_STATE_VERSION
+      : value,
+  z.literal(COACH_AGENT_STATE_VERSION),
+);
+const CoachAgentGraphVersionSchema = z.preprocess(
+  (value) =>
+    value === LEGACY_COACH_AGENT_GRAPH_V1_VERSION || value === LEGACY_COACH_AGENT_GRAPH_V2_VERSION
+      ? COACH_AGENT_GRAPH_VERSION
+      : value,
+  z.literal(COACH_AGENT_GRAPH_VERSION),
+);
+
 const CoachAgentEventVersionSchema = z.union([
   z.literal(LEGACY_COACH_AGENT_EVENT_VERSION),
   z.literal(COACH_AGENT_EVENT_VERSION),
@@ -17,6 +47,16 @@ const CoachAgentEventVersionSchema = z.union([
 const Id = z.string().min(1).max(160);
 const Hash = z.string().min(1).max(256);
 const EvidenceRef = z.string().min(1).max(160);
+
+/**
+ * The diagnosis module owns the bounded input contract.  A submission keeps
+ * the reflection beside the frozen evidence packet so Host code cannot hide a
+ * second, unvalidated reflection in an arbitrary object.  The module's
+ * runtime input schema also accepts the combined form; the graph combines
+ * these two fields immediately before invoking the pure function.
+ */
+const TeachingDiagnosisInputPayloadSchema = TeachingDiagnosisInputSchema.omit({ reflection: true });
+export type TeachingDiagnosisInputPayload = z.infer<typeof TeachingDiagnosisInputPayloadSchema>;
 
 export const CoachAgentIdentitySchema = z
   .object({
@@ -455,6 +495,67 @@ export const ResumeToolEventSchema = z
   .strict();
 export type ResumeToolEvent = z.infer<typeof ResumeToolEventSchema>;
 
+const DiagnosisSubmissionBaseSchema = z
+  .object({
+    version: z.literal(COACH_AGENT_EVENT_VERSION),
+    eventId: Id,
+    identity: CoachAgentIdentitySchema,
+    cueId: Id,
+    // A diagnosis is allowed only after the host has completed the
+    // decision-before-outcome gate.  The runtime repeats this check against
+    // its checkpoint state; this wire check prevents accidental leakage at
+    // the API boundary.
+    outcomeGateStatus: z.literal("COMPLETE"),
+    // Accept the canonical split packet as well as the combined
+    // TeachingDiagnosisInput shape emitted by the standalone diagnosis API.
+    // Both branches are strict and bounded; accepting the latter keeps old
+    // Host adapters source-compatible without widening the event surface.
+    input: z.union([TeachingDiagnosisInputPayloadSchema, TeachingDiagnosisInputSchema]),
+    reflection: UserReflectionSchema,
+  })
+  .strict()
+  .superRefine((event, context) => {
+    if (event.input.cueId !== event.cueId) {
+      context.addIssue({
+        code: "custom",
+        path: ["input", "cueId"],
+        message: "diagnosis input cueId must match event cueId",
+      });
+    }
+    if ("reflection" in event.input && event.input.reflection.cueId !== event.cueId) {
+      context.addIssue({
+        code: "custom",
+        path: ["input", "reflection", "cueId"],
+        message: "combined diagnosis input reflection cueId must match event cueId",
+      });
+    }
+    if (event.reflection.cueId !== event.cueId) {
+      context.addIssue({
+        code: "custom",
+        path: ["reflection", "cueId"],
+        message: "reflection cueId must match event cueId",
+      });
+    }
+    if (event.input.candidateId && event.input.material?.candidateId &&
+      event.input.candidateId !== event.input.material.candidateId) {
+      context.addIssue({
+        code: "custom",
+        path: ["input", "candidateId"],
+        message: "diagnosis candidateId must match material candidateId",
+      });
+    }
+  });
+
+export const SubmitReflectionEventSchema = DiagnosisSubmissionBaseSchema.extend({
+  type: z.literal("SUBMIT_REFLECTION"),
+}).strict();
+export type SubmitReflectionEvent = z.infer<typeof SubmitReflectionEventSchema>;
+
+export const SubmitDisagreementEventSchema = DiagnosisSubmissionBaseSchema.extend({
+  type: z.literal("SUBMIT_DISAGREEMENT"),
+}).strict();
+export type SubmitDisagreementEvent = z.infer<typeof SubmitDisagreementEventSchema>;
+
 export const ResetEventSchema = z
   .object({
     version: CoachAgentEventVersionSchema,
@@ -594,6 +695,8 @@ export const CoachAgentEventSchema = z.discriminatedUnion("type", [
   StartCueEventSchema,
   StartManualCueVisitEventSchema,
   ResumeToolEventSchema,
+  SubmitReflectionEventSchema,
+  SubmitDisagreementEventSchema,
   ResetEventSchema,
   ObserveSegmentEventSchema,
   ObservePresentedCueEventSchema,
@@ -693,6 +796,10 @@ export const FallbackReasonSchema = z.enum([
   "RECOVERY_REPLAY_NOT_READY",
   "RECOVERY_TOOL_CANCELLED",
   "RECOVERY_TOOL_MISMATCH",
+  "DIAGNOSIS_FAILED",
+  "DIAGNOSIS_GATE_LOCKED",
+  "DIAGNOSIS_ATTEMPT_EXHAUSTED",
+  "DIAGNOSIS_INVALID_OUTPUT",
 ]);
 export type FallbackReason = z.infer<typeof FallbackReasonSchema>;
 
@@ -715,8 +822,8 @@ export type PresentedCueBinding = z.infer<typeof PresentedCueBindingSchema>;
 
 export const CoachAgentStateSchema = z
   .object({
-    schemaVersion: z.literal(COACH_AGENT_STATE_VERSION),
-    graphVersion: z.literal(COACH_AGENT_GRAPH_VERSION),
+    schemaVersion: CoachAgentStateVersionSchema,
+    graphVersion: CoachAgentGraphVersionSchema,
     runId: Id,
     sessionId: Id,
     demoId: Id,
@@ -736,9 +843,9 @@ export const CoachAgentStateSchema = z
     ]),
     activeSegmentId: Id.nullable(),
     activeCueId: Id.nullable(),
-    activeCueSource: z.enum(["DEFAULT", "MANUAL"]).nullable(),
-    activeManualVisitId: Id.nullable(),
-    activeTargetSegmentIndex: z.number().int().nonnegative().max(512).nullable(),
+    activeCueSource: z.enum(["DEFAULT", "MANUAL"]).nullable().default(null),
+    activeManualVisitId: Id.nullable().default(null),
+    activeTargetSegmentIndex: z.number().int().nonnegative().max(512).nullable().default(null),
     routeCursor: z.number().int().min(-1).max(512),
     currentSegmentMode: SegmentModeSchema.nullable(),
     activeFocus: Id.nullable(),
@@ -755,7 +862,18 @@ export const CoachAgentStateSchema = z
     toolHistory: z.array(ToolHistorySummarySchema).max(16),
     completedCueIds: z.array(Id).max(64),
     completedCueSummaries: z.array(PresentableCueSummarySchema).max(64),
-    presentedCueBindings: z.array(PresentedCueBindingSchema).max(64),
+    presentedCueBindings: z.array(PresentedCueBindingSchema).max(64).default([]),
+    // Added after state.v3 shipped. Defaults deliberately make old v3
+    // checkpoints and fixtures readable without a migration write.
+    cueCases: z
+      .record(Id, CueCaseSchema)
+      .superRefine((cases, context) => {
+        if (Object.keys(cases).length > 64) {
+          context.addIssue({ code: "custom", message: "cueCases exceeds the 64-case bound." });
+        }
+      })
+      .default({}),
+    learningThreads: z.array(LearningThreadSchema).max(16).default([]),
     sessionThemes: z.array(SessionThemeSchema).max(16),
     summaryThemes: z.array(SessionThemeSchema).max(3),
     sessionSummaryInput: SessionSummaryInputSchema.nullable(),

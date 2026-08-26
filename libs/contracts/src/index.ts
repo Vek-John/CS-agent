@@ -283,6 +283,11 @@ export interface SessionUserEvent {
     | "OUTCOME_REPLAYED"
     | "CUE_PRESENTED"
     | "QUESTION_ASKED"
+    | "REFLECTION_SUBMITTED"
+    | "REFLECTION_SKIPPED"
+    | "DIAGNOSTIC_COMPLETED"
+    | "USER_DISAGREED"
+    | "VERDICT_CONFIRMED"
     | "SESSION_COMPLETED";
   segment_id?: string;
   cue_id?: string;
@@ -328,6 +333,10 @@ export interface CoachingSessionState {
   route_fingerprint?: string;
   /** Present only for the active cue and complete only after outcome_end confirmation. */
   outcome_completion?: OutcomeCompletionState;
+  /** Cue-local adaptive teaching records; absent on legacy sessions. */
+  cue_cases?: Readonly<Record<string, import("./teaching-diagnosis").CueCase>>;
+  /** Session-scoped learning threads; never treated as cross-Demo memory. */
+  learning_threads?: readonly import("./teaching-diagnosis").LearningThread[];
   /** The phase that was active immediately before a natural narration buffer. */
   buffered_from_phase?: "PLAYING" | "SKIPPING";
   user_events: SessionUserEvent[];
@@ -356,3 +365,4 @@ export * from "./playback-bridge";
 export * from "./observation";
 export * from "./win-probability";
 export * from "./coaching";
+export * from "./teaching-diagnosis";

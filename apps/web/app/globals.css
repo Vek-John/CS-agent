@@ -2128,7 +2128,7 @@ button:disabled {
 .cs2d-coach-free-view h3 { margin: 0.32rem 0 0; color: var(--text); font-size: 0.88rem; line-height: 1.36; }
 .cs2d-coach-free-view p { margin: 0.58rem 0 0; color: var(--text-secondary); font-size: 0.67rem; line-height: 1.58; }
 .cs2d-coach-free-view span { display: block; margin-top: 0.58rem; color: #ffd48a; font-size: 0.58rem; }
-.cs2d-coach-badge { display: inline-flex; align-items: baseline; gap: 0.24rem; padding: 0.22rem 0.4rem; border: 0.0625rem solid rgba(48,209,88,0.25); border-radius: 99rem; color: #78e993; white-space: nowrap; }
+.cs2d-coach-badge { display: inline-flex; align-items: baseline; gap: 0.24rem; padding: 0.22rem 0.4rem; border: 0.0625rem solid rgba(48,209,88,0.25); border-radius: 99rem; color: #78e993; font-size: 0.57rem; line-height: 1; white-space: nowrap; }
 .cs2d-coach-badge small { color: rgba(120,233,147,0.72); font: 650 0.46rem/1 system-ui, sans-serif; }
 .cs2d-coach-badge b { font: 650 0.49rem/1 ui-monospace, monospace; }
 .cs2d-coach-card { margin-top: 0.8rem; padding: 0.75rem; border: 0.0625rem solid var(--line); border-radius: 0.8rem; background: rgba(255,255,255,0.035); }

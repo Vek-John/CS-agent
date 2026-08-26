@@ -40,6 +40,9 @@ import type {
   ReviewPlan,
   CoachingRouteState,
   NarrationBundle,
+  CueCase,
+  LearningThread,
+  UserReflection,
   AnalysisProgressEvent,
   AnalysisTelemetryEvent
 } from "@cs-coach/contracts";
@@ -112,8 +115,23 @@ import {
   Stage2AckTimeoutController,
   type Stage2ToolContext
 } from "../../lib/coaching/coach-agent-host-adapter";
+import { TeachingDiagnosisPanel } from "./teaching-diagnosis-panel";
+import {
+  baselineCueCase,
+  buildTeachingDiagnosisInput,
+  buildTeachingDiagnosisSubmissionEvent,
+  reflectionForSkip,
+  runTeachingDiagnosis,
+  type TeachingDiagnosisHostContext,
+} from "../../lib/coaching/teaching-diagnosis-host";
+import {
+  SubmitDisagreementEventSchema,
+  SubmitReflectionEventSchema,
+  reviseTeachingDiagnosis,
+} from "@cs-coach/coach-agent/client";
 import {
   CoachAgentStage3HostAdapter,
+  buildStage3Identity,
   createStage3HostAdapterStore,
   stage3EligibleCueIds,
   stage3ToolStatusLabel,
@@ -148,6 +166,7 @@ import {
   timelinePercent,
   HOST_SPEED_OPTIONS,
   hostCoachingCueSurface,
+  teachingDiagnosticsEnabled,
   canBeginManualCueVisit,
   cuePresentedActionForTerminal,
   nearestCoachingCue,
@@ -294,6 +313,13 @@ export function Cs2dPlaybackHost({
   const bundleRef = useRef<Cs2dAnalysisBundle | undefined>(undefined);
   const narrationByCueRef = useRef<Readonly<Record<string, NarrationBundle>>>({});
   const [session, setSession] = useState<CoachingSessionState>();
+  const [teachingCases, setTeachingCases] = useState<Readonly<Record<string, CueCase>>>({});
+  const [teachingThreads, setTeachingThreads] = useState<readonly LearningThread[]>([]);
+  const [diagnosticBusyCueId, setDiagnosticBusyCueId] = useState<string>();
+  const [diagnosticError, setDiagnosticError] = useState<string>();
+  const [diagnosticsEnabled, setDiagnosticsEnabled] = useState(true);
+  const teachingCasesRef = useRef<Readonly<Record<string, CueCase>>>({});
+  const teachingThreadsRef = useRef<readonly LearningThread[]>([]);
   const [analysisError, setAnalysisError] = useState<string>();
   const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgressEvent>();
   const [reviewPreparationStatus, setReviewPreparationStatus] = useState<ReviewPreparationStatus>();
@@ -322,6 +348,7 @@ export function Cs2dPlaybackHost({
   const replayHashRef = useRef<string | undefined>(undefined);
   const liveSessionRef = useRef<CoachingSessionState | undefined>(undefined);
   const liveCueRef = useRef<ReviewPlan["cues"][number] | undefined>(undefined);
+  const diagnosisRequestEpochRef = useRef(0);
   const guidedSeekEpochRef = useRef(0);
   const guidedSeekGateRef = useRef<GuidedSeekGate | undefined>(undefined);
   const [userTookOver, setUserTookOver] = useState(false);
@@ -337,6 +364,13 @@ export function Cs2dPlaybackHost({
   const [winRateVerticalZoom, setWinRateVerticalZoom] = useState(1);
   const [timelinePanning, setTimelinePanning] = useState(false);
   const [gameAssetCatalog, setGameAssetCatalog] = useState<GameAssetCatalog>();
+
+  useEffect(() => {
+    setDiagnosticsEnabled(teachingDiagnosticsEnabled(window.location.search));
+  }, []);
+
+  teachingCasesRef.current = teachingCases;
+  teachingThreadsRef.current = teachingThreads;
 
   useEffect(() => {
     let active = true;
@@ -612,8 +646,28 @@ export function Cs2dPlaybackHost({
     guidedSeekGateRef.current = undefined;
   }, []);
 
+  const isTeachingDiagnosisRequestLive = useCallback((cueId: string, generation: number, requestEpoch: number): boolean => {
+    const liveSession = liveSessionRef.current;
+    const liveCue = liveCueRef.current;
+    return diagnosisRequestEpochRef.current === requestEpoch &&
+      generationRef.current === generation &&
+      (!userTookOverRef.current || liveSession?.manual_cue_visit?.cue_id === cueId) &&
+      liveCue?.id === cueId &&
+      liveSession?.phase === "PAUSED_FOR_COACHING" &&
+      liveSession.current_cue_id === cueId &&
+      liveSession.outcome_completion?.cueId === cueId &&
+      liveSession.outcome_completion.status === "COMPLETE";
+  }, []);
+
   const markUserTookOver = useCallback(() => {
     invalidateGuidedSeek();
+    if (diagnosticsEnabled) {
+      // Invalidate any in-flight adaptive request before the live refs change;
+      // its finally block must not clear a newer request's busy state.
+      diagnosisRequestEpochRef.current += 1;
+      setDiagnosticBusyCueId(undefined);
+      setDiagnosticError(undefined);
+    }
     stage2AckTimeoutRef.current.clear();
     stage2AdapterRef.current.cancel(generationRef.current);
     stage2PendingRef.current = undefined;
@@ -624,9 +678,12 @@ export function Cs2dPlaybackHost({
         : current);
     }
     const reason = "已由你接管，当前 Agent 工具已取消；基础回放仍可继续。";
-    if (stage3InputRef.current) {
+    // Adaptive diagnosis has no visual Agent effect to cancel.  Sending the
+    // legacy Stage3 takeover event here would move the diagnosis checkpoint to
+    // USER_TAKEOVER and block the next Reflection submission.
+    if (!diagnosticsEnabled && stage3InputRef.current) {
       void stage3ControllerRef.current?.takeover(stage3InputRef.current, reason, generationRef.current);
-    } else if (stage3IdentityRef.current) {
+    } else if (!diagnosticsEnabled && stage3IdentityRef.current) {
       void stage3ControllerRef.current?.takeoverIdentity(stage3IdentityRef.current, reason, generationRef.current);
     }
     if (stage2Status === "STARTING" || stage2Status === "FOCUSING" || stage2Status === "RESUMING") {
@@ -636,7 +693,7 @@ export function Cs2dPlaybackHost({
     if (!userTookOverRef.current) send({ type: "setCamera", mode: "full" });
     userTookOverRef.current = true;
     setUserTookOver(true);
-  }, [invalidateGuidedSeek, send, stage2Status]);
+  }, [diagnosticsEnabled, invalidateGuidedSeek, send, stage2Status]);
 
   const clearUserTakeover = useCallback(() => {
     invalidateGuidedSeek();
@@ -652,14 +709,14 @@ export function Cs2dPlaybackHost({
         : current);
     }
     const defaultInput = stage3Mode ? stage3DefaultInputRef.current : undefined;
-    if (defaultInput) {
+    if (defaultInput && !diagnosticsEnabled) {
       const resumed = await stage3ControllerRef.current?.resumeAfterTakeover(defaultInput);
       if (!resumed) return;
     }
     // Keep the takeover guard active while the Graph checkpoint is reconciled.
     // The normal default-cue effect consumes the armed resume sequence once.
     clearUserTakeover();
-  }, [clearUserTakeover, stage3Mode]);
+  }, [clearUserTakeover, diagnosticsEnabled, stage3Mode]);
 
   const issueUserCommand = useCallback((command: PlaybackCommand) => {
     if (session) markUserTookOver();
@@ -791,6 +848,10 @@ export function Cs2dPlaybackHost({
     setRouteState(undefined);
     setNarrationByCue({});
     setSession(undefined);
+    setTeachingCases({});
+    setTeachingThreads([]);
+    setDiagnosticBusyCueId(undefined);
+    setDiagnosticError(undefined);
     setAnalysisError(undefined);
     setAnalysisProgress(undefined);
     setReviewPreparationStatus(undefined);
@@ -1019,6 +1080,10 @@ export function Cs2dPlaybackHost({
           setRouteState(undefined);
           setNarrationByCue({});
           setSession(undefined);
+          setTeachingCases({});
+          setTeachingThreads([]);
+          setDiagnosticBusyCueId(undefined);
+          setDiagnosticError(undefined);
           setReviewPreparationStatus({ phase: "ERROR", detail: "回放未能落到恢复位置；基础回放仍可继续。" });
           void runtime.dispatch({
             type: "RECOVERY_HANDSHAKE_FAILED",
@@ -1086,6 +1151,10 @@ export function Cs2dPlaybackHost({
         setRouteState(undefined);
         setNarrationByCue({});
         setSession(undefined);
+        setTeachingCases({});
+        setTeachingThreads([]);
+        setDiagnosticBusyCueId(undefined);
+        setDiagnosticError(undefined);
         setAnalysisError(undefined);
         setAnalysisProgress(undefined);
         setReviewPreparationStatus(undefined);
@@ -1117,6 +1186,10 @@ export function Cs2dPlaybackHost({
         setRouteState(undefined);
         setNarrationByCue({});
         setSession(undefined);
+        setTeachingCases({});
+        setTeachingThreads([]);
+        setDiagnosticBusyCueId(undefined);
+        setDiagnosticError(undefined);
         planRef.current = undefined;
         setReviewPreparationStatus(undefined);
         userTookOverRef.current = false;
@@ -1385,8 +1458,36 @@ export function Cs2dPlaybackHost({
     const activePlan = planRef.current;
     if (!activePlan) return;
     clearUserTakeover();
-    setSession((current) => current ? reduceCoachingSession(activePlan, current, action) : current);
-  }, [clearUserTakeover]);
+    // Stage 3 normally emits the terminal event that records CUE_PRESENTED.
+    // Adaptive diagnosis deliberately does not start that visual controller,
+    // so close the same boundary when the player leaves the adaptive surface
+    // (confirm, or Baseline's continue button).  Keep it in one functional
+    // reducer update: the Session gate still owns PAUSED+COMPLETE validation,
+    // while the cue id captured at click time prevents a double click from
+    // presenting a newly-entered cue accidentally.
+    const presentedCueId = liveCueRef.current?.id;
+    setSession((current) => {
+      if (!current) return current;
+      let next = current;
+      const outcomeCompletion = current.outcome_completion;
+      const canCloseAdaptivePresentation = diagnosticsEnabled &&
+        (action.type === "ADVANCE_SEGMENT" || action.type === "CANCEL_MANUAL_CUE_VISIT") &&
+        presentedCueId !== undefined &&
+        current.current_cue_id === presentedCueId &&
+        current.phase === "PAUSED_FOR_COACHING" &&
+        outcomeCompletion?.cueId === presentedCueId &&
+        outcomeCompletion.status === "COMPLETE" &&
+        !current.presented_cue_ids.includes(presentedCueId);
+      if (canCloseAdaptivePresentation && presentedCueId) {
+        next = reduceCoachingSession(activePlan, current, {
+          type: "CUE_PRESENTED",
+          cueId: presentedCueId,
+          ...(current.manual_cue_visit ? { visitId: current.manual_cue_visit.visit_id } : {}),
+        });
+      }
+      return reduceCoachingSession(activePlan, next, action);
+    });
+  }, [clearUserTakeover, diagnosticsEnabled]);
 
   const transitionKey = session ? guidedTransitionKey(session) : "idle";
   useEffect(() => {
@@ -1532,6 +1633,216 @@ export function Cs2dPlaybackHost({
         runId: recoveryIdentity.runId,
       }
     : undefined;
+
+  const activeTeachingCase = cue ? teachingCases[cue.id] : undefined;
+  const diagnosisDecisionFacts = coachingView?.decisionFacts ?? (cue
+    ? cue.facts.filter((fact) => fact.availability === "DECISION" && fact.available_at_tick <= cue.decision_tick && cue.observable_fact_refs.includes(fact.id))
+    : []);
+
+  const applyTeachingDiagnosis = useCallback((output: ReturnType<typeof runTeachingDiagnosis>) => {
+    const nextCase = output.cueCase;
+    setTeachingCases((current) => ({ ...current, [nextCase.cueId]: nextCase }));
+    setTeachingThreads((current) => [
+      ...current.filter((thread) => thread.threadId !== output.learningThread.threadId),
+      output.learningThread,
+    ].slice(-16));
+    const active = planRef.current;
+    setSession((current) => active && current
+      ? reduceCoachingSession(active, current, {
+          type: "RECORD_TEACHING_CASE",
+          cueCase: nextCase,
+          learningThread: output.learningThread,
+        })
+      : current);
+  }, []);
+
+  const diagnosisContext = useCallback((): TeachingDiagnosisHostContext | undefined => {
+    const active = planRef.current ?? activePlan;
+    const currentCue = liveCueRef.current ?? cue;
+    if (!active || !currentCue || !bundle) return undefined;
+    return {
+      plan: active,
+      cue: currentCue,
+      material: currentCue.candidate_id
+        ? bundle.candidate_set.materials.find((material) => material.candidateId === currentCue.candidate_id)
+        : undefined,
+      timeline: bundle.match_timeline,
+      selectedPlayerId: selected?.playerId ?? active.player_id,
+      learningThreads: teachingThreadsRef.current,
+    };
+  }, [activePlan, bundle, cue, selected?.playerId]);
+
+  const submitTeachingReflection = useCallback(async (reflection: UserReflection) => {
+    const context = diagnosisContext();
+    if (!context) {
+      const currentCue = liveCueRef.current ?? cue;
+      setDiagnosticError("当前讲解状态已变化，已保留基础讲解；你仍可以继续回放。");
+      // If the cue changed between the click and this callback, do not attach
+      // the old reflection to the new cue. Otherwise keep the user's input in
+      // a Baseline case so a missing context never becomes a silent no-op.
+      if (!currentCue || currentCue.id !== reflection.cueId) return;
+      const fallback = {
+        ...baselineCueCase(currentCue, "教学上下文暂不可用；使用 Baseline 讲解。"),
+        reflection,
+      };
+      setTeachingCases((current) => ({ ...current, [currentCue.id]: fallback }));
+      const active = planRef.current ?? activePlan;
+      setSession((current) => active && current
+        ? reduceCoachingSession(active, current, { type: "RECORD_TEACHING_CASE", cueCase: fallback, reflection })
+        : current);
+      return;
+    }
+    const requestEpoch = ++diagnosisRequestEpochRef.current;
+    const requestGeneration = generationRef.current;
+    const requestCueId = context.cue.id;
+    const requestIsLive = () => isTeachingDiagnosisRequestLive(requestCueId, requestGeneration, requestEpoch);
+    if (!requestIsLive()) return;
+    setDiagnosticBusyCueId(reflection.cueId);
+    setDiagnosticError(undefined);
+    try {
+      if (!requestIsLive()) return;
+      const input = buildTeachingDiagnosisInput(context, reflection);
+      let output: ReturnType<typeof runTeachingDiagnosis> | undefined;
+      // The graph is the preferred path.  A local deterministic implementation
+      // is retained as the bounded fallback when the remote Agent is absent.
+      if (stage3IdentityContext && routeState && replay?.demoContentHash) {
+        try {
+          const identity = buildStage3Identity(stage3IdentityContext);
+          const event = SubmitReflectionEventSchema.parse(buildTeachingDiagnosisSubmissionEvent(
+            context,
+            reflection,
+            {
+              eventType: "SUBMIT_REFLECTION",
+              eventId: `diagnosis-reflection-${reflection.cueId}-${crypto.randomUUID()}`,
+              identity,
+            },
+          ));
+          if (!requestIsLive()) return;
+          const result = await dispatchCoachAgentEvent(event);
+          if (!requestIsLive()) return;
+          const graphCase = result.state.cueCases?.[reflection.cueId];
+          const graphThread = result.state.learningThreads?.find((thread) => thread.evidenceCueIds.includes(reflection.cueId));
+          if (graphCase && graphThread) output = { cueCase: graphCase, learningThread: graphThread };
+        } catch (error) {
+          if (requestIsLive()) setDiagnosticError(error instanceof Error ? "Agent 暂不可用，已使用确定性诊断。" : "Agent 暂不可用，已使用确定性诊断。");
+        }
+      }
+      if (!requestIsLive()) return;
+      if (!output) output = runTeachingDiagnosis(context, reflection);
+      if (!requestIsLive()) return;
+      applyTeachingDiagnosis(output);
+    } catch (error) {
+      if (!requestIsLive()) return;
+      setDiagnosticError(error instanceof Error ? error.message.slice(0, 180) : "诊断失败，已保留基础讲解。");
+      // Keep the submitted USER reflection attached to the fallback case so a
+      // provider/schema failure cannot silently erase what the player said.
+      const fallback = {
+        ...baselineCueCase(context.cue, "教学诊断失败；基础讲解仍可继续。"),
+        reflection,
+      };
+      setTeachingCases((current) => ({ ...current, [context.cue.id]: fallback }));
+      const active = planRef.current ?? activePlan;
+      setSession((current) => active && current
+        ? reduceCoachingSession(active, current, { type: "RECORD_TEACHING_CASE", cueCase: fallback, reflection })
+        : current);
+    } finally {
+      if (diagnosisRequestEpochRef.current === requestEpoch) setDiagnosticBusyCueId(undefined);
+    }
+  }, [activePlan, applyTeachingDiagnosis, buildStage3Identity, cue, diagnosisContext, isTeachingDiagnosisRequestLive, replay?.demoContentHash, routeState, stage3IdentityContext]);
+
+  const skipTeachingReflection = useCallback(() => {
+    const currentCue = liveCueRef.current ?? cue;
+    const liveSession = liveSessionRef.current;
+    if (!currentCue || !liveSession || liveSession.current_cue_id !== currentCue.id || liveSession.phase !== "PAUSED_FOR_COACHING" ||
+      liveSession.outcome_completion?.cueId !== currentCue.id || liveSession.outcome_completion.status !== "COMPLETE") return;
+    const reflection = reflectionForSkip(currentCue.id);
+    const fallback = {
+      ...baselineCueCase(currentCue, "用户跳过 Reflection Gate；使用 Baseline Narration。"),
+      reflection,
+    };
+    setTeachingCases((current) => ({ ...current, [currentCue.id]: fallback }));
+    const active = planRef.current ?? activePlan;
+    setSession((current) => active && current
+      ? reduceCoachingSession(active, current, { type: "RECORD_TEACHING_CASE", cueCase: fallback, reflection })
+      : current);
+    setDiagnosticError(undefined);
+  }, [activePlan, cue]);
+
+  const confirmTeachingDiagnosis = useCallback(() => {
+    const currentCue = liveCueRef.current ?? cue;
+    const active = planRef.current ?? activePlan;
+    if (!currentCue || !active) return;
+    const currentCase = teachingCasesRef.current[currentCue.id];
+    if (currentCase) {
+      const completedCase: CueCase = { ...currentCase, status: "COMPLETED" };
+      setTeachingCases((current) => ({ ...current, [currentCue.id]: completedCase }));
+      setSession((current) => current
+        ? reduceCoachingSession(active, current, { type: "CONFIRM_TEACHING_CASE", cueId: currentCue.id })
+        : current);
+    }
+    if (session?.manual_cue_visit) transition({ type: "CANCEL_MANUAL_CUE_VISIT" });
+    else transition({ type: "ADVANCE_SEGMENT" });
+  }, [activePlan, cue, session?.manual_cue_visit, transition]);
+
+  const disagreeTeachingDiagnosis = useCallback(async (reflection: UserReflection) => {
+    const context = diagnosisContext();
+    const currentCue = liveCueRef.current ?? cue;
+    if (!context || !currentCue) return;
+    const previousCase = teachingCasesRef.current[currentCue.id];
+    if (!previousCase?.reflection || previousCase.attemptBudget.disagreement >= 1) return;
+    const requestEpoch = ++diagnosisRequestEpochRef.current;
+    const requestGeneration = generationRef.current;
+    const requestCueId = currentCue.id;
+    const requestIsLive = () => isTeachingDiagnosisRequestLive(requestCueId, requestGeneration, requestEpoch);
+    if (!requestIsLive()) return;
+    setDiagnosticBusyCueId(currentCue.id);
+    setDiagnosticError(undefined);
+    try {
+      let output: ReturnType<typeof runTeachingDiagnosis> | undefined;
+      if (stage3IdentityContext && routeState && replay?.demoContentHash) {
+        try {
+          const identity = buildStage3Identity(stage3IdentityContext);
+          const input = buildTeachingDiagnosisInput(context, previousCase.reflection);
+          const event = SubmitDisagreementEventSchema.parse(buildTeachingDiagnosisSubmissionEvent(
+            context,
+            reflection,
+            {
+              eventType: "SUBMIT_DISAGREEMENT",
+              eventId: `diagnosis-disagreement-${currentCue.id}-${crypto.randomUUID()}`,
+              identity,
+            },
+          ));
+          if (!requestIsLive()) return;
+          const result = await dispatchCoachAgentEvent(event);
+          if (!requestIsLive()) return;
+          const graphCase = result.state.cueCases?.[currentCue.id];
+          const graphThread = result.state.learningThreads?.find((thread) => thread.evidenceCueIds.includes(currentCue.id));
+          if (graphCase && graphThread) output = { cueCase: graphCase, learningThread: graphThread };
+        } catch {
+          if (requestIsLive()) setDiagnosticError("Agent 未能重新检查，已使用本地确定性规则。");
+        }
+      }
+      if (!requestIsLive()) return;
+      if (!output) {
+        const input = buildTeachingDiagnosisInput(context, previousCase.reflection);
+        const priorThread = teachingThreadsRef.current.find((thread) => thread.evidenceCueIds.includes(currentCue.id))
+          ?? runTeachingDiagnosis(context, previousCase.reflection).learningThread;
+        output = reviseTeachingDiagnosis({
+          previous: { cueCase: previousCase, learningThread: priorThread },
+          input,
+          disagreement: reflection,
+        });
+      }
+      if (!requestIsLive()) return;
+      applyTeachingDiagnosis(output);
+    } catch (error) {
+      if (!requestIsLive()) return;
+      setDiagnosticError(error instanceof Error ? error.message.slice(0, 180) : "补充信息未能应用；将保持条件化结论。");
+    } finally {
+      if (diagnosisRequestEpochRef.current === requestEpoch) setDiagnosticBusyCueId(undefined);
+    }
+  }, [applyTeachingDiagnosis, cue, diagnosisContext, isTeachingDiagnosisRequestLive, replay?.demoContentHash, routeState, stage3IdentityContext]);
+
   stage3IdentityRef.current = stage3IdentityContext;
   // Async Stage2 work must consult these refs immediately before postMessage or
   // remote resume; the PAUSED values captured when START began are not authority.
@@ -1587,6 +1898,10 @@ export function Cs2dPlaybackHost({
 
   useEffect(() => {
     if (!stage2Mode || !activePlan || !routeState || !session || !cue || !stage2Cue) return;
+    // The adaptive panel is the presentation surface while this flag is on;
+    // the legacy Stage2 map harness remains available behind the flag-off
+    // path for regression work.
+    if (diagnosticsEnabled) return;
     if (stage2StartedCueRef.current === stage2Cue.id || stage2Cue.id !== cue.id) return;
     if (
       userTookOverRef.current ||
@@ -1703,7 +2018,7 @@ export function Cs2dPlaybackHost({
       setStage2Status("FAILED");
       setStage2Error(error instanceof Error ? error.message.slice(0, 160) : "当前 cue 校验失败；基础回放仍可继续。");
     }
-  }, [activePlan, bundle, cue, cueRevealed, presentableNarration, replay?.demoContentHash, routeState, selected?.playerId, send, session, stage2Cue, stage2Mode]);
+  }, [activePlan, bundle, cue, cueRevealed, diagnosticsEnabled, presentableNarration, replay?.demoContentHash, routeState, selected?.playerId, send, session, stage2Cue, stage2Mode]);
 
   useEffect(() => {
     if (
@@ -1724,6 +2039,10 @@ export function Cs2dPlaybackHost({
       session.outcome_completion.status !== "COMPLETE" ||
       stage3ControllerRef.current?.hasStartedCue(cue.id)
     ) return;
+    // Adaptive diagnosis owns the first question at a cue.  Do not spend a
+    // visual-tool budget or reveal a coaching effect before the user has
+    // answered or explicitly skipped the Reflection Gate.
+    if (diagnosticsEnabled) return;
     if (!replay?.demoContentHash) {
       if (!stage3BlockedCueRef.current.has(cue.id)) {
         stage3BlockedCueRef.current.add(cue.id);
@@ -1764,7 +2083,7 @@ export function Cs2dPlaybackHost({
     stage3InputRef.current = lifecycleInput;
     stage3DefaultInputRef.current = lifecycleInput;
     stage3ControllerRef.current?.start(lifecycleInput);
-  }, [activePlan, bundle, candidateMaterial, cue, cueRevealed, outcomeImpact, presentableNarration, recoveryIdentity, replay, routeState, selected?.playerId, session, stage2Mode, stage3Cue, stage3Mode]);
+  }, [activePlan, activeTeachingCase, bundle, candidateMaterial, cue, cueRevealed, diagnosticsEnabled, outcomeImpact, presentableNarration, recoveryIdentity, replay, routeState, selected?.playerId, session, stage2Mode, stage3Cue, stage3Mode]);
 
   useEffect(() => {
     const visit = session?.manual_cue_visit;
@@ -1772,6 +2091,7 @@ export function Cs2dPlaybackHost({
       !presentableNarration || !recoveryIdentity || !replay?.demoContentHash || !session.outcome_completion ||
       session.outcome_completion.status !== "COMPLETE" || session.phase !== "PAUSED_FOR_COACHING" ||
       session.presented_cue_ids.includes(cue.id) || stage3State.visitId === visit.visit_id) return;
+    if (diagnosticsEnabled) return;
     const candidate = cue.candidate_id ? bundle?.candidate_set.candidates.find((item) => item.candidateId === cue.candidate_id) : undefined;
     const input: Stage3HostAdapterInput = {
       plan: activePlan, routeState, cue, narration: presentableNarration, outcomeGate: session.outcome_completion,
@@ -1783,7 +2103,7 @@ export function Cs2dPlaybackHost({
     };
     stage3InputRef.current = input;
     stage3ControllerRef.current?.startManualCueVisit(input, visit.visit_id);
-  }, [activePlan, bundle, candidateMaterial, cue, outcomeImpact, presentableNarration, recoveryIdentity, replay, routeState, selected?.playerId, session, stage3Mode, stage3State.visitId]);
+  }, [activePlan, activeTeachingCase, bundle, candidateMaterial, cue, diagnosticsEnabled, outcomeImpact, presentableNarration, recoveryIdentity, replay, routeState, selected?.playerId, session, stage3Mode, stage3State.visitId]);
 
   useEffect(() => {
     if (!activePlan || !session) return;
@@ -1982,7 +2302,22 @@ export function Cs2dPlaybackHost({
             </section>
           ) : null}
 
-          {session && (!userTookOver || Boolean(session.manual_cue_visit)) && cue && (cueRevealed || session.manual_cue_visit?.cue_id === cue.id) && coachingView && presentableNarration && threeStageCoaching && session.phase === "PAUSED_FOR_COACHING" ? (
+          {diagnosticsEnabled && activeTeachingCase?.status !== "FALLBACK" && session && (!userTookOver || Boolean(session.manual_cue_visit)) && cue && (cueRevealed || session.manual_cue_visit?.cue_id === cue.id) && session.phase === "PAUSED_FOR_COACHING" && session.outcome_completion?.status === "COMPLETE" ? (
+            <TeachingDiagnosisPanel
+              cue={cue}
+              decisionFacts={diagnosisDecisionFacts}
+              cueCase={activeTeachingCase}
+              learningThread={activeTeachingCase ? teachingThreads.find((thread) => thread.evidenceCueIds.includes(activeTeachingCase.cueId)) : undefined}
+              busy={diagnosticBusyCueId === cue.id}
+              error={diagnosticError}
+              onSubmit={submitTeachingReflection}
+              onSkip={skipTeachingReflection}
+              onConfirm={confirmTeachingDiagnosis}
+              onDisagree={disagreeTeachingDiagnosis}
+            />
+          ) : null}
+
+          {session && (!userTookOver || Boolean(session.manual_cue_visit)) && cue && (cueRevealed || session.manual_cue_visit?.cue_id === cue.id) && (!diagnosticsEnabled || activeTeachingCase?.status === "FALLBACK") && coachingView && presentableNarration && threeStageCoaching && session.phase === "PAUSED_FOR_COACHING" ? (
             <section className="cs2d-coach-cue" aria-live="polite">
               <div className="cs2d-coach-cue-heading">
                 <small>第 {segment?.round_number ?? ""} 回合 · 处理看完了</small>

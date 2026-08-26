@@ -185,6 +185,21 @@ describe("schema-only Session Recovery contracts", () => {
     })).toBeTruthy();
   });
 
+  it("defaults only the legacy presented cue list without relaxing its shape", () => {
+    const legacy = SessionRecoveryRecordSchema.parse(record({
+      cueProgress: { completedCueIds: [], consumedCueIds: [], revealedCueIds: [] },
+    }));
+    expect(legacy.cueProgress.presentedCueIds).toEqual([]);
+
+    expect(() => SessionRecoveryRecordSchema.parse(record({
+      cueProgress: { completedCueIds: [], presentedCueIds: null, consumedCueIds: [], revealedCueIds: [] },
+    }))).toThrow();
+    expect(() => SessionRecoveryRecordSchema.parse(record({
+      cueProgress: { completedCueIds: [], presentedCueIds: ["file"], consumedCueIds: [], revealedCueIds: [] },
+      frozenReviewPlan: plan({ generation_manifest: { rawReplay: { frames: [] } } }),
+    }))).toThrow();
+  });
+
   it("rejects non-SHA256 demos, oversized route readiness, replay bulk objects, and non-ready replay", () => {
     expect(() => FrozenReviewPlanSchema.parse(plan({ status: "FAILED" }))).toThrow();
     expect(() => SessionRecoveryRecordSchema.parse(record({ demoContentHash: "demo-hash" }))).toThrow();

@@ -91,8 +91,9 @@ Replay / MatchTimeline / Win-rate timeline
 - 当前支持 0.5x 慢放、地图证据聚焦、已发生投掷物轨迹、负向胜率影响和经济语境；没有额外教学价值时直接结束 cue；
 - 每 cue 默认最多一个成功工具，失败后最多一次合法替代；自由跳转会暂停 Agent，返回路线后恢复；
 - 全场结束只从已完成 cue 聚合最多三个重复主题，并保留 cue/evidence 引用。
+- 教学诊断切片在结果播放完成后显示 Reflection Gate，将用户回答保留为 USER claim，并通过 `VERIFY_RISK_BUDGET` 生成有界结论与下次判断规则；跳过或失败时回到 Baseline Narration。
 
-当前发布直接通过 <http://localhost:3000> 启用整场 Agent；`?coachAgent=stage2` 只用于单 cue 回归。
+当前发布直接通过 <http://localhost:3000> 启用整场 Agent；`?coachAgent=stage2&teachingDiagnostics=off` 只用于旧单 cue 回归。需要暂时关闭教学诊断时使用 `?teachingDiagnostics=off`（也可设置 `NEXT_PUBLIC_TEACHING_DIAGNOSTICS=off`），不会关闭原有基础回放。
 
 ### 讲解风格
 
