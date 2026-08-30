@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "CS Agent Coach",
+  "identifier": "com.csagent.coach",
+  "version": "../package.json",
+  "build": {
+    "frontendDist": "../bootstrap",
+    "beforeBuildCommand": "",
+    "beforeDevCommand": ""
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-src 'none'",
+      "capabilities": ["bootstrap-local", "settings-local"]
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://github.com/Vek-John/CS-agent/releases/latest/download/latest.json"],
+      "pubkey": "INVALID_PUBLIC_KEY_PUBLIC_RELEASE_BLOCKED"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "externalBin": ["binaries/cs-agent-runtime"],
+    "resources": ["resources/runtime-root", "resources/viewer-root", "resources/desktop-runtime-manifest.json"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns"],
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "signingIdentity": "-"
+    }
+  }
+}

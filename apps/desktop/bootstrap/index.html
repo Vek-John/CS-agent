@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>CS Agent Coach</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="module" src="./bootstrap.js"></script>
+  </head>
+  <body>
+    <main class="shell" aria-live="polite">
+      <section class="status-card" data-state="starting">
+        <div class="brand" aria-hidden="true">
+          <svg viewBox="0 0 64 64">
+            <circle cx="29" cy="32" r="20" />
+            <path d="M29 32 43 15M29 32a20 20 0 0 1 18 11" />
+            <circle class="brand-dot" cx="29" cy="32" r="3" />
+            <path class="brand-cue" d="M43 40h13v9H50l-4 4 1-4h-4Z" />
+          </svg>
+        </div>
+        <div class="copy">
+          <p class="eyebrow">CS Agent Coach</p>
+          <h1 id="status-title">正在准备本地教练</h1>
+          <p id="status-detail">正在启动安全的本地运行环境。你的 Demo 不会经过桌面宿主。</p>
+        </div>
+        <div class="progress" aria-hidden="true"><span></span></div>
+        <div class="actions">
+          <button id="retry-button" type="button" hidden>重新启动应用</button>
+          <button id="settings-button" class="secondary" type="button">设置</button>
+        </div>
+        <p class="privacy-note">本地优先 · 主教练页面无系统权限</p>
+      </section>
+    </main>
+  </body>
+</html>

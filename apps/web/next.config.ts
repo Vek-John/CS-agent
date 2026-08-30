@@ -1,4 +1,10 @@
 import type { NextConfig } from "next";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const desktopBuild = process.env.DESKTOP_BUILD === "1";
+const webRoot = path.dirname(fileURLToPath(import.meta.url));
+const monorepoRoot = path.resolve(webRoot, "../..");
 
 const crossOriginIsolationHeaders = [
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
@@ -7,6 +13,23 @@ const crossOriginIsolationHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  ...(desktopBuild ? {
+    output: "standalone" as const,
+    outputFileTracingRoot: monorepoRoot,
+    outputFileTracingIncludes: {
+      "/*": [
+        "../../libs/*/package.json",
+        "node_modules/next/**/*",
+      ],
+    },
+    outputFileTracingExcludes: {
+      "/*": [
+        "../../.local-data/**/*",
+        "public/generated-data/**/*",
+        "../../libs/**/*.test.ts",
+      ],
+    },
+  } : {}),
   // pg's Cloudflare stream adapter is selected through the `workerd` export
   // condition during the OpenNext bundle. Keep the package's full dist/ tree
   // in the traced server output so its CommonJS branch resolves correctly.

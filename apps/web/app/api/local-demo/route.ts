@@ -4,6 +4,9 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
+  if ((process.env.DEPLOY_TARGET ?? "").trim().toLowerCase() === "desktop") {
+    return Response.json({ error: "DESKTOP_LOCAL_DEMO_DISABLED" }, { status: 404 });
+  }
   try {
     const size = Number(request.headers.get("x-demo-size") ?? request.headers.get("content-length") ?? "0");
     if (!Number.isSafeInteger(size) || size <= 0) {

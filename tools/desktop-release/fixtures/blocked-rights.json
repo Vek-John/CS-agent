@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "desktop-distribution-audit.v1",
+  "publicReleaseApproved": false,
+  "reviewedAt": null,
+  "reviewer": null,
+  "cs2d": {
+    "status": "BLOCKED_NO_LICENSE",
+    "evidence": "https://github.com/zenojunior/cs2d"
+  },
+  "valveAssets": {
+    "status": "REVIEW_REQUIRED",
+    "evidence": "https://developer.valvesoftware.com/"
+  }
+}

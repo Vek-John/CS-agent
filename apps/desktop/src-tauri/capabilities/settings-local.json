@@ -1,0 +1,26 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "settings-local",
+  "description": "Provider and local path commands for the bundled settings window only.",
+  "local": true,
+  "windows": ["settings"],
+  "permissions": [
+    "allow-runtime-status",
+    "allow-provider-status",
+    "allow-provider-validate",
+    "allow-provider-save",
+    "allow-provider-delete",
+    "allow-desktop-paths",
+    "allow-open-memory",
+    "allow-open-log-directory",
+    "allow-runtime-restart",
+    "allow-update-status",
+    "allow-update-check",
+    "allow-update-download-stage",
+    "allow-update-end-review",
+    "allow-update-install",
+    "allow-update-relaunch",
+    "allow-update-open-fallback",
+    "allow-hide-settings"
+  ]
+}

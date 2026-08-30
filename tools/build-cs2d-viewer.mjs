@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { sanitizeViewerHtml } from "./cs2d-host/sanitize-viewer-html.mjs";
 
 const root = process.cwd();
 const upstream = resolve(process.env.CS2D_UPSTREAM_DIR || resolve(root, ".local-data/upstream/cs2d"));
@@ -39,5 +40,8 @@ for (const required of ["index.html", "assets", "zstd.wasm"]) {
     throw new Error(`cs2d viewer build is missing ${required}: ${dist}`);
   }
 }
+
+const viewerIndex = resolve(dist, "index.html");
+writeFileSync(viewerIndex, sanitizeViewerHtml(readFileSync(viewerIndex, "utf8")));
 
 process.stdout.write(`[cs2d-host] built Cloudflare viewer at ${dist}\n`);

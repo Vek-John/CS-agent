@@ -87,6 +87,26 @@ describe("DeepSeek Coach Policy adapter", () => {
     expect(body).not.toContain("server-secret");
   });
 
+  it("supports a keyless loopback OpenAI-compatible endpoint without an authorization header", async () => {
+    const fetcher = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      expect(String(url)).toBe("http://127.0.0.1:11434/v1/chat/completions");
+      expect(new Headers(init?.headers).has("authorization")).toBe(false);
+      return completion({
+        action: "FINISH_CUE",
+        evidenceRefs: [],
+        rationaleCode: "NO_EXTRA_VISUAL_VALUE",
+        confidence: 0.8,
+      });
+    });
+    const result = await directCoachPolicy(policyInput(), {
+      DEEPSEEK_MODEL: "local-model",
+      DEEPSEEK_URL: "http://127.0.0.1:11434/v1/chat/completions",
+      DEEPSEEK_ALLOW_EMPTY_KEY: true,
+    }, fetcher);
+    expect(result.status).toBe("SUCCEEDED");
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
   it.each([
     ["unknown capability", { action: "SELECT_CAPABILITY", capabilityId: "cap-not-available", evidenceRefs: [], rationaleCode: "POSITION_NEEDS_MAP_FOCUS", confidence: 0.8 }],
     ["illegal ref", { action: "SELECT_CAPABILITY", capabilityId: "cap-cue17-map-focus", evidenceRefs: ["action-1"], rationaleCode: "POSITION_NEEDS_MAP_FOCUS", confidence: 0.8 }],

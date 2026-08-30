@@ -13,6 +13,8 @@ export const DEEPSEEK_NARRATOR_PROMPT_VERSION = "deepseek-narration-bundle/1.1.1
 export interface DeepSeekNarratorEnv {
   DEEPSEEK_API_KEY?: string;
   DEEPSEEK_MODEL?: string;
+  DEEPSEEK_URL?: string;
+  DEEPSEEK_ALLOW_EMPTY_KEY?: boolean;
 }
 
 interface FetchLike {
@@ -273,16 +275,16 @@ export async function narrateWithDeepSeek(
     throw new NarratorValidationError("Invalid narration request.");
   }
   const apiKey = env.DEEPSEEK_API_KEY?.trim();
-  if (!apiKey) return fallbackResult(safeRequest, "MISSING_API_KEY");
+  if (!apiKey && !env.DEEPSEEK_ALLOW_EMPTY_KEY) return fallbackResult(safeRequest, "MISSING_API_KEY");
   const model = env.DEEPSEEK_MODEL?.trim() || DEFAULT_MODEL;
-  if (!ALLOWED_MODELS.has(model)) return fallbackResult(safeRequest, "MODEL_NOT_ALLOWED", model);
+  if (!env.DEEPSEEK_URL && !ALLOWED_MODELS.has(model)) return fallbackResult(safeRequest, "MODEL_NOT_ALLOWED", model);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetcher(DEEPSEEK_URL, {
+    const response = await fetcher(env.DEEPSEEK_URL ?? DEEPSEEK_URL, {
       method: "POST",
       signal: controller.signal,
-      headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+      headers: { "content-type": "application/json", ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}) },
       body: JSON.stringify({
         model,
         messages: [

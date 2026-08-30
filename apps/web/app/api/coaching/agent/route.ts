@@ -6,10 +6,12 @@ import {
   type CoachAgentRuntime,
 } from "@cs-coach/coach-agent";
 import { buildAgentMemoryBrief, type UserMemoryBrief } from "@cs-coach/memory";
+import { getSqliteCheckpointSaver } from "@cs-coach/memory-sqlite/server";
 import { after as scheduleAfter } from "next/server";
 import { ensureRequestPrincipal, withCookie } from "../../../../lib/memory/api";
 import { getMemoryRuntime, memoryPersistenceUnavailable } from "../../../../lib/memory/server";
 import { buildLocalAgentMemoryEvents } from "../../../../lib/memory/agent-events";
+import { sameOriginRequest } from "../../../../lib/desktop/request-origin";
 
 export const dynamic = "force-dynamic";
 
@@ -25,21 +27,15 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-function sameOrigin(request: Request): boolean {
-  const origin = request.headers.get("origin");
-  if (!origin) return true;
-  try {
-    return origin === new URL(request.url).origin;
-  } catch {
-    return false;
-  }
-}
-
 function runtimeFor(sessionId: string): CoachAgentRuntime {
-  const existing = runtimes.get(sessionId);
+  const desktop = (process.env.DEPLOY_TARGET ?? "").trim().toLowerCase() === "desktop";
+  const runtimeKey = `${desktop ? "sqlite" : "memory"}:${sessionId}`;
+  const existing = runtimes.get(runtimeKey);
   if (existing) return existing;
-  const runtime = createCoachAgentRuntime();
-  runtimes.set(sessionId, runtime);
+  const runtime = desktop
+    ? createCoachAgentRuntime({ checkpointer: getSqliteCheckpointSaver(), checkpoint: "sqlite", checkpointBackend: "SQLITE" })
+    : createCoachAgentRuntime();
+  runtimes.set(runtimeKey, runtime);
   return runtime;
 }
 
@@ -139,7 +135,7 @@ function scheduleLocalMemoryPersistence(userId: string, task: () => Promise<unkn
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (!sameOrigin(request)) return json({ schemaVersion: "coach-agent-remote-error.v1", reason: "CROSS_ORIGIN" }, 403);
+  if (!sameOriginRequest(request)) return json({ schemaVersion: "coach-agent-remote-error.v1", reason: "CROSS_ORIGIN" }, 403);
   if (request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !== "application/json") {
     return json({ schemaVersion: "coach-agent-remote-error.v1", reason: "UNSUPPORTED_MEDIA_TYPE" }, 415);
   }
@@ -221,7 +217,8 @@ export async function POST(request: Request): Promise<Response> {
     const result = parseRemoteCoachAgentDispatchResponse(
       await runtimeFor(dispatchEnvelope.sessionId).dispatch(dispatchEnvelope.event),
     );
-    if (result.checkpoint.backend !== "MEMORY" || result.checkpoint.recoverableAfterRefresh) {
+    const expectedBackend = (process.env.DEPLOY_TARGET ?? "").trim().toLowerCase() === "desktop" ? "SQLITE" : "MEMORY";
+    if (result.checkpoint.backend !== expectedBackend || result.checkpoint.recoverableAfterRefresh !== (expectedBackend === "SQLITE")) {
       return json({ schemaVersion: "coach-agent-remote-error.v1", reason: "LOCAL_BACKEND_CONTRACT" }, 500);
     }
     if (memoryRuntime?.featureEnabled && memoryPrincipalId && !memoryPersistenceUnavailable(memoryRuntime)) {

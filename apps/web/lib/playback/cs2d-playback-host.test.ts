@@ -140,10 +140,26 @@ describe("cs2d localhost host boundary", () => {
       else process.env.DEPLOY_TARGET = previousRuntime;
     }
   });
+  it("isolates the localhost viewer authority from the IPv4 app cookie host", () => {
+    expect(cs2dHostConfig("http://localhost:51234/", "http://127.0.0.1:41234/desktop", "desktop")).toEqual({
+      url: "http://localhost:51234/?host=1&parentOrigin=http%3A%2F%2F127.0.0.1%3A41234",
+      origin: "http://localhost:51234"
+    });
+    const desktop = cs2dHostConfig("http://localhost:51234/", "http://127.0.0.1:41234", "desktop");
+    expect(new URL(desktop.url).searchParams.get("parentOrigin")).toBe("http://127.0.0.1:41234");
+    expect(desktop.url).not.toMatch(/token|cs_agent_runtime|session/i);
+    expect(() => cs2dHostConfig(undefined, "http://127.0.0.1:41234", "desktop")).toThrow(/requires/);
+    expect(() => cs2dHostConfig("http://127.0.0.1:51234/", "http://127.0.0.1:41234", "desktop")).toThrow(/localhost viewer/);
+    expect(() => cs2dHostConfig("http://[::1]:51234/", "http://127.0.0.1:41234", "desktop")).toThrow(/localhost viewer/);
+    expect(() => cs2dHostConfig("http://localhost:51234/", "http://[::1]:41234", "desktop")).toThrow(/IPv4 app/);
+    expect(() => cs2dHostConfig("http://localhost:51234/cs2d", "http://127.0.0.1:41234", "desktop")).toThrow(/exact/);
+  });
   it("requires both iframe source and exact origin", () => {
     expect(acceptedPlaybackEvent({ data: event, eventOrigin: "http://localhost:5174", expectedOrigin: "http://localhost:5174", sourceMatches: true })).toEqual(event);
     expect(acceptedPlaybackEvent({ data: event, eventOrigin: "http://127.0.0.1:5174", expectedOrigin: "http://localhost:5174", sourceMatches: true })).toBeUndefined();
     expect(acceptedPlaybackEvent({ data: event, eventOrigin: "http://localhost:5174", expectedOrigin: "http://localhost:5174", sourceMatches: false })).toBeUndefined();
+    expect(acceptedPlaybackEvent({ data: event, eventOrigin: "http://evil.example", expectedOrigin: "http://127.0.0.1:51234", sourceMatches: true })).toBeUndefined();
+    expect(playbackCommandMessage({ type: "play" })).toEqual({ channel: PLAYBACK_BRIDGE_CHANNEL, direction: "command", payload: { type: "play" } });
   });
 
 

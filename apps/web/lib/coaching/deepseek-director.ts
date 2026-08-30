@@ -79,6 +79,8 @@ export interface DirectorProviderRequestContext {
 export interface DeepSeekDirectorEnv {
   DEEPSEEK_API_KEY?: string;
   DEEPSEEK_MODEL?: string;
+  DEEPSEEK_URL?: string;
+  DEEPSEEK_ALLOW_EMPTY_KEY?: boolean;
 }
 
 interface FetchLike {
@@ -289,16 +291,16 @@ export async function directWithDeepSeek(
   }
   if (safeRequest.candidates.length === 0) return fallbackProviderResult(safeRequest, "NO_PRACTICAL_CANDIDATES");
   const key = env.DEEPSEEK_API_KEY?.trim();
-  if (!key) return fallbackProviderResult(safeRequest, "MISSING_API_KEY");
+  if (!key && !env.DEEPSEEK_ALLOW_EMPTY_KEY) return fallbackProviderResult(safeRequest, "MISSING_API_KEY");
   const model = env.DEEPSEEK_MODEL?.trim() || DEFAULT_MODEL;
-  if (!ALLOWED_MODELS.has(model)) return fallbackProviderResult(safeRequest, "MODEL_NOT_ALLOWED");
+  if (!env.DEEPSEEK_URL && !ALLOWED_MODELS.has(model)) return fallbackProviderResult(safeRequest, "MODEL_NOT_ALLOWED");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetcher(DEEPSEEK_URL, {
+    const response = await fetcher(env.DEEPSEEK_URL ?? DEEPSEEK_URL, {
       method: "POST",
       signal: controller.signal,
-      headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+      headers: { "content-type": "application/json", ...(key ? { authorization: `Bearer ${key}` } : {}) },
       body: JSON.stringify({
         model,
         messages: [

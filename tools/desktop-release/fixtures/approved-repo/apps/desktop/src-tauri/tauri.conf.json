@@ -1,0 +1,12 @@
+{
+  "version": "../package.json",
+  "bundle": {
+    "targets": ["app", "dmg"]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://github.com/Vek-John/CS-agent/releases/latest/download/latest.json"],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IHN5bnRoZXRpYyBmaXh0dXJlIG1pbmlzaWduIHB1YmxpYyBrZXkKUldUTXpNek16TXpNek16TXpNek16TXpNek16TXpNek16TXpNek16TXpNek16TXpNek16TXpBPT0="
+    }
+  }
+}

@@ -170,7 +170,8 @@ import {
   canBeginManualCueVisit,
   cuePresentedActionForTerminal,
   nearestCoachingCue,
-  type CoachAgentEntryMode
+  type CoachAgentEntryMode,
+  type Cs2dDeployTarget
 } from "../../lib/playback/cs2d-playback-host";
 
 type HostPhase = "BOOTING" | "WAITING_FOR_DEMO" | "READY" | "ERROR";
@@ -219,6 +220,11 @@ function coachingStatusText(chip: CoachingStatusChip, catalog?: GameAssetCatalog
 export interface Cs2dPlaybackHostProps {
   /** Optional test/provider override; production builds it from ANALYSIS_READY. */
   reviewPreparationDependencies?: ReviewPreparationDependencies;
+  /** Runtime-owned exact viewer URL. Raw Demo and Replay never cross this prop. */
+  viewerUrl?: string;
+  /** Trusted exact App origin; keeps Desktop SSR and hydration identical. */
+  parentOrigin?: string;
+  deployTarget?: Cs2dDeployTarget;
 }
 
 type ReviewPreparationStatus = {
@@ -250,7 +256,10 @@ function recoveryEventId(prefix: string): string {
 }
 
 export function Cs2dPlaybackHost({
-  reviewPreparationDependencies
+  reviewPreparationDependencies,
+  viewerUrl,
+  parentOrigin,
+  deployTarget,
 }: Cs2dPlaybackHostProps = {}) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const planRef = useRef<ReviewPlan | undefined>(undefined);
@@ -276,17 +285,22 @@ export function Cs2dPlaybackHost({
   const stage2Mode = coachAgentMode === "STAGE2";
   const stage3Mode = coachAgentMode === "STAGE3";
   const config = useMemo(() => {
-    const base = cs2dHostConfig();
+    const resolvedParentOrigin = parentOrigin ?? (typeof window === "undefined"
+      ? "http://localhost:3000"
+      : window.location.origin);
+    const base = cs2dHostConfig(viewerUrl, resolvedParentOrigin, deployTarget);
     // Keep the host URL deterministic during Next SSR; the browser origin is
     // only needed when resolving a relative Cloudflare viewer path.
-    const parentOrigin = typeof window === "undefined" ? "http://localhost:3000" : window.location.origin;
-    const parsed = new URL(base.url, parentOrigin);
+    const parsed = new URL(base.url, resolvedParentOrigin);
     if (!parsed.searchParams.has("csProvider")) parsed.searchParams.set("csProvider", CS_NET_DEFAULT_PROVIDER);
     if (!parsed.searchParams.has("csBatch")) parsed.searchParams.set("csBatch", CS_NET_DEFAULT_BATCH_SIZE);
     new URLSearchParams(benchmarkQuery).forEach((value, key) => parsed.searchParams.set(key, value));
     return { ...base, url: base.url.startsWith("/") ? `${parsed.pathname}${parsed.search}${parsed.hash}` : parsed.toString() };
-  }, [benchmarkQuery]);
-  const [phase, setPhase] = useState<HostPhase>("BOOTING");
+  }, [benchmarkQuery, deployTarget, parentOrigin, viewerUrl]);
+  // Desktop SSR already has a readiness-validated Viewer URL. Starting in the
+  // waiting state avoids missing an iframe load event that can finish before
+  // React hydrates the server-rendered frame.
+  const [phase, setPhase] = useState<HostPhase>(viewerUrl ? "WAITING_FOR_DEMO" : "BOOTING");
   const [replay, setReplay] = useState<ReplayReadyEvent>();
   const [selected, setSelected] = useState<PlayerSelectedEvent>();
   const selectedPlayerIdRef = useRef<string | undefined>(undefined);

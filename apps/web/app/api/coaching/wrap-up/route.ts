@@ -4,6 +4,8 @@ import {
   sessionWrapUpLimits,
   type DeepSeekWrapUpEnv,
 } from "../../../../lib/coaching/deepseek-wrap-up";
+import { coachingProviderEnv } from "../../../../lib/desktop/provider";
+import { sameOriginRequest } from "../../../../lib/desktop/request-origin";
 
 export const dynamic = "force-dynamic";
 
@@ -14,25 +16,12 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-function sameOrigin(request: Request): boolean {
-  const origin = request.headers.get("origin");
-  if (!origin) return true;
-  try {
-    return origin === new URL(request.url).origin;
-  } catch {
-    return false;
-  }
-}
-
 function serverEnv(): DeepSeekWrapUpEnv {
-  return {
-    DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
-    DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL,
-  };
+  return coachingProviderEnv();
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (!sameOrigin(request)) return json({ status: "FALLBACK", reason: "CROSS_ORIGIN" }, 403);
+  if (!sameOriginRequest(request)) return json({ status: "FALLBACK", reason: "CROSS_ORIGIN" }, 403);
   const declaredLength = request.headers.get("content-length");
   if (declaredLength !== null) {
     const length = Number(declaredLength);

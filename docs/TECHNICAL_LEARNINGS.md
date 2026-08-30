@@ -6,7 +6,7 @@
 > - 产品目标与范围以 [PRD.md](../PRD.md) 和 [MVP_SCOPE.md](../MVP_SCOPE.md) 为准。
 > - 本文记录「为什么做这个选择」「实际踩到了什么问题」「如何验证」；它可以解释架构，但不能覆盖架构契约。
 >
-> 最后更新：2026-08-30
+> 最后更新：2026-08-31
 
 ## 1. 维护规则
 
@@ -28,7 +28,7 @@
 
 ~~~text
 本地 .dem
-  → 浏览器内一次解析
+  → WKWebView Viewer/Worker 内一次解析
   → 真实 2D 回放 + 结构化分析包
   → 教练选择值得讲的片段
   → 先完整看动作和结果
@@ -45,6 +45,8 @@
 - **模型是分析信号，不是事实或因果证明。** 胜率下降可以帮助定位，但不能自动断言“全是这个玩家造成的”。
 - **先用可复用底座交付 MVP。** 不为了“自研”重复做成熟回放能力。
 
+5.1.0 已对齐已实现的 local-first 桌面边界：Tauri 只监督一个自包含 Node/Next sidecar，现有 Next/cs2d/Session/Agent/Memory interface 继续作为深 module；桌面 Memory 与 Agent checkpoint 使用同一 Application Support SQLite 文件中的不同 Adapter/表。Cloudflare/DO/PostgreSQL 保留为 Web 兼容形态，不是桌面前置。实现测试/local ad-hoc RC 与 public distribution 仍必须分开记录。
+
 ## 3. 当前技术选型速查
 
 | 领域 | 当前选择 | 选择原因 | 不能做什么 |
@@ -57,7 +59,9 @@
 | LLM | Provider-neutral JSON/Schema Adapter；当前可用 DeepSeek | LLM 负责表达与教学判断，不负责读取 Demo 或控制播放器 | 不能输出无事实引用的结果、数值或因果 |
 | 实时胜率 | 固定 cs-net win-rate head → INT8 ONNX → iframe Worker ORT/WASM | 用真实局面信号辅助 Director 选择教学片段 | 不改变 Demo parser，也不是玩家当时的已知信息 |
 | 模型资产 | 版本化 manifest、量化 ONNX、浏览器缓存 | 可复现、可校验，并适配 Worker 静态资源限制 | 不上传 Replay、模型输入或 .dem 到服务端 |
-| 部署 | localhost 双进程；Cloudflare 同源 /cs2d/ Viewer | 开发调试与生产体验使用同一播放契约 | key 不能进入仓库、日志、NEXT_PUBLIC 变量或普通 .env 文件 |
+| 主产品部署 | Tauri 2.11.5 + pinned Node 24.19.0/Next standalone sidecar | 自包含 Apple Silicon app；宿主只监督进程/窗口/Secret/更新 | 不另造 Parser、Session、Memory，不依赖系统 Node/Cloudflare/PostgreSQL |
+| 开发/兼容 Adapter | localhost 双进程；Cloudflare 同源 `/cs2d/` Viewer | 调试与保留 Web 部署兼容性 | 不能反向定义普通桌面用户前置；key 不进仓库、日志或 NEXT_PUBLIC |
+| 桌面存储 | Application Support SQLite + macOS Keychain | Memory、checkpoint、preference 得到本机 locality，Secret 与数据库分离 | 同一 DB 文件不代表领域合并；WebView 永远不能读取 Secret |
 
 ## 4. 已学到的关键问题与结论
 
@@ -979,7 +983,7 @@ Outbox 在发送前复核实时 consent authority：authority outage 返回 fail
 
 `pnpm dev` 在没有显式变量时固定以 `MEMORY_ENABLED=false` 启动；新增跨平台 `pnpm dev:memory`，通过启动器 `--memory` 参数提供默认 true，而不使用 POSIX shell 前缀。shell 显式值优先于本地文件，两者中任一显式 `false` 都不会被 `--memory` 反转。无 DB 时复用现有 `getMemoryRuntime` 的 `IN_MEMORY` 适配器并明确报告“进程内、重启清空”；有 `MEMORY_DATABASE_URL`/`DATABASE_URL` 时仍走唯一 PostgreSQL adapter，embedding 继续可选。Migration CLI 提供 `--dry-run` 和 `--check-config` 两个不连库的预检面。
 
-启动器在任何准备或子进程启动前同时检查两个端口，冲突时只返回可诊断错误，不动旧进程。Unix 上为自己创建的两个服务建独立进程组，正常退出先 `SIGTERM`、超时再 `SIGKILL`；任一服务异常退出都会收敛另一个。当前运行与验收基线收口为 localhost 模块化单体；未来 Cockpit Tools 风格桌面壳只包装该边界并复用 Playback/Session/Agent/Memory 契约，Tauri/Electron 等容器选型继续后置。
+启动器在任何准备或子进程启动前同时检查两个端口，冲突时只返回可诊断错误，不动旧进程。Unix 上为自己创建的两个服务建独立进程组，正常退出先 `SIGTERM`、超时再 `SIGKILL`；任一服务异常退出都会收敛另一个。当时把运行与验收基线收口为 localhost 模块化单体，并把桌面容器选型后置；该桌面决定已由 4.45 与 ADR-0007 取代，localhost 进程生命周期证据本身继续有效。
 
 **落点**
 
@@ -1030,6 +1034,188 @@ Homebrew PostgreSQL **17.11** 以 service 形式运行，`cs_agent_local` 连接
 **限制 / 下一步**
 
 本轮只验证 macOS 单机 Homebrew PostgreSQL，不包含 Cloudflare、Hyperdrive、Durable Object 或远程数据库，也不把 localhost 结果外推为云部署结论。pgvector extension 和 vector migration 已就绪，但没有配置或验证真实 embedding provider，因此本轮语义召回仍不是验收项。Homebrew service 的备份、升级和本机凭据轮换仍由操作者管理；项目不自动 drop/reset 任何本地数据库。
+
+### 4.45 2026-08-30：冻结 local-first Tauri 桌面架构，但不冒充实现完成
+
+> 历史说明：本节记录 5.0.0 冻结当日的状态；其中双 IPv4 loopback 与“尚未实现”结论已由 4.46、ADR-0008 与 ARCHITECTURE 5.1.0 取代，不是当前架构事实。ADR-0007 同样保留这段冻结历史，不能被当作当前实现快照。
+
+**触发**
+
+4.1.1 只确认 localhost 模块化单体适合被桌面壳监督，却仍把容器选型、桌面 Memory 真相和 Agent checkpoint 留在“后续/云端默认”状态。若直接开始实现，最容易出现四种结构性错误：在 Rust/Tauri 内复制 Parser/Session/Memory；让桌面仍依赖 Cloudflare、Durable Object 或 PostgreSQL；把 raw Demo path/bytes 从 File/Worker seam 搬进高权限宿主；或直接调用缺少 restore 保证的 updater install 并把失败变成不可恢复覆盖。
+
+**决定**
+
+通过 [ADR-0007](./adr/ADR-0007-local-first-tauri-desktop.md) 冻结 Apple Silicon `aarch64` 首发：Tauri `2.11.5` 只监督一个自包含 desktop runtime sidecar，sidecar 打包 pinned Node `24.19.0` 与 Next standalone traced resources，并在同一进程中持有两个 OS 分配的 `127.0.0.1:0` 端口（Next UI/API 与独立 cs2d Viewer）。不用 `localhost` hostname、LAN、通配监听或 grandchildren。Next UI/Route Handler、cs2d File → Worker/WASM、Playback bridge、Outcome Gate、完整时间线和 observable-state 证据边界全部复用；raw Demo/Replay 不跨 iframe。
+
+supervision 使用 stdin init 与 token admin transport 的严格版本 envelope。nonce/token 不进入 argv、environment、disk、log 或 WebView；Keychain generic password secret 只经 Rust → sidecar 内存。main coaching remote origin 零 Tauri capability；bundled bootstrap/settings/update window 只有 AppManifest allowlist 中的窄 `status/set/delete` 等命令，不提供 broad shell/fs/http/process/dialog/opener，Secret 永不 `get`。Demo 继续由 WKWebView 原生 HTML File chooser 选择，路径/bytes 不跨 Rust。
+
+Application Support SQLite 成为桌面 Memory 真相，并以不同表/Adapter 同时承载 preferences、consent、events/revisions/tombstones/evidence/Float32 embeddings 与 LangGraph checkpoint。`memory-sqlite` 实现既有 `MemoryRepository`/`AuthorizationStore`，checkpoint saver 独立实现 `BaseCheckpointSaver`；Memory Domain 与 Session/Agent 不合并。SQLite 固定 WAL、foreign keys、FULL synchronous、busy timeout、checksummed migrations、single writer；embedding 只做 bounded exact cosine，首发不加载 `sqlite-vec`。IndexedDB 仍只保存 Host Recovery，恢复与 SQLite checkpoint 精确双状态握手。Web 的 Cloudflare/DO/PostgreSQL Adapter 和历史保留，但退出桌面默认；`MemoryWritePolicy`、跨 Demo 晋级、consent、revision、tombstone 和 late-event 防复活不变。
+
+Updater 只用官方 Tauri Updater 完成 HTTPS check/download、minisign、`latest.json` 和 SemVer；启动异步检查并 24 小时频控，下载与安装分别确认，活跃工作受 busy gate。因 plugin `2.10` 的 macOS install 缺少 restore 保证，不调用破坏性官方 install；改为验签后在同卷 staging 校验签名并用 `renamex_np(RENAME_SWAP)` 原子交换。原子能力、权限或签名任一不足时保持当前 app，降级打开 DMG。数据库升级前 backup + integrity，新版本 health 成功后才清旧 bundle。
+
+**落点**
+
+长期契约更新到 `ARCHITECTURE.md` 5.0.0；不可逆取舍和被取代的桌面解释写入 ADR-0007。本阶段没有修改生产代码、PRD、MVP_SCOPE 或 README。版本唯一源冻结为 `apps/desktop/package.json`，tag 为 `desktop-vX.Y.Z`，发布资产为 `dmg`、`app.tar.gz`、`.sig`、`latest.json`、`SHA256SUMS`。正式发布必须通过 `distribution:audit`；当前 cs2d 无 LICENSE，Valve 资源为 `LOCALHOST_ONLY/REVIEW_REQUIRED`，因此只允许本机/internal RC，公开 workflow 保持 blocked。没有 Apple Developer 凭据时只能称 ad-hoc、未公证构建。
+
+**验证**
+
+本阶段开始前工作树为 clean。沿用并明确记录上一轮已完成的实现基线：`pnpm typecheck` 通过；Vitest 为 **96 个文件通过、2 个文件跳过，715 个测试通过、4 个测试跳过**；Next production build 通过。另做的 in-memory browser bundle probe 成功，证明把紧凑前端 bundle 放进 WebView 在技术上可行；最终仍选择 Next standalone sidecar，因为它能直接复用 Route Handler、服务端 Provider/Memory interface、traced resources 和现有 localhost 运行语义，interface 更小且 module depth/locality 更好。
+
+本次文档检查使用冲突 `rg`、`apply_patch`、二次冲突 `rg`、Markdown heading/fence 检查和 `git diff --check`。没有运行新的产品测试或构建，也没有把上述历史基线重新表述为 Tauri/SQLite/updater 验收。
+
+**限制 / 下一步**
+
+Tauri 宿主、pinned Node/Next sidecar 打包、双 loopback origin、`memory-sqlite`、SQLite saver、Keychain、AppManifest capability、日志权限/轮转、updater 原子交换与 rollback 都尚未实现。Updater 仍需安全评审、故障注入和真实同卷 `RENAME_SWAP` 验证；Xcode/Apple Developer 签名/notarization 凭据未验证。cs2d 许可证与 Valve 资源权利仍阻止公开发行。下一阶段只能逐 gate 实现并分别报告结果，不能以 localhost、in-memory probe 或文档冻结替代桌面验证。
+
+### 4.46 2026-08-31：桌面实现完成后，用户文档必须从 localhost 叙事迁移到 distribution truth
+
+**触发**
+
+桌面壳、sidecar、SQLite、Keychain 和 updater/rollback 已从 ADR 目标进入实现，但 README 仍把 localhost、系统 Node/pnpm、PostgreSQL 和 Cloudflare 写成普通用户主路径；ARCH/ADR 仍保留两个 `127.0.0.1`、token 完全不进 WebView、桌面 principal 由 Keychain 支撑和“全部尚未实现”等冻结期文字。另一方面，release workflow 的完整性容易被误读成已有公开下载，忽略 rights JSON=false、第三方 notices、updater placeholder 公钥和缺少 rights-approved Developer ID/notary 资产的事实。
+
+**决定**
+
+把 Desktop 明确为主产品，并将普通用户的目标安装流与当前可执行状态分开：目标 DMG 自包含 Node `24.19.0`、Next/Viewer/WASM 和 SQLite，不要求系统开发工具或云基础设施；当前只允许本地/internal ad-hoc RC，public Release 继续 fail closed。Cloudflare/PostgreSQL 退到开发兼容附录。
+
+架构边界对齐实现：App host 为随机 `127.0.0.1`，Viewer host 为随机 `[::1]`；session token 由 Rust 写入 HttpOnly/Strict cookie store，进入 WKWebView cookie store但不进入 URL/JS；admin token不进入 WebView。Node 使用精确 FS permission、`--jitless` 和 child deny。桌面 Memory principal 是 sidecar session-cookie保护下的稳定非 secret ID；Keychain 只保存 Provider key。Updater 文档区分“代码/测试已实现”与“正式公钥、Developer ID、notarization、rights-approved public asset 尚未验证”。
+
+**落点**
+
+README 改为用户优先的 Desktop 文档，补充数据路径、卸载、Keychain、更新模型、ad-hoc/Gatekeeper 边界和开发命令。新增贡献、安全、CHANGELOG、Bug/Feature Issue 与 PR 模板，统一禁止自动附带 Demo、DB/backup、日志、secret/token 和用户 Memory。发布 Runbook 与 distribution audit 文档记录真实 Gate。`ARCHITECTURE.md` 升至 5.1.0；ADR-0007 保留冻结历史，具体实施偏差由后续 ADR-0008 记录。PRD/MVP_SCOPE、代码、manifest、workflow、rights JSON 和 notices 保持不变。
+
+**验证**
+
+本轮是文档与只读一致性审计，没有运行构建、产品测试或浏览器。验证只包括：对 package scripts、Tauri/runtime/updater/provider/supervisor、SQLite backup/export/delete、release workflow/audit 与 rights records 的只读映射；Markdown heading/fence、相对链接、Issue YAML、workflow YAML/JSON 基本解析；冲突措辞 `rg`；`git diff --check`。这些检查不能替代既有模块测试，也不能证明正式 updater/Public Release 通过。
+
+**限制 / 下一步**
+
+公开发行仍受 cs2d/Valve rights、正式 updater 公钥、Developer ID/notarization 和 protected environment 实际凭据阻塞。只有上述外部事项形成可审查 evidence，并由 workflow 对同一不可变 tag 完成签名、staple、公钥反验和固定资产发布，README 才能改成公开下载说明。local/internal ad-hoc 构建不得被用来缩短该 Gate。
+
+### 4.47 2026-08-31：桌面安全边界必须以运行时注入、静止点和可审计资源描述
+
+**触发**
+
+实现收口后仍有六类文档漂移风险：把浏览器自报 `Origin` 当成桌面信任；把“收到 backup 请求”误写成 Next 响应已经静止；让 Desktop 删除继续依赖 Cloudflare invalidation；把本地 feature hash 称为神经语义模型；只验证 Node binary 而漏掉随包许可；以及把 CI signature verifier 或较早 bundle 误认为最终 App 已通过。ADR-0007 是实现前冻结历史，若原地改写会同时失去决策上下文并制造“未实现/已实现”自相矛盾。
+
+**决定**
+
+新增 [ADR-0008](./adr/ADR-0008-desktop-runtime-implementation-amendments.md) 部分取代 ADR-0007 的具体实现细节，ADR-0007 保持 Accepted 历史。当前 Desktop App 使用 `127.0.0.1`，Viewer 使用 `[::1]`；protected sidecar 在严格 Host＋唯一 43 字符 session cookie 后覆盖注入 `x-cs-agent-app-origin`，所有 coaching 与 Memory mutating routes 共用 trusted-origin helper。iframe 只携带编码后的精确 `parentOrigin`，不携带 token。
+
+Updater backup 先切换到 `DRAINING`，拒绝新 Next 请求，等待 handler 与 response 两部分 active 状态都完成后才 drain SQLite writer/checkpoint 并备份。该计数只覆盖 Next/API 活动；iframe parser 是纯本地计算，不产生 server write。关闭主窗口只隐藏并继续保持 busy；只有 Settings 的“结束当前复盘”成功导航 bundled maintenance page 后才设置 `review_ended`，“稍后”或关闭 Settings 会恢复复盘。Desktop 删除使用 local no-op invalidator，由 SQLite single-writer、tombstone、deletion marker 与 residue purge 收敛；Web/Cloudflare 的严格 notification/invalidation 不变。
+
+默认桌面向量 provider 固定为 `local-unicode-feature-hash/1.0.0`，用 256 维 Unicode 1–3 gram Float32 feature hash 做有界 exact cosine。它是词法相似度补充，不是 neural embedding；结构化召回优先。固定 Node `24.19.0` tar 同时提取完整 `LICENSE`，manifest 记录 license SHA，bundle audit 复核；精确 repo build-root 只做等长清理，上游 binary 自带 `/Users/runner` 不误报。CI updater verifier 通过 Cargo feature gate 单独构建，禁止进入 App。DMG fallback 只一键打开由版本构造并再次校验的固定 GitHub asset URL；release workflow 把 tag、精确 commit、`HEAD` 与 `CS_AGENT_BUILD_SHA` 固定为同一发布身份。
+
+**落点**
+
+长期事实更新到 `ARCHITECTURE.md` 5.1.0 和 ADR-0008；README、SECURITY、CHANGELOG、Desktop Release Runbook 与 Distribution Audit 同步用户可见边界和发布限制。ADR-0007 与本日志 4.45 保留实现前历史，不承担当前架构真相。
+
+**验证**
+
+实现证据来自两次真实 protected-sidecar smoke：consent、export、跨进程 persistence 与 delete 均 PASS，测试数据和进程已清理；相关 Host/cookie/trusted-origin、Viewer origin、route mutation gate、local invalidator、feature hash、Node license manifest、backup quiescence、updater rollback 和 verifier feature gate 另有单元/fixture/audit 检查。本次记录只做代码与文档只读映射、Markdown/YAML/JSON/链接/围栏和 `git diff --check`，没有重跑构建、浏览器或产品测试。
+
+**限制 / 下一步**
+
+这些 smoke 证明 protected runtime 的本地边界，不单独证明最终 App 或 public distribution；后续最终 App/DMG 的重建、bundle 与 GUI 证据记录在 4.48。公开发行继续受 cs2d/Valve rights、正式 updater 公钥、Developer ID/notarization 与 rights-approved 最终资产阻塞。词法 feature hash 不具备神经语义召回能力，文档和 UI 都不得暗示相反结论。
+
+### 4.48 2026-08-31：桌面 readiness 必须覆盖浏览器真实资产、hydration 与 iframe，而不只是 HTML 200
+
+**触发**
+
+最终 `.app` 首轮 GUI 能到达 `/desktop`，但页面没有样式、Viewer 停在 `about:blank`。原有真实 sidecar smoke 只验证 SSR Route 200、Viewer 根文档 200 和 CSP header，因此把“服务启动”误当成“产品可交互”。补齐 CSS/JavaScript 检查后首先发现 `/_next/static` 为 404；修复后 CSS 恢复，但 Web Inspector 又显示 Viewer build 引用的 `/cs2d/assets/*` 在 Desktop root handler 下 404、SSR iframe 使用占位 App port、Google Fonts 仍尝试外网，以及 style nonce 与 `unsafe-inline` 在 WebKit 下不能承担原注释所声称的兼容语义。
+
+Distribution audit 同时发现 Next 随包 docs 中存在示例 `BEGIN RSA PRIVATE KEY` 文本。它不是真实密钥，但不属于运行时资源并会让私密材料 Gate 失去区分力；不能通过放宽扫描解决。
+
+**决定**
+
+Desktop runtime 改用 Next custom-server handler，保留严格 Host/cookie/header 包装；不再直接使用只覆盖内部渲染的 `NextServer`。真实 smoke 解析 SSR HTML，验证每个 Next CSS/JavaScript 的 200、MIME、非空内容和 CSP nonce，并验证 iframe 的 Viewer origin、`host=1` 与精确 App `parentOrigin`。
+
+Viewer static handler 在 URL decode 与 `..`/escape 拒绝后，只把精确 `/cs2d/` 前缀映射回同一 Viewer root，使 Cloudflare 与 Desktop 复用同一受控产物。Desktop page 从 runtime 注入 header 取得可信 App origin并同时用于 SSR/client prop，消除占位 port hydration 差异。App CSP 使用 same-origin＋nonce script、same-origin＋inline style、`frame-src http:`；frame scheme 兼容必须与 Rust readiness 派生的 exact App/Viewer navigation allow-list、Viewer exact `frame-ancestors` 同时成立。构建后删除 Viewer 的远程字体 links。准备器排除 dependency `docs/`，但继续从 pinned Node tar 单独带入完整 LICENSE。
+
+**落点**
+
+变化落在 `desktop-runtime` 的 Next/Viewer/security seam、Tauri supervisor navigation gate、Desktop page 与 `Cs2dPlaybackHost` 的 exact parent-origin prop、cs2d Viewer HTML sanitizer、prepared resource filter，以及真实 sidecar smoke。没有把 Parser、Session、Memory 或 Demo bytes 搬入 Rust；raw Demo 仍只属于 iframe Worker。
+
+**验证**
+
+Web Inspector 明确复现并分类了五条浏览器错误。最终回归为 Vitest **109 files passed / 2 skipped、763 tests passed / 4 skipped**，desktop runtime **8/8**、runtime prepare/bootstrap **14/14**、stub sidecar **1/1**、Rust **35/35**，`pnpm typecheck`、普通 Next production build与 Desktop webpack production build均通过。`pnpm desktop:dev` 实际完成 prepare、Rust dev build并启动 Tauri 主进程和唯一 sidecar，随后中断开发命令并确认两者均清理。增强后的 prepared 与最终 bundled real-sidecar 双启动 smoke 均 PASS：逐一检查首屏 SSR 已进入“请选择本地 Demo”且没有残留“正在连接本地回放”、Next CSS/JS、精确 iframe query、全部 `/cs2d/assets` HEAD、Viewer、SQLite consent/export/delete/persistence、backup、route gate 与 graceful shutdown；资源产物不再含 Google Fonts link 或 Next docs 示例私钥文本。
+
+真实 WKWebView 验收使用 `demoTests/test_demo.dem`（Finder 显示 60.6 MB）：完成 de_mirage 解析、10 人与 9 回合识别、主体选择、胜率模型、11 个 guided cue、播放/自由接管/回到默认顺序、decision-before-outcome 提问、USER claim 诊断，以及 Settings 的 busy/install gate 与“稍后”精确恢复。最终 App bundle 仅含两个 arm64 executable，strict codesign integrity 通过。最终 DMG 的冻结校验值更新在 4.49。
+
+**限制 / 下一步**
+
+完整 GUI 路径在最终首屏状态一行修订之前已经通过；该修订不改变 chooser、Worker、Replay、Session 或 Agent seam。精确最终重建的 prepared/bundled SSR 与进程级 smoke 已覆盖这行状态，但 macOS 再次自动锁屏，阻止了对重建后窗口的最后一次视觉读取；因此不能声称为这次重建另有一张最终截图。Public Release 仍独立受第三方权利、正式 updater 公钥、Developer ID 与 notarization 阻塞；当前 App 是 ad-hoc 签名的本机验证产物，`spctl` 拒绝且 distribution audit 按预期停在 `APP_DEVELOPER_ID_SIGNATURE_MISSING`。
+
+### 4.49 2026-08-31：DMG 构建不能把 Finder 窗口生命周期当作发布依赖
+
+**触发**
+
+Tauri 的默认 DMG 美化脚本在同一最终 App 上两次卡在 Finder/AppleScript 边界；手动复用脚本可以成功，但 `pnpm desktop:build` 与 CI 仍会留下概率性失败。发布 workflow 的静态审计此前也只确认存在 Tauri build，没有证明自定义 DMG 在 notarization 前执行。
+
+**决定**
+
+Tauri 固定只构建并签名 App。`create-dmg.mjs` 在私有临时目录使用 `ditto` 复制该 App，加入精确 `/Applications` symlink 和 `.metadata_never_index`，再以 `hdiutil` 生成压缩 DMG；不调用 Finder 或 `osascript`。partial 先校验，替换后再校验；最终校验失败恢复旧镜像原字节，无法恢复时保留显式 previous 文件而不删除。CLI 相对路径始终以 repo root 解析，避免 `pnpm --dir` 在 CI 中重复 `apps/desktop`。workflow audit 固定 App build、`create:dmg`、notary、bundle audit 的顺序并拒绝 Finder/Tauri DMG 回退。
+
+**落点**
+
+`apps/desktop/scripts/create-dmg.mjs` 与测试、根/desktop package scripts、`.github/workflows/desktop-release.yml`、release audit/tests、README、Runbook 与本架构记录。
+
+**验证**
+
+完整 `pnpm desktop:build` 一次通过并生成 App 与 Finder-free DMG；打包器 **6/6**、desktop prepare/bootstrap/DMG **20/20**、release audit **10/10**、workflow audit、prepared/bundled real-sidecar 与 bundle lifecycle 均通过。DMG CLI 只接受 canonical App 与版本化 output，不能覆盖任意 `.dmg`。DMG 挂载根目录精确为 `.metadata_never_index`、`Applications -> /Applications`、`CS Agent Coach.app`，无脚本/icon/source；App、sidecar、manifest hashes 与最终 bundle 一致，卸载后无 mount/temp/previous。合入 Ready v2、updater 纵向 seam 与 Viewer oversized-Cookie fail-closed guard 后的最终 DMG 为 **208,304,335 bytes**，SHA-256 `5f10b8d6122702c822fc141bbb48cdbd61133ec28d45b7ac803f844ee2e7ae62`，CRC `$FC9BD06F`；最终 Rust 为 **38/38**。
+
+**限制 / 下一步**
+
+这解决本地与 CI 的 Finder 生命周期问题，不提供第三方再分发权利、正式 updater key、Developer ID 或 notarization。公开 workflow 仍必须在具备这些受保护输入后真实执行；当前产物继续是 ad-hoc internal RC。
+
+### 4.50 2026-08-31：监听地址与浏览器 authority 必须分开建模
+
+**触发**
+
+ADR-0008 用 App `127.0.0.1`＋Viewer `[::1]` 避免 Cookie 跨端口发送，但原始桌面验收明确要求内部 socket 只绑定 `127.0.0.1`。直接把 Viewer origin 也改成 literal IPv4 会让 host-only Cookie发送到 Viewer，因为 Cookie 不区分端口；同时旧 IPv6 workaround 迫使 App CSP 使用过宽的 `frame-src http:`。
+
+**决定**
+
+通过 Design It Twice 比较了三种 interface：单一 `localhost` Viewer authority、随机 sibling `.localhost` authorities、Tauri custom scheme。接受最小方案：`DesktopOriginPair` module 一次绑定并验证两个 `127.0.0.1:0` socket，App browser origin 保持 literal IPv4，Viewer browser origin 使用不向用户暴露的 `localhost:<port>`。Tauri cookie 仍只属于 `127.0.0.1`；Viewer 在进入静态路径处理前拒绝任何 `cs_agent_runtime` Cookie，超过 Cookie 解析上限的非空输入也按 malformed transport fail closed。Ready/HTTP wire contract 升到 v2，Rust 拒绝旧 v1、`[::1]`、共享 IPv4 authority 和同端口；App CSP 收紧为 exact Viewer origin。
+
+随机 sibling hostname 对 single-instance 产品没有足够收益；custom scheme 尚未证明 module Worker、WASM、IndexedDB、SharedArrayBuffer、COOP/COEP 与 exact `postMessage`，均不进入默认路径。历史 ADR-0008 不原地改写，由 ADR-0009 取代相关段落。
+
+**落点**
+
+`apps/desktop-runtime/src/origins.ts`、runtime/security/viewer 与测试，Rust protocol/supervisor，Web desktop/playback validators，sidecar/bundle/WKWebView smoke，以及 ADR-0009、Architecture、README、Security、Changelog。
+
+**验证**
+
+红测先分别复现旧 `[::1]` runtime、Web validator、同端口 readiness 被接受，以及 8192-byte 上限之外的 Cookie 绕过 Viewer guard。修复后 origin module 证明两个真实 socket 都是 `IPv4 / 127.0.0.1`、端口不同、失败清理；Runtime **10/10**、Web transport **23/23**、Rust **38/38** 通过。prepared 与 bundled real-sidecar 双启动继续通过，并新增 exact CSP、Viewer session-cookie guard 和 Ready v2 检查；release App lifecycle smoke 只接受两个 `TCP 127.0.0.1:*` listener。
+
+macOS 锁屏使可访问性截图不可读，但新增的无界面真实 `WKWebView` 阶段仍通过：受保护 Next `/desktop`、精确 localhost Viewer origin、CSS/JS、`crossOriginIsolated`、SharedArrayBuffer、module Worker、parser WASM fetch/compile 与 session Cookie host 隔离全部为真。扩展 Gate 通过标准 `runOpenPanel` delegate 把 60.6 MB `test_demo.dem` 交给同一 File input，raw bytes 留在 WebKit/Worker；真实解析到 10 人选择面，选择首位玩家后进入 Canvas 回放舞台。一次性 token 只经 stdin 进入临时 WebKit test process，不进入 argv或输出，controller 负责 sidecar/临时目录清理。
+
+**限制 / 下一步**
+
+此变化只替换 transport，不改变 Demo、Replay、Session、Agent、Memory 或教学顺序。60.6 MB Demo 的完整 Coach GUI 旅程已在同一产品代码的上一 transport 上通过；精确 v2 transport 又以真实 WKWebView 完成 File input、解析、玩家选择和 Canvas stage。锁屏只阻止了新的可访问性截图，不再缺少执行证据。Public Release 仍独立受 rights、正式 updater key、Developer ID 和 notarization 阻塞。
+
+### 4.51 2026-08-31：Updater 需要一条真实签名数据流，也需要可替换的安装验证 seam
+
+**触发**
+
+Updater 已有 metadata、minisign、safe extraction、backup、swap、rollback 的分散测试，但缺少真实 versioned App archive 从签名、HTTPS 下载到 production verifier 的纵向证据。正式 GitHub key、Developer ID 与 notarization 当前不可用，不能伪造 public update 成功；同时 `install_staged` 把外部证书验证与本地原子事务写死在同一函数中，使无凭据环境无法证明 receipt/swap/health cleanup 的顺序。
+
+**决定**
+
+增加单一 controller 的 macOS local updater smoke：从最终 0.1.0 App 用 `ditto` 复制，修改 plist 为 0.1.1并 ad-hoc 重签；运行时生成临时 Tauri updater key，签名真实 App tar；本地自签 CA 的 HTTPS server 只提供有界 `latest.json` 与 archive，客户端流式下载；随后调用 production `updater-signature-verify`，解包并重新验证 version、arm64 和 codesign integrity，再篡改 archive 确认 verifier fail closed。私钥、证书、archive、下载和解包内容都属于同一临时目录，finally 清理；SQLite sentinel 只读复核不变。
+
+把 `install_staged` 深化为 production wrapper＋私有 `install_staged_with(validate, swap)` seam。生产仍注入真实 Developer ID/spctl validator 与 `RENAME_SWAP`；macOS 测试只替换外部凭据 validator，继续执行真实 same-volume check、receipt、原子交换、RELAUNCH_REQUIRED 和 health 后旧 App 清理。这样 caller interface 不变，测试不绕开安装事务。
+
+**落点**
+
+`apps/desktop/scripts/local-updater-smoke.mjs`、desktop/root scripts、Rust updater 与纵向测试、README、Runbook、Architecture 和本日志。
+
+**验证**
+
+最终 Ready v2 App 的真实 local smoke 从 **0.1.0 → 0.1.1** 通过：164,135,699-byte archive 经 HTTPS 流式下载，临时 Tauri signature 由 production Rust verifier 接受，追加篡改后返回 `VERIFY_SIGNATURE_INVALID`；解包后的 App 为 arm64、0.1.1且 strict codesign integrity有效，SQLite sentinel不变。临时 key/cert/archive/download/extract/process 全部清理。Rust 原子安装纵向测试通过 1.2.3→1.2.4 swap、pending receipt、RELAUNCH_REQUIRED、health cleanup 和数据保持。
+
+**限制 / 下一步**
+
+这是可执行的本地更新工程证据，不是公开 GitHub Release 或 Apple trust chain。正式公钥仍为阻断占位值；没有 rights-approved Developer ID/notary 输入，因此 production `spctl`、真实 GitHub endpoint、App restart 与新版本首次 launch 不能诚实宣称已完成公开验收。workflow 已保留这些 fail-closed Gate。
 
 ## 5. 常用问题排查表
 

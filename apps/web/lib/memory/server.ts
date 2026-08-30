@@ -1,5 +1,6 @@
 import {
   InMemoryMemoryRepository,
+  createLocalFeatureHashEmbeddingProvider,
   MemoryAuthorizationSchema,
   MemoryService,
   type MemoryAuthorization,
@@ -10,6 +11,8 @@ import {
   type MemoryAuthorizationStore,
   type MemoryDeleteInput,
   type MemoryDiagnostic,
+  type MemoryDeleteAllResult,
+  type MemoryUserDataExport,
 } from "@cs-coach/memory";
 import {
   createNodePostgresPool,
@@ -21,10 +24,11 @@ import {
   type SqlResult,
   type SqlExecutor,
 } from "@cs-coach/memory-postgres/server";
+import { SqliteMemoryRepository } from "@cs-coach/memory-sqlite/server";
 import { parseMemoryEnabled } from "./feature-flag";
 import { hmacSha256Base64Url } from "./principal";
 
-export type MemoryStorageKind = "IN_MEMORY" | "POSTGRES" | "UNAVAILABLE" | "INJECTED";
+export type MemoryStorageKind = "IN_MEMORY" | "POSTGRES" | "SQLITE" | "UNAVAILABLE" | "INJECTED";
 
 class InMemoryAuthorizationStore implements MemoryAuthorizationStore {
   private readonly values = new Map<string, MemoryAuthorization>();
@@ -126,6 +130,9 @@ function configuredMemoryDatabaseUrl(options: MemoryRuntimeOptions): string | un
 
 function configuredEmbedding(options: MemoryRuntimeOptions): import("@cs-coach/memory").EmbeddingProvider | undefined {
   if (options.embedding) return options.embedding;
+  if ((process.env.DEPLOY_TARGET ?? "").trim().toLowerCase() === "desktop") {
+    return createLocalFeatureHashEmbeddingProvider();
+  }
   const context = (globalThis as unknown as Record<PropertyKey, unknown>)[Symbol.for("__cloudflare-context__")] as CloudflareContextLike | undefined;
   const contextValue = context?.env?.MEMORY_EMBEDDING_URL;
   const endpoint = firstNonEmpty(
@@ -283,6 +290,12 @@ export interface MemoryRuntime {
   getRecord(userId: string, memoryId: string): Promise<MemoryRecord | undefined>;
   setAuthorization(userId: string, input: unknown): Promise<MemoryAuthorization | undefined>;
   delete(userId: string, memoryId: string, input?: MemoryDeleteInput): Promise<MemoryRecord | undefined>;
+  /** Present as a method on every runtime, but returns undefined when the
+   * selected provider cannot guarantee one-commit delete-all semantics. */
+  deleteAllAtomic(userId: string): Promise<MemoryDeleteAllResult | undefined>;
+  /** Privacy export remains available after consent revocation. Undefined
+   * means the selected provider does not implement the optional capability. */
+  exportUserData(userId: string): Promise<MemoryUserDataExport | undefined>;
   close(): Promise<void>;
 }
 
@@ -404,12 +417,27 @@ export function createMemoryRuntime(options: MemoryRuntimeOptions = {}): MemoryR
   let lazyExecutor: LazyPostgresExecutor | undefined;
   const databaseUrl = configuredMemoryDatabaseUrl(options);
   const embedding = configuredEmbedding(options);
+  const desktop = (process.env.DEPLOY_TARGET ?? "").trim().toLowerCase() === "desktop";
 
   if (repository) {
     storage = options.executor ? "INJECTED" : "INJECTED";
     authorizationStore ??= new InMemoryAuthorizationStore();
     durable = Boolean(options.executor);
     if (!durable && env === "production") degradedReason ??= "INJECTED_STORAGE_IS_NOT_DECLARED_DURABLE";
+  } else if (desktop) {
+    try {
+      const sqlite = new SqliteMemoryRepository({ path: process.env.CS_AGENT_DESKTOP_DB_PATH });
+      repository = sqlite;
+      authorizationStore ??= sqlite;
+      storage = "SQLITE";
+      durable = true;
+    } catch {
+      repository = new UnavailableMemoryRepository();
+      authorizationStore ??= new UnavailableAuthorizationStore();
+      storage = "UNAVAILABLE";
+      durable = false;
+      degradedReason ??= "SQLITE_UNAVAILABLE";
+    }
   } else if (options.executor) {
     repository = new PostgresMemoryRepository({ executor: options.executor });
     authorizationStore ??= new PostgresMemoryAuthorizationStore(options.executor);
@@ -437,12 +465,18 @@ export function createMemoryRuntime(options: MemoryRuntimeOptions = {}): MemoryR
 
   const selectedRepository = repository;
   const selectedAuthorizationStore = authorizationStore;
+  // Desktop has no remote Durable Object or Cloudflare outbox to invalidate.
+  // Selecting an explicit local completion keeps a committed SQLite deletion
+  // from being misreported as a host outage while the cloud adapter retains
+  // its strict, authenticated invalidation requirement.
+  const deletionNotifier = options.onMemoryDeleted
+    ?? (desktop ? async () => undefined : notifyCloudflareMemoryOutboxes);
   const service = new MemoryService({
     repository: selectedRepository,
     authorizationStore: selectedAuthorizationStore,
     memoryEnabled: featureEnabled,
     embedding,
-    onMemoryDeleted: options.onMemoryDeleted ?? notifyCloudflareMemoryOutboxes,
+    onMemoryDeleted: deletionNotifier,
     onDiagnostic: options.onDiagnostic ?? productionMemoryDiagnosticSink(env),
   });
 
@@ -526,6 +560,27 @@ export function createMemoryRuntime(options: MemoryRuntimeOptions = {}): MemoryR
       return service.setAuthorization(userId, input);
     },
     delete: (userId, memoryId, input) => service.delete(userId, memoryId, input),
+    async deleteAllAtomic(userId: string): Promise<MemoryDeleteAllResult | undefined> {
+      if (storage !== "SQLITE" || !selectedRepository.purgeUserMemoryResidue) return undefined;
+      if (!(await this.canDelete(userId))) return undefined;
+      // This list is response metadata only. The repository purge below is
+      // the privacy boundary and deletes every row even when this bounded ID
+      // list reaches its cap.
+      const responseIdLimit = 1000;
+      const deletedMemoryIds = selectedRepository.listMemoryIdsForDeletion
+        ? await selectedRepository.listMemoryIdsForDeletion(userId, responseIdLimit)
+        : [];
+      const sessionIds = await service.purgeUserMemoryResidue(userId);
+      return {
+        deletedMemoryIds,
+        sessionIds,
+        idListLimited: deletedMemoryIds.length >= responseIdLimit,
+      };
+    },
+    async exportUserData(userId: string): Promise<MemoryUserDataExport | undefined> {
+      if (!selectedRepository.exportUserData || !(await this.canDelete(userId))) return undefined;
+      return selectedRepository.exportUserData(userId);
+    },
     close: async () => {
       if (lazyExecutor) await lazyExecutor.close();
     },
@@ -542,7 +597,7 @@ function closeRuntime(runtime: MemoryRuntime | undefined): void {
 }
 
 function environmentKey(): string {
-  return `${process.env.NODE_ENV ?? "development"}|${process.env.MEMORY_ENABLED ?? ""}`;
+  return `${process.env.NODE_ENV ?? "development"}|${process.env.DEPLOY_TARGET ?? ""}|${process.env.CS_AGENT_DESKTOP_DB_PATH ?? ""}|${process.env.MEMORY_ENABLED ?? ""}`;
 }
 
 export function getMemoryRuntime(): MemoryRuntime {

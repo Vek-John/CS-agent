@@ -43,6 +43,8 @@ export interface Cs2dHostConfig {
   origin: string;
 }
 
+export type Cs2dDeployTarget = "localhost" | "cloudflare" | "desktop";
+
 function isLoopbackHostname(hostname: string): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
 }
@@ -68,6 +70,12 @@ export function cs2dHostConfig(
   deployTarget = process.env.NEXT_PUBLIC_DEPLOY_TARGET ?? process.env.DEPLOY_TARGET
 ): Cs2dHostConfig {
   const target = deployTarget?.trim().toLowerCase() || "localhost";
+  if (target !== "localhost" && target !== "cloudflare" && target !== "desktop") {
+    throw new Error("unsupported cs2d deploy target.");
+  }
+  if (target === "desktop" && !raw?.trim()) {
+    throw new Error("desktop cs2d host requires the runtime viewer URL.");
+  }
   const requested = raw?.trim() || (target === "cloudflare" ? CLOUDFLARE_CS2D_HOST_PATH : DEFAULT_CS2D_HOST_URL);
   const relative = isRelativePath(requested);
   let parent: URL;
@@ -89,14 +97,36 @@ export function cs2dHostConfig(
     if (!sameOrigin || !isCloudflareViewerPath(parsed.pathname)) {
       throw new Error("Cloudflare cs2d host must be served from the same-origin /cs2d/ path.");
     }
+  } else if (target === "desktop") {
+    const parentPort = Number(parent.port);
+    const viewerPort = Number(parsed.port);
+    if (relative
+      || parsed.protocol !== "http:"
+      || parsed.hostname !== "localhost"
+      || !Number.isInteger(viewerPort)
+      || viewerPort < 1
+      || viewerPort > 65535
+      || parsed.username
+      || parsed.password
+      || parsed.pathname !== "/"
+      || parsed.search
+      || parsed.hash
+      || parent.protocol !== "http:"
+      || parent.hostname !== "127.0.0.1"
+      || !Number.isInteger(parentPort)
+      || parentPort < 1
+      || parentPort > 65535
+      || sameOrigin) {
+      throw new Error("desktop cs2d host must use the exact localhost viewer and IPv4 app authorities.");
+    }
   } else if (!isLoopbackHostname(parsed.hostname)) {
     throw new Error("cs2d host must remain on localhost until the upstream license is clarified.");
   }
 
   parsed.searchParams.set("host", "1");
-  // A cross-origin iframe needs an explicit allow-list origin. Same-origin
-  // Cloudflare embeds intentionally omit it so SSR and browser hydration use
-  // the same relative URL; the viewer falls back to document.referrer.
+  // Every cross-origin iframe receives an explicit allow-list origin. This is
+  // mandatory on desktop because cs2d navigation changes document.referrer;
+  // never put the session token or cookie value in this URL.
   if (!sameOrigin) parsed.searchParams.set("parentOrigin", parent.origin);
   const url = relative ? `${parsed.pathname}${parsed.search}${parsed.hash}` : parsed.toString();
   return { url, origin: parsed.origin };

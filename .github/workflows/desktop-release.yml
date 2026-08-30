@@ -1,0 +1,271 @@
+name: Desktop public release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing desktop-vX.Y.Z tag to release
+        required: true
+        type: string
+  push:
+    tags: ["desktop-v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Rights and immutable version gate
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+      commit: ${{ steps.release.outputs.commit }}
+    steps:
+      - name: Check out the exact release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Resolve immutable release identity
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          git show-ref --verify --quiet "refs/tags/${RELEASE_TAG}"
+          COMMIT="$(git rev-list -n 1 "${RELEASE_TAG}")"
+          test "$COMMIT" = "$(git rev-parse HEAD)"
+          VERSION="$(node -p 'require("./apps/desktop/package.json").version')"
+          echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "commit=${COMMIT}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up pinned audit Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+
+      - name: distribution:audit rights
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          DESKTOP_DISTRIBUTION_APPROVED: ${{ vars.DESKTOP_DISTRIBUTION_APPROVED }}
+        run: >-
+          node tools/desktop-release/audit.mjs preflight
+          --repo .
+          --tag "$RELEASE_TAG"
+          --approval docs/DESKTOP_DISTRIBUTION_AUDIT.json
+          --secrets false
+
+  build-sign-release:
+    name: Build, sign, notarize, audit, and publish
+    needs: preflight
+    runs-on: macos-15
+    timeout-minutes: 90
+    environment: desktop-release
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
+      RELEASE_COMMIT: ${{ needs.preflight.outputs.commit }}
+      RELEASE_DIR: ${{ runner.temp }}/desktop-release-assets
+      TARGET_TRIPLE: aarch64-apple-darwin
+      CS_AGENT_BUILD_SHA: ${{ needs.preflight.outputs.commit }}
+    steps:
+      - name: Check out the audited tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.preflight.outputs.commit }}
+          fetch-depth: 0
+
+      - name: Verify Apple Silicon runner
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "arm64"
+          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
+          test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$RELEASE_COMMIT"
+
+      - name: distribution:audit secrets
+        env:
+          DESKTOP_DISTRIBUTION_APPROVED: ${{ vars.DESKTOP_DISTRIBUTION_APPROVED }}
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: >-
+          node tools/desktop-release/audit.mjs preflight
+          --repo .
+          --tag "$RELEASE_TAG"
+          --approval docs/DESKTOP_DISTRIBUTION_AUDIT.json
+          --secrets true
+
+      - name: Set up pnpm 11.16.0
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.16.0
+
+      - name: Set up Node.js 24.19.0
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: pnpm
+
+      - name: Set up Rust 1.89.0 for Apple Silicon
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: 1.89.0
+          target: aarch64-apple-darwin
+          components: rustfmt, clippy
+
+      - name: Cache Cargo outputs
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+          cache-on-failure: false
+
+      - name: Install locked JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build desktop resources (self-contained)
+        run: pnpm desktop:prepare
+
+      - name: Run release tests
+        run: |
+          set -euo pipefail
+          node --test tools/desktop-release/audit.test.mjs
+          pnpm desktop:test:unit
+          pnpm --dir apps/desktop smoke:runtime-real
+          pnpm typecheck
+
+      - name: Import Developer ID certificate into an ephemeral keychain
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          CERTIFICATE_PATH="$RUNNER_TEMP/desktop-release-certificate.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/desktop-release.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+          printf '%s' "$APPLE_CERTIFICATE_BASE64" | /usr/bin/base64 -D > "$CERTIFICATE_PATH"
+          chmod 600 "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security default-keychain -d user -s "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -F "$APPLE_SIGNING_IDENTITY" >/dev/null
+          echo "RELEASE_KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Build and Developer ID sign the app, then create the DMG
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          RELEASE_CONFIG="$RUNNER_TEMP/release-tauri-config.json"
+          node -e 'const fs=require("node:fs"); fs.writeFileSync(process.argv[1], JSON.stringify({bundle:{macOS:{signingIdentity:process.env.APPLE_SIGNING_IDENTITY}}}));' "$RELEASE_CONFIG"
+          pnpm --dir apps/desktop exec tauri build --target "$TARGET_TRIPLE" --bundles app --config "$RELEASE_CONFIG"
+          BUNDLE_ROOT="apps/desktop/src-tauri/target/$TARGET_TRIPLE/release/bundle"
+          test "$(find "$BUNDLE_ROOT" -type d -name '*.app' -prune | wc -l | tr -d ' ')" -eq 1
+          APP_PATH="$(find "$BUNDLE_ROOT" -type d -name '*.app' -prune | head -n 1)"
+          DMG_PATH="$BUNDLE_ROOT/dmg/CS Agent Coach_${RELEASE_VERSION}_aarch64.dmg"
+          pnpm --dir apps/desktop create:dmg --app "$APP_PATH" --output "$DMG_PATH"
+          test -f "$DMG_PATH"
+          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+          echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"
+
+      - name: Submit notarization and staple tickets
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          PROFILE="cs-agent-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          xcrun notarytool store-credentials "$PROFILE" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID"
+          xcrun notarytool submit "$DMG_PATH" --keychain-profile "$PROFILE" --wait --output-format json > "$RUNNER_TEMP/notary-result.json"
+          xcrun stapler staple "$APP_PATH"
+          xcrun stapler staple "$DMG_PATH"
+          xcrun stapler validate "$APP_PATH"
+          xcrun stapler validate "$DMG_PATH"
+
+      - name: distribution:audit bundle
+        run: >-
+          node tools/desktop-release/audit.mjs bundle
+          --repo .
+          --prepared apps/desktop/src-tauri
+          --app "$APP_PATH"
+          --notary "$RUNNER_TEMP/notary-result.json"
+          --version "$RELEASE_VERSION"
+
+      - name: Create and updater-sign the fixed release asset set
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RELEASE_DIR"
+          cp "$DMG_PATH" "$RELEASE_DIR/CS-Agent-Coach_${RELEASE_VERSION}_aarch64.dmg"
+          tar -czf "$RELEASE_DIR/CS-Agent-Coach.app.tar.gz" -C "$(dirname "$APP_PATH")" "$(basename "$APP_PATH")"
+          pnpm --dir apps/desktop exec tauri signer sign "$RELEASE_DIR/CS-Agent-Coach.app.tar.gz"
+          UPDATER_PUBLIC_KEY="$(node -e 'const fs=require("node:fs"); const config=JSON.parse(fs.readFileSync("apps/desktop/src-tauri/tauri.conf.json", "utf8")); process.stdout.write(config.plugins.updater.pubkey);')"
+          cargo run --quiet --locked --release --target "$TARGET_TRIPLE" \
+            --manifest-path apps/desktop/src-tauri/Cargo.toml \
+            --features release-verifier --bin updater-signature-verify -- \
+            "$UPDATER_PUBLIC_KEY" \
+            "$RELEASE_DIR/CS-Agent-Coach.app.tar.gz" \
+            "$RELEASE_DIR/CS-Agent-Coach.app.tar.gz.sig"
+          node tools/desktop-release/audit.mjs manifest --release "$RELEASE_DIR" --version "$RELEASE_VERSION" --tag "$RELEASE_TAG" --repoSlug "$GITHUB_REPOSITORY" --notes "CS Agent Coach $RELEASE_VERSION"
+
+      - name: distribution:audit release
+        run: >-
+          node tools/desktop-release/audit.mjs release
+          --release "$RELEASE_DIR"
+          --version "$RELEASE_VERSION"
+          --tag "$RELEASE_TAG"
+          --repoSlug "$GITHUB_REPOSITORY"
+
+      - name: Publish audited assets through a recoverable draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release already exists; refusing to overwrite it" >&2
+            exit 1
+          fi
+          created=0
+          cleanup() {
+            if [ "$created" -eq 1 ]; then gh release delete "$RELEASE_TAG" --yes >/dev/null 2>&1 || true; fi
+          }
+          trap cleanup EXIT
+          gh release create "$RELEASE_TAG" --verify-tag --draft --title "CS Agent Coach $RELEASE_VERSION" --notes "Audited Apple Silicon desktop release."
+          created=1
+          gh release upload "$RELEASE_TAG" \
+            "$RELEASE_DIR/CS-Agent-Coach_${RELEASE_VERSION}_aarch64.dmg" \
+            "$RELEASE_DIR/CS-Agent-Coach.app.tar.gz" \
+            "$RELEASE_DIR/CS-Agent-Coach.app.tar.gz.sig" \
+            "$RELEASE_DIR/latest.json" \
+            "$RELEASE_DIR/SHA256SUMS"
+          gh release edit "$RELEASE_TAG" --draft=false
+          created=0
+          trap - EXIT
+
+      - name: Remove ephemeral signing material
+        if: always()
+        run: |
+          set +e
+          if [ -n "${RELEASE_KEYCHAIN_PATH:-}" ]; then security delete-keychain "$RELEASE_KEYCHAIN_PATH"; fi
+          find "$RUNNER_TEMP" -maxdepth 1 -type f \( -name 'desktop-release-certificate.p12' -o -name 'release-tauri-config.json' -o -name 'notary-result.json' \) -delete

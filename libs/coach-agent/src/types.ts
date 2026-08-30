@@ -996,7 +996,7 @@ export type CoachAgentState = z.infer<typeof CoachAgentStateSchema>;
 
 export const CheckpointInfoSchema = z
   .object({
-    backend: z.enum(["MEMORY", "INDEXEDDB", "DURABLE_OBJECT"]),
+    backend: z.enum(["MEMORY", "INDEXEDDB", "DURABLE_OBJECT", "SQLITE"]),
     recoverableAfterRefresh: z.boolean(),
     checkpointId: Id.nullable(),
     fallbackReason: z.enum(["NONE", "CHECKPOINT_UNAVAILABLE", "IDB_FALLBACK"]).optional(),

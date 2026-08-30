@@ -1,5 +1,6 @@
 import {
   clearMemoryPrincipalCookie,
+  DESKTOP_LOCAL_PRINCIPAL_ID,
   ensureRequestPrincipal,
   hasBodyUserId,
   jsonResponse,
@@ -95,6 +96,11 @@ export async function POST(request: Request): Promise<Response> {
     storage: runtimeState.storage,
     ...(runtimeState.degradedReason ? { degradedReason: runtimeState.degradedReason } : {}),
   });
+  if (requestPrincipal.principal.id === DESKTOP_LOCAL_PRINCIPAL_ID) {
+    // The sidecar session cookie remains the sole desktop browser credential;
+    // consent is durable in local SQLite under the stable single-user ID.
+    return response;
+  }
   if (!enabled) {
     // Keep the same signed principal (now explicitly REVOKED) so the user can
     // still issue a privacy deletion after withdrawal. The revoked cookie is

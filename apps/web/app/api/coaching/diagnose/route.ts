@@ -7,6 +7,7 @@ import {
   type TeachingDiagnosisInput,
   type TeachingDiagnosisOutput,
 } from "@cs-coach/coach-agent";
+import { sameOriginRequest } from "../../../../lib/desktop/request-origin";
 
 export const dynamic = "force-dynamic";
 
@@ -16,18 +17,12 @@ function json(body: unknown, status = 200): Response {
   return Response.json(body, { status, headers: { "cache-control": "no-store" } });
 }
 
-function sameOrigin(request: Request): boolean {
-  const origin = request.headers.get("origin");
-  if (!origin) return true;
-  try { return origin === new URL(request.url).origin; } catch { return false; }
-}
-
 function fallback(reason: string): Response {
   return json({ status: "FALLBACK", reason: reason.slice(0, 200) });
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (!sameOrigin(request)) return fallback("CROSS_ORIGIN");
+  if (!sameOriginRequest(request)) return fallback("CROSS_ORIGIN");
   if (request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !== "application/json") {
     return fallback("UNSUPPORTED_MEDIA_TYPE");
   }

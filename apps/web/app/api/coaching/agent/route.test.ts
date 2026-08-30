@@ -9,6 +9,11 @@ import { InMemoryMemoryRepository } from "@cs-coach/memory";
 import { issueTestMemoryPrincipalCookie } from "../../../../lib/memory/principal";
 import { setMemoryRuntimeForTests, resetMemoryRuntimeForTests } from "../../../../lib/memory/server";
 import { afterEach, vi } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { closeSqliteDatabaseOwnersForTests } from "@cs-coach/memory-sqlite/server";
+import { DESKTOP_APP_ORIGIN_HEADER } from "../../../../lib/desktop/request-origin";
 
 afterEach(() => {
   resetMemoryRuntimeForTests();
@@ -24,6 +29,27 @@ function post(body: unknown, headers: Record<string, string> = { "content-type":
 }
 
 describe("local Coach Agent route", () => {
+  it("uses the shared recoverable SQLite saver for desktop dispatch", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "cs-agent-route-sqlite-"));
+    vi.stubEnv("DEPLOY_TARGET", "desktop");
+    vi.stubEnv("CS_AGENT_DESKTOP_DB_PATH", join(directory, "desktop.sqlite3"));
+    try {
+      const identity = { ...fixtureIdentity, sessionId: "desktop-sqlite-route-session" };
+      const started = parseRemoteCoachAgentDispatchResponse(await (await POST(post(
+        createRemoteCoachAgentDispatchEnvelope(startCueEvent({ identity, eventId: "desktop-sqlite-start" })),
+        {
+          "content-type": "application/json",
+          [DESKTOP_APP_ORIGIN_HEADER]: "http://127.0.0.1:43123",
+        },
+      ))).json());
+      expect(started.checkpoint).toMatchObject({ backend: "SQLITE", recoverableAfterRefresh: true });
+      expect(started.effects).toHaveLength(1);
+    } finally {
+      resetMemoryRuntimeForTests();
+      await closeSqliteDatabaseOwnersForTests();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
   it("keeps a process-local Memory backend and resumes idempotently", async () => {
     const identity = { ...fixtureIdentity, sessionId: "local-route-session" };
     const startEvent = startCueEvent({ identity, eventId: "local-start" });

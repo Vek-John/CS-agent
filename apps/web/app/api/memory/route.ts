@@ -80,7 +80,16 @@ export async function DELETE(request: Request): Promise<Response> {
   let limited = false;
   let globallyPurged = false;
   try {
-    while (deleted < maxDeletes) {
+    const atomicResult = await runtimeState.deleteAllAtomic(userId);
+    if (atomicResult) {
+      // SQLite owns the complete erase transaction. No record-level delete
+      // is allowed on this branch: a failed purge must report zero committed
+      // deletions, and outbox invalidation runs only after the commit.
+      deleted = atomicResult.deletedMemoryIds.length;
+      limited = atomicResult.idListLimited;
+      globallyPurged = true;
+    }
+    while (!globallyPurged && deleted < maxDeletes) {
       // Always enumerate opaque IDs for a delete-all operation. This remains
       // valid if consent changes from GRANTED to REVOKED during the loop and
       // never recalls memory content into the management process.
@@ -96,7 +105,7 @@ export async function DELETE(request: Request): Promise<Response> {
       }
       if (memoryIds.length < batchSize) break;
     }
-    if (deleted >= maxDeletes) {
+    if (!globallyPurged && deleted >= maxDeletes) {
       const remaining = await runtimeState.listMemoryIdsForDeletion(userId, 1);
       limited = remaining.length > 0;
       if (limited) {

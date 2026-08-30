@@ -43,6 +43,10 @@ export interface MemoryRepository {
   /** Remove orphaned side-table rows after a confirmed user deletion. */
   purgeMemoryResidue?(userId: string, memoryId: string, logicalKey?: string, sourceRefs?: readonly unknown[]): Promise<void>;
   purgeUserMemoryResidue?(userId: string): Promise<readonly string[]>;
+  /** Optional privacy export capability. Adapters return domain rows scoped
+   * to the explicit principal; HTTP hosts must still project these rows to a
+   * public DTO and fail closed if an adapter crosses the user boundary. */
+  exportUserData?(userId: string): Promise<MemoryUserDataExport>;
   /** Minimal privacy-erasure seam. It may enumerate opaque IDs after consent
    * revocation without returning memory content to recall/UI paths. */
   listMemoryIdsForDeletion?(userId: string, limit?: number): Promise<readonly string[]>;
@@ -55,6 +59,23 @@ export interface MemoryRepository {
   /** Optional derived-index seam; absence means semantic recall remains disabled. */
   saveEmbedding?(userId: string, input: MemoryEmbeddingWrite): Promise<void>;
   deleteMemoryEmbedding?(userId: string, memoryId: string, deletedAt?: string): Promise<void>;
+}
+
+/** Provider-neutral payload behind the optional privacy-export seam. */
+export interface MemoryUserDataExport {
+  readonly schemaVersion: "memory-export.v1";
+  readonly exportedAt: string;
+  readonly authorization?: MemoryAuthorization;
+  readonly records: readonly MemoryRecord[];
+  readonly events: readonly MemoryEvent[];
+}
+
+/** Result returned by a host that can make delete-all one storage commit. */
+export interface MemoryDeleteAllResult {
+  readonly deletedMemoryIds: readonly string[];
+  readonly sessionIds: readonly string[];
+  /** True when the response ID list was bounded; storage was still purged. */
+  readonly idListLimited: boolean;
 }
 
 /** A cache is an optimization only; failures must never affect memory truth. */

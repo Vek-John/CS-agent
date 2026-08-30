@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "desktop-distribution-audit.v1",
+  "publicReleaseApproved": true,
+  "reviewedAt": "2026-08-30T00:00:00.000Z",
+  "reviewer": "Synthetic Fixture Reviewer",
+  "cs2d": {
+    "status": "APPROVED_FOR_PUBLIC_REDISTRIBUTION",
+    "evidence": "https://example.test/fixtures/cs2d-approval"
+  },
+  "valveAssets": {
+    "status": "APPROVED_FOR_PUBLIC_REDISTRIBUTION",
+    "evidence": "https://example.test/fixtures/valve-assets-approval"
+  }
+}

@@ -7,3 +7,4 @@ export * from "./proposal";
 export * from "./brief";
 export * from "./service";
 export * from "./in-memory";
+export * from "./local-embedding";

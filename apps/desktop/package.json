@@ -1,0 +1,22 @@
+{
+  "name": "@cs-coach/desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "prepare:runtime": "node scripts/prepare-runtime.mjs",
+    "prepare:runtime:test": "node --test scripts/prepare-runtime.test.mjs scripts/bootstrap-ipc.test.mjs scripts/create-dmg.test.mjs",
+    "create:dmg": "node scripts/create-dmg.mjs",
+    "smoke:sidecar": "node --test scripts/stub-sidecar-smoke.test.mjs",
+    "smoke:runtime-real": "node scripts/real-sidecar-smoke.mjs --prepared",
+    "smoke:webkit": "node scripts/real-sidecar-smoke.mjs --prepared --webkit",
+    "smoke:webkit-demo": "node scripts/real-sidecar-smoke.mjs --prepared --webkit-demo",
+    "smoke:update-local": "node scripts/local-updater-smoke.mjs",
+    "smoke:bundle": "node scripts/bundled-app-smoke.mjs",
+    "icons": "node scripts/generate-icons.mjs",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.4"
+  }
+}

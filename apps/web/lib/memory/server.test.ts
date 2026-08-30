@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SqlExecutor } from "@cs-coach/memory-postgres/server";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { closeSqliteDatabaseOwnersForTests } from "@cs-coach/memory-sqlite/server";
 
 const poolFactory = vi.hoisted(() => ({ create: vi.fn() }));
 
@@ -45,6 +49,20 @@ afterEach(() => {
 });
 
 describe("web memory runtime database selection", () => {
+  it("uses SQLite as the durable desktop truth without a PostgreSQL URL", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "cs-agent-web-sqlite-"));
+    try {
+      vi.stubEnv("DEPLOY_TARGET", "desktop");
+      vi.stubEnv("CS_AGENT_DESKTOP_DB_PATH", join(directory, "memory.sqlite3"));
+      const runtime = createMemoryRuntime({ memoryEnabled: true, nodeEnv: "production" });
+      expect(runtime).toMatchObject({ storage: "SQLITE", durable: true, featureEnabled: true });
+      await runtime.setAuthorization("desktop-principal", { userId: "desktop-principal", memoryEnabled: true, consent: "GRANTED" });
+      expect(await runtime.isAuthorized("desktop-principal")).toBe(true);
+    } finally {
+      await closeSqliteDatabaseOwnersForTests();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
   it("does not initialize a configured database when the feature flag is off", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("MEMORY_ENABLED", "true");

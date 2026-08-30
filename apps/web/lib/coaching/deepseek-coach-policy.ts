@@ -17,6 +17,8 @@ export const DEEPSEEK_COACH_POLICY_PROMPT_VERSION = "deepseek-coach-policy/1.0.0
 export interface DeepSeekCoachPolicyEnv {
   DEEPSEEK_API_KEY?: string;
   DEEPSEEK_MODEL?: string;
+  DEEPSEEK_URL?: string;
+  DEEPSEEK_ALLOW_EMPTY_KEY?: boolean;
 }
 
 interface FetchLike {
@@ -145,17 +147,17 @@ export async function directCoachPolicy(
   }
   if (input.capabilities.length === 0) return deterministicResult(input, "NO_CAPABILITIES");
   const key = env.DEEPSEEK_API_KEY?.trim();
-  if (!key) return deterministicResult(input, "MISSING_API_KEY");
+  if (!key && !env.DEEPSEEK_ALLOW_EMPTY_KEY) return deterministicResult(input, "MISSING_API_KEY");
   const model = env.DEEPSEEK_MODEL?.trim() || DEFAULT_MODEL;
-  if (!ALLOWED_MODELS.has(model)) return deterministicResult(input, "MODEL_NOT_ALLOWED");
+  if (!env.DEEPSEEK_URL && !ALLOWED_MODELS.has(model)) return deterministicResult(input, "MODEL_NOT_ALLOWED");
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetcher(DEEPSEEK_URL, {
+    const response = await fetcher(env.DEEPSEEK_URL ?? DEEPSEEK_URL, {
       method: "POST",
       signal: controller.signal,
-      headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+      headers: { "content-type": "application/json", ...(key ? { authorization: `Bearer ${key}` } : {}) },
       body: JSON.stringify({
         model,
         messages: [

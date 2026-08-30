@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>CS Agent 设置</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="settings-shell">
+      <section class="settings-card">
+        <p class="eyebrow">CS Agent Coach</p>
+        <h1>本地教练设置</h1>
+        <p class="settings-intro">密钥保存在 macOS 钥匙串，只会在启动时通过内存交给本地运行时。</p>
+        <form id="provider-form">
+          <label>模型服务
+            <select id="provider-kind">
+              <option value="NONE">不使用模型服务</option>
+              <option value="DEEPSEEK">DeepSeek</option>
+              <option value="OPENAI_COMPATIBLE">OpenAI Compatible</option>
+            </select>
+          </label>
+          <label>API Key <span id="key-state" class="field-note">未保存</span>
+            <input id="api-key" type="password" maxlength="512" autocomplete="off" spellcheck="false" placeholder="留空则保留已有密钥" />
+          </label>
+          <label class="checkbox-row"><input id="delete-key" type="checkbox" />移除已保存的密钥</label>
+          <label>Base URL
+            <input id="base-url" type="url" maxlength="2048" spellcheck="false" />
+          </label>
+          <label>模型
+            <input id="model" maxlength="120" spellcheck="false" />
+          </label>
+          <p id="provider-message" class="settings-message" role="status"></p>
+          <div class="actions settings-actions">
+            <button id="validate-provider" class="secondary" type="button">检查配置</button>
+            <button id="save-provider" type="submit">保存</button>
+            <button id="restart-runtime" class="secondary" type="button" disabled>安全重启</button>
+            <button id="delete-provider" class="danger" type="button">删除配置</button>
+          </div>
+        </form>
+        <section class="update-panel" aria-labelledby="update-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="update-title">应用更新</h2>
+              <p id="update-summary" class="field-note" aria-live="polite">正在读取更新状态…</p>
+            </div>
+            <span id="update-version" class="version-chip">—</span>
+          </div>
+          <progress id="update-progress" max="100" value="0" hidden aria-label="更新下载进度"></progress>
+          <p id="update-detail" class="settings-message" role="status"></p>
+          <p id="update-notes" class="update-notes" hidden></p>
+          <p class="field-note">下载不会中断复盘。安装前必须明确结束当前未保存的复盘；系统会先让解析页面和 Worker 退出，再拒绝新请求、等待 Agent 与写入排空，完成 SQLite 一致性备份和安全重启。选择“稍后”会返回复盘。</p>
+          <div class="actions settings-actions">
+            <button id="update-check" class="secondary" type="button">检查更新</button>
+            <button id="update-download" class="secondary" type="button" disabled>下载并验证</button>
+            <button id="update-end-review" class="danger" type="button" disabled>结束当前复盘</button>
+            <button id="update-install" type="button" disabled>备份并安装</button>
+            <button id="update-relaunch" class="secondary" type="button" disabled>重新打开新版本</button>
+            <button id="update-later" class="secondary" type="button">稍后</button>
+          </div>
+          <div id="update-fallback" class="fallback" hidden>
+            <strong>自动安装不可用，当前应用没有被更改。</strong>
+            <span>可以从已验证发布页手动下载 DMG：</span>
+            <code id="update-fallback-url"></code>
+            <button id="update-open-fallback" class="secondary" type="button">打开 DMG 下载页</button>
+          </div>
+        </section>
+        <section class="paths" aria-labelledby="paths-title">
+          <h2 id="paths-title">本地数据</h2>
+          <dl><dt>数据目录</dt><dd id="data-path">—</dd><dt>数据库</dt><dd id="database-path">—</dd><dt>缓存</dt><dd id="cache-path">—</dd><dt>日志</dt><dd id="log-path">—</dd></dl>
+          <p id="archive-status" class="field-note">正在读取本地数据能力…</p>
+          <div class="actions settings-actions data-actions">
+            <button id="manage-memory" type="button">管理、导出或清除记忆</button>
+            <button id="open-logs" class="secondary" type="button">打开日志文件夹</button>
+          </div>
+        </section>
+      </section>
+    </main>
+    <script type="module" src="./settings.js"></script>
+  </body>
+</html>

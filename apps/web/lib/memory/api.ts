@@ -22,6 +22,11 @@ import {
   verifyHmacSha256Base64Url,
   type AnonymousPrincipal,
 } from "./principal";
+import {
+  DESKTOP_APP_ORIGIN_HEADER,
+  sameOriginRequest,
+  validatedDesktopAppOrigin,
+} from "../desktop/request-origin";
 import { getMemoryRuntime, type MemoryRuntime } from "./server";
 
 export const MEMORY_API_MAX_BODY_BYTES = 64 * 1024;
@@ -51,7 +56,30 @@ export interface RequestPrincipal {
   readonly persistent: boolean;
 }
 
+export const DESKTOP_LOCAL_PRINCIPAL_ID = "desktop-local-principal.v1";
+
+function desktopLoopbackPrincipal(request: Request): AnonymousPrincipal | undefined {
+  if ((process.env.DEPLOY_TARGET ?? "").trim().toLowerCase() !== "desktop") return undefined;
+  if (!validatedDesktopAppOrigin(request.headers.get(DESKTOP_APP_ORIGIN_HEADER))) return undefined;
+  const cookie = request.headers.get("cookie") ?? "";
+  const session = cookie.split(";").map((part) => part.trim())
+    .find((part) => part.startsWith("cs_agent_runtime="))?.slice("cs_agent_runtime=".length);
+  if (!session || session.length !== 43 || !/^[A-Za-z0-9_-]+$/u.test(session)) return undefined;
+  return {
+    id: DESKTOP_LOCAL_PRINCIPAL_ID,
+    type: "ANONYMOUS",
+    consent: "UNKNOWN",
+    consentVersion: 0,
+    issuedAt: "1970-01-01T00:00:00.000Z",
+  };
+}
+
 export async function ensureRequestPrincipal(request: Request): Promise<RequestPrincipal> {
+  // The sidecar validates cs_agent_runtime before this request reaches Next.
+  // DEPLOY_TARGET is process-owned, never a request header. This stable local
+  // identity does not read cloud/env signing secrets and never sets a second cookie.
+  const desktopPrincipal = desktopLoopbackPrincipal(request);
+  if (desktopPrincipal) return { principal: desktopPrincipal, persistent: true };
   const resolved = await resolveMemoryPrincipal(request);
   if (resolved.principal) return { principal: resolved.principal, persistent: true };
   const principal = createAnonymousPrincipal();
@@ -74,17 +102,7 @@ export async function ensureRequestPrincipal(request: Request): Promise<RequestP
 }
 
 export function sameOrigin(request: Request): boolean {
-  const origin = request.headers.get("origin");
-  if (origin) {
-    try {
-      if (origin !== new URL(request.url).origin) return false;
-    } catch {
-      return false;
-    }
-  }
-  const fetchSite = request.headers.get("sec-fetch-site");
-  if (fetchSite && ["cross-site", "none"].includes(fetchSite.toLowerCase())) return false;
-  return true;
+  return sameOriginRequest(request);
 }
 
 export function hasBodyUserId(value: unknown): boolean {

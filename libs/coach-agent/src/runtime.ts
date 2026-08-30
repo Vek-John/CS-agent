@@ -33,8 +33,8 @@ export interface CoachAgentRuntime {
 export interface CoachAgentRuntimeOptions {
   policy?: PolicyAdapter;
   checkpointer?: BaseCheckpointSaver;
-  checkpoint?: "memory" | "indexeddb" | "durable_object";
-  checkpointBackend?: "MEMORY" | "INDEXEDDB" | "DURABLE_OBJECT";
+  checkpoint?: "memory" | "indexeddb" | "durable_object" | "sqlite";
+  checkpointBackend?: "MEMORY" | "INDEXEDDB" | "DURABLE_OBJECT" | "SQLITE";
   indexedDB?: IDBFactory;
   databaseName?: string;
   retention?: number;
@@ -42,7 +42,7 @@ export interface CoachAgentRuntimeOptions {
 
 interface RuntimeBackend {
   saver: BaseCheckpointSaver;
-  kind: "MEMORY" | "INDEXEDDB" | "DURABLE_OBJECT";
+  kind: "MEMORY" | "INDEXEDDB" | "DURABLE_OBJECT" | "SQLITE";
   recoverableAfterRefresh: boolean;
   fallbackReason?: "CHECKPOINT_UNAVAILABLE" | "IDB_FALLBACK";
   close?: () => Promise<void>;
@@ -704,6 +704,9 @@ function createBackend(options: CoachAgentRuntimeOptions): RuntimeBackend {
   }
   if (options.checkpoint === "durable_object") {
     throw new Error("Durable Object checkpoint requires an injected checkpointer");
+  }
+  if (options.checkpoint === "sqlite") {
+    throw new Error("SQLite checkpoint requires an injected checkpointer");
   }
   if (options.checkpoint !== "indexeddb") {
     return { saver: new MemorySaver(), kind: "MEMORY", recoverableAfterRefresh: false };

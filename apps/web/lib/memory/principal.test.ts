@@ -7,6 +7,8 @@ import {
   signMemoryPrincipalCookie,
   verifyHmacSha256Base64Url,
 } from "./principal";
+import { DESKTOP_LOCAL_PRINCIPAL_ID, ensureRequestPrincipal } from "./api";
+import { DESKTOP_APP_ORIGIN_HEADER } from "../desktop/request-origin";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -46,5 +48,37 @@ describe("anonymous memory principal", () => {
     expect(await verifyHmacSha256Base64Url("body", signature, "internal-secret")).toBe(true);
     expect(await verifyHmacSha256Base64Url("body", `${signature}=`, "internal-secret")).toBe(false);
     expect(await verifyHmacSha256Base64Url("body", signature.slice(0, -1), "internal-secret")).toBe(false);
+  });
+
+  it("uses the stable local principal only behind desktop loopback session-cookie protection", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("DEPLOY_TARGET", "desktop");
+    const cookie = `cs_agent_runtime=${"s".repeat(43)}`;
+    const desktopOrigin = "http://127.0.0.1:43123";
+    const desktop = await ensureRequestPrincipal(new Request(`${desktopOrigin}/api/memory/status`, {
+      headers: { cookie, [DESKTOP_APP_ORIGIN_HEADER]: desktopOrigin },
+    }));
+    expect(desktop).toMatchObject({ persistent: true, principal: { id: DESKTOP_LOCAL_PRINCIPAL_ID, consent: "UNKNOWN" } });
+    expect(desktop.setCookie).toBeUndefined();
+
+    const missingSession = await ensureRequestPrincipal(new Request(`${desktopOrigin}/api/memory/status`, {
+      headers: { [DESKTOP_APP_ORIGIN_HEADER]: desktopOrigin },
+    }));
+    expect(missingSession.principal.id).not.toBe(DESKTOP_LOCAL_PRINCIPAL_ID);
+    const missingTrustedOrigin = await ensureRequestPrincipal(new Request(`${desktopOrigin}/api/memory/status`, { headers: { cookie } }));
+    expect(missingTrustedOrigin.principal.id).not.toBe(DESKTOP_LOCAL_PRINCIPAL_ID);
+  });
+
+  it("cannot enable the desktop principal from a public deploy target", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("DEPLOY_TARGET", "cloudflare");
+    vi.stubEnv("NEXT_PUBLIC_DEPLOY_TARGET", "desktop");
+    const resolved = await ensureRequestPrincipal(new Request("http://127.0.0.1:43123/api/memory/status", {
+      headers: {
+        cookie: `cs_agent_runtime=${"s".repeat(43)}`,
+        [DESKTOP_APP_ORIGIN_HEADER]: "http://127.0.0.1:43123",
+      },
+    }));
+    expect(resolved.principal.id).not.toBe(DESKTOP_LOCAL_PRINCIPAL_ID);
   });
 });

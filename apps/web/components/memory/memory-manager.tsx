@@ -19,6 +19,7 @@ import {
   type TeachingPreferenceKey,
   type MemorySourceCategory,
 } from "./memory-ui";
+import { downloadMemoryExport } from "./memory-download";
 
 type PublicPreferenceValue = string | number | boolean;
 
@@ -98,7 +99,13 @@ function consentCopy(status: MemoryStatusResponse | null): string {
   return "尚未授权。当前复盘不会写入跨 Demo 记忆。";
 }
 
-export function MemoryManager() {
+export function MemoryManager({
+  backHref = "/",
+  principalNotice = "当前使用匿名浏览器主体；清除本浏览器 Cookie 后，无法恢复或关联到原主体。",
+}: {
+  readonly backHref?: "/" | "/desktop";
+  readonly principalNotice?: string;
+}) {
   const [status, setStatus] = useState<MemoryStatusResponse | null>(null);
   const [records, setRecords] = useState<PublicMemoryRecord[]>([]);
   const [limitations, setLimitations] = useState<string[]>([]);
@@ -292,11 +299,23 @@ export function MemoryManager() {
     setBusy("all");
     try {
       const result = await requestJson<{ deleted: number; limited?: boolean }>("/api/memory", { method: "DELETE" });
-      const resultMessage = `已删除 ${result.deleted} 条长期记忆。${result.limited ? "仍有更多记录，请再次执行清除。" : "迟到事件不会让它们重新出现。"}`;
+      const resultMessage = `已删除 ${result.deleted} 条长期记忆。${result.limited ? "显示计数已达上限，但全部清除仍已完成。" : "迟到事件不会让它们重新出现。"}`;
       await refresh();
       setMessage(resultMessage);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "全部删除失败。");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const exportAll = async () => {
+    setBusy("export");
+    try {
+      await downloadMemoryExport();
+      setMessage("记忆 JSON 已开始下载。导出不会重新开启已撤回的授权。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "记忆导出失败。");
     } finally {
       setBusy(null);
     }
@@ -308,7 +327,7 @@ export function MemoryManager() {
     <main className="memory-page" aria-labelledby="memory-page-title">
       <header className="memory-page-header">
         <div>
-          <a className="memory-back-link" href="/">返回复盘</a>
+          <a className="memory-back-link" href={backHref}>返回复盘</a>
           <p className="memory-eyebrow">LONG-TERM COACHING MEMORY</p>
           <h1 id="memory-page-title">长期记忆</h1>
           <p className="memory-lede">只留下能帮助下一场复盘的线索。你始终可以查看来源、纠正内容，或删除它。</p>
@@ -320,7 +339,7 @@ export function MemoryManager() {
           <p className="memory-section-kicker">授权</p>
           <h2 id="memory-consent-title">让教练记住跨 Demo 的学习线索</h2>
           <p>{consentCopy(status)}</p>
-          <small className="memory-note">当前使用匿名浏览器主体；清除本浏览器 Cookie 后，无法恢复或关联到原主体。</small>
+          <small className="memory-note">{principalNotice}</small>
           {runtimePresentation.localNote && <small className="memory-note">{runtimePresentation.localNote}</small>}
           {runtimePresentation.warning && <small className="memory-warning">当前处于降级状态：{runtimePresentation.warning}</small>}
         </div>
@@ -418,6 +437,15 @@ export function MemoryManager() {
           <div><p className="memory-section-kicker">可管理记录</p><h2 id="memory-records-title">教练记住了什么</h2></div>
           <div className="memory-record-actions">
             <button type="button" className="memory-button memory-button-quiet" onClick={() => void refresh()} disabled={loading || busy !== null}>刷新</button>
+            <button
+              type="button"
+              className="memory-button memory-button-quiet"
+              aria-label="导出当前匿名主体的长期记忆为 JSON"
+              onClick={() => void exportAll()}
+              disabled={loading || busy !== null}
+            >
+              {busy === "export" ? "导出中…" : "导出 JSON"}
+            </button>
             {/* Deletion is a privacy exception and remains available when the
                 recall feature flag is off. The API still performs the opaque
                 principal/consent check; disabling this control based on the

@@ -1,0 +1,17 @@
+{
+  "name": "@cs-coach/desktop-runtime",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "../../node_modules/.bin/esbuild src/index.ts --bundle --platform=node --target=node24 --format=cjs --outfile=dist/desktop-runtime.cjs --sourcemap && ../../node_modules/.bin/esbuild src/checkpoint-probe.ts --bundle --platform=node --target=node24 --format=cjs --outfile=dist/desktop-checkpoint-probe.cjs --sourcemap",
+    "test": "../../node_modules/.bin/tsx --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@cs-coach/memory-sqlite": "workspace:*"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "tsx": "4.23.12"
+  }
+}

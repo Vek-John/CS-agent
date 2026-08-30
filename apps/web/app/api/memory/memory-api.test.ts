@@ -5,9 +5,11 @@ import {
   InMemoryMemoryRepository,
   type MemoryEvent,
   type MemoryProposal,
+  type MemoryUserDataExport,
 } from "@cs-coach/memory";
 import type { SqlExecutor } from "@cs-coach/memory-postgres/server";
 import { issueTestMemoryPrincipalCookie, resolveMemoryPrincipal } from "../../../lib/memory/principal";
+import { DESKTOP_APP_ORIGIN_HEADER } from "../../../lib/desktop/request-origin";
 import { getMemoryRuntime, resetMemoryRuntimeForTests, setMemoryRuntimeForTests } from "../../../lib/memory/server";
 import { GET as getStatus } from "./status/route";
 import { POST as postConsent } from "./consent/route";
@@ -17,6 +19,8 @@ import { POST as postEvents } from "./events/route";
 import { POST as confirmMemory } from "./[id]/confirm/route";
 import { POST as correctMemory } from "./[id]/correct/route";
 import { DELETE as deleteMemory } from "./[id]/route";
+import { MEMORY_EXPORT_MAX_BYTES } from "../../../lib/memory/export-policy";
+import { GET as exportMemories } from "./export/route";
 
 afterEach(() => {
   resetMemoryRuntimeForTests();
@@ -86,6 +90,20 @@ function unusedDurableExecutor(): SqlExecutor {
   return executor;
 }
 
+class ExportableInMemoryRepository extends InMemoryMemoryRepository {
+  async exportUserData(userId: string): Promise<MemoryUserDataExport> {
+    return {
+      schemaVersion: "memory-export.v1",
+      exportedAt: "2026-08-30T00:00:00.000Z",
+      records: await this.listMemories(userId, {
+        includeDeleted: true,
+        limit: 100,
+      }),
+      events: this.events.filter((event) => event.userId === userId),
+    };
+  }
+}
+
 async function seedDurableMemory(userId: string, suffix: string): Promise<{ memoryId: string; cookie: string }> {
   const repository = new InMemoryMemoryRepository();
   const runtime = setMemoryRuntimeForTests({
@@ -103,6 +121,30 @@ async function seedDurableMemory(userId: string, suffix: string): Promise<{ memo
 }
 
 describe("memory management API", () => {
+  it("persists consent under the stable desktop loopback principal without a cloud cookie secret", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("DEPLOY_TARGET", "desktop");
+    const repository = new InMemoryMemoryRepository();
+    setMemoryRuntimeForTests({ repository, memoryEnabled: true, nodeEnv: "test", allowTestPrincipal: false });
+    const cookie = `cs_agent_runtime=${"s".repeat(43)}`;
+    const desktopRequest = (path: string, init?: RequestInit) => new Request(`http://127.0.0.1:43123${path}`, {
+      ...init,
+      headers: {
+        cookie,
+        [DESKTOP_APP_ORIGIN_HEADER]: "http://127.0.0.1:43123",
+        ...(init?.headers ?? {}),
+      },
+    });
+    const consent = await postConsent(desktopRequest("/api/memory/consent", {
+      method: "POST", body: JSON.stringify({ enabled: true }),
+    }));
+    expect(consent.status).toBe(200);
+    expect(consent.headers.get("set-cookie")).toBeNull();
+    expect(await consent.json()).toMatchObject({ accepted: true, enabled: true, consent: "GRANTED" });
+    const status = await getStatus(desktopRequest("/api/memory/status"));
+    expect(await status.json()).toMatchObject({ enabled: true, consent: "GRANTED" });
+  });
+
   it("keeps the feature-off path side-effect free", async () => {
     vi.stubEnv("NODE_ENV", "test");
     const repository = new InMemoryMemoryRepository();
@@ -161,6 +203,221 @@ describe("memory management API", () => {
     expect(deleted.status).toBe(200);
     expect(await deleted.json()).toMatchObject({ accepted: true, deleted: 1 });
     expect((await repository.findByLogicalKey(userId, `preference-${userId}-before-revoke`))?.status).toBe("DELETED");
+  });
+
+  it("exports only the signed principal through a public, no-store DTO", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    const repository = new ExportableInMemoryRepository();
+    const runtime = setMemoryRuntimeForTests({
+      repository,
+      memoryEnabled: true,
+      nodeEnv: "test",
+      allowTestPrincipal: true,
+    });
+    for (const userId of ["principal-export-a", "principal-export-b"]) {
+      await runtime.service.setAuthorization(userId, {
+        userId,
+        memoryEnabled: true,
+        consent: "GRANTED",
+      });
+      await runtime.service.ingestEvent(
+        userId,
+        preferenceEvent(userId, userId.endsWith("a") ? "alpha" : "beta"),
+      );
+    }
+    const cookie = (await cookieFor("principal-export-a")).split(";")[0];
+    const response = await exportMemories(
+      request("/api/memory/export", { headers: { cookie } }),
+    );
+    const text = await response.text();
+    const payload = JSON.parse(text) as {
+      schemaVersion: string;
+      records: unknown[];
+      events: unknown[];
+    };
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("content-type")).toBe(
+      "application/json; charset=utf-8",
+    );
+    expect(response.headers.get("content-disposition")).toBe(
+      'attachment; filename="cs-agent-memory-export-2026-08-30.json"',
+    );
+    expect(payload).toMatchObject({
+      schemaVersion: "memory-export.v1",
+      records: [{ preference: { value: "support" } }],
+      events: [{ type: "USER_PREFERENCE_STATED" }],
+    });
+    expect(text).not.toContain("principal-export-a");
+    expect(text).not.toContain("principal-export-b");
+    expect(text).not.toContain("idempotencyKey");
+    expect(text).not.toContain("payload");
+    expect(text).not.toContain("demoContentHash");
+  });
+
+  it("allows revoked principals to export without reopening consent", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    const userId = "principal-revoked-export";
+    const repository = new ExportableInMemoryRepository();
+    const runtime = setMemoryRuntimeForTests({
+      repository,
+      memoryEnabled: true,
+      nodeEnv: "test",
+      allowTestPrincipal: true,
+    });
+    await runtime.service.setAuthorization(userId, {
+      userId,
+      memoryEnabled: true,
+      consent: "GRANTED",
+    });
+    await runtime.service.ingestEvent(
+      userId,
+      preferenceEvent(userId, "before-revoke-export"),
+    );
+    const grantedCookie = (await cookieFor(userId)).split(";")[0];
+    const revoked = await postConsent(
+      request("/api/memory/consent", {
+        method: "POST",
+        headers: { cookie: grantedCookie },
+        body: JSON.stringify({ enabled: false }),
+      }),
+    );
+    const revokedCookie = revoked.headers.get("set-cookie")?.split(";")[0] ?? "";
+
+    const response = await exportMemories(
+      request("/api/memory/export", { headers: { cookie: revokedCookie } }),
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).records).toHaveLength(1);
+    expect((await runtime.getAuthorizationForDeletion(userId))?.consent).toBe(
+      "REVOKED",
+    );
+  });
+
+  it("fails closed for unsupported or cross-principal export adapters", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    const userId = "principal-export-guard";
+    const unsupported = new InMemoryMemoryRepository();
+    let runtime = setMemoryRuntimeForTests({
+      repository: unsupported,
+      memoryEnabled: true,
+      nodeEnv: "test",
+      allowTestPrincipal: true,
+    });
+    await runtime.service.setAuthorization(userId, {
+      userId,
+      memoryEnabled: true,
+      consent: "GRANTED",
+    });
+    const cookie = (await cookieFor(userId)).split(";")[0];
+    expect(
+      (
+        await exportMemories(
+          request("/api/memory/export", { headers: { cookie } }),
+        )
+      ).status,
+    ).toBe(501);
+
+    const crossed = new ExportableInMemoryRepository();
+    crossed.exportUserData = async () => ({
+      schemaVersion: "memory-export.v1",
+      exportedAt: "2026-08-30T00:00:00.000Z",
+      records: [
+        ...(await unsupported.listMemories(userId, {
+          includeDeleted: true,
+        })),
+      ].map((record) => ({ ...record, userId: "principal-other" })),
+      events: [],
+    });
+    runtime = setMemoryRuntimeForTests({
+      repository: crossed,
+      memoryEnabled: true,
+      nodeEnv: "test",
+      allowTestPrincipal: true,
+    });
+    await runtime.service.setAuthorization(userId, {
+      userId,
+      memoryEnabled: true,
+      consent: "GRANTED",
+    });
+    await runtime.service.ingestEvent(
+      userId,
+      preferenceEvent(userId, "scope-guard"),
+    );
+    crossed.exportUserData = async () => ({
+      schemaVersion: "memory-export.v1",
+      exportedAt: "2026-08-30T00:00:00.000Z",
+      records: (await crossed.listMemories(userId)).map((record) => ({
+        ...record,
+        userId: "principal-other",
+      })),
+      events: [],
+    });
+    expect(
+      (
+        await exportMemories(
+          request("/api/memory/export", { headers: { cookie } }),
+        )
+      ).status,
+    ).toBe(503);
+    expect(
+      (
+        await exportMemories(
+          request("/api/memory/export?userId=principal-other", {
+            headers: { cookie },
+          }),
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await exportMemories(
+          request("/api/memory/export", {
+            headers: { cookie, origin: "https://evil.example" },
+          }),
+        )
+      ).status,
+    ).toBe(403);
+  });
+
+  it("rejects an oversized export instead of buffering it into a download", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    const userId = "principal-export-size";
+    const repository = new ExportableInMemoryRepository();
+    const runtime = setMemoryRuntimeForTests({
+      repository,
+      memoryEnabled: true,
+      nodeEnv: "test",
+      allowTestPrincipal: true,
+    });
+    await runtime.service.setAuthorization(userId, {
+      userId,
+      memoryEnabled: true,
+      consent: "GRANTED",
+    });
+    await runtime.service.ingestEvent(
+      userId,
+      preferenceEvent(userId, "size"),
+    );
+    const originalExport = repository.exportUserData.bind(repository);
+    repository.exportUserData = async (requestedUserId) => {
+      const exported = await originalExport(requestedUserId);
+      return {
+        ...exported,
+        records: exported.records.map((record) => ({
+          ...record,
+          content: "x".repeat(MEMORY_EXPORT_MAX_BYTES + 1),
+        })),
+      };
+    };
+    const cookie = (await cookieFor(userId)).split(";")[0];
+
+    const response = await exportMemories(
+      request("/api/memory/export", { headers: { cookie } }),
+    );
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ error: "EXPORT_TOO_LARGE" });
   });
 
   it("returns a revoked cookie after delete-all while the feature flag is off", async () => {

@@ -1,0 +1,24 @@
+name: 功能建议
+description: 提议有界的产品或工程改进
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes: { label: 用户问题, description: "它如何改善整场引导复盘，而不是增加一个报告面板？" }
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes: { label: 建议方案与最小验收 }
+    validations: { required: true }
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: 边界检查
+      options:
+        - label: "不会要求普通桌面用户安装 Node/pnpm/Rust/Postgres/Cloudflare。"
+        - label: "不会扩大 Demo、secret、WebView capability 或 future-information 边界。"
+        - label: "若涉及第三方资产/发布，我已说明 rights 与签名影响。"
+  - type: markdown
+    attributes:
+      value: "不要附加真实 Demo、数据库、日志、secret、token 或用户数据。"

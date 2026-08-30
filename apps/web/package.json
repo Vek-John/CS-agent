@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:desktop": "DESKTOP_BUILD=1 next build --webpack",
     "start": "next start"
   },
   "dependencies": {
@@ -15,6 +16,7 @@
     "@cs-coach/map-semantics": "workspace:*",
     "@cs-coach/memory": "workspace:*",
     "@cs-coach/memory-postgres": "workspace:*",
+    "@cs-coach/memory-sqlite": "workspace:*",
     "@cs-coach/observation": "workspace:*",
     "@cs-coach/review-planner": "workspace:*",
     "@cs-coach/session": "workspace:*",

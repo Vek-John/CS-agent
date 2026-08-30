@@ -7,7 +7,7 @@ does not grant rights to map or game assets.
 
 ### cs-net
 
-Repository: local pinned checkout `/Users/vekel/编程/CS-agent/.local-data/upstream/cs-net`
+Repository: local pinned checkout `.local-data/upstream/cs-net`
 
 Audited commit: `e15acc3fda3de21f25fe12a5ca31722381f40162`
 
@@ -25,6 +25,19 @@ Package: `onnxruntime-web@1.27.0` (including the WASM runtime and threaded-SIMD
 assets). License: MIT, Copyright (c) Microsoft Corporation. The browser Worker
 loads the package's `ort-wasm-simd-threaded.mjs/.wasm` assets; the model remains
 the separately pinned cs-net asset above. No ORT source is vendored.
+
+### Node.js sidecar runtime
+
+Binary distribution: `node-v24.19.0-darwin-arm64.tar.gz` from the official
+Node.js release service, pinned by SHA-256 in
+`apps/desktop/scripts/prepare-runtime.mjs`.
+
+License: Node.js license (MIT for Node.js itself plus the complete notices for
+its externally maintained libraries). The preparation step extracts the full
+`LICENSE` from the same pinned archive as the binary, installs it at
+`resources/runtime-root/third-party/node-v24.19.0-LICENSE`, and records its
+SHA-256 in `desktop-runtime-manifest.json`. The desktop bundle audit rejects a
+missing, altered, or mismatched copy.
 
 ### csfreezetime
 

@@ -1,0 +1,16 @@
+{
+  "name": "@cs-coach/memory-sqlite",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts"
+  },
+  "dependencies": {
+    "@cs-coach/coach-agent": "workspace:*",
+    "@cs-coach/memory": "workspace:*",
+    "@langchain/core": "1.2.9",
+    "@langchain/langgraph": "1.4.12"
+  }
+}

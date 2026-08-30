@@ -5,6 +5,9 @@ export const runtime = "nodejs";
 type LocalDemoRouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, context: LocalDemoRouteContext) {
+  if ((process.env.DEPLOY_TARGET ?? "").trim().toLowerCase() === "desktop") {
+    return Response.json({ error: "DESKTOP_LOCAL_DEMO_DISABLED" }, { status: 404 });
+  }
   const { id } = await context.params;
   const job = await getLocalDemoJob(id);
   return job
@@ -13,6 +16,9 @@ export async function GET(_request: Request, context: LocalDemoRouteContext) {
 }
 
 export async function POST(request: Request, context: LocalDemoRouteContext) {
+  if ((process.env.DEPLOY_TARGET ?? "").trim().toLowerCase() === "desktop") {
+    return Response.json({ error: "DESKTOP_LOCAL_DEMO_DISABLED" }, { status: 404 });
+  }
   try {
     const { id } = await context.params;
     const payload = await request.json() as { selected_player_id?: unknown };
