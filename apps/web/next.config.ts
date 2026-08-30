@@ -7,6 +7,10 @@ const crossOriginIsolationHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // pg's Cloudflare stream adapter is selected through the `workerd` export
+  // condition during the OpenNext bundle. Keep the package's full dist/ tree
+  // in the traced server output so its CommonJS branch resolves correctly.
+  serverExternalPackages: ["pg-cloudflare"],
   transpilePackages: [
     "@cs-coach/contracts",
     "@cs-coach/demo-domain",

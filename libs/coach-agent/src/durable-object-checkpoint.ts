@@ -114,6 +114,12 @@ export class DurableObjectCheckpointSaver extends BaseCheckpointSaver {
   private readonly storage: DurableObjectStorageLike;
   private readonly retention: number;
   private readonly completedRetention: number;
+  /**
+   * A Memory Brief is a request-scoped teaching hint, not DO truth. Keep it
+   * only in the live saver instance so an interrupt/resume on the same object
+   * can reuse it; never serialize it into durable checkpoint storage.
+   */
+  private readonly ephemeralMemoryBriefs = new Map<string, unknown>();
 
   constructor(options: DurableObjectCheckpointSaverOptions) {
     super();
@@ -192,10 +198,23 @@ export class DurableObjectCheckpointSaver extends BaseCheckpointSaver {
     record: StoredCheckpoint,
     config: RunnableConfig,
   ): Promise<CheckpointTuple> {
-    const checkpoint = (await this.serde.loadsTyped(
+    let checkpoint = (await this.serde.loadsTyped(
       record.checkpointType,
       copyBytes(record.checkpointData),
     )) as Checkpoint;
+    const ephemeralBrief = this.ephemeralMemoryBriefs.get(record.threadId);
+    if (ephemeralBrief !== undefined && checkpoint.channel_values?.agent && typeof checkpoint.channel_values.agent === "object" && !Array.isArray(checkpoint.channel_values.agent)) {
+      checkpoint = {
+        ...checkpoint,
+        channel_values: {
+          ...checkpoint.channel_values,
+          agent: {
+            ...(checkpoint.channel_values.agent as Record<string, unknown>),
+            memoryBrief: ephemeralBrief,
+          },
+        },
+      };
+    }
     const metadata = await this.serde.loadsTyped(
       record.metadataType,
       copyBytes(record.metadataData),
@@ -305,7 +324,43 @@ export class DurableObjectCheckpointSaver extends BaseCheckpointSaver {
     const threadId = requireThreadId(config);
     const checkpointNs = namespaceOf(config);
     const prepared = copyCheckpoint(checkpoint);
+    const preparedAgent = prepared.channel_values?.agent;
+    if (preparedAgent && typeof preparedAgent === "object" && !Array.isArray(preparedAgent)) {
+      const brief = (preparedAgent as Record<string, unknown>).memoryBrief;
+      if (brief !== null && brief !== undefined) this.ephemeralMemoryBriefs.set(threadId, brief);
+      else if (this.ephemeralMemoryBriefs.has(threadId) && (preparedAgent as Record<string, unknown>).sessionStatus === "COMPLETED") this.ephemeralMemoryBriefs.delete(threadId);
+      const { memoryBrief: _discardedBrief, ...agentWithoutBrief } = preparedAgent as Record<string, unknown>;
+      void _discardedBrief;
+      prepared.channel_values = {
+        ...prepared.channel_values,
+        // Long-term memory remains in PostgreSQL; DO storage carries only the
+        // session state and outbox. Rehydrate from the live map above. Delete
+        // the key rather than writing a null marker so baseline checkpoints
+        // remain byte-compatible when the feature is disabled.
+        agent: agentWithoutBrief,
+      };
+    }
+    const preparedEvent = prepared.channel_values?.event;
+    if (preparedEvent && typeof preparedEvent === "object" && !Array.isArray(preparedEvent)) {
+      const eventRecord = preparedEvent as Record<string, unknown>;
+      const eventBrief = eventRecord.memoryBrief;
+      if (eventBrief !== null && eventBrief !== undefined && !this.ephemeralMemoryBriefs.has(threadId)) {
+        this.ephemeralMemoryBriefs.set(threadId, eventBrief);
+      }
+      const { memoryBrief: _discardedBrief, ...eventWithoutBrief } = eventRecord;
+      void _discardedBrief;
+      prepared.channel_values = {
+        ...prepared.channel_values,
+        event: eventWithoutBrief,
+      };
+    }
     const compacted = this.compactCompletedCheckpoint(prepared);
+    if (compacted.completed) {
+      // A completed session no longer needs the request-scoped brief. Clear it
+      // from the live map as well as the serialized checkpoint to avoid
+      // retaining user context for the lifetime of a hot Durable Object.
+      this.ephemeralMemoryBriefs.delete(threadId);
+    }
     const [checkpointType, checkpointData] = await this.serde.dumpsTyped(compacted.checkpoint);
     const [metadataType, metadataData] = await this.serde.dumpsTyped(metadata);
     await this.storage.put<StoredCheckpoint>(checkpointKey(threadId, checkpointNs, checkpoint.id), {
@@ -354,7 +409,21 @@ export class DurableObjectCheckpointSaver extends BaseCheckpointSaver {
     );
   }
 
+  /**
+   * Forget all request-scoped Memory Briefs held by this live saver.
+   *
+   * A consent withdrawal is a privacy boundary, not a session-completion
+   * event.  The Durable Object therefore needs an explicit synchronous hook
+   * that can clear the in-memory rehydration map before any awaited provider
+   * or outbox operation.  Nothing is deleted from the checkpoint namespace;
+   * the map only contains the optional, non-authoritative brief projection.
+   */
+  clearEphemeralMemoryBriefs(): void {
+    this.ephemeralMemoryBriefs.clear();
+  }
+
   async deleteThread(threadId: string): Promise<void> {
+    this.ephemeralMemoryBriefs.delete(threadId);
     const [checkpoints, writes] = await Promise.all([
       this.storage.list<StoredCheckpoint>({ prefix: checkpointThreadPrefix(threadId) }),
       this.storage.list<StoredWrite>({ prefix: writeThreadPrefix(threadId) }),

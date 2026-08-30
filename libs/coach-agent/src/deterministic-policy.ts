@@ -63,6 +63,24 @@ function evidenceScore(tool: TeachingToolName, namespaces: Set<string>): number 
   }
 }
 
+/**
+ * A memory brief is a teaching hint, never a fact source.  When the provider
+ * is unavailable the deterministic fallback still gives that hint a small,
+ * evidence-preserving effect: an active cross-Demo thread asks for a fresh
+ * transfer check, while a user correction gets the strongest re-check bias.
+ * The current cue evidence/focus score remains dominant, so memory cannot
+ * select an unavailable or unsupported capability.
+ */
+function memorySignalScore(input: PolicyInput, tool: TeachingToolName): number {
+  const brief = input.memoryBrief;
+  if (!brief) return 0;
+  const corrections = Array.isArray(brief.corrections) ? brief.corrections.length : 0;
+  const activeThreads = Array.isArray(brief.activeThreads) ? brief.activeThreads.length : 0;
+  if (corrections > 0) return tool === "REPLAY_CUE_SLOW" ? 3 : tool === "FOCUS_MAP_EVIDENCE" ? 1 : 0;
+  if (activeThreads > 0) return tool === "REPLAY_CUE_SLOW" ? 2 : tool === "FOCUS_MAP_EVIDENCE" ? 1 : 0;
+  return 0;
+}
+
 function finish(): PolicyOutput {
   return {
     action: "FINISH_CUE",
@@ -92,7 +110,7 @@ export function deterministicPolicyOutput(rawInput: PolicyInput): PolicyOutput {
   const scored = input.capabilities.map((capability) => {
     const namespaces = evidenceNamespaces(input, capability.evidenceRefs);
     const focusScore = family === familyForTool(capability.tool) ? 4 : 0;
-    const score = focusScore + evidenceScore(capability.tool, namespaces);
+    const score = focusScore + evidenceScore(capability.tool, namespaces) + memorySignalScore(input, capability.tool);
     return { capability, score };
   });
   const bestScore = Math.max(...scored.map((item) => item.score));

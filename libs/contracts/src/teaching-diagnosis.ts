@@ -285,6 +285,14 @@ export type PedagogyMode =
   | "DEFER";
 
 /**
+ * A bounded teaching hint derived from an already-authorized long-term
+ * Memory Brief.  It is intentionally narrower than the full CueCase mode:
+ * memory may request a transfer check or reinforcement, but it can never
+ * choose a capability or bypass the current cue's evidence gate.
+ */
+export type MemoryPedagogyMode = Extract<PedagogyMode, "CHECK_TRANSFER" | "REINFORCE">;
+
+/**
  * Identity-free resource evidence for a remote diagnosis.
  *
  * This is a projection of the selected player's decision-time state, not a
@@ -317,6 +325,8 @@ export interface TeachingDiagnosisInput {
   focusCode?: string;
   economyClass?: "PISTOL" | "ECO" | "FORCE" | "FULL" | "UNKNOWN";
   existingThreads?: readonly LearningThread[];
+  /** Optional mode hint projected from the trusted, bounded Memory Brief. */
+  memoryPedagogyMode?: MemoryPedagogyMode;
   limitations?: readonly string[];
 }
 

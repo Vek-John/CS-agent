@@ -162,6 +162,20 @@ describe("teaching diagnosis trust and evidence boundaries", () => {
     expect(output.learningThread.diagnosis.type).toBe("RISK_MODEL");
   });
 
+  it("turns an authorized Memory Brief hint into an explicit bounded pedagogy mode", () => {
+    const transfer = diagnoseCue(input({
+      decisionState: decisionState(),
+      memoryPedagogyMode: "CHECK_TRANSFER",
+    }));
+    expect(transfer.cueCase.pedagogyMode).toBe("CHECK_TRANSFER");
+
+    const reinforce = diagnoseCue(input({
+      decisionState: decisionState(),
+      memoryPedagogyMode: "REINFORCE",
+    }));
+    expect(reinforce.cueCase.pedagogyMode).toBe("REINFORCE");
+  });
+
   it("marks a low-resource risk condition as failed after a negative outcome", () => {
     const output = diagnoseCue(input({
       decisionState: decisionState({ health: 30, armor: 0, has_helmet: false }),

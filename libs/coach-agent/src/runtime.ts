@@ -187,6 +187,7 @@ function initialState(
       : null,
     activeAllowedEvidenceSummary: event.allowedEvidenceSummary,
     activePresentableCueSummary: event.presentableSummary ?? null,
+    memoryBrief: "memoryBrief" in event ? event.memoryBrief ?? undefined : base.memoryBrief ?? undefined,
     currentSessionPhase: event.currentSessionPhase,
     outcomeGateStatus: event.outcomeGateStatus,
     narrationReadiness: event.narrationReadiness,
@@ -221,6 +222,7 @@ function initialManualVisitState(
     activeNarrationPolicySummary: "fields" in event.narrationSummary ? event.narrationSummary : null,
     activeAllowedEvidenceSummary: event.allowedEvidenceSummary,
     activePresentableCueSummary: event.presentableSummary ?? null,
+    memoryBrief: "memoryBrief" in event ? event.memoryBrief ?? undefined : previous.memoryBrief ?? undefined,
     currentSessionPhase: event.currentSessionPhase,
     outcomeGateStatus: event.outcomeGateStatus,
     narrationReadiness: event.narrationReadiness,
@@ -256,7 +258,14 @@ function dormantState(
 function stateFromCheckpoint(value: unknown): CheckpointRead {
   if (!value || typeof value !== "object") return { incompatible: false, checkpointId: null };
   const parsed = CoachAgentStateSchema.safeParse(value);
-  if (parsed.success) return { state: parsed.data, incompatible: false, checkpointId: null };
+  if (parsed.success) {
+    const state = parsed.data;
+    if (state.memoryBrief === undefined && Object.prototype.hasOwnProperty.call(state, "memoryBrief")) {
+      const { memoryBrief: _omitted, ...withoutBrief } = state;
+      return { state: withoutBrief as CoachAgentState, incompatible: false, checkpointId: null };
+    }
+    return { state, incompatible: false, checkpointId: null };
+  }
   return { incompatible: true, checkpointId: null };
 }
 
@@ -273,15 +282,21 @@ function resultForState(
   checkpointId: string | null = null,
   includeEffects = true,
 ): CoachAgentResult {
+  const publicState = state.memoryBrief === undefined && Object.prototype.hasOwnProperty.call(state, "memoryBrief")
+    ? (() => {
+        const { memoryBrief: _omitted, ...withoutBrief } = state;
+        return withoutBrief as CoachAgentState;
+      })()
+    : state;
   const result = {
     version: "coach-agent-result.v1" as const,
     // Preserve the Stage 2 response status for existing Host adapters; the
     // v2 state carries the distinct CUE_COMPLETED vs session COMPLETED status.
-    status: state.runStatus === "CUE_COMPLETED" ? "COMPLETED" : state.runStatus,
-    identity: identityFromState(state),
-    state,
-    effects: includeEffects && state.pendingToolCall ? [state.pendingToolCall] : [],
-    trace: state.trace,
+    status: publicState.runStatus === "CUE_COMPLETED" ? "COMPLETED" : publicState.runStatus,
+    identity: identityFromState(publicState),
+    state: publicState,
+    effects: includeEffects && publicState.pendingToolCall ? [publicState.pendingToolCall] : [],
+    trace: publicState.trace,
     checkpoint: {
       backend: backend.kind,
       recoverableAfterRefresh: backend.recoverableAfterRefresh,

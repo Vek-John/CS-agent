@@ -49,6 +49,101 @@ const Hash = z.string().min(1).max(256);
 const EvidenceRef = z.string().min(1).max(160);
 
 /**
+ * Memory Brief is a read-only projection owned by @cs-coach/memory.  The
+ * Coach Agent only carries the already-validated projection across its wire
+ * seam; it must not duplicate MemoryRecord/LearningThread schemas here.  The
+ * shallow guard enforces the projection's hard cardinality/byte bounds while
+ * the Memory Domain remains the authoritative validator for nested records.
+ */
+export const MemoryBriefWireSchema = z
+  .object({
+    schemaVersion: z.literal("memory-brief.v1"),
+    generatedAt: z.string().min(1).max(80),
+    preferences: z.record(z.string().min(1).max(160), z.union([z.string().max(1_200), z.number().finite(), z.boolean()])).optional(),
+    activeThreads: z.array(z.unknown()).max(2),
+    memories: z.array(z.unknown()).max(3),
+    corrections: z.array(z.unknown()).max(2),
+    limitations: z.array(z.string().max(240)).max(16),
+    source: z.enum(["STRUCTURED", "STRUCTURED_PLUS_SEMANTIC", "EMPTY"]),
+    structuredStatus: z.enum(["AVAILABLE", "UNAVAILABLE", "EMPTY"]).optional(),
+    semanticStatus: z.enum(["OPTIONAL", "UNAVAILABLE", "USED"]).optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      context.addIssue({ code: "custom", message: "memoryBrief must be an object" });
+      return;
+    }
+    const brief = value as Record<string, unknown>;
+    // The base object schema already checks the version and top-level shape.
+    const boundedArrays: Array<[string, number]> = [
+      ["activeThreads", 2],
+      ["memories", 3],
+      ["corrections", 2],
+      ["limitations", 16],
+    ];
+    for (const [name, max] of boundedArrays) {
+      if (!Array.isArray(brief[name]) || brief[name].length > max) {
+        context.addIssue({ code: "custom", path: [name], message: `${name} exceeds memory brief bound` });
+      }
+    }
+    if (brief.preferences !== undefined &&
+      (!brief.preferences || typeof brief.preferences !== "object" || Array.isArray(brief.preferences) || Object.keys(brief.preferences).length > 8)) {
+      context.addIssue({ code: "custom", path: ["preferences"], message: "preferences exceeds memory brief bound" });
+    }
+    if (brief.preferences && typeof brief.preferences === "object" && !Array.isArray(brief.preferences)) {
+      for (const [key, preference] of Object.entries(brief.preferences as Record<string, unknown>)) {
+        if (!/^[A-Za-z0-9_.:-]{1,160}$/u.test(key) ||
+          !((typeof preference === "string" && preference.length <= 1_200) ||
+            (typeof preference === "number" && Number.isFinite(preference)) ||
+            typeof preference === "boolean")) {
+          context.addIssue({ code: "custom", path: ["preferences", key], message: "invalid memory preference projection" });
+        }
+      }
+    }
+    const forbiddenKeys = new Set([
+      "userId", "principal", "cookie", "rawDemo", "raw_demo", "demoBytes", "demo_bytes", "frames", "ticks", "fullReplay", "full_replay", "replay", "tickStream", "tick_stream", "prompt",
+      "chainOfThought", "chain_of_thought", "cot", "memoryId", "logicalKey", "proposalId",
+      "eventId", "idempotencyKey", "sessionId", "demoContentHash", "cueId", "caseId",
+      "threadId", "refId", "previousRevisionId", "lastIdempotencyKey", "correctionId",
+      "originReflectionId", "sourceThreadId", "targetMemoryId", "evidenceCueIds", "successfulCueIds",
+      "conflictingCueIds", "claimIds", "evidenceRefs", "adviceRefs", "refs", "sourceRefs",
+      "demoContentHashes", "supportingRefs", "contradictingRefs",
+    ]);
+    const scan = (nested: unknown, seen: Set<unknown>): void => {
+      if (!nested || typeof nested !== "object" || seen.has(nested)) return;
+      seen.add(nested);
+      if (Array.isArray(nested)) {
+        for (const item of nested) scan(item, seen);
+        return;
+      }
+      for (const [key, child] of Object.entries(nested)) {
+        if (forbiddenKeys.has(key)) context.addIssue({ code: "custom", path: [key], message: `${key} is not allowed in memory brief` });
+        scan(child, seen);
+      }
+    };
+    scan(value, new Set());
+    if (!["STRUCTURED", "STRUCTURED_PLUS_SEMANTIC", "EMPTY"].includes(String(brief.source))) {
+      context.addIssue({ code: "custom", path: ["source"], message: "invalid memory brief source" });
+    }
+    try {
+      const serialized = JSON.stringify(value);
+      if (new TextEncoder().encode(serialized).byteLength > 16 * 1024) {
+        context.addIssue({ code: "custom", message: "memory brief exceeds 16KiB" });
+      }
+      // Keep a tokenizer-free deterministic approximation in the wire seam as
+      // well as in the domain projection. The actual model tokenizer is
+      // intentionally not a runtime dependency.
+      if (Math.ceil(serialized.length / 3) > 800) {
+        context.addIssue({ code: "custom", message: "memory brief exceeds the 800-token teaching budget" });
+      }
+    } catch {
+      context.addIssue({ code: "custom", message: "memory brief is not JSON serializable" });
+    }
+  });
+export type MemoryBriefWire = z.infer<typeof MemoryBriefWireSchema>;
+
+/**
  * The diagnosis module owns the bounded input contract.  A submission keeps
  * the reflection beside the frozen evidence packet so Host code cannot hide a
  * second, unvalidated reflection in an arbitrary object.  The module's
@@ -437,6 +532,8 @@ const CueStartPayloadSchema = z
     allowedEvidenceSummary: z.array(AllowedEvidenceSummarySchema).max(6),
     limitations: z.array(z.string().min(1).max(200)).max(8),
     sessionThemes: z.array(SessionThemeSchema).max(16),
+    /** Optional server-fetched, read-only projection; never a fact source. */
+    memoryBrief: MemoryBriefWireSchema.nullable().optional(),
     capabilities: z.array(TeachingCapabilitySchema).max(8),
     presentableSummary: PresentableCueSummarySchema.optional(),
     segmentMode: SegmentModeSchema.optional(),
@@ -852,6 +949,14 @@ export const CoachAgentStateSchema = z
     activeNarrationPolicySummary: NarrationPolicySummarySchema.nullable(),
     activeAllowedEvidenceSummary: z.array(AllowedEvidenceSummarySchema).max(6),
     activePresentableCueSummary: PresentableCueSummarySchema.nullable().optional(),
+    // Optional rather than default-null keeps the legacy Coach response
+    // byte-compatible when memory is disabled. A null supplied by the trust
+    // boundary is a clear signal and is normalized away before it reaches the
+    // public state shape.
+    memoryBrief: z.preprocess(
+      (value) => value === null ? undefined : value,
+      MemoryBriefWireSchema.optional(),
+    ),
     observedSegmentIds: z.array(Id).max(128),
     currentSessionPhase: SessionPhaseSchema,
     outcomeGateStatus: OutcomeGateStatusSchema,
@@ -959,6 +1064,7 @@ export const PolicyInputSchema = z
       .max(8),
     toolObservations: z.array(ToolHistorySummarySchema).max(16),
     themes: z.array(SessionThemeSchema).max(16),
+    memoryBrief: MemoryBriefWireSchema.optional(),
     limitations: z.array(z.string().min(1).max(200)).max(8),
     budget: PolicyBudgetSchema,
     maxMoves: z.literal(1),

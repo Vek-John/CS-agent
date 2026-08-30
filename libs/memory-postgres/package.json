@@ -1,0 +1,17 @@
+{
+  "name": "@cs-coach/memory-postgres",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts"
+  },
+  "dependencies": {
+    "@cs-coach/memory": "workspace:*",
+    "pg": "8.16.3"
+  },
+  "devDependencies": {
+    "@types/pg": "8.15.6"
+  }
+}

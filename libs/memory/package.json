@@ -1,0 +1,13 @@
+{
+  "name": "@cs-coach/memory",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@cs-coach/contracts": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

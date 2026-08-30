@@ -13,6 +13,8 @@
     "@cs-coach/cs2d-analysis-adapter": "workspace:*",
     "@cs-coach/demo-domain": "workspace:*",
     "@cs-coach/map-semantics": "workspace:*",
+    "@cs-coach/memory": "workspace:*",
+    "@cs-coach/memory-postgres": "workspace:*",
     "@cs-coach/observation": "workspace:*",
     "@cs-coach/review-planner": "workspace:*",
     "@cs-coach/session": "workspace:*",

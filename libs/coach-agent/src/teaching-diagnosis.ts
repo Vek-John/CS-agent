@@ -20,6 +20,7 @@ import type {
   UserClaimType,
   UserReflection,
   ClaimVerificationStatus,
+  MemoryPedagogyMode,
   PedagogyMode,
   OutcomeFact,
 } from "@cs-coach/contracts";
@@ -50,6 +51,7 @@ const QuestionTypeSchema = z.enum(REFLECTION_QUESTION_TYPES);
 const ResponseSchema = z.enum(REFLECTION_RESPONSES);
 const ClaimTypeSchema = z.enum(USER_CLAIM_TYPES);
 const VerificationSchema = z.enum(CLAIM_VERIFICATION_STATUSES);
+const MemoryPedagogyModeSchema = z.enum(["CHECK_TRANSFER", "REINFORCE"]);
 
 export const UserReflectionSchema = z.object({
   cueId: IdSchema,
@@ -139,6 +141,8 @@ export const TeachingDiagnosisInputSchema = z.object({
   decisionResources: DecisionResourcesSchema.optional(),
   focusCode: z.string().max(160).optional(),
   economyClass: z.enum(["PISTOL", "ECO", "FORCE", "FULL", "UNKNOWN"]).optional(),
+  /** A bounded hint from the trusted Memory Brief; never a fact source. */
+  memoryPedagogyMode: MemoryPedagogyModeSchema.optional(),
   // ThreadSchema is declared below so this lazy reference keeps the input
   // contract strict without introducing a duplicate (or unbounded) shape.
   existingThreads: z.array(z.lazy(() => ThreadSchema)).max(16).optional(),
@@ -886,7 +890,9 @@ export function diagnoseCue(rawInput: TeachingDiagnosisInput): TeachingDiagnosis
   const prior = (input.existingThreads ?? []).filter((thread): thread is LearningThread => Boolean(thread && typeof thread === "object" && "threadId" in thread));
   const learningThread = updateLearningThread(prior, { ...input, reflection }, verifiedHinge, verdict, transferRule, verifiedClaims);
   const priorMatch = prior.some((thread) => thread.hingeCode === verifiedHinge.conditionCode);
-  const pedagogyMode: PedagogyMode = result.status === "UNVERIFIABLE" ? "DEFER" : priorMatch ? "CLARIFY" : "INTRODUCE";
+  const pedagogyMode: PedagogyMode = result.status === "UNVERIFIABLE"
+    ? "DEFER"
+    : (input.memoryPedagogyMode as MemoryPedagogyMode | undefined) ?? (priorMatch ? "CLARIFY" : "INTRODUCE");
   const limitations = unique([
     ...(input.limitations ?? []),
     ...reflection.limitations,
@@ -1011,6 +1017,7 @@ export type {
   DiagnosticCapability,
   DiagnosticResult,
   DecisionResources,
+  MemoryPedagogyMode,
   CoachVerdict,
   TransferRule,
 } from "@cs-coach/contracts";

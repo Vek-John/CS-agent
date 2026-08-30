@@ -6,10 +6,12 @@
   "packageManager": "pnpm@11.16.0",
   "scripts": {
     "dev": "node tools/run-localhost.mjs",
+    "dev:memory": "node tools/run-localhost.mjs --memory",
     "build": "pnpm --filter @cs-coach/web build",
     "start": "pnpm --filter @cs-coach/web start",
     "test": "vitest run",
     "test:watch": "vitest",
+    "memory:migrate": "tsx tools/migrate-memory.mjs",
     "assets:valve-items": "node tools/fetch_valve_item_icons.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "check": "pnpm test && pnpm typecheck && pnpm build",
@@ -26,6 +28,7 @@
   "devDependencies": {
     "@opennextjs/cloudflare": "1.20.2",
     "@types/node": "^24.3.0",
+    "tsx": "4.23.12",
     "typescript": "7.0.2",
     "vitest": "^4.0.0",
     "wrangler": "4.122.0"

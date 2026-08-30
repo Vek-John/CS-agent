@@ -53,6 +53,7 @@ export function startCueEvent(
     cueId: string;
     segmentId: string;
     routeSegmentIndex?: number;
+    memoryBrief?: unknown;
     outcomeGateStatus: "LOCKED" | "COMPLETE" | "NOT_APPLICABLE";
     narrationReadiness: "NOT_REQUIRED" | "PENDING" | "READY" | "FALLBACK";
   }> = {},
@@ -94,6 +95,7 @@ export function startCueEvent(
     ],
     capabilities: overrides.capabilities ?? [slowReplayCapability],
     ...(overrides.routeSegmentIndex === undefined ? {} : { routeSegmentIndex: overrides.routeSegmentIndex }),
+    ...(overrides.memoryBrief === undefined ? {} : { memoryBrief: overrides.memoryBrief }),
     presentableSummary: {
       completionStatus: "COMPLETED",
       presentationStatus: "PRESENTABLE",

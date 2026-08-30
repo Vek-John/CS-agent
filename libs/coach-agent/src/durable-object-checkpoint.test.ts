@@ -6,6 +6,7 @@ import {
 } from "./durable-object-checkpoint";
 import { createCoachAgentRuntime } from "./runtime";
 import { fixtureIdentity, resumeEvent, startCueEvent } from "./test-fixtures";
+import { threadIdForIdentity } from "./identity";
 
 class FakeDurableObjectStorage implements DurableObjectStorageLike {
   readonly values = new Map<string, unknown>();
@@ -52,6 +53,32 @@ async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
 }
 
 describe("DurableObjectCheckpointSaver", () => {
+  it("keeps Memory Brief ephemeral instead of persisting it in DO checkpoint storage", async () => {
+    const storage = new FakeDurableObjectStorage();
+    const saver = new DurableObjectCheckpointSaver({ storage });
+    const runtime = createCoachAgentRuntime({ checkpointer: saver, checkpointBackend: "DURABLE_OBJECT" });
+    const brief = {
+      schemaVersion: "memory-brief.v1",
+      generatedAt: "2026-08-28T00:00:00.000Z",
+      activeThreads: [],
+      memories: [],
+      corrections: [],
+      limitations: ["ephemeral-brief-marker"],
+      source: "EMPTY",
+      structuredStatus: "EMPTY",
+      semanticStatus: "OPTIONAL",
+    } as const;
+    const started = await runtime.dispatch(startCueEvent({ memoryBrief: brief }));
+    expect((started.state.memoryBrief as { limitations?: readonly string[] } | null)?.limitations).toEqual(["ephemeral-brief-marker"]);
+    expect(JSON.stringify([...storage.values.values()])).not.toContain("ephemeral-brief-marker");
+    const threadId = threadIdForIdentity(fixtureIdentity);
+    const restored = await saver.getTuple({ configurable: { thread_id: threadId, checkpoint_ns: "" } });
+    expect((restored?.checkpoint.channel_values.agent as { memoryBrief?: unknown }).memoryBrief).toEqual(brief);
+    const restarted = new DurableObjectCheckpointSaver({ storage });
+    const cold = await restarted.getTuple({ configurable: { thread_id: threadId, checkpoint_ns: "" } });
+    expect((cold?.checkpoint.channel_values.agent as { memoryBrief?: unknown }).memoryBrief ?? null).toBeNull();
+  });
+
   it("uses LangGraph typed serializer, retains per namespace, and deletes a thread", async () => {
     const storage = new FakeDurableObjectStorage();
     const saver = new DurableObjectCheckpointSaver({ storage, retention: 2 });

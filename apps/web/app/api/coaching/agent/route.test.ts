@@ -5,6 +5,15 @@ import {
   parseRemoteCoachAgentDispatchResponse,
 } from "@cs-coach/coach-agent";
 import { fixtureIdentity, resumeEvent, startCueEvent } from "../../../../../../libs/coach-agent/src/test-fixtures";
+import { InMemoryMemoryRepository } from "@cs-coach/memory";
+import { issueTestMemoryPrincipalCookie } from "../../../../lib/memory/principal";
+import { setMemoryRuntimeForTests, resetMemoryRuntimeForTests } from "../../../../lib/memory/server";
+import { afterEach, vi } from "vitest";
+
+afterEach(() => {
+  resetMemoryRuntimeForTests();
+  vi.unstubAllEnvs();
+});
 
 function post(body: unknown, headers: Record<string, string> = { "content-type": "application/json" }): Request {
   return new Request("http://localhost/api/coaching/agent", {
@@ -47,5 +56,65 @@ describe("local Coach Agent route", () => {
     const envelope = createRemoteCoachAgentDispatchEnvelope(event);
     expect((await POST(post({ ...envelope, frames: [] }))).status).toBe(400);
     expect((await POST(post({ ...envelope, sessionId: "other-session" }))).status).toBe(400);
+  });
+
+  it("strips a browser-supplied memory brief on the local baseline route", async () => {
+    const identity = { ...fixtureIdentity, sessionId: "local-brief-untrusted" };
+    const event = startCueEvent({
+      identity,
+      eventId: "local-brief-untrusted-start",
+      memoryBrief: {
+        schemaVersion: "memory-brief.v1",
+        generatedAt: "2026-08-28T00:00:00.000Z",
+        activeThreads: [],
+        memories: [],
+        corrections: [],
+        limitations: ["client supplied"],
+        source: "EMPTY",
+      },
+    });
+    const result = parseRemoteCoachAgentDispatchResponse(await (await POST(post(createRemoteCoachAgentDispatchEnvelope(event)))).json());
+    expect(result.state.memoryBrief).toBeUndefined();
+  });
+
+  it("uses a server-derived local brief only after feature flag and consent", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    const userId = "local-memory-route-user";
+    const runtime = setMemoryRuntimeForTests({ repository: new InMemoryMemoryRepository(), memoryEnabled: true, nodeEnv: "test", allowTestPrincipal: true });
+    await runtime.service.setAuthorization(userId, { userId, memoryEnabled: true, consent: "GRANTED" });
+    await runtime.service.setPreference(userId, { key: "explanationDepth", value: "DEEP" });
+    const cookie = (await issueTestMemoryPrincipalCookie(userId, { consent: "GRANTED", consentVersion: 1 })).split(";")[0];
+    const event = startCueEvent({ identity: { ...fixtureIdentity, sessionId: "local-memory-route-session" }, eventId: "local-memory-route-start", memoryBrief: {
+      schemaVersion: "memory-brief.v1", generatedAt: "2026-08-28T00:00:00.000Z", activeThreads: [], memories: [], corrections: [], limitations: ["untrusted"], source: "EMPTY",
+    } });
+    const response = await POST(post(createRemoteCoachAgentDispatchEnvelope(event), { cookie, "content-type": "application/json" }));
+    const result = parseRemoteCoachAgentDispatchResponse(await response.json());
+    expect(result.state.memoryBrief?.preferences?.explanationDepth).toBe("DEEP");
+    expect(result.state.memoryBrief?.limitations).not.toContain("untrusted");
+  });
+
+  it("drops a local brief when consent changes while it is loading", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    const userId = "local-memory-route-race";
+    const runtime = setMemoryRuntimeForTests({ repository: new InMemoryMemoryRepository(), memoryEnabled: true, nodeEnv: "test", allowTestPrincipal: true });
+    await runtime.service.setAuthorization(userId, { userId, memoryEnabled: true, consent: "GRANTED", consentVersion: 1 });
+    const cookie = (await issueTestMemoryPrincipalCookie(userId, { consent: "GRANTED", consentVersion: 1 })).split(";")[0];
+    runtime.service.getBrief = async () => {
+      await runtime.service.setAuthorization(userId, { userId, memoryEnabled: true, consent: "REVOKED", consentVersion: 2 });
+      return {
+        schemaVersion: "memory-brief.v1",
+        generatedAt: "2026-08-28T00:00:00.000Z",
+        preferences: {},
+        activeThreads: [],
+        memories: [],
+        corrections: [],
+        limitations: ["STALE_LOCAL_BRIEF"],
+        source: "STRUCTURED",
+      };
+    };
+    const event = startCueEvent({ identity: { ...fixtureIdentity, sessionId: "local-memory-route-race-session" }, eventId: "local-memory-route-race-start" });
+    const response = await POST(post(createRemoteCoachAgentDispatchEnvelope(event), { cookie, "content-type": "application/json" }));
+    const result = parseRemoteCoachAgentDispatchResponse(await response.json());
+    expect(result.state.memoryBrief).toBeUndefined();
   });
 });

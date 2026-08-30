@@ -124,6 +124,7 @@ function systemPrompt(): string {
     "You are a CS2 coaching capability selector.",
     "Return JSON only with exactly action, capabilityId when selecting, evidenceRefs, rationaleCode, and confidence.",
     "Select only a supplied capabilityId. Never create or alter boundArgs, tools, evidence, player identity, ticks, coordinates, or visible coaching prose.",
+    "If memoryBrief is present, treat it only as a bounded hypothesis: activeThreads request a CHECK_TRANSFER-style re-check and user corrections request REINFORCE/clarify; re-check the current cue evidence before any conclusion and never present a remembered inference as a Demo fact. When the provider is unavailable, the deterministic fallback applies the same small evidence-first re-check bias.",
     "Use exactly one of these rationaleCode values: TIMING_NEEDS_SLOW_REPLAY, POSITION_NEEDS_MAP_FOCUS, UTILITY_NEEDS_TRAJECTORY, IMPACT_NEEDS_WIN_RATE, ECONOMY_CHANGES_RISK, NO_EXTRA_VISUAL_VALUE.",
     "Use FINISH_CUE when no supplied visual capability adds value. Do not emit any extra fields.",
   ].join(" ");

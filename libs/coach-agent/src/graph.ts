@@ -348,6 +348,7 @@ function policyInputFor(
     ),
     toolObservations: state.toolHistory,
     themes: state.sessionThemes,
+    ...(event.memoryBrief ? { memoryBrief: event.memoryBrief } : {}),
     limitations: event.limitations,
     budget: state.policyBudget,
     maxMoves: 1,
@@ -401,6 +402,7 @@ function policyInputForState(
     })),
     toolObservations: state.toolHistory,
     themes: state.sessionThemes,
+    ...(state.memoryBrief ? { memoryBrief: state.memoryBrief } : {}),
     limitations: [],
     budget: state.policyBudget,
     maxMoves: 1,
@@ -619,6 +621,24 @@ function markDiagnosisEvent(
   return [...state.processedEventIds, eventId].slice(-64);
 }
 
+/**
+ * Convert the already-validated, identity-free Memory Brief into the only
+ * teaching-mode hint memory is allowed to provide.  A user correction takes
+ * precedence over a remembered thread so the next cue explicitly revisits
+ * the disputed understanding; otherwise an active cross-Demo thread asks
+ * for a fresh transfer check.  Empty/absent briefs leave the legacy
+ * session-thread mode selection untouched.
+ */
+function memoryPedagogyModeFor(
+  state: CoachAgentState,
+): "CHECK_TRANSFER" | "REINFORCE" | undefined {
+  const brief = state.memoryBrief;
+  if (!brief) return undefined;
+  if (brief.corrections.length > 0) return "REINFORCE";
+  if (brief.activeThreads.length > 0) return "CHECK_TRANSFER";
+  return undefined;
+}
+
 function diagnosisInputFor(
   event: DiagnosisSubmissionEvent,
   state: CoachAgentState,
@@ -626,10 +646,16 @@ function diagnosisInputFor(
 ): Parameters<typeof diagnoseTeachingCue>[0] {
   // The session's bounded threads are authoritative.  Host-provided thread
   // snapshots are intentionally not trusted to replace checkpoint state.
+  // Likewise, a browser/remote caller cannot choose the memory-derived mode;
+  // it is recomputed from the server-validated brief below.
+  const { memoryPedagogyMode: _clientMemoryMode, ...inputWithoutMemoryMode } = event.input;
+  void _clientMemoryMode;
+  const memoryPedagogyMode = memoryPedagogyModeFor(state);
   const parsed = TeachingDiagnosisInputSchema.parse({
-    ...event.input,
+    ...inputWithoutMemoryMode,
     reflection,
     existingThreads: state.learningThreads,
+    ...(memoryPedagogyMode ? { memoryPedagogyMode } : {}),
   });
   // The schema intentionally accepts the identity-free DecisionResources
   // projection while the domain contract may carry additional observable
@@ -1056,6 +1082,7 @@ async function policyNode(
       activeFocus: event.focus,
       activeNarrationPolicySummary: normalizeNarrationSummary(event.narrationSummary),
       activeAllowedEvidenceSummary: event.allowedEvidenceSummary,
+      memoryBrief: "memoryBrief" in event ? event.memoryBrief ?? undefined : state.agent.memoryBrief ?? undefined,
       currentSessionPhase: event.currentSessionPhase,
       outcomeGateStatus: event.outcomeGateStatus,
       narrationReadiness: event.narrationReadiness,
@@ -1097,6 +1124,7 @@ async function policyNode(
     activeNarrationPolicySummary: normalizeNarrationSummary(event.narrationSummary),
     activeAllowedEvidenceSummary: event.allowedEvidenceSummary,
     activePresentableCueSummary: event.presentableSummary ?? null,
+    memoryBrief: "memoryBrief" in event ? event.memoryBrief ?? undefined : state.agent.memoryBrief ?? undefined,
     routeCursor: event.type === "START_CUE"
       ? event.routeSegmentIndex ?? state.agent.routeCursor
       : state.agent.routeCursor,

@@ -18,7 +18,8 @@ CS2 AI Demo Coach 不是“上传 Demo 后生成几条报告”。它把 Demo �
 - [当前能力](#当前能力)
 - [快速开始](#快速开始)
 - [DeepSeek 配置](#deepseek-配置)
-- [Cloudflare 部署](#cloudflare-部署)
+- [长期记忆配置（可选）](#长期记忆配置可选)
+- [Cloudflare 兼容部署（非当前主路径）](#cloudflare-兼容部署非当前主路径)
 - [项目结构](#项目结构)
 - [验证与开发](#验证与开发)
 - [当前限制](#当前限制)
@@ -124,12 +125,22 @@ pnpm cs2d:setup
 pnpm dev
 ```
 
-必须通过 `pnpm dev` 启动，项目才会显式读取 `.local-data/deepseek.env`。直接运行 `next dev`/`next start` 不会自动读取这个非标准私密路径，除非调用者自己把同名变量注入进程环境。
+`pnpm dev` 是当前默认交付路径：在 shell 和本地配置都没有显式设置时，它以 `MEMORY_ENABLED=false` 启动，不要求 PostgreSQL、embedding provider 或云凭据。若要本地验证 Memory 管理面，使用跨平台命令：
+
+```bash
+pnpm dev:memory
+```
+
+`pnpm dev:memory` 只在 shell 与 `.local-data/deepseek.env` 都没有显式 `MEMORY_ENABLED` 时默认开启；显式 `false` 永远优先。未配置数据库时，启动器会明确报告 `storage=IN_MEMORY fallback`：这只是进程内测试存储，重启即清空，不冒充长期记忆。
+
+必须通过上述两个命令之一启动，项目才会显式读取 `.local-data/deepseek.env`。直接运行 `next dev`/`next start` 不会自动读取这个非标准私密路径，除非调用者自己把同名变量注入进程环境。
 
 打开 <http://localhost:3000>，在回放区域选择本地 `.dem`。`pnpm dev` 会同时启动：
 
 - `http://localhost:3000`：Next 教练壳；
 - `http://localhost:5174`：cs2d Viewer。
+
+启动器会在创建子进程前同时预检 `3000` 和 `5174` 端口。任一端口已被占用时会立即失败，不会终止占用端口的旧进程，也不会只启动半套服务。`Ctrl-C` 或任一受管服务异常退出时，启动器只清理自己创建的 Next/cs2d 进程组。
 
 首次安装会固定上游 commit、应用最小 host patch、安装依赖并本机构建 parser WASM。之后可以直接使用 `pnpm dev`。
 
@@ -142,16 +153,18 @@ pnpm dev
 
 DeepSeek 是可选的讲解润色层。它只接收匿名的决策侧事实、判断、建议和结果证据，不读取原始 `.dem`、完整事件流、稳定玩家 ID 或未揭示的未来画面。
 
-### 本地
+### 本地私密运行配置
 
 ```bash
 mkdir -p .local-data
 cp deepseek.env.example .local-data/deepseek.env
-# 编辑 .local-data/deepseek.env，填写 DEEPSEEK_API_KEY
+# 编辑 .local-data/deepseek.env；可填 DeepSeek 和下文的 Memory 变量
 pnpm dev
 ```
 
-### Cloudflare Worker
+shell 变量优先于该文件。启动日志只报告功能、存储与降级状态，不打印 key、token、URL 或密码。
+
+### Cloudflare Worker（可选兼容路径）
 
 ```bash
 pnpm exec wrangler secret put DEEPSEEK_API_KEY --config wrangler.jsonc
@@ -160,9 +173,29 @@ pnpm exec wrangler secret put DEEPSEEK_API_KEY --config wrangler.jsonc
 
 不要把 key 写入 `wrangler.jsonc`、GitHub、`NEXT_PUBLIC_*`、标准 `.env*` 文件或日志。生产构建会检查 source 和 bundle，拒绝把本地 secret 打进产物。
 
-## Cloudflare 部署
+## 长期记忆配置（可选）
 
-手动部署需要已登录 Wrangler，并配置 Cloudflare API 权限：
+长期记忆默认关闭，只有 `MEMORY_ENABLED=true` 且用户在 `/memory` 明确授权后才会读取或写入。原始 Demo 仍留在浏览器；PostgreSQL 只保存有界的 Memory Record、版本和 provenance 引用。
+
+`.local-data/deepseek.env` 可配置 `MEMORY_ENABLED`、`MEMORY_DATABASE_URL`、`MEMORY_PRINCIPAL_SECRET` 和可选的 `MEMORY_EMBEDDING_*`，启动器会把它们传给现有 `getMemoryRuntime`。建议在启用 PostgreSQL 时配置至少 16 个字符的稳定 `MEMORY_PRINCIPAL_SECRET`，否则本地匿名主体会在服务重启后失效。
+
+无 PostgreSQL 的功能 smoke 直接运行 `pnpm dev:memory`。若要使用真正可持久化的本地记忆，先将同一个 PostgreSQL URL 注入当前 shell，再按顺序检查 migration；`--dry-run` 和 `--check-config` 都不会打开数据库连接：
+
+```bash
+export MEMORY_DATABASE_URL='postgresql://…'
+pnpm memory:migrate -- --dry-run
+pnpm memory:migrate -- --check-config
+pnpm memory:migrate
+pnpm dev:memory
+
+# 可选：MEMORY_WITH_VECTOR=true pnpm memory:migrate -- --with-vector
+```
+
+有效 URL、核心 migration 和有效的 `MEMORY_ENABLED=true`（例如未被显式 `false` 覆盖的 `pnpm dev:memory`）同时就绪时，Memory status 应报告 `storage=POSTGRES` 与 `durable=true`。embedding 和 pgvector 仍是可选派生能力；未配置时保留结构化召回。Cloudflare/Hyperdrive/DO 的配置边界见 [ARCHITECTURE.md](./ARCHITECTURE.md) 与 [ADR-0006](./docs/adr/ADR-0006-long-term-memory-postgres-outbox.md)，不是当前 localhost 启动的前置条件。
+
+## Cloudflare 兼容部署（非当前主路径）
+
+当前开发、交付和验收主路径是 localhost。Cloudflare 脚本作为可选兼容部署适配器保留，不是运行本地产品或验证本轮功能的前置条件。手动验证该适配器需要已登录 Wrangler，并配置 Cloudflare API 权限：
 
 ```bash
 pnpm cloudflare:build
@@ -170,7 +203,7 @@ pnpm cloudflare:assets
 pnpm cloudflare:deploy
 ```
 
-生产 Worker 会把 Next 教练壳、Director/Narrator/Coach Policy/Wrap-up API、每 session 一个 Coach Agent Durable Object 和 `/cs2d/` Viewer 放在同一部署中。推送 `main` 也会触发仓库现有的 Cloudflare Actions workflow；如果只想验证构建，请使用 `pnpm cloudflare:build`，不要执行 deploy。
+该适配器会把 Next 教练壳、Director/Narrator/Coach Policy/Wrap-up API、Coach Agent Durable Object 和 `/cs2d/` Viewer 放在同一部署中。推送 `main` 也会触发仓库现有的 Cloudflare Actions workflow；如果只想验证构建，请使用 `pnpm cloudflare:build`，不要执行 deploy。
 
 ## 项目结构
 

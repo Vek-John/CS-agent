@@ -5,7 +5,7 @@ import {
 } from "./types";
 import { FakePolicyAdapter } from "./adapters";
 import { createCoachAgentRuntime } from "./runtime";
-import { fixtureIdentity } from "./test-fixtures";
+import { fixtureIdentity, startCueEvent } from "./test-fixtures";
 
 const cueId = "cue-diagnosis-bootstrap";
 
@@ -146,6 +146,44 @@ describe("Coach Agent teaching diagnosis bootstrap", () => {
     expect(second.state.cueCases[cueId]?.cueId).toBe(cueId);
     expect(second.state.cueCases[secondCueId]?.cueId).toBe(secondCueId);
     expect(policy.calls).toHaveLength(0);
+  });
+
+  it("projects a recalled cross-Demo thread into CHECK_TRANSFER for the next cue", async () => {
+    const runtime = createCoachAgentRuntime();
+    const brief = {
+      schemaVersion: "memory-brief.v1" as const,
+      generatedAt: "2026-08-28T00:00:00.000Z",
+      activeThreads: [{ scope: "CROSS_DEMO", status: "STABLE" }],
+      memories: [],
+      corrections: [],
+      limitations: [],
+      source: "STRUCTURED" as const,
+    };
+    const started = await runtime.dispatch(startCueEvent({
+      eventId: "memory-mode-start",
+      capabilities: [],
+      memoryBrief: brief,
+    }));
+    const reflection = reflectionEvent("memory-mode-reflection", { selectedGoal: "OTHER" }, {
+      cueId: "cue-memory-mode",
+    });
+    if (reflection.type !== "SUBMIT_REFLECTION") throw new Error("memory mode fixture should be a reflection");
+    const next = await runtime.dispatch({
+      ...reflection,
+      input: {
+        ...reflection.input,
+        decisionResources: {
+          health: 100,
+          armor: 100,
+          hasHelmet: true,
+          inventoryCount: 1,
+          evidenceRefs: ["fact-decision"],
+        },
+      },
+    });
+
+    expect(started.state.memoryBrief).toMatchObject({ activeThreads: brief.activeThreads });
+    expect(next.state.cueCases["cue-memory-mode"]?.pedagogyMode).toBe("CHECK_TRANSFER");
   });
 
   it("allows one disagreement only after a case and thread exist", async () => {

@@ -6,7 +6,7 @@
 > - 产品目标与范围以 [PRD.md](../PRD.md) 和 [MVP_SCOPE.md](../MVP_SCOPE.md) 为准。
 > - 本文记录「为什么做这个选择」「实际踩到了什么问题」「如何验证」；它可以解释架构，但不能覆盖架构契约。
 >
-> 最后更新：2026-08-18
+> 最后更新：2026-08-30
 
 ## 1. 维护规则
 
@@ -900,6 +900,100 @@ GitHub Actions run `32836672732` 成功部署 Worker `cs2-ai-demo-coach`，Cloud
 **限制 / 下一步**
 
 本轮只做了一个 9 回合小 Demo 的短浏览器 smoke，没有声称完成整场长时间验收；真实语音、逐玩家 LOS、阻挡和精确接触窗口仍不可验证。另修复了旧恢复记录在 IDB request 回调中抛错导致的开发态 issue overlay，以及手动 cue visit 下提交反思被 takeover guard 静默丢弃的问题。push 后 Cloudflare Actions `32978616087` 成功部署 Worker，线上首页 HTTP 200、`/api/coaching/diagnose` POST 返回 `SUCCEEDED`，`/api/coaching/agent` 的 Reflection smoke 返回 `CUE_COMPLETED`、`DURABLE_OBJECT` 且 `recoverableAfterRefresh=true`；线上 IAB 页面加载超过 30 秒，未将其记作浏览器通过，curl/API 结果是当前可复核证据。
+
+### 4.40 2026-08-28：OpenNext trace 需保留 pg-cloudflare 的 workerd 包
+
+**触发**
+
+Cloudflare OpenNext 在 server bundle 阶段解析 `pg@8.16.3` 的可选 `pg-cloudflare` 失败。锁文件中依赖存在，但 Next trace 只复制了 `dist/empty.js`；`pg-cloudflare` 的 `workerd.require` 导出声明的 `dist/index.js` 因而找不到。
+
+**决定**
+
+在 `apps/web/next.config.ts` 将 `pg-cloudflare` 列入 `serverExternalPackages`，让 OpenNext 的 workerd package copy 阶段保留完整 `dist/` 和 workerd 导出。继续复用 `libs/memory-postgres` 的动态 `pg` driver seam，不把 `pg-cloudflare` 当作独立 PostgreSQL 连接实现。
+
+**落点**
+
+仅修改 Web 的 OpenNext/Next 打包配置；未改变 memory domain、schema、repository、DO 或 Worker 行为。
+
+**验证**
+
+首轮 `pnpm cloudflare:build` 在上述解析错误处失败；配置 smoke、frozen lockfile 检查、第二轮 `pnpm cloudflare:build`（含 OpenNext bundle 与 source/bundle secret scan）通过。`libs/memory-postgres` migrations/repository/server 定向测试 15/15、`pnpm typecheck` 和 `pnpm build` 均通过。
+
+**限制 / 下一步**
+
+构建只证明 `dist/index.js` 与 `cloudflare:sockets` 已进入 bundle，尚未证明真实 Cloudflare Worker 的 Hyperdrive binding、Secret 与 PostgreSQL 网络连通性；生产环境仍需一次不带本地凭据的 Hyperdrive runtime smoke。
+
+### 4.41 2026-08-28：长期记忆收口必须把授权、删除和教学提示当作同一条链路
+
+**触发**
+
+针对长期记忆第一版的回放、授权、Outbox、PostgreSQL 和管理面审查发现了几类容易被 happy path 掩盖的问题：重复请求只改变 producer timestamp 却被误判为冲突；墓碑提交后 host/DO fan-out 失败会留下旧 Brief 缓存；已脱敏的删除事件不能再用原始 payload 重放；`DISPUTED` 纠正会在结构化 active 查询中被挤掉；feature flag 关闭时仍可能写 refresh marker，且关闭后错误设置 revoked latch 会阻止同一 DO 在重新开启时恢复既有授权；Outbox 首次投影成功但响应丢失时，consumer 的幂等拒绝还会被误判为失败；以及只把 Brief 放进 PolicyInput 并不会让下一 cue 产生明确的迁移复查模式。
+
+**决定**
+
+保留 PostgreSQL 为长期记忆真相源、Durable Object 为 Session checkpoint＋可靠 Outbox、pgvector 为可选派生索引。服务层使用 canonical event 比较（忽略 envelope/Proposal 的 producer 时间和重试元数据，但仍拒绝 payload、目标和身份冲突），删除在墓碑提交后立即 bump Brief generation，并在首次 fan-out 失败时允许重复 DELETE/`MEMORY_DELETED` 只做清理重试而不重新写入正文。结构化 recall 为 active memories 单独使用状态白名单，同时开一个有界 `DISPUTED` correction channel。Graph 从已验证 Brief 派生 `memoryPedagogyMode`：thread→`CHECK_TRANSFER`、correction→`REINFORCE`，但永远服从当前 cue 的 Outcome Gate 和证据状态。Outbox/consumer 对 `DUPLICATE_IDEMPOTENCY`、`DELETED_TOMBSTONE` 和已存在的删除 tombstone 视为终态收敛，真正的 repository/persistence error 仍按失败重试。flag-off 只清进程内上下文，不写持久 refresh marker，也不把部署开关本身当作用户撤回；因此 feature-off 清理使用 `latch:false`，保留旧 GRANTED consent 在同一 DO 重新开启时可恢复。localhost 的延迟 Memory 写入按 principal 串行，保证诊断事件先于同一用户的纠正事件落地。
+
+**落点**
+
+主要落在 `libs/memory` 的 service、InMemory adapter、Brief 和 preference/event schema，`libs/memory-postgres` 的事务锁、删除 marker、可选 vector probe、redaction 和 session enumeration，`tools/memory-outbox.mjs`、`tools/coach-agent-durable-object.mjs`、Cloudflare Worker 的授权/签名/invalidation seam，`apps/web` 的 consent、memory management、local Agent dispatch，以及 `libs/contracts`/`libs/coach-agent` 的受限教学模式字段。对应长期契约同步到 `ARCHITECTURE.md` 和 ADR-0006。
+
+**验证**
+
+最终收口的本地全套 Vitest 为 **93 个文件、666 个测试通过，1 个文件跳过、2 个测试跳过**；定向记忆/PG/DO/API/Graph 回归也全部通过。`pnpm typecheck`、`pnpm build`、Cloudflare OpenNext build（含 source/bundle secret scan）、`node --check tools/cloudflare-worker.mjs`、`node --check tools/coach-agent-durable-object.mjs` 和 `git diff --check` 均已运行并通过。仓库没有 `lint` script，`pnpm lint` 因命令不存在退出，不能报告 lint 已通过。新增回归覆盖 timestamp-only idempotency、删除缓存/host 重试、direct delete redaction、flag-off storage no-write 与 off→on 授权恢复、幂等 consumer→Outbox 收敛、Brief→`CHECK_TRANSFER`/`REINFORCE` 和 stale sink race。
+
+**限制 / 下一步**
+
+本轮没有运行 live PostgreSQL、Cloudflare Durable Object/Worker、Hyperdrive 或真实 embedding provider；`postgres.real.test.ts` 仍按环境变量跳过，因此跨 Demo 链路目前是 InMemory＋fake sink 的 contract E2E，不应称为真实部署验收。未知且从未写入 PostgreSQL 的 DO session 仍只能依赖实时 authority 的 fail-closed 防线；合法 future-clock event 尚未由独立 deletion generation 证明；PostgreSQL `RETRY→DEAD_LETTER` 需要外部 consumer/retention job；授权读取与外部 provider/dispatch 之间仍有极窄的跨系统 TOCTOU 窗口。生产发布前应在带真实凭据的隔离环境补跑这些链路，并确认 lint 工具可用后再执行 lint。
+
+### 4.42 2026-08-28：明确资料切片与 Outbox 授权拒绝必须在 Agent 边界外收敛
+
+**触发**
+
+长期记忆已经有偏好、候选习惯和纠正链路，但“用户明确填写的资料”仍容易被误当作 cue proposal；同时，Outbox 在 consent 被撤回、authority 暂时不可用或 sink 返回 HTTP 200/`accepted:false` 时，若只看 transport 状态，就可能错误投递、保留原文或把拒绝误记为成功。授权队列与 Outbox flush 互相等待还会形成 auth↔Outbox deadlock。
+
+**决定**
+
+新增 bounded `MemoryProfile`（最多 8 个 `string | number | boolean` 字段）和 `USER_PROFILE_STATED` 事件；`PROFILE` proposal/record 只能由签名 anonymous principal 在 consent gate 后写入，首次资料立即 `CONFIRMED`，canonical 快照重复请求幂等，管理面通过 `/api/memory/profile` 读取/更新。资料保留在用户管理/User brief 供查看，但 `buildAgentMemoryBrief` 完全排除 `PROFILE` record，不把资料元数据或值送入 Agent。
+
+Outbox 在发送前复核实时 consent authority：authority outage 返回 fail-closed 并保留 `PENDING` 以待后续 alarm；明确的 `CONSENT_REQUIRED`、`MEMORY_DISABLED`、版本过期或 `CONSENT_REVOKED` 终止投递、脱敏事件 payload 并进入 `DEAD_LETTER`。HTTP 200 但 `accepted:false` 仍按领域拒绝处理，只有明确幂等收敛才标记 `DELIVERED`。授权串行尾只排队 Outbox invalidation，flush 内的 veto 只终止当前行并异步安排剩余清理，避免等待对方队列造成 deadlock；authority outage 同时清除本地 Brief，不能把旧上下文送入 Agent。
+
+**落点**
+
+资料切片落在 `libs/memory` 的 `MemoryProfileSchema`、`USER_PROFILE_STATED` proposal/policy/reducer/service、`/api/memory/profile` 和 `MemoryManager`；Agent 投影边界落在 `libs/memory/src/brief.ts`。Outbox 授权拒绝、payload redaction、before-send authority gate 与 serialized invalidation 落在 `tools/memory-outbox.mjs`、`tools/coach-agent-durable-object.mjs`，服务端 consent/签名/invalidation seam 与 `libs/memory-postgres` authority transaction 共同 fail-closed。
+
+**验证**
+
+当前全套 Vitest：**94 个文件通过、1 个文件跳过；689 个测试通过、2 个测试跳过**（`pnpm exec vitest run --reporter=dot`）。覆盖 PROFILE service/API 管理与 Agent projection 排除、feature-off 无持久化读取、principal/query 隔离、Outbox consent rejection redaction、authority outage pending、HTTP 200 domain rejection、幂等收敛和 auth↔Outbox 串行化。`pnpm typecheck` 已通过；此前的 `pnpm build`、Cloudflare OpenNext build、source/bundle secret scan 和 `git diff --check` 仍保留在 4.41 验证记录中。
+
+**限制 / 下一步**
+
+本轮仍未运行 live PostgreSQL、Cloudflare Durable Object/Worker、Hyperdrive 或真实 embedding/provider；`postgres.real.test.ts` 因环境变量缺失跳过，不能把 InMemory＋fake sink contract E2E 称为真实部署验收。仓库没有 `lint` script，`pnpm lint` 无法执行，不能报告 lint 通过。未知且从未写入 PostgreSQL 的 DO session 仍依赖实时 authority 的 fail-closed 防线；跨独立 Node/DO 系统仍存在极窄 TOCTOU 窗口，生产前需在隔离真实凭据环境补跑。
+
+### 4.43 2026-08-30：localhost 启动必须把可选基础设施与受管进程生命周期同时收口
+
+**触发**
+
+长期记忆的 domain/API/UI 已存在，但 localhost 启动器只允许 DeepSeek 变量，无法通过受控的 `.local-data/deepseek.env` 启用 Memory；`MEMORY_ENABLED` 没有显式安全默认，文件值还会覆盖命令行变量。同时，原启动器在 `3000`/`5174` 冲突前没有统一预检，退出时只向 `pnpm` 直系子进程发送一次信号，可能遗留 Next/Vite 后代。README 又把 Cloudflare 部署写得像当前交付前置，与本轮 localhost-only 目标不一致。
+
+**决定**
+
+`pnpm dev` 在没有显式变量时固定以 `MEMORY_ENABLED=false` 启动；新增跨平台 `pnpm dev:memory`，通过启动器 `--memory` 参数提供默认 true，而不使用 POSIX shell 前缀。shell 显式值优先于本地文件，两者中任一显式 `false` 都不会被 `--memory` 反转。无 DB 时复用现有 `getMemoryRuntime` 的 `IN_MEMORY` 适配器并明确报告“进程内、重启清空”；有 `MEMORY_DATABASE_URL`/`DATABASE_URL` 时仍走唯一 PostgreSQL adapter，embedding 继续可选。Migration CLI 提供 `--dry-run` 和 `--check-config` 两个不连库的预检面。
+
+启动器在任何准备或子进程启动前同时检查两个端口，冲突时只返回可诊断错误，不动旧进程。Unix 上为自己创建的两个服务建独立进程组，正常退出先 `SIGTERM`、超时再 `SIGKILL`；任一服务异常退出都会收敛另一个。当前运行与验收基线收口为 localhost 模块化单体；未来 Cockpit Tools 风格桌面壳只包装该边界并复用 Playback/Session/Agent/Memory 契约，Tauri/Electron 等容器选型继续后置。
+
+**落点**
+
+启动契约落在 `tools/run-localhost.mjs`、`package.json`、`deepseek.env.example` 及定向回归测试；用户命令、Memory migration 预检和 Cloudflare 的可选定位写入 `README.md`。localhost/桌面壳的模块边界、技术选型后置以及 raw Demo/单次解析/Outcome Gate 不变式写入 `ARCHITECTURE.md`。
+
+**验证**
+
+`node --check tools/run-localhost.mjs` 通过；localhost 启动与旧 cs2d patch seam 定向 Vitest 为 **2 个文件、12 个测试全部通过**。真实 `pnpm dev` 和 `pnpm dev:memory` smoke 均启动 `localhost:3000` 与 `localhost:5174`；首页与 cs2d Viewer 均返回 HTTP 200，首页 iframe 指向并加载 `:5174` Viewer。默认路径的 `/api/memory/status` 返回 `featureFlag=false`；`dev:memory` 返回 `featureFlag=true`、`storage=IN_MEMORY`、`durable=false` 和 `LOCAL_IN_MEMORY_STORAGE`，Memory consent 与 profile 的 POST/GET 链路均完成 HTTP 200 smoke。已配置 DeepSeek 的 models 连通检查返回 HTTP 200，输出中没有凭据。
+
+端口冲突 smoke 证明：旧 listener 占用目标端口时，新启动器在创建任何服务前失败，旧 listener 仍存活。正常 `Ctrl-C` 后复查 `3000`/`5174` 均已释放，没有遗留本轮 Next/Vite 进程。
+
+**限制 / 下一步**
+
+当前环境没有提供 `MEMORY_DATABASE_URL` 或 `DATABASE_URL`，因此没有运行真实 PostgreSQL migration、持久化 consent/profile 或重启恢复；上述 Memory HTTP smoke 只证明 InMemory 垂直链路，不能称为长期持久化验收。也未运行真实 embedding provider、Cloudflare/Hyperdrive/DO 或桌面壳；桌面容器仍需在权限、进程生命周期、签名更新和可测量包体证据就绪后用独立 ADR 选型。
 
 ## 5. 常用问题排查表
 
