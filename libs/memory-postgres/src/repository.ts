@@ -1483,7 +1483,12 @@ export class PostgresMemoryRepository implements MemoryRepository {
     const userId = requireUser(userIdInput);
     const memoryId = scopedId(memoryIdInput, "memory_id");
     const logicalKey = logicalKeyInput === undefined ? "" : scopedId(logicalKeyInput, "logical_key");
-    assertSafeJson(sourceRefs);
+    // sourceRefs is intentionally an array for jsonb_array_elements below,
+    // while the shared persisted-JSON guard rejects top-level arrays used by
+    // ordinary record/event payloads. Wrap this bounded field so the guard
+    // still enforces aggregate size, array length, depth and forbidden keys
+    // without widening the accepted top-level payload shape globally.
+    assertSafeJson({ sourceRefs });
     await withSqlTransaction(this.executor, async (tx) => {
       await this.assertAuthorization(tx, userId, true);
       await this.purgeMemoryResidueTx(tx, userId, memoryId, logicalKey, sourceRefs);

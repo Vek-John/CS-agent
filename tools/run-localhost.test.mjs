@@ -31,16 +31,18 @@ describe("localhost runtime bootstrap contract", () => {
   it("defaults Memory off while letting explicit shell variables override the local file", () => {
     const defaults = resolveLocalCoachEnvironment({}, {});
     expect(defaults.MEMORY_ENABLED).toBe("false");
+    expect(defaults.DEPLOY_TARGET).toBe("localhost");
 
     const fromFile = resolveLocalCoachEnvironment({ MEMORY_ENABLED: "on" }, {});
     expect(fromFile.MEMORY_ENABLED).toBe("on");
 
     const fromShell = resolveLocalCoachEnvironment(
       { MEMORY_ENABLED: "false", MEMORY_DATABASE_URL: "postgresql://file-secret" },
-      { MEMORY_ENABLED: "true", MEMORY_DATABASE_URL: "postgresql://shell-secret" },
+      { MEMORY_ENABLED: "true", MEMORY_DATABASE_URL: "postgresql://shell-secret", DEPLOY_TARGET: "cloudflare" },
     );
     expect(fromShell.MEMORY_ENABLED).toBe("true");
     expect(fromShell.MEMORY_DATABASE_URL).toBe("postgresql://shell-secret");
+    expect(fromShell.DEPLOY_TARGET).toBe("localhost");
     expect(fromShell.NEXT_PUBLIC_DEPLOY_TARGET).toBe("localhost");
   });
 

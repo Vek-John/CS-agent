@@ -343,12 +343,20 @@ async function notifyCloudflareMemoryOutboxes(notice: {
       if (!endpoint || typeof fetch !== "function") {
         // In a production/Worker deployment, silently dropping a known
         // session invalidation would make the consent API claim immediate
-        // zero-outbox semantics while leaving a live DO behind. Local
-        // process-only memory has no DO fan-out surface, so it may safely
-        // continue without this host callback.
-        const strictDeployment = process.env.NODE_ENV === "production" ||
-          env?.DEPLOY_TARGET === "cloudflare" ||
-          (typeof process === "undefined" && env !== undefined);
+        // zero-outbox semantics while leaving a live DO behind. The localhost
+        // launcher explicitly selects a non-Cloudflare host, and this branch
+        // has already proved that neither a binding nor an HTTP endpoint
+        // exists. An empty platform context alone does not create a DO channel.
+        const cloudflareDeployTarget = typeof env?.DEPLOY_TARGET === "string"
+          ? env.DEPLOY_TARGET.trim().toLowerCase()
+          : "";
+        const processDeployTarget = process.env.DEPLOY_TARGET?.trim().toLowerCase() ?? "";
+        const explicitLocalhostWithoutOutbox =
+          processDeployTarget === "localhost" &&
+          cloudflareDeployTarget !== "cloudflare";
+        const strictDeployment = !explicitLocalhostWithoutOutbox && (process.env.NODE_ENV === "production" ||
+          processDeployTarget === "cloudflare" || cloudflareDeployTarget === "cloudflare" ||
+          (typeof process === "undefined" && env !== undefined));
         if (strictDeployment) throw new Error("OUTBOX_INVALIDATION_UNAVAILABLE");
         return;
       }

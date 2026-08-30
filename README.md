@@ -177,18 +177,57 @@ pnpm exec wrangler secret put DEEPSEEK_API_KEY --config wrangler.jsonc
 
 长期记忆默认关闭，只有 `MEMORY_ENABLED=true` 且用户在 `/memory` 明确授权后才会读取或写入。原始 Demo 仍留在浏览器；PostgreSQL 只保存有界的 Memory Record、版本和 provenance 引用。
 
-`.local-data/deepseek.env` 可配置 `MEMORY_ENABLED`、`MEMORY_DATABASE_URL`、`MEMORY_PRINCIPAL_SECRET` 和可选的 `MEMORY_EMBEDDING_*`，启动器会把它们传给现有 `getMemoryRuntime`。建议在启用 PostgreSQL 时配置至少 16 个字符的稳定 `MEMORY_PRINCIPAL_SECRET`，否则本地匿名主体会在服务重启后失效。
+`.local-data/deepseek.env` 可配置 `MEMORY_ENABLED`、`MEMORY_DATABASE_URL`、`MEMORY_PRINCIPAL_SECRET` 和可选的 `MEMORY_EMBEDDING_*`，启动器会把它们传给现有 `getMemoryRuntime`。建议在启用 PostgreSQL 时配置至少 16 个字符的稳定 `MEMORY_PRINCIPAL_SECRET`，否则本地匿名主体会在服务重启后失效。不要把连接密码、API key 或签名密钥写入 README、命令输出或任何已跟踪文件。
 
-无 PostgreSQL 的功能 smoke 直接运行 `pnpm dev:memory`。若要使用真正可持久化的本地记忆，先将同一个 PostgreSQL URL 注入当前 shell，再按顺序检查 migration；`--dry-run` 和 `--check-config` 都不会打开数据库连接：
+无 PostgreSQL 的功能 smoke 直接运行 `pnpm dev:memory`。它使用明确的 `IN_MEMORY` 回退，不提供重启持久性。
+
+### macOS Homebrew PostgreSQL 17
+
+下列路径已用 Homebrew PostgreSQL **17.11** 和 pgvector **0.8.6** 验证。`postgresql@17` 是 keg-only formula，因此示例通过 Homebrew prefix 直接定位命令，不要求把它永久写入全局 `PATH`：
 
 ```bash
-export MEMORY_DATABASE_URL='postgresql://…'
+brew install postgresql@17 pgvector
+brew services start postgresql@17
+
+PG17_BIN="$(brew --prefix postgresql@17)/bin"
+"$PG17_BIN/createdb" cs_agent_local
+```
+
+`createdb` 只需执行一次；如果已存在 `cs_agent_local`，跳过该命令。这里故意不提供通配 `dropdb`、reset 或删除 Homebrew 数据目录的命令，避免误删同一 PostgreSQL 实例中的其他数据库。
+
+确保 `.local-data/deepseek.env` 已存在（不要覆盖已有文件），然后在其中设置 `MEMORY_ENABLED=true`、指向 `cs_agent_local` 的 `MEMORY_DATABASE_URL`，以及本机专用的稳定 `MEMORY_PRINCIPAL_SECRET`。当本机 Homebrew 使用默认用户和端口时，无密码 URL 可写为 `postgresql://localhost:5432/cs_agent_local`；如果本机鉴权不同，只在该已忽略文件中调整，不要把实际凭据复制进文档。
+
+Migration CLI 读取当前进程环境，不会自动加载 `.local-data/deepseek.env`。把同一个本地 URL 临时注入当前 shell 后执行；`--dry-run` 和 `--check-config` 都不会打开数据库连接，`--with-vector` 会在 core migration 之后应用可选向量 migration：
+
+```bash
+export MEMORY_DATABASE_URL='postgresql://localhost:5432/cs_agent_local'
 pnpm memory:migrate -- --dry-run
 pnpm memory:migrate -- --check-config
-pnpm memory:migrate
-pnpm dev:memory
+pnpm memory:migrate -- --with-vector
+unset MEMORY_DATABASE_URL
 
-# 可选：MEMORY_WITH_VECTOR=true pnpm memory:migrate -- --with-vector
+pnpm dev:memory
+```
+
+启动后，以下命令只读取服务、migration、extension 和应用状态：
+
+```bash
+PG17_BIN="$(brew --prefix postgresql@17)/bin"
+brew services info postgresql@17
+"$PG17_BIN/pg_isready" -d cs_agent_local
+"$PG17_BIN/psql" -d cs_agent_local -c \
+  'SELECT migration_id, applied_at FROM memory_schema_migrations ORDER BY migration_id;'
+"$PG17_BIN/psql" -d cs_agent_local -c \
+  "SELECT extversion FROM pg_extension WHERE extname = 'vector';"
+curl -fsS http://localhost:3000/api/memory/status
+```
+
+正常状态应包含 `memory-core-001`、`memory-core-003`、`memory-vector-002`、pgvector 版本，以及应用的 `storage=POSTGRES`/`durable=true`。若应用报 `POSTGRES_UNAVAILABLE`，依次检查 `brew services info`、`pg_isready`、`.local-data/deepseek.env` 的 URL 与 migration ledger；修正环境文件后完整停止并重启 `pnpm dev:memory`，使进程重新读取变量。若 vector extension 缺失，先确认 `brew list pgvector` 成功，再重跑 `pnpm memory:migrate -- --with-vector`；结构化召回不依赖 vector。
+
+停止应用时在 `pnpm dev:memory` 终端按 `Ctrl-C`。PostgreSQL 是独立的 Homebrew service；确认本机暂时不再需要它时，再单独执行：
+
+```bash
+brew services stop postgresql@17
 ```
 
 有效 URL、核心 migration 和有效的 `MEMORY_ENABLED=true`（例如未被显式 `false` 覆盖的 `pnpm dev:memory`）同时就绪时，Memory status 应报告 `storage=POSTGRES` 与 `durable=true`。embedding 和 pgvector 仍是可选派生能力；未配置时保留结构化召回。Cloudflare/Hyperdrive/DO 的配置边界见 [ARCHITECTURE.md](./ARCHITECTURE.md) 与 [ADR-0006](./docs/adr/ADR-0006-long-term-memory-postgres-outbox.md)，不是当前 localhost 启动的前置条件。

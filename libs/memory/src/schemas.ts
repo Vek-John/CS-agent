@@ -338,13 +338,16 @@ export const MemoryProposalSchema = z
     if (proposal.eventType === "USER_PREFERENCE_STATED" && !["PREFERENCE", "COACHING_PREFERENCE"].includes(proposal.kind)) {
       ctx.addIssue({ code: "custom", path: ["kind"], message: "preference event must carry a preference kind" });
     }
-    if (proposal.kind === "PROFILE" && (!proposal.profile || proposal.eventType !== "USER_PROFILE_STATED")) {
+    const isProfileWrite = proposal.kind === "PROFILE" && ["CREATE", "UPDATE"].includes(proposal.operation);
+    if (isProfileWrite && (!proposal.profile || proposal.eventType !== "USER_PROFILE_STATED")) {
       ctx.addIssue({ code: "custom", path: ["profile"], message: "PROFILE proposals require USER_PROFILE_STATED and profile fields" });
     }
     if (proposal.profile && proposal.kind !== "PROFILE") {
       ctx.addIssue({ code: "custom", path: ["kind"], message: "profile fields require PROFILE kind" });
+    } else if (proposal.profile && !isProfileWrite) {
+      ctx.addIssue({ code: "custom", path: ["profile"], message: "profile fields are only valid for PROFILE CREATE or UPDATE proposals" });
     }
-    if (proposal.eventType === "USER_PROFILE_STATED" && (proposal.kind !== "PROFILE" || !proposal.profile)) {
+    if (proposal.eventType === "USER_PROFILE_STATED" && (!isProfileWrite || !proposal.profile)) {
       ctx.addIssue({ code: "custom", path: ["profile"], message: "USER_PROFILE_STATED requires a PROFILE proposal" });
     }
     if (["PREFERENCE", "COACHING_PREFERENCE"].includes(proposal.kind) && !proposal.preference) {

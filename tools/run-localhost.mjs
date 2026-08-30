@@ -63,6 +63,10 @@ export function resolveLocalCoachEnvironment(fileEnv = {}, inheritedEnv = proces
     ...fileEnv,
     ...inheritedEnv,
     MEMORY_ENABLED: memoryEnabled ?? 'false',
+    // The localhost command owns this server-side runtime boundary. Override
+    // an inherited Cloudflare marker so `pnpm dev` cannot accidentally retain
+    // production-only DO/Outbox semantics.
+    DEPLOY_TARGET: 'localhost',
     NEXT_PUBLIC_DEPLOY_TARGET: 'localhost',
     NEXT_PUBLIC_CS2D_HOST_URL: 'http://localhost:5174/?host=1',
   }

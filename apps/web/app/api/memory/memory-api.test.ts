@@ -6,6 +6,7 @@ import {
   type MemoryEvent,
   type MemoryProposal,
 } from "@cs-coach/memory";
+import type { SqlExecutor } from "@cs-coach/memory-postgres/server";
 import { issueTestMemoryPrincipalCookie, resolveMemoryPrincipal } from "../../../lib/memory/principal";
 import { getMemoryRuntime, resetMemoryRuntimeForTests, setMemoryRuntimeForTests } from "../../../lib/memory/server";
 import { GET as getStatus } from "./status/route";
@@ -19,7 +20,9 @@ import { DELETE as deleteMemory } from "./[id]/route";
 
 afterEach(() => {
   resetMemoryRuntimeForTests();
+  Reflect.deleteProperty(globalThis as unknown as Record<PropertyKey, unknown>, Symbol.for("__cloudflare-context__"));
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 function ref(userId: string, suffix: string) {
@@ -73,6 +76,30 @@ function cookieFor(userId: string): Promise<string> {
 
 function request(url: string, init?: RequestInit): Request {
   return new Request(`http://localhost${url}`, init);
+}
+
+function unusedDurableExecutor(): SqlExecutor {
+  const executor: SqlExecutor = {
+    query: async () => { throw new Error("UNEXPECTED_SQL_QUERY"); },
+    transaction: async (work) => work(executor),
+  };
+  return executor;
+}
+
+async function seedDurableMemory(userId: string, suffix: string): Promise<{ memoryId: string; cookie: string }> {
+  const repository = new InMemoryMemoryRepository();
+  const runtime = setMemoryRuntimeForTests({
+    repository,
+    executor: unusedDurableExecutor(),
+    memoryEnabled: true,
+    allowTestPrincipal: true,
+  });
+  await runtime.service.setAuthorization(userId, { userId, memoryEnabled: true, consent: "GRANTED" });
+  const seeded = await runtime.service.ingestEvent(userId, preferenceEvent(userId, suffix));
+  return {
+    memoryId: seeded.record?.memoryId as string,
+    cookie: (await cookieFor(userId)).split(";")[0],
+  };
 }
 
 describe("memory management API", () => {
@@ -256,6 +283,103 @@ describe("memory management API", () => {
     }), { params: Promise.resolve({ id: memoryId }) });
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({ accepted: false, reason: "OUTBOX_INVALIDATION_PENDING", deleted: true });
+  });
+
+  it("accepts an idempotent localhost delete when PostgreSQL is durable but no DO outbox channel exists", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("DEPLOY_TARGET", "localhost");
+    vi.stubEnv("NEXT_PUBLIC_DEPLOY_TARGET", "cloudflare");
+    vi.stubEnv("MEMORY_PRINCIPAL_SECRET", "localhost-postgres-test-secret");
+    (globalThis as unknown as Record<PropertyKey, unknown>)[Symbol.for("__cloudflare-context__")] = { env: {} };
+    const userId = "principal-localhost-postgres-delete";
+    const { memoryId, cookie } = await seedDurableMemory(userId, "localhost-postgres");
+
+    const response = await deleteMemory(request(`/api/memory/${memoryId}`, {
+      method: "DELETE",
+      headers: { cookie },
+    }), { params: Promise.resolve({ id: memoryId }) });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ accepted: true, deleted: true });
+
+    const repeated = await deleteMemory(request(`/api/memory/${memoryId}`, {
+      method: "DELETE",
+      headers: { cookie },
+    }), { params: Promise.resolve({ id: memoryId }) });
+    expect(repeated.status).toBe(200);
+    expect(await repeated.json()).toMatchObject({ accepted: true, deleted: true });
+  });
+
+  it("keeps a missing outbox channel fail-closed for an unknown production target", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("DEPLOY_TARGET", "");
+    vi.stubEnv("NEXT_PUBLIC_DEPLOY_TARGET", "localhost");
+    vi.stubEnv("MEMORY_PRINCIPAL_SECRET", "unknown-production-test-secret");
+    (globalThis as unknown as Record<PropertyKey, unknown>)[Symbol.for("__cloudflare-context__")] = { env: {} };
+    const { memoryId, cookie } = await seedDurableMemory("principal-unknown-production", "unknown-production");
+
+    const response = await deleteMemory(request(`/api/memory/${memoryId}`, { method: "DELETE", headers: { cookie } }), {
+      params: Promise.resolve({ id: memoryId }),
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ accepted: false, reason: "OUTBOX_INVALIDATION_PENDING", deleted: true });
+  });
+
+  it("keeps a Cloudflare deployment marker fail-closed without an invalidation channel", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("DEPLOY_TARGET", "localhost");
+    vi.stubEnv("NEXT_PUBLIC_DEPLOY_TARGET", "localhost");
+    vi.stubEnv("MEMORY_PRINCIPAL_SECRET", "cloudflare-target-test-secret");
+    (globalThis as unknown as Record<PropertyKey, unknown>)[Symbol.for("__cloudflare-context__")] = {
+      env: { DEPLOY_TARGET: "cloudflare" },
+    };
+    const { memoryId, cookie } = await seedDurableMemory("principal-cloudflare-target", "cloudflare-target");
+
+    const response = await deleteMemory(request(`/api/memory/${memoryId}`, { method: "DELETE", headers: { cookie } }), {
+      params: Promise.resolve({ id: memoryId }),
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ accepted: false, reason: "OUTBOX_INVALIDATION_PENDING", deleted: true });
+  });
+
+  it("keeps a failing Durable Object binding retryable on localhost", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("DEPLOY_TARGET", "localhost");
+    vi.stubEnv("NEXT_PUBLIC_DEPLOY_TARGET", "localhost");
+    vi.stubEnv("MEMORY_PRINCIPAL_SECRET", "cloudflare-binding-test-secret");
+    (globalThis as unknown as Record<PropertyKey, unknown>)[Symbol.for("__cloudflare-context__")] = {
+      env: {
+        COACH_AGENT: {
+          idFromName: (name: string) => name,
+          get: () => ({ fetch: async () => new Response(null, { status: 503 }) }),
+        },
+      },
+    };
+    const { memoryId, cookie } = await seedDurableMemory("principal-cloudflare-binding", "cloudflare-binding");
+
+    const response = await deleteMemory(request(`/api/memory/${memoryId}`, { method: "DELETE", headers: { cookie } }), {
+      params: Promise.resolve({ id: memoryId }),
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ accepted: false, reason: "OUTBOX_INVALIDATION_PENDING", deleted: true });
+  });
+
+  it("keeps a failing HTTP invalidator endpoint retryable on localhost", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("DEPLOY_TARGET", "localhost");
+    vi.stubEnv("NEXT_PUBLIC_DEPLOY_TARGET", "localhost");
+    vi.stubEnv("MEMORY_PRINCIPAL_SECRET", "http-invalidator-test-secret");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 })));
+    (globalThis as unknown as Record<PropertyKey, unknown>)[Symbol.for("__cloudflare-context__")] = {
+      env: { MEMORY_OUTBOX_INVALIDATOR_URL: "https://invalidator.example.test/memory" },
+    };
+    const { memoryId, cookie } = await seedDurableMemory("principal-http-invalidator", "http-invalidator");
+
+    const response = await deleteMemory(request(`/api/memory/${memoryId}`, { method: "DELETE", headers: { cookie } }), {
+      params: Promise.resolve({ id: memoryId }),
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ accepted: false, reason: "OUTBOX_INVALIDATION_PENDING", deleted: true });
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it("enforces origin, query and body bounds before touching memory", async () => {

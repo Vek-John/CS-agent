@@ -7,25 +7,19 @@ import {
   type MemoryEvent,
   type MemoryProposal,
 } from "@cs-coach/memory";
-import { createPgSqlExecutor, runMemoryMigrations, PostgresMemoryRepository, PostgresMemoryAuthorizationStore } from "./index";
+import { runMemoryMigrations, PostgresMemoryRepository, PostgresMemoryAuthorizationStore } from "./index";
+import { createNodePostgresPool } from "./driver";
 import { MemoryOutbox } from "../../../tools/memory-outbox.mjs";
 
 const enabled = process.env.RUN_POSTGRES_TESTS === "1";
 
 describe.skipIf(!enabled)("real PostgreSQL memory adapter (opt-in)", () => {
   it("runs migrations and a cross-Demo LearningThread write/recall flow", async () => {
-    // The pg package is deliberately not a dependency of this package.  A
-    // server test harness may inject a pg Pool through the dynamic module
-    // boundary below, keeping browser bundles free of database drivers.
     const databaseUrl = process.env.MEMORY_DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim();
     expect(databaseUrl, "MEMORY_DATABASE_URL or DATABASE_URL is required when RUN_POSTGRES_TESTS=1").toBeTruthy();
-    const dynamicImport = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<unknown>;
-    const pgModule = await dynamicImport("pg").catch(() => undefined);
-    expect(pgModule, "install pg in the server test environment to run this opt-in suite").toBeTruthy();
-    if (!pgModule || !databaseUrl) return;
-    const Pool = (pgModule as { Pool: new (options: { connectionString: string }) => { connect: () => Promise<unknown>; query: (text: string, values?: readonly unknown[]) => Promise<unknown>; end: () => Promise<void> } }).Pool;
-    const pool = new Pool({ connectionString: databaseUrl });
-    const executor = createPgSqlExecutor(pool as never);
+    if (!databaseUrl) return;
+    const handle = await createNodePostgresPool({ connectionString: databaseUrl });
+    const { executor, pool } = handle;
     const userId = `real-pg-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
     try {
       await runMemoryMigrations(executor);
@@ -150,7 +144,7 @@ describe.skipIf(!enabled)("real PostgreSQL memory adapter (opt-in)", () => {
         // If core migration itself failed there may be no app_users table yet;
         // preserve the original test failure rather than masking it here.
       }
-      await pool.end();
+      await handle.close();
     }
   });
 });

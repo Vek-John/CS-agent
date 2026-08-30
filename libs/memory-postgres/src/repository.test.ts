@@ -133,6 +133,19 @@ function makeProfileProposal(): MemoryProposal {
   }) as unknown as MemoryProposal;
 }
 
+function makeProfileRecord(): MemoryRecord {
+  const proposal = makeProfileProposal();
+  const decision = new MemoryWritePolicy().decide({ proposal });
+  const record = new MemoryReducer().reduce({
+    userId,
+    proposal,
+    decision,
+    now: "2026-08-28T00:00:10.000Z",
+  });
+  if (!record) throw new Error("profile fixture was not reduced");
+  return MemoryRecordSchema.parse(record) as unknown as MemoryRecord;
+}
+
 class FakeExecutor implements SqlExecutor {
   readonly calls: Array<{ text: string; values: readonly unknown[] }> = [];
   private readonly handler: (text: string, values: readonly unknown[]) => Promise<SqlResult> | SqlResult;
@@ -184,6 +197,58 @@ describe("PostgresMemoryRepository SQL adapter", () => {
       profile: proposal.profile,
     });
     expect(storedPayload?.profile).toEqual(proposal.profile);
+  });
+
+  it("builds targeted PROFILE management proposals without reopening PROFILE writes", () => {
+    const current = makeProfileRecord();
+    const repository = new PostgresMemoryRepository({
+      executor: new FakeExecutor(() => {
+        throw new Error("management proposal construction must not query SQL");
+      }),
+    });
+    const internals = repository as unknown as {
+      proposalFromCurrent: (
+        userId: string,
+        record: MemoryRecord,
+        operation: "CORRECT" | "DELETE" | "CONFIRM",
+        input: unknown,
+      ) => MemoryProposal;
+    };
+
+    const proposals = [
+      internals.proposalFromCurrent(userId, current, "CONFIRM", { confirmationId: "confirm-profile" }),
+      internals.proposalFromCurrent(userId, current, "CORRECT", {
+        correctionId: "correct-profile",
+        content: "我主要打步枪位",
+      }),
+      internals.proposalFromCurrent(userId, current, "DELETE", { reason: "remove profile" }),
+    ];
+
+    expect(proposals.map(({ operation, eventType }) => ({ operation, eventType }))).toEqual([
+      { operation: "CONFIRM", eventType: "USER_CONFIRMED" },
+      { operation: "CORRECT", eventType: "USER_CORRECTED_COACH" },
+      { operation: "DELETE", eventType: "MEMORY_DELETED" },
+    ]);
+    for (const proposal of proposals) {
+      expect(proposal).toMatchObject({ kind: "PROFILE", targetMemoryId: current.memoryId });
+      expect(proposal).not.toHaveProperty("profile");
+      expect(MemoryProposalSchema.safeParse(proposal).success).toBe(true);
+      expect(MemoryProposalSchema.safeParse({ ...proposal, targetMemoryId: undefined }).success).toBe(false);
+      const decision = new MemoryWritePolicy().decide({ proposal, current, eventType: proposal.eventType });
+      expect(decision.accepted).toBe(true);
+      expect(new MemoryReducer().reduce({ userId, proposal, decision, current })).toMatchObject({
+        memoryId: current.memoryId,
+        kind: "PROFILE",
+        status: proposal.operation === "DELETE" ? "DELETED" : "CONFIRMED",
+      });
+    }
+
+    const create = makeProfileProposal();
+    const { profile: _profile, ...profilelessCreate } = create;
+    expect(MemoryProposalSchema.safeParse(profilelessCreate).success).toBe(false);
+    expect(MemoryProposalSchema.safeParse({ ...create, eventType: "USER_CONFIRMED" }).success).toBe(false);
+    expect(MemoryProposalSchema.safeParse({ ...create, operation: "UPDATE" }).success).toBe(true);
+    expect(MemoryProposalSchema.safeParse({ ...profilelessCreate, operation: "UPDATE" }).success).toBe(false);
   });
 
   it("always scopes structured recall by user_id and validates database JSON", async () => {
@@ -585,6 +650,63 @@ describe("PostgresMemoryRepository SQL adapter", () => {
     });
     const repository = new PostgresMemoryRepository({ executor });
     await expect(repository.listMemoryIdsForDeletion(userId, 10)).resolves.toEqual(["memory-privacy-id"]);
+  });
+
+  for (const [label, sourceRefs] of [
+    ["an empty source-ref list", []],
+    ["bounded source refs", makeProposal("residue-source-ref").origin.typedSourceRefs],
+  ] as const) {
+    it(`purges single-memory residue with ${label}`, async () => {
+      let serializedSourceRefs: unknown;
+      const executor = new FakeExecutor((text, values) => {
+        if (text === "BEGIN" || text === "COMMIT" || text === "ROLLBACK") return { rows: [] };
+        if (text.includes("SELECT user_id, memory_enabled, consent FROM app_users")) {
+          return { rows: [{ user_id: userId, memory_enabled: true, consent: "GRANTED" }] };
+        }
+        if (text.includes("DELETE FROM memory_observations")) {
+          serializedSourceRefs = values[3];
+          return { rows: [] };
+        }
+        if (text.includes("SELECT to_regclass('memory_embeddings_v1')")) return { rows: [] };
+        if (text.includes("DELETE FROM memory_") || text.includes("DELETE FROM learning_threads") || text.includes("UPDATE memory_events")) {
+          return { rows: [] };
+        }
+        throw new Error(`unexpected SQL: ${text}`);
+      });
+      const repository = new PostgresMemoryRepository({ executor, vectorAvailable: false });
+
+      await expect(repository.purgeMemoryResidue(
+        userId,
+        "memory-residue",
+        "logical-residue",
+        sourceRefs,
+      )).resolves.toBeUndefined();
+
+      expect(JSON.parse(String(serializedSourceRefs))).toEqual(sourceRefs);
+      expect(executor.calls.filter((call) => call.text === "COMMIT")).toHaveLength(1);
+    });
+  }
+
+  it("keeps persisted JSON safety limits on single-memory residue source refs", async () => {
+    const validRef = makeProposal("unsafe-residue-source-ref").origin.typedSourceRefs[0];
+    const executor = new FakeExecutor(() => {
+      throw new Error("unsafe source refs must fail before SQL");
+    });
+    const repository = new PostgresMemoryRepository({ executor });
+
+    await expect(repository.purgeMemoryResidue(
+      userId,
+      "memory-residue",
+      "logical-residue",
+      [{ ...validRef, prompt: "forbidden persisted field" }],
+    )).rejects.toThrow("FORBIDDEN_PERSISTED_FIELD:prompt");
+    await expect(repository.purgeMemoryResidue(
+      userId,
+      "memory-residue",
+      "logical-residue",
+      Array.from({ length: 65 }, () => validRef),
+    )).rejects.toThrow("PERSISTED_ARRAY_TOO_LONG");
+    expect(executor.calls).toHaveLength(0);
   });
 
   it("turns every current record into a redacted tombstone during one authorized purge transaction", async () => {

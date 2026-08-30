@@ -122,7 +122,7 @@ describe.skipIf(!liveEnabled)("real PostgreSQL memory migration smoke (opt-in)",
       });
       await expect(service.getProfile(userId)).resolves.toEqual(saved.record?.profile);
       if (!saved.record) throw new Error("PROFILE smoke record was not persisted");
-      await expect(repository.deleteMemory(userId, saved.record.memoryId, { reason: "smoke cleanup" }))
+      await expect(service.delete(userId, saved.record.memoryId, { reason: "smoke cleanup" }))
         .resolves.toMatchObject({ status: "DELETED" });
       await expect(service.getProfile(userId)).resolves.toBeUndefined();
     }));

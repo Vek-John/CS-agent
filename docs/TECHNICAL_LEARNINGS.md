@@ -995,6 +995,42 @@ Outbox 在发送前复核实时 consent authority：authority outage 返回 fail
 
 当前环境没有提供 `MEMORY_DATABASE_URL` 或 `DATABASE_URL`，因此没有运行真实 PostgreSQL migration、持久化 consent/profile 或重启恢复；上述 Memory HTTP smoke 只证明 InMemory 垂直链路，不能称为长期持久化验收。也未运行真实 embedding provider、Cloudflare/Hyperdrive/DO 或桌面壳；桌面容器仍需在权限、进程生命周期、签名更新和可测量包体证据就绪后用独立 ADR 选型。
 
+### 4.44 2026-08-30：localhost 长期记忆必须用真实重启证明“持久”
+
+**触发**
+
+4.43 只验证了 `IN_MEMORY` 垂直链路，它能证明 consent/profile API 和本地启动契约可用，但不能证明 migration 能在真实 PostgreSQL 执行、跨 Demo 记忆能从新 Session 召回，也不能证明用户资料在应用完整停止后仍存在。把 `storage=IN_MEMORY` 的 HTTP 200 写成“长期记忆已就绪”会混淆功能可用与持久性两个不同结论。
+
+真库验收还暴露了三个被 fake adapter 遮住的具体问题。第一，real test 最初从脱离工作区模块解析位置的 seam 执行 `dynamic import("pg")`，失败反映的是测试 harness 与生产驱动路径不一致，不是 PostgreSQL 连通性失败。第二，PROFILE 管理 proposal schema 把“必须有 profile”错误施加到所有 operation，因而拦住不应携带资料正文的 DELETE。第三，service delete 在 tombstone 已提交后运行 `purgeMemoryResidue`，却把合法 `sourceRefs` 顶层数组直接交给只接收 object 的持久化 payload guard；真实 HTTP 因此表现为删除墓碑已落库，但请求返回 503。
+
+**决定**
+
+使用 macOS Homebrew 的 `postgresql@17` 作为 localhost 单机真相源，由 `brew services` 管理数据库生命周期，并把项目数据限定在显式数据库 `cs_agent_local`。应用继续通过已忽略提交的 `.local-data/deepseek.env` 读取 `MEMORY_DATABASE_URL`、功能开关和稳定匿名 principal 签名配置；凭据值不进入 Git、文档或验证输出。
+
+先执行 core migration，再执行可选 vector migration；`memory_schema_migrations` 是已应用版本的可审计 ledger，pgvector 仍只是可重建的派生索引能力。localhost 持久性的验收标准不是“进程返回 200”，而是：同一签名匿名 principal 完成 consent 与 profile 写入，完整停止并重启应用后，仍能从 PostgreSQL 读回同一 profile，且 status 明确为 `POSTGRES`/durable。
+
+Real tests 不再建第二套 `pg` 加载路径，改为复用生产 `createNodePostgresPool`，使测试与真实 runtime 共用连接配置、驱动解析和关闭语义。PROFILE proposal 的约束收紧到精确 operation：只有 `CREATE`/`UPDATE` 必须携带 profile，`DELETE` 仍使用不带资料正文的 tombstone 语义。`purgeMemoryResidue` 改为向原 object-only guard 传入 `{ sourceRefs }`，仅修正调用形状；没有放宽通用 persisted payload 必须为 object、不得携带 raw artifact 的边界。
+
+**落点**
+
+运行环境落在 Homebrew PostgreSQL service、`cs_agent_local` 和已忽略的本地 env 文件；核心结构仍由 `libs/memory-postgres` 的同一 migration/repository 边界创建和访问，没有新增第二套本地 store。`README.md` 只补充安装、建库、migration、启停、状态与故障检查命令；长期模块、权威与隐私契约仍以 `ARCHITECTURE.md` 为唯一事实源。
+
+最终修复分别落在 real PostgreSQL 测试的生产 pool factory seam、PROFILE 管理 proposal 的 operation-aware schema，以及 Memory Service 删除后清理的 payload guard 调用点。这三处都复用原模块，没有新增 PostgreSQL adapter、宽松 payload schema 或绕过 tombstone 的特殊 API。
+
+**验证**
+
+Homebrew PostgreSQL **17.11** 以 service 形式运行，`cs_agent_local` 连接成功。真实 migration ledger 包含 `memory-core-001`、`memory-core-003` 和 `memory-vector-002`，数据库中 pgvector extension 版本为 **0.8.6**。以 `RUN_POSTGRES_TESTS=1` 启用的真实 migration/cross-Demo suites 为 **3/3 通过**：覆盖空 schema 的 core migration，已记录 `core-001` 的 legacy schema 升级与幂等重跑，以及两个不同 Demo hash 从 `CANDIDATE` 晋级 active memory、新 `MemoryService` 实例召回的完整链路。测试使用隔离 schema 或随机测试 principal，并在结束时清理自己的数据。
+
+真实 localhost 应用完成 consent 和 profile 写入后，`/api/memory/status` 报告 `storage=POSTGRES` 且 `durable=true`。完整停止并重启应用后，使用同一签名匿名 principal 再次读取 profile，内容仍存在，证明它来自 PostgreSQL 而非旧 Node 进程内存。本轮所有输出只记录版本、migration ID、HTTP/存储状态与测试计数，未记录连接凭据、API key 或签名密钥。
+
+修复后使用一个全新签名匿名 principal 重跑真实 PostgreSQL HTTP 链路：consent 写入成功，profile POST/GET 成功，DELETE 返回 HTTP 200，随后 profile 为 `null`。数据库复查显示该 smoke 数据只留下不含资料正文的脱敏 tombstone，active records 为 **0**；因此这次不再把“墓碑已提交但清理返回 503”误记为删除未发生，也不把 503 接口状态接受为正常成功。
+
+最终全量 Vitest 执行 **96 files**，**715 passed**、**4 skipped**；其中显式启用真库的 PostgreSQL suites 为 **2 files / 3 passed**。`pnpm typecheck` 与 `pnpm build` 均通过。这些结果与上述真实 HTTP 重跑一起构成本轮 localhost PostgreSQL 收口证据，但不代表未运行的外部系统。
+
+**限制 / 下一步**
+
+本轮只验证 macOS 单机 Homebrew PostgreSQL，不包含 Cloudflare、Hyperdrive、Durable Object 或远程数据库，也不把 localhost 结果外推为云部署结论。pgvector extension 和 vector migration 已就绪，但没有配置或验证真实 embedding provider，因此本轮语义召回仍不是验收项。Homebrew service 的备份、升级和本机凭据轮换仍由操作者管理；项目不自动 drop/reset 任何本地数据库。
+
 ## 5. 常用问题排查表
 
 | 现象 | 首先检查 | 常见根因 | 不要做什么 |
