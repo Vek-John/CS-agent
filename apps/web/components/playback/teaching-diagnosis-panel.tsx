@@ -127,7 +127,10 @@ export function TeachingDiagnosisPanel({
   if (!cueCase || cueCase.status === "REFLECTION_PENDING") {
     return (
       <section className={styles.panel} aria-live="polite" aria-labelledby={`${cue.id}-reflection-title`}>
-        <div className={styles.kicker}>先说说你的思路</div>
+        <div className={styles.topline}>
+          <div className={styles.kicker}>先说说你的思路</div>
+          <span className={styles.counter}>1 / 2</span>
+        </div>
         <h3 id={`${cue.id}-reflection-title`}>{question}</h3>
         <p className={styles.lede}>只选一个最接近的目标即可，也可以补一句话；不需要猜结果。</p>
         <div className={styles.goalGrid} role="group" aria-label="当时的目标">
@@ -170,7 +173,10 @@ export function TeachingDiagnosisPanel({
   if (cueCase.status === "FALLBACK" || !cueCase.hinge || !cueCase.diagnosticResult || !cueCase.verdict || !cueCase.transferRule) {
     return (
       <section className={`${styles.panel} ${styles.fallback}`} aria-live="polite">
-        <div className={styles.kicker}>基础讲解</div>
+        <div className={styles.topline}>
+          <div className={styles.kicker}>基础讲解</div>
+          <span className={styles.counter}>已降级</span>
+        </div>
         <h3>这次先不做自适应诊断</h3>
         <p className={styles.lede}>保留原有的事实和讲解，你仍然可以继续回放。</p>
         <Limitations values={cueCase.limitations} />
@@ -183,7 +189,10 @@ export function TeachingDiagnosisPanel({
   const showDisagreement = disagreeing && cueCase.attemptBudget.disagreement < 1;
   return (
     <section className={styles.panel} aria-live="polite" aria-labelledby={`${cue.id}-diagnosis-title`}>
-      <div className={styles.kicker}>你的思路 · {cueCase.pedagogyMode === "CLARIFY" ? "继续澄清" : "第一次讲清"}</div>
+      <div className={styles.topline}>
+        <div className={styles.kicker}>你的思路 · {cueCase.pedagogyMode === "CLARIFY" ? "继续澄清" : "第一次讲清"}</div>
+        <span className={styles.counter}>2 / 2</span>
+      </div>
       <h3 id={`${cue.id}-diagnosis-title`}>诊断完成</h3>
       <div className={styles.claimBox}>
         <span>你的思路</span>

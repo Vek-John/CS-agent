@@ -16,13 +16,10 @@ export default async function DesktopPage() {
   if (!viewerOrigin || !appOrigin) notFound();
 
   return (
-    <>
-      <a className="memory-home-entry" href="/memory">长期记忆</a>
-      <Cs2dPlaybackHost
-        deployTarget="desktop"
-        parentOrigin={appOrigin}
-        viewerUrl={`${viewerOrigin}/`}
-      />
-    </>
+    <Cs2dPlaybackHost
+      deployTarget="desktop"
+      parentOrigin={appOrigin}
+      viewerUrl={`${viewerOrigin}/`}
+    />
   );
 }

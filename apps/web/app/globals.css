@@ -239,28 +239,6 @@ button:disabled {
 .demo-intake-error { border: 0.0625rem solid rgba(255, 69, 58, 0.24); background: rgba(255, 69, 58, 0.09); color: #ffb4ae; font-size: 0.72rem; }
 @keyframes demo-progress-sweep { to { transform: translateX(365%); } }
 
-/* Long-term memory management is intentionally namespaced so the playback
-   host keeps its existing layout and interaction contract. */
-.memory-home-entry {
-  position: fixed;
-  z-index: 120;
-  top: 0.9rem;
-  right: 1rem;
-  min-height: 2.15rem;
-  padding: 0.45rem 0.75rem;
-  border: 0.0625rem solid rgba(100, 170, 255, 0.32);
-  border-radius: 0.7rem;
-  background: rgba(14, 16, 19, 0.78);
-  color: var(--text-secondary);
-  font-size: 0.72rem;
-  text-decoration: none;
-  backdrop-filter: blur(1rem) saturate(150%);
-  -webkit-backdrop-filter: blur(1rem) saturate(150%);
-  transition: color 160ms var(--ease-out), border-color 160ms var(--ease-out), transform 120ms var(--ease-out);
-}
-.memory-home-entry:active { transform: scale(0.97); }
-.memory-home-entry:focus-visible { color: var(--text); }
-
 .memory-page {
   width: min(70rem, 100%);
   min-height: 100vh;
@@ -374,7 +352,6 @@ button:disabled {
 .memory-empty p { max-width: 30rem; margin: 0.5rem 0 0; font-size: 0.76rem; }
 
 @media (hover: hover) and (pointer: fine) {
-  .memory-home-entry:hover { border-color: rgba(100, 170, 255, 0.72); color: var(--text); }
   .memory-button:hover:not(:disabled) { border-color: var(--line-strong); background-color: rgba(255, 255, 255, 0.09); }
   .memory-button-primary:hover:not(:disabled) { background-color: #2b95ff; }
   .memory-button-danger:hover:not(:disabled) { background-color: rgba(255, 69, 58, 0.1); }
@@ -390,21 +367,17 @@ button:disabled {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .memory-home-entry,
   .memory-button { transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease; }
-  .memory-home-entry:active,
   .memory-button:active:not(:disabled) { transform: none; }
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .memory-home-entry,
   .memory-consent-card,
   .memory-record-card,
   .memory-profile-field input { background: var(--surface-heavy); backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
 
 @media (prefers-contrast: more) {
-  .memory-home-entry,
   .memory-consent-card,
   .memory-record-card,
   .memory-button,
@@ -2200,56 +2173,125 @@ button:disabled {
 /* cs2d localhost playback host ------------------------------------------------ */
 .cs2d-host-shell {
   min-height: 100dvh;
-  padding: 0.8rem;
+  padding: 0.72rem;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 0.7rem;
-  background: #08090b;
+  gap: 0.72rem;
+  background:
+    radial-gradient(circle at 12% -8%, rgba(10, 132, 255, 0.15), transparent 26rem),
+    radial-gradient(circle at 92% 4%, rgba(191, 90, 242, 0.07), transparent 22rem),
+    linear-gradient(rgba(255, 255, 255, 0.016) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.016) 1px, transparent 1px),
+    #08090b;
+  background-size: auto, auto, 2.5rem 2.5rem, 2.5rem 2.5rem, auto;
 }
 .cs2d-host-header,
 .cs2d-host-timeline {
   min-width: 0;
   border: 0.0625rem solid var(--line);
-  background: rgba(17, 19, 23, 0.82);
-  backdrop-filter: blur(1.25rem) saturate(145%);
-  -webkit-backdrop-filter: blur(1.25rem) saturate(145%);
+  background: rgba(17, 19, 23, 0.78);
+  backdrop-filter: blur(1.5rem) saturate(160%);
+  -webkit-backdrop-filter: blur(1.5rem) saturate(160%);
+  box-shadow: inset 0 0.0625rem rgba(255, 255, 255, 0.045), 0 0.8rem 2.5rem rgba(0, 0, 0, 0.16);
 }
 .cs2d-host-header {
-  min-height: 3.8rem;
-  padding: 0.65rem 0.9rem;
+  position: relative;
+  min-height: 4.25rem;
+  padding: 0.7rem 0.78rem 0.7rem 0.72rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  border-radius: 1rem;
+  overflow: hidden;
+  border-radius: 1.1rem;
 }
+.cs2d-host-header::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, rgba(100, 170, 255, 0.065), transparent 34%, transparent 72%, rgba(191, 90, 242, 0.04));
+  pointer-events: none;
+}
+.cs2d-host-brand,
+.cs2d-host-header-actions { position: relative; z-index: 1; }
+.cs2d-host-brand { min-width: 0; display: flex; align-items: center; gap: 0.68rem; }
+.cs2d-host-mark {
+  width: 2.55rem;
+  height: 2.55rem;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 0.0625rem solid rgba(112, 183, 255, 0.3);
+  border-radius: 0.82rem;
+  background: linear-gradient(145deg, rgba(10, 132, 255, 0.32), rgba(72, 55, 145, 0.2));
+  color: #d9ebff;
+  box-shadow: inset 0 0.0625rem rgba(255, 255, 255, 0.15), 0 0.5rem 1.4rem rgba(10, 132, 255, 0.16);
+}
+.cs2d-host-mark svg { width: 1.05rem; height: 1.05rem; stroke-width: 1.9; }
 .cs2d-host-eyebrow { margin: 0; color: var(--blue-bright); font-size: 0.56rem; font-weight: 750; letter-spacing: 0.16em; }
-.cs2d-host-header h1 { margin: 0.05rem 0 0; font-size: 1.05rem; letter-spacing: 0; }
+.cs2d-host-header h1 { margin: 0.05rem 0 0; font-size: 1.12rem; line-height: 1.18; letter-spacing: -0.018em; }
+.cs2d-host-header-actions { min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; }
+.cs2d-host-memory-link {
+  min-height: 2.2rem;
+  padding: 0.38rem 0.5rem 0.38rem 0.62rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.36rem;
+  border: 0.0625rem solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font-size: 0.69rem;
+  font-weight: 650;
+  text-decoration: none;
+  transition: transform 120ms var(--ease-out), color 150ms ease, border-color 150ms ease, background-color 150ms ease;
+}
+.cs2d-host-memory-link svg:first-child { width: 0.9rem; height: 0.9rem; color: #bda7ff; }
+.cs2d-host-memory-link svg:last-child { width: 0.78rem; height: 0.78rem; color: var(--text-tertiary); }
+.cs2d-host-memory-link:active { transform: scale(0.97); }
 .cs2d-host-status { display: inline-flex; align-items: center; gap: 0.45rem; color: var(--text-secondary); font-size: 0.67rem; }
 .cs2d-host-status span { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0.8rem rgba(255,159,10,0.42); }
 .cs2d-host-status[data-phase="READY"] span { background: var(--green); box-shadow: 0 0 0.8rem rgba(48,209,88,0.42); }
 .cs2d-host-status[data-phase="ERROR"] span { background: var(--red); }
-.cs2d-host-workspace { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 20rem; gap: 0.7rem; }
+.cs2d-host-workspace { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) clamp(21.5rem, 27vw, 25.5rem); gap: 0.72rem; }
 .cs2d-host-stage,
 .cs2d-host-coach {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
   border: 0.0625rem solid var(--line);
-  border-radius: 1.15rem;
-  background: rgba(14, 16, 19, 0.9);
+  border-radius: 1.2rem;
+  background: rgba(14, 16, 19, 0.88);
   box-shadow: var(--shadow-stage);
 }
-.cs2d-host-stage iframe { width: 100%; height: 100%; min-height: 38rem; display: block; border: 0; background: #07080c; }
-.cs2d-host-coach { padding: 0.85rem; overflow-y: auto; }
+.cs2d-host-stage { border-color: rgba(255, 255, 255, 0.12); box-shadow: 0 2.2rem 6rem rgba(0, 0, 0, 0.44), inset 0 0.0625rem rgba(255, 255, 255, 0.06); }
+.cs2d-host-stage iframe { width: 100%; height: 100%; min-height: 39rem; display: block; border: 0; background: #07080c; }
+.cs2d-host-coach {
+  padding: 1rem;
+  overflow-y: auto;
+  background: linear-gradient(165deg, rgba(21, 24, 30, 0.94), rgba(13, 15, 18, 0.9));
+  scrollbar-color: rgba(255,255,255,0.2) transparent;
+  scrollbar-width: thin;
+}
 .cs2d-coach-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.7rem; }
 .cs2d-coach-heading small,
-.cs2d-coach-card small { color: var(--text-tertiary); font-size: 0.58rem; letter-spacing: 0.08em; }
-.cs2d-coach-heading h2 { margin: 0.15rem 0 0; font-size: 0.92rem; line-height: 1.3; }
-.cs2d-coach-focus {
-  margin: 0.22rem 0 0;
+.cs2d-coach-card small { color: var(--text-tertiary); font-size: 0.62rem; letter-spacing: 0.075em; }
+.cs2d-coach-kicker {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
   color: var(--blue-bright);
-  font-size: 0.65rem;
+  font-size: 0.58rem;
+  font-weight: 760;
+  letter-spacing: 0.1em;
+}
+.cs2d-coach-kicker svg { width: 0.72rem; height: 0.72rem; }
+.cs2d-coach-heading h2 { margin: 0.18rem 0 0; font-size: 1rem; line-height: 1.3; letter-spacing: -0.012em; }
+.cs2d-coach-focus {
+  margin: 0.3rem 0 0;
+  color: var(--blue-bright);
+  font-size: 0.69rem;
   font-weight: 680;
   line-height: 1.3;
   overflow: hidden;
@@ -2301,54 +2343,68 @@ button:disabled {
 .cs2d-coach-free-view h3 { margin: 0.32rem 0 0; color: var(--text); font-size: 0.88rem; line-height: 1.36; }
 .cs2d-coach-free-view p { margin: 0.58rem 0 0; color: var(--text-secondary); font-size: 0.67rem; line-height: 1.58; }
 .cs2d-coach-free-view span { display: block; margin-top: 0.58rem; color: #ffd48a; font-size: 0.58rem; }
-.cs2d-coach-badge { display: inline-flex; align-items: baseline; gap: 0.24rem; padding: 0.22rem 0.4rem; border: 0.0625rem solid rgba(48,209,88,0.25); border-radius: 99rem; color: #78e993; font-size: 0.57rem; line-height: 1; white-space: nowrap; }
+.cs2d-coach-badge { display: inline-flex; align-items: baseline; gap: 0.24rem; padding: 0.3rem 0.48rem; border: 0.0625rem solid rgba(48,209,88,0.25); border-radius: 99rem; background: rgba(48,209,88,0.065); color: #78e993; font-size: 0.59rem; line-height: 1; white-space: nowrap; }
 .cs2d-coach-badge small { color: rgba(120,233,147,0.72); font: 650 0.46rem/1 system-ui, sans-serif; }
 .cs2d-coach-badge b { font: 650 0.49rem/1 ui-monospace, monospace; }
-.cs2d-coach-card { margin-top: 0.8rem; padding: 0.75rem; border: 0.0625rem solid var(--line); border-radius: 0.8rem; background: rgba(255,255,255,0.035); }
-.cs2d-coach-card p { margin: 0.3rem 0 0; color: var(--text-secondary); font-size: 0.67rem; line-height: 1.55; }
+.cs2d-coach-route-progress {
+  margin-top: 0.8rem;
+  padding: 0.62rem 0.7rem;
+  border: 0.0625rem solid rgba(100, 170, 255, 0.15);
+  border-radius: 0.72rem;
+  background: rgba(10, 132, 255, 0.045);
+}
+.cs2d-coach-route-progress > div { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; }
+.cs2d-coach-route-progress > div span { color: var(--text-secondary); font-size: 0.62rem; font-weight: 650; }
+.cs2d-coach-route-progress > div b { color: #b9dcff; font: 700 0.57rem/1 ui-monospace, monospace; }
+.cs2d-coach-route-progress > span { position: relative; height: 0.24rem; margin-top: 0.48rem; display: block; overflow: hidden; border-radius: 999px; background: rgba(255, 255, 255, 0.08); }
+.cs2d-coach-route-progress i { position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(90deg, var(--blue), #64d2ff); transform-origin: left center; transition: transform 180ms var(--ease-out); }
+.cs2d-coach-card { position: relative; margin-top: 0.82rem; padding: 0.82rem; overflow: hidden; border: 0.0625rem solid var(--line); border-radius: 0.88rem; background: rgba(255,255,255,0.037); box-shadow: inset 0 0.0625rem rgba(255,255,255,0.035); }
+.cs2d-coach-card p { margin: 0.32rem 0 0; color: var(--text-secondary); font-size: 0.72rem; line-height: 1.56; }
 .cs2d-coach-card--error { border-color: rgba(255,69,58,0.35); background: rgba(255,69,58,0.075); }
 .cs2d-coach-card--error small { color: #ff8f88; }
 .cs2d-coach-cue,
 .cs2d-coach-summary {
-  margin-top: 0.8rem;
-  padding: 0.85rem;
-  border: 0.0625rem solid rgba(100,170,255,0.24);
-  border-radius: 0.9rem;
-  background: rgba(10,132,255,0.06);
+  margin-top: 0.85rem;
+  padding: 0.92rem;
+  border: 0.0625rem solid rgba(100,170,255,0.28);
+  border-radius: 1rem;
+  background: linear-gradient(150deg, rgba(10,132,255,0.11), rgba(255,255,255,0.028) 58%);
+  box-shadow: inset 0 0.0625rem rgba(255,255,255,0.06), 0 1rem 2.6rem rgba(0,0,0,0.16);
 }
 .cs2d-coach-cue > small,
 .cs2d-coach-summary > small { color: var(--blue-bright); font-size: 0.56rem; font-weight: 720; letter-spacing: 0.09em; }
 .cs2d-coach-cue h3,
-.cs2d-coach-summary h3 { margin: 0.32rem 0 0; color: var(--text); font-size: 0.88rem; line-height: 1.36; letter-spacing: 0; }
+.cs2d-coach-summary h3 { margin: 0.35rem 0 0; color: var(--text); font-size: 0.96rem; line-height: 1.35; letter-spacing: -0.012em; }
 .cs2d-coach-cue > p,
-.cs2d-coach-summary p { margin: 0.58rem 0 0; color: var(--text-secondary); font-size: 0.67rem; line-height: 1.58; }
+.cs2d-coach-summary p { margin: 0.58rem 0 0; color: var(--text-secondary); font-size: 0.72rem; line-height: 1.58; }
 .cs2d-coach-cue-heading small { color: var(--blue-bright); font-size: 0.56rem; font-weight: 720; letter-spacing: 0; }
 .cs2d-coach-cue-heading h3 { margin-top: 0.32rem; }
 .cs2d-coaching-bands { display: grid; gap: 0.5rem; margin-top: 0.78rem; }
 .cs2d-coaching-band {
-  padding: 0.7rem;
+  padding: 0.76rem;
   border: 0.0625rem solid;
-  border-radius: 0.72rem;
+  border-radius: 0.8rem;
   background: rgba(255,255,255,0.035);
+  box-shadow: inset 0 0.0625rem rgba(255,255,255,0.04);
 }
 .cs2d-coaching-band--situation { border-color: rgba(77,163,255,0.32); background: rgba(10,132,255,0.07); }
 .cs2d-coaching-band--problem { border-color: rgba(255,98,88,0.3); background: rgba(255,69,58,0.065); }
 .cs2d-coaching-band--better { border-color: rgba(82,216,120,0.28); background: rgba(48,209,88,0.06); }
 .cs2d-coaching-band-heading { display: flex; align-items: center; gap: 0.42rem; }
-.cs2d-coaching-band-heading strong { color: var(--text); font-size: 0.68rem; font-weight: 740; letter-spacing: -0.005em; }
+.cs2d-coaching-band-heading strong { color: var(--text); font-size: 0.72rem; font-weight: 740; letter-spacing: -0.005em; }
 .cs2d-coaching-band-icon { width: 1.35rem; height: 1.35rem; display: grid; place-items: center; border-radius: 0.42rem; color: var(--text-secondary); background: rgba(255,255,255,0.07); }
 .cs2d-coaching-band-icon svg { width: 0.76rem; height: 0.76rem; stroke-width: 2; }
-.cs2d-coaching-band > p { margin: 0.48rem 0 0; color: #e0e3e8; font-size: 0.65rem; line-height: 1.52; }
+.cs2d-coaching-band > p { margin: 0.5rem 0 0; color: #e0e3e8; font-size: 0.71rem; line-height: 1.55; }
 .cs2d-coaching-band--problem > p { color: #ffd1cd; }
 .cs2d-coaching-band--better > p { color: #dbf7e2; }
 .cs2d-coaching-status-list { margin: 0.55rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.32rem; list-style: none; }
-.cs2d-coaching-status-list li { min-height: 1.72rem; margin: 0; padding: 0.28rem 0.45rem; display: inline-flex; align-items: center; gap: 0.28rem; border: 0.0625rem solid rgba(112,180,255,0.18); border-radius: 0.52rem; background: rgba(7,18,31,0.54); color: #e7f2ff; font-size: 0.58rem; font-weight: 650; line-height: 1.2; }
+.cs2d-coaching-status-list li { min-height: 1.82rem; margin: 0; padding: 0.3rem 0.48rem; display: inline-flex; align-items: center; gap: 0.3rem; border: 0.0625rem solid rgba(112,180,255,0.18); border-radius: 0.58rem; background: rgba(7,18,31,0.54); color: #e7f2ff; font-size: 0.62rem; font-weight: 650; line-height: 1.2; }
 .cs2d-coaching-status-list svg,
 .cs2d-coaching-status-list img { width: 0.9rem; height: 0.9rem; flex: 0 0 auto; object-fit: contain; color: #75b9ff; }
 .cs2d-coaching-status-list img { width: 1.25rem; filter: brightness(0) invert(1); opacity: 0.9; }
 .cs2d-coaching-consequence { margin-top: 0.55rem; padding-top: 0.48rem; display: flex; align-items: flex-start; gap: 0.34rem; border-top: 0.0625rem solid rgba(255,98,88,0.18); color: #ffaaa4; }
 .cs2d-coaching-consequence svg { width: 0.72rem; height: 0.72rem; margin-top: 0.14rem; flex: 0 0 auto; }
-.cs2d-coaching-consequence span { font-size: 0.59rem; line-height: 1.48; }
+.cs2d-coaching-consequence span { font-size: 0.63rem; line-height: 1.48; }
 .cs2d-coaching-trigger { display: block; margin-top: 0.42rem; color: var(--text-tertiary); font-size: 0.55rem; line-height: 1.45; }
 .cs2d-coaching-advice { margin-top: 0.62rem; padding-top: 0.58rem; border-top: 0.0625rem solid rgba(82,216,120,0.22); }
 .cs2d-coaching-advice strong { color: #93f2aa; font-size: 0.59rem; font-weight: 720; }
@@ -2360,27 +2416,27 @@ button:disabled {
 .cs2d-coach-action small { color: var(--text-tertiary); font-size: 0.56rem; line-height: 1.45; }
 .cs2d-coach-primary,
 .cs2d-coach-result-actions button {
-  min-height: 2.65rem;
+  min-height: 2.75rem;
   margin-top: 0.72rem;
   padding: 0.55rem 0.72rem;
   border: 0.0625rem solid var(--line-strong);
-  border-radius: 0.7rem;
+  border-radius: 0.76rem;
   background: rgba(255,255,255,0.055);
   color: var(--text);
   cursor: pointer;
-  font-size: 0.63rem;
+  font-size: 0.68rem;
   font-weight: 680;
   transition: transform 140ms var(--ease-out), background-color 140ms ease, border-color 140ms ease;
 }
-.cs2d-coach-primary { width: 100%; border-color: rgba(100,170,255,0.52); background: #0a74df; color: #fff; }
+.cs2d-coach-primary { width: 100%; border-color: rgba(100,170,255,0.58); background: linear-gradient(180deg, #1689f5, #0873d9); color: #fff; box-shadow: inset 0 0.0625rem rgba(255,255,255,0.22), 0 0.55rem 1.2rem rgba(10,132,255,0.16); }
 .cs2d-coach-result-actions { display: grid; grid-template-columns: 1fr 1.2fr; gap: 0.38rem; }
 .cs2d-coach-result-actions .cs2d-coach-primary { width: auto; }
 .cs2d-coach-summary { border-color: rgba(48,209,88,0.25); background: linear-gradient(145deg, rgba(48,209,88,0.085), rgba(255,255,255,0.025) 58%); }
 .cs2d-coach-summary > small { color: #8ce9a2; }
 .cs2d-coach-facts { margin: 0.75rem 0 0; border-top: 0.0625rem solid var(--line); }
 .cs2d-coach-facts div { min-height: 2.1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 0.0625rem solid var(--line); }
-.cs2d-coach-facts dt { color: var(--text-tertiary); font-size: 0.6rem; }
-.cs2d-coach-facts dd { margin: 0; color: var(--text); font: 600 0.64rem/1 ui-monospace, monospace; text-align: right; }
+.cs2d-coach-facts dt { color: var(--text-tertiary); font-size: 0.64rem; }
+.cs2d-coach-facts dd { margin: 0; color: var(--text); font: 600 0.67rem/1 ui-monospace, monospace; text-align: right; }
 .cs2d-timeline-toolbar { min-width: 0; display: grid; grid-template-columns: auto auto minmax(13rem, 1fr) auto; align-items: center; gap: 0.55rem; }
 .cs2d-host-controls,
 .cs2d-round-controls,
@@ -2619,6 +2675,7 @@ button:disabled {
 }
 .cs2d-visually-hidden { position: absolute; width: 0.0625rem; height: 0.0625rem; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 @media (hover: hover) and (pointer: fine) {
+  .cs2d-host-memory-link:hover { border-color: rgba(189,167,255,0.46); background: rgba(189,167,255,0.08); color: var(--text); }
   .cs2d-host-icon-button:hover:not(:disabled),
   .cs2d-host-play:hover:not(:disabled),
   .cs2d-speed-controls button:hover:not(:disabled),
@@ -2636,7 +2693,14 @@ button:disabled {
 }
 @media (max-width: 44rem) {
   .cs2d-host-shell { padding: 0.4rem; gap: 0.4rem; }
-  .cs2d-host-header { border-radius: 0.75rem; }
+  .cs2d-host-header { min-height: 3.8rem; padding: 0.55rem; border-radius: 0.75rem; }
+  .cs2d-host-mark { width: 2.25rem; height: 2.25rem; border-radius: 0.7rem; }
+  .cs2d-host-eyebrow { font-size: 0.49rem; }
+  .cs2d-host-header h1 { font-size: 0.96rem; }
+  .cs2d-host-header-actions { gap: 0.28rem; }
+  .cs2d-host-memory-link { min-width: 2.2rem; padding: 0.35rem; justify-content: center; }
+  .cs2d-host-memory-link span,
+  .cs2d-host-memory-link svg:last-child { display: none; }
   .cs2d-host-status { max-width: 50%; text-align: right; }
   .cs2d-host-stage, .cs2d-host-coach { border-radius: 0.85rem; }
   .cs2d-host-stage iframe { min-height: 32rem; }
@@ -2659,20 +2723,25 @@ button:disabled {
   .cs2d-host-play,
   .cs2d-speed-controls button,
   .cs2d-timeline-round-button,
+  .cs2d-host-memory-link,
   .cs2d-coach-primary,
   .cs2d-coach-result-actions button,
   .cs2d-coach-takeover button { transition: none; }
   .cs2d-host-icon-button:active:not(:disabled),
   .cs2d-host-play:active:not(:disabled),
   .cs2d-speed-controls button:active:not(:disabled),
+  .cs2d-host-memory-link:active,
   .cs2d-coach-primary:active,
   .cs2d-coach-result-actions button:active,
   .cs2d-coach-takeover button:active { transform: none; }
+  .cs2d-coach-route-progress i { transition: none; }
 }
 @media (prefers-reduced-transparency: reduce) {
   .cs2d-host-header,
   .cs2d-host-timeline,
   .cs2d-host-coach,
+  .cs2d-host-memory-link,
+  .cs2d-coach-route-progress,
   .cs2d-coach-cue,
   .cs2d-coaching-band,
   .cs2d-coach-summary,
@@ -2683,6 +2752,8 @@ button:disabled {
   .cs2d-host-stage,
   .cs2d-host-coach,
   .cs2d-host-timeline,
+  .cs2d-host-memory-link,
+  .cs2d-coach-route-progress,
   .cs2d-coach-takeover,
   .cs2d-coach-takeover button { border-color: rgba(255,255,255,0.72); }
 }

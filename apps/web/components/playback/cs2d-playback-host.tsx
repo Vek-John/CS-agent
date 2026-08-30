@@ -12,6 +12,8 @@ import {
   ArrowLeftRight,
   ArrowUpDown,
   Bomb,
+  BrainCircuit,
+  ChevronRight,
   CircleDollarSign,
   CornerUpLeft,
   Crosshair,
@@ -27,6 +29,7 @@ import {
   Shield,
   SkipBack,
   SkipForward,
+  Sparkles,
   TriangleAlert
 } from "lucide-react";
 import type {
@@ -149,6 +152,8 @@ import {
   SessionRecoveryStatus,
   type SessionRecoveryStatusKind,
 } from "./session-recovery-status";
+import { CoachSetupFlow, type CoachSetupStep } from "./coach-setup-flow";
+import { LiquidPhaseStatus } from "./liquid-phase-status";
 import {
   acceptedPlaybackEvent,
   adjacentRoundIndex,
@@ -2216,18 +2221,71 @@ export function Cs2dPlaybackHost({
       ? recoveryModeRef.current ? "REBUILDING" : undefined
       : recoveryResult.status
     : undefined;
+  const hostStatusLabel = phase === "BOOTING"
+    ? "正在连接本地回放"
+    : phase === "WAITING_FOR_DEMO"
+      ? "请选择本地 Demo"
+      : phase === "READY"
+        ? `${replay?.map ?? "Demo"} 已就绪`
+        : "回放宿主异常";
+  const analysisPercent = analysisProgress && analysisProgress.total > 0
+    ? Math.round((analysisProgress.completed / analysisProgress.total) * 100)
+    : undefined;
+  const setupSteps: readonly CoachSetupStep[] = [
+    {
+      title: "读取本地 Demo",
+      detail: replay
+        ? `${replay.map} · ${replay.roundCount} 回合已进入本地时间线`
+        : phase === "ERROR"
+          ? "本地 Viewer 没有正常响应，请重新打开应用"
+          : "在地图内选择 .dem，文件不会上传",
+      state: phase === "ERROR" ? "error" : replay ? "complete" : "active",
+    },
+    {
+      title: "选择复盘玩家",
+      detail: selected
+        ? `已锁定 ${selected.displayName}，整场两方内容都会覆盖`
+        : replay
+          ? "在 10 名玩家中选择你自己"
+          : "读取 Demo 后开放选择",
+      state: selected ? "complete" : replay ? "active" : "pending",
+    },
+    {
+      title: "编排整场路线",
+      detail: reviewPreparationStatus?.detail
+        ?? (analysisProgressText || (selected ? "正在构建完整覆盖与讲解节点" : "选择玩家后开始")),
+      state: analysisError || reviewPreparationStatus?.phase === "ERROR"
+        ? "error"
+        : session || (routeState?.routeFrozen && reviewPreparationStatus?.phase === "READY")
+          ? "complete"
+          : selected
+            ? "active"
+            : "pending",
+      ...(analysisPercent !== undefined ? { progress: analysisPercent } : {}),
+    },
+  ];
+  const routeProgressPercent = sessionProgress && sessionProgress.total > 0
+    ? Math.max(0, Math.min(100, (sessionProgress.current / sessionProgress.total) * 100))
+    : 0;
 
   return (
     <main className="cs2d-host-shell">
       <header className="cs2d-host-header">
-        <div>
-          <p className="cs2d-host-eyebrow">CS2 AI DEMO COACH</p>
-          <h1>整场带看</h1>
+        <div className="cs2d-host-brand">
+          <span className="cs2d-host-mark" aria-hidden="true"><Sparkles /></span>
+          <div>
+            <p className="cs2d-host-eyebrow">CS2 AI DEMO COACH</p>
+            <h1>整场带看</h1>
+          </div>
         </div>
-        <div className="cs2d-host-status" data-phase={phase}>
-          <span aria-hidden="true" />
-          {phase === "BOOTING" ? "正在连接本地回放" : phase === "WAITING_FOR_DEMO" ? "请选择本地 Demo" : phase === "READY" ? `${replay?.map ?? "Demo"} 已就绪` : "回放宿主异常"}
-        </div>
+        <nav className="cs2d-host-header-actions" aria-label="应用导航">
+          <LiquidPhaseStatus phase={phase} label={hostStatusLabel} />
+          <a className="cs2d-host-memory-link" href="/memory">
+            <BrainCircuit aria-hidden="true" />
+            <span>长期记忆</span>
+            <ChevronRight aria-hidden="true" />
+          </a>
+        </nav>
       </header>
 
       <section className="cs2d-host-workspace">
@@ -2242,10 +2300,14 @@ export function Cs2dPlaybackHost({
           />
         </div>
 
-        <aside className="cs2d-host-coach" aria-label="AI 教练">
+        <aside
+          className="cs2d-host-coach"
+          aria-label="AI 教练"
+          aria-busy={Boolean(selected && !session && !analysisError)}
+        >
           <div className="cs2d-coach-heading">
             <div>
-              <small>教练</small>
+              <p className="cs2d-coach-kicker"><Sparkles aria-hidden="true" />私教会话</p>
               {selected ? <p className="cs2d-coach-focus" title={selected.displayName}>正在复盘：{selected.displayName}</p> : null}
               <h2>{userTookOver ? "自由查看" : session ? phaseText[session.phase] : selected ? (routeState && !routeState.routeFrozen ? "等待教学路线冻结" : `正在分析 ${selected.displayName}`) : replay ? "先在地图内选择玩家" : "等待 Demo"}</h2>
             </div>
@@ -2256,6 +2318,20 @@ export function Cs2dPlaybackHost({
               {sessionProgress ? <><small>讲解</small><b>{sessionProgress.current}/{sessionProgress.total}</b></> : "LOCAL"}
             </span>
           </div>
+
+          {sessionProgress ? (
+            <div
+              className="cs2d-coach-route-progress"
+              role="progressbar"
+              aria-label="整场教练路线进度"
+              aria-valuemin={0}
+              aria-valuemax={sessionProgress.total}
+              aria-valuenow={sessionProgress.current}
+            >
+              <div><span>整场路线</span><b>{sessionProgress.current} / {sessionProgress.total}</b></div>
+              <span><i style={{ transform: `scaleX(${routeProgressPercent / 100})` }} /></span>
+            </div>
+          ) : null}
 
           {session && userTookOver ? (
             <div className="cs2d-coach-takeover" role="status">
@@ -2295,26 +2371,7 @@ export function Cs2dPlaybackHost({
             </section>
           ) : null}
 
-          {!session ? (
-            <section className="cs2d-coach-card">
-              <small>当前阶段</small>
-              <p>{!replay ? "Demo 留在浏览器，由 cs2d Worker 解析。" : !selected ? "选择本场分析主体后，教练会自动接管播放节奏。" : "正在从同一份 cs2d Replay 生成整场讲解路线。"}</p>
-            </section>
-          ) : null}
-
-          {!session && selected && analysisProgress ? (
-            <section className={`cs2d-coach-card ${analysisProgress.phase === "unavailable" ? "cs2d-coach-card--muted" : ""}`} role="status" aria-live="polite">
-              <small>{analysisProgressText}</small>
-              <p>{analysisProgress.detail || (analysisProgress.total > 0 ? `${Math.round((analysisProgress.completed / analysisProgress.total) * 100)}%` : "模型在本机 Worker 中运行，不上传 Demo。")}</p>
-            </section>
-          ) : null}
-
-          {!session && selected && reviewPreparationStatus ? (
-            <section className={`cs2d-coach-card ${reviewPreparationStatus.phase === "ERROR" ? "cs2d-coach-card--error" : ""}`} role="status" aria-live="polite">
-              <small>{reviewPreparationStatus.phase === "ROUTE" ? "教学路线准备中" : reviewPreparationStatus.phase === "NARRATION" ? "讲解包准备中" : reviewPreparationStatus.phase === "READY" ? "教学路线已就绪" : "教学路线需要恢复"}</small>
-              <p>{reviewPreparationStatus.detail}</p>
-            </section>
-          ) : null}
+          {!session && !recoveryStatusKind ? <CoachSetupFlow steps={setupSteps} /> : null}
 
           {diagnosticsEnabled && activeTeachingCase?.status !== "FALLBACK" && session && (!userTookOver || Boolean(session.manual_cue_visit)) && cue && (cueRevealed || session.manual_cue_visit?.cue_id === cue.id) && session.phase === "PAUSED_FOR_COACHING" && session.outcome_completion?.status === "COMPLETE" ? (
             <TeachingDiagnosisPanel

@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, extname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const READY_TIMEOUT_MS = 20_000;
@@ -12,6 +12,17 @@ const appPath = join(repoRoot, "apps/desktop/src-tauri/target/aarch64-apple-darw
 const preparedMode = process.argv.includes("--prepared");
 const webkitMode = process.argv.includes("--webkit");
 const webkitDemoMode = process.argv.includes("--webkit-demo");
+const snapshotFlagIndex = process.argv.indexOf("--snapshot");
+const snapshotPath = snapshotFlagIndex >= 0 ? process.argv[snapshotFlagIndex + 1] : undefined;
+const snapshotRoot = join(repoRoot, ".local-data", "ui-qa");
+if (snapshotFlagIndex >= 0 && (
+  !snapshotPath
+  || !isAbsolute(snapshotPath)
+  || dirname(snapshotPath) !== snapshotRoot
+  || extname(snapshotPath).toLowerCase() !== ".png"
+)) {
+  throw new Error(`--snapshot requires an absolute .png directly inside ${snapshotRoot}`);
+}
 const contents = preparedMode ? join(repoRoot, "apps/desktop/src-tauri") : join(appPath, "Contents");
 const binary = preparedMode
   ? join(contents, "binaries", "cs-agent-runtime-aarch64-apple-darwin")
@@ -24,6 +35,7 @@ const dataDir = join(temporaryRoot, "data");
 const cacheDir = join(temporaryRoot, "cache");
 const logDir = join(temporaryRoot, "log");
 await Promise.all([dataDir, cacheDir, logDir].map((path) => mkdir(path, { mode: 0o700 })));
+if (snapshotPath) await mkdir(snapshotRoot, { recursive: true, mode: 0o700 });
 
 const permissionArguments = [runtimeRoot, viewerRoot, dataDir, cacheDir, logDir]
   .map((path) => `--allow-fs-read=${path}`)
@@ -154,6 +166,7 @@ async function runWebKitSmoke(run) {
     sessionToken: run.message.sessionToken,
     wasmPath: `/cs2d/assets/${wasmName}`,
     demoPath: webkitDemoMode ? join(repoRoot, "demoTests/test_demo.dem") : null,
+    snapshotPath: snapshotPath ?? null,
   }));
   const exited = new Promise((resolve, reject) => {
     child.once("error", reject);
@@ -187,6 +200,7 @@ async function runWebKitSmoke(run) {
     throw new Error("WKWebView Demo smoke returned an invalid summary");
   }
   process.stdout.write("PASS WKWebView IPv4 localhost, cookie isolation, assets, Worker and WASM\n");
+  if (snapshotPath) process.stdout.write(`PASS WKWebView app snapshot ${snapshotPath}\n`);
   if (webkitDemoMode) process.stdout.write("PASS WKWebView real Demo parse, player selection and Canvas stage\n");
 }
 

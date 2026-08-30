@@ -7,6 +7,8 @@
 ### Added
 
 - Apple Silicon local-first Tauri 宿主与自包含 Node `24.19.0`/Next standalone sidecar。
+- 参考 Beautiful UI 的本地准备任务流、教练路线进度、诊断选择和三段式建议卡层级。
+- `liquid-gooey@0.2.1` 驱动的低频运行阶段形态提示；高频播放控制保持即时响应。
 - App/Viewer 双 `127.0.0.1` 随机 socket、literal IPv4/hidden localhost browser authority、HttpOnly runtime cookie、精确 CSP、窄 capability 和单实例生命周期。
 - Desktop SQLite Memory/checkpoint、atomic migration、`local-unicode-feature-hash/1.0.0` 256 维 Unicode 1–3 gram 词法向量、精确 cosine、导出/删除、backup 与 update rollback seam。
 - macOS Keychain Provider 设置，支持 `NONE`、DeepSeek 和 OpenAI-compatible。
@@ -15,6 +17,7 @@
 ### Changed
 
 - Desktop 成为主产品；localhost 与 Cloudflare 降为开发/部署兼容 adapter。
+- 播放主画面继续占据核心空间，长期记忆入口并入顶栏，教练侧栏与时间轴提高字号、对比和空间层级。
 - Demo 继续通过 WKWebView 原生文件选择并在 Viewer Worker/WASM 内解析。
 - Desktop 删除使用 SQLite/tombstone/deletion marker 与本地 no-op invalidator，不依赖 Cloudflare Outbox；Web/Cloudflare 严格通知/invalidation 保持不变。
 - Updater 使用下载/安装分开确认、显式“结束当前复盘”/恢复 gate、`DRAINING` 后等待 Next handler＋response active count 归零的 SQLite backup、同卷原子交换与首次 health confirmation；关闭主窗口只隐藏且保持 busy。

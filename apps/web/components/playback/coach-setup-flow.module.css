@@ -1,0 +1,166 @@
+.flow {
+  margin-top: 0.85rem;
+  overflow: hidden;
+  border: 0.0625rem solid rgba(100, 170, 255, 0.2);
+  border-radius: 1rem;
+  background: linear-gradient(150deg, rgba(18, 31, 49, 0.82), rgba(17, 19, 23, 0.7) 62%);
+  box-shadow: inset 0 0.0625rem rgba(255, 255, 255, 0.055);
+}
+
+.heading {
+  padding: 0.85rem 0.85rem 0.72rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 0.0625rem solid rgba(255, 255, 255, 0.08);
+}
+
+.heading p {
+  margin: 0;
+  color: var(--blue-bright);
+  font-size: 0.58rem;
+  font-weight: 760;
+  letter-spacing: 0.11em;
+}
+
+.heading h3 {
+  margin: 0.24rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.heading > span {
+  min-width: 2.2rem;
+  padding: 0.28rem 0.45rem;
+  border: 0.0625rem solid rgba(100, 170, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(10, 132, 255, 0.1);
+  color: #b9dcff;
+  font: 700 0.58rem/1 ui-monospace, monospace;
+  text-align: center;
+}
+
+.steps {
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+}
+
+.steps li {
+  position: relative;
+  min-height: 3.55rem;
+  padding: 0.62rem 0.62rem;
+  display: grid;
+  grid-template-columns: 1.5rem 1.7rem minmax(0, 1fr);
+  align-items: start;
+  gap: 0.4rem;
+  border-radius: 0.72rem;
+  color: var(--text-tertiary);
+}
+
+.steps li + li::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0.6rem;
+  left: 0.6rem;
+  height: 0.0625rem;
+  background: rgba(255, 255, 255, 0.065);
+}
+
+.steps li[data-state="active"] {
+  overflow: hidden;
+  background: rgba(10, 132, 255, 0.075);
+  color: var(--blue-bright);
+}
+
+.steps li[data-state="active"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 25%, rgba(112, 183, 255, 0.07) 48%, transparent 72%);
+  transform: translateX(-100%);
+  animation: setup-shimmer 1.45s linear infinite;
+  pointer-events: none;
+}
+
+.steps li[data-state="complete"] { color: #7ce997; }
+.steps li[data-state="error"] { color: #ff8f88; background: rgba(255, 69, 58, 0.06); }
+
+.index {
+  padding-top: 0.12rem;
+  color: currentColor;
+  font: 650 0.53rem/1.4 ui-monospace, monospace;
+  opacity: 0.7;
+}
+
+.icon {
+  width: 1.55rem;
+  height: 1.55rem;
+  display: grid;
+  place-items: center;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, currentColor 11%, transparent);
+}
+
+.icon svg { width: 0.78rem; height: 0.78rem; stroke-width: 2.2; }
+.steps li[data-state="active"] .icon svg { animation: setup-spin 0.85s linear infinite; }
+
+.copy { min-width: 0; }
+.copy > div { display: flex; align-items: baseline; justify-content: space-between; gap: 0.65rem; }
+.copy strong { color: var(--text); font-size: 0.7rem; line-height: 1.25; }
+.copy small { color: currentColor; font-size: 0.54rem; font-weight: 680; white-space: nowrap; }
+.copy p { margin: 0.2rem 0 0; color: var(--text-tertiary); font-size: 0.61rem; line-height: 1.45; }
+
+.progress {
+  position: relative;
+  height: 0.22rem;
+  margin-top: 0.42rem;
+  display: block;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.progress i {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--blue), #64d2ff);
+  transform-origin: left center;
+  transition: transform 180ms var(--ease-out);
+}
+
+.privacy {
+  margin: 0;
+  padding: 0.6rem 0.78rem 0.68rem;
+  display: flex;
+  align-items: center;
+  gap: 0.34rem;
+  border-top: 0.0625rem solid rgba(255, 255, 255, 0.065);
+  color: var(--text-tertiary);
+  font-size: 0.56rem;
+}
+
+.privacy svg { width: 0.74rem; height: 0.74rem; color: #7ce997; }
+
+@keyframes setup-spin { to { transform: rotate(360deg); } }
+@keyframes setup-shimmer { to { transform: translateX(100%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .steps li[data-state="active"]::after,
+  .steps li[data-state="active"] .icon svg { animation: none; }
+  .progress i { transition: none; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .flow { background: #111722; }
+}
+
+@media (prefers-contrast: more) {
+  .flow { border-color: currentColor; }
+  .copy p,
+  .privacy { color: var(--text-secondary); }
+}

@@ -81,6 +81,9 @@ importers:
       '@cs-coach/session':
         specifier: workspace:*
         version: link:../../libs/session
+      liquid-gooey:
+        specifier: 0.2.1
+        version: 0.2.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       lucide-react:
         specifier: 0.468.0
         version: 0.468.0(react@19.2.8)
@@ -2612,6 +2615,12 @@ packages:
   lightningcss@1.33.0:
     resolution: {integrity: sha512-WkUDrojuJs0xkgGf2udWxa3yGBRxPtxUkB79i6aCZLRgc7PM8fZe9TosfPDcvEpQZbuFASnHYmRLBLUbmLOIIA==}
     engines: {node: '>= 12.0.0'}
+
+  liquid-gooey@0.2.1:
+    resolution: {integrity: sha512-BRb0Rscie4JCHFmk4bkWxM+p03c34sidLgNE8XFJGRGEyWM/Wf0FYztJH3CfMWwOVajd4dVurAFe+BTSj8Eeeg==}
+    peerDependencies:
+      react: '>=18'
+      react-dom: '>=18'
 
   long@5.3.2:
     resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
@@ -5588,6 +5597,11 @@ snapshots:
       lightningcss-linux-x64-musl: 1.33.0
       lightningcss-win32-arm64-msvc: 1.33.0
       lightningcss-win32-x64-msvc: 1.33.0
+
+  liquid-gooey@0.2.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
+    dependencies:
+      react: 19.2.8
+      react-dom: 19.2.8(react@19.2.8)
 
   long@5.3.2: {}
 

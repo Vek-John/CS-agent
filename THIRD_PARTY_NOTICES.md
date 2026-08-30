@@ -5,6 +5,30 @@ does not grant rights to map or game assets.
 
 ## MIT code references
 
+### Beautiful UI
+
+Reference site: <https://www.beautifului.dev/>
+
+License: MIT. Copyright (c) 2026 Shane Levine.
+
+The desktop coaching shell adapts the site's public interaction vocabulary for
+AI-native task rows, approval cards, compact status surfaces, and recommendation
+cards. No Beautiful UI package or source tree is vendored; the implementation is
+repository-owned React/CSS and preserves this notice because the reference was a
+material design input.
+
+### Liquid Gooey
+
+Package: `liquid-gooey@0.2.1` from
+<https://github.com/Jakubantalik/Libraries/tree/main/packages/liquid-gooey>.
+
+License: MIT. Copyright (c) 2026 Jakub.
+
+The desktop header uses the package's SVG silhouette/content-layer `Liquid`
+primitive for the low-frequency local-runtime phase transition only. Playback,
+timeline seeking, keyboard actions, and coaching state remain ordinary DOM
+controls; reduced-motion behavior is retained.
+
 ### cs-net
 
 Repository: local pinned checkout `.local-data/upstream/cs-net`

@@ -8,6 +8,7 @@ private struct SmokeInput: Decodable {
     let sessionToken: String
     let wasmPath: String
     let demoPath: String?
+    let snapshotPath: String?
 }
 
 private final class SmokeRunner: NSObject, WKNavigationDelegate, WKUIDelegate {
@@ -97,17 +98,48 @@ private final class SmokeRunner: NSObject, WKNavigationDelegate, WKUIDelegate {
                     return
                 }
                 self.appResult = object
-                self.phase = .viewer
-                guard let encodedParent = self.input.appOrigin.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-                      let viewerURL = URL(string: "\(self.input.viewerOrigin)/cs2d/?host=1&parentOrigin=\(encodedParent)") else {
-                    self.fail("WEBKIT_INPUT_INVALID")
-                    return
-                }
-                self.webView.load(URLRequest(url: viewerURL, cachePolicy: .reloadIgnoringLocalCacheData))
+                self.captureSnapshotIfRequested { [weak self] in self?.loadViewer() }
             case .failure:
                 self.fail("WEBKIT_APP_SCRIPT_FAILED")
             }
         }
+    }
+
+    private func captureSnapshotIfRequested(completion: @escaping () -> Void) {
+        guard let path = input.snapshotPath else {
+            completion()
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            guard let self else { return }
+            self.webView.takeSnapshot(with: nil) { [weak self] image, error in
+                guard let self else { return }
+                guard error == nil,
+                      let image,
+                      let tiff = image.tiffRepresentation,
+                      let bitmap = NSBitmapImageRep(data: tiff),
+                      let png = bitmap.representation(using: .png, properties: [:]) else {
+                    self.fail("WEBKIT_SNAPSHOT_FAILED")
+                    return
+                }
+                do {
+                    try png.write(to: URL(fileURLWithPath: path), options: .atomic)
+                    completion()
+                } catch {
+                    self.fail("WEBKIT_SNAPSHOT_FAILED")
+                }
+            }
+        }
+    }
+
+    private func loadViewer() {
+        phase = .viewer
+        guard let encodedParent = input.appOrigin.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let viewerURL = URL(string: "\(input.viewerOrigin)/cs2d/?host=1&parentOrigin=\(encodedParent)") else {
+            fail("WEBKIT_INPUT_INVALID")
+            return
+        }
+        webView.load(URLRequest(url: viewerURL, cachePolicy: .reloadIgnoringLocalCacheData))
     }
 
     private func inspectViewer() {

@@ -1217,6 +1217,32 @@ Updater 已有 metadata、minisign、safe extraction、backup、swap、rollback 
 
 这是可执行的本地更新工程证据，不是公开 GitHub Release 或 Apple trust chain。正式公钥仍为阻断占位值；没有 rights-approved Developer ID/notary 输入，因此 production `spctl`、真实 GitHub endpoint、App restart 与新版本首次 launch 不能诚实宣称已完成公开验收。workflow 已保留这些 fail-closed Gate。
 
+### 4.52 2026-08-31：桌面视觉优化必须强化带看主线，而不是把播放器包装成 AI dashboard
+
+**触发**
+
+桌面链路和真实 Demo 已经可用，但最终 App 的首屏仍有三类体验债：长期记忆入口以固定浮层压在顶栏外；Demo 读取、玩家选择、胜率/路线准备分散成多个同权重小卡；教练侧栏、三段式讲解和诊断选项大量使用约 10px 的文字。功能正确，但用户仍需要自行拼出“现在在哪一步、接下来会发生什么”，不够像教练主持的一场完整复盘。macOS 多次锁屏也说明视觉验收不能只依赖可见桌面自动化。
+
+**决定**
+
+保持地图主画面、教练侧栏和完整时间轴三个既有区域，不改变 Replay、ReviewPlan、Outcome Gate、播放器命令或 Memory 边界。参考 Beautiful UI 的 AI-native primitive，把准备阶段收敛为三条有状态任务行，把讲解进度做成明确的整场路线进度，把诊断改成两步 approval card，并提高教练卡、状态 chip 和建议文案的字号与对比。长期记忆入口并入应用顶栏，不再作为 fixed overlay。
+
+引入 MIT `liquid-gooey@0.2.1`，但只用于本地 runtime phase 的低频合并/分离提示。播放、暂停、seek、回合切换、速度和键盘动作全部保持普通即时 DOM 控件；没有给高频输入增加弹簧等待。Gooey 内容层继续是真实 DOM，`prefers-reduced-motion` 由组件和仓库 CSS 双重降级；新增 translucent surface 同时覆盖 `prefers-reduced-transparency` 与 `prefers-contrast`。
+
+**落点**
+
+新增 `CoachSetupFlow`、`LiquidPhaseStatus` 及各自 CSS Module；更新 `Cs2dPlaybackHost` 顶栏、准备态、整场路线进度、三段式讲解卡与时间轴视觉层级；更新 `TeachingDiagnosisPanel` 的两步 approval card 表达。`page.tsx` 与 Desktop page 不再重复渲染浮动 Memory link。第三方来源记录在 `THIRD_PARTY_NOTICES.md`，用户可见变化记录在 `CHANGELOG.md`。现有单 controller WKWebView smoke 新增可选 PNG snapshot 输出，先等待 Viewer host-mode 稳定后截取外层 App，不创建第二套浏览器生命周期。
+
+**验证**
+
+`pnpm check` 通过：Vitest **109 files passed / 2 skipped、763 tests passed / 4 skipped**，TypeScript 与普通 Next production build 通过；Desktop webpack production build通过。`desktop:test:unit` 继续为 Runtime **10/10**、prepare/bootstrap/DMG **20/20**、stub sidecar **1/1**、Rust **38/38**。prepared 与最终 bundled sidecar 的真实 WKWebView smoke 都通过 exact IPv4/localhost authority、Cookie 隔离、CSS/JS、Worker、WASM 与 graceful shutdown；`test_demo.dem`（60.6 MB）继续完成 File→Worker/WASM、玩家选择和 Canvas stage。
+
+最终 arm64 `.app` 完成 strict ad-hoc codesign，两个 executable 均为 Mach-O arm64；Finder-free DMG 经 partial 与 final 两次 `hdiutil verify`。本轮 UI internal RC DMG 为 **208,132,141 bytes**，SHA-256 `a5123b7246059f96c52262458f5e85eb94b352b32b798fdd8413fcfb1d1b1535`。真实 bundled WKWebView 快照保存在忽略目录 `.local-data/ui-qa/desktop-shell-bundled.png`，确认 Viewer host-mode 已隐藏上游 GitHub、语言和 Library/Tournaments chrome，外层任务流、Gooey 状态和时间轴同时可见。
+
+**限制 / 下一步**
+
+快照覆盖最终 bundled 首屏，真实 Demo 的解析/选择/Canvas 由无界面 WKWebView 验证；锁屏状态下没有重新录制完整有窗口的全场教练交互。Beautiful UI 只作为 MIT 设计参考，没有 vendored 其源码；Liquid Gooey 是新增运行依赖，后续若浏览器兼容或包体成本不再值得，应保留普通状态 pill 的确定性降级。公开 GitHub Release 仍被 cs2d/Valve 权利、正式 updater 公钥、Developer ID 与 notarization 阻塞；新的 ad-hoc DMG 不能被称为公开 macOS release。
+
 ## 5. 常用问题排查表
 
 | 现象 | 首先检查 | 常见根因 | 不要做什么 |
