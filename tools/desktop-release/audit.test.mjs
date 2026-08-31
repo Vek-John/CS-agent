@@ -242,6 +242,28 @@ test("desktop release workflow keeps triggers, pins, gates and publication order
   assert.deepEqual(await auditWorkflow(path.join(repoRoot, ".github/workflows/desktop-release.yml")), { ok: true });
 });
 
+test("workflow audit rejects runner-only context in job-level environment", async () => {
+  const repoRoot = path.resolve(toolRoot, "../..");
+  const source = await readFile(path.join(repoRoot, ".github/workflows/desktop-release.yml"), "utf8");
+  const fixtureRoot = await mkdtemp(path.join(tmpdir(), "desktop-workflow-context-"));
+  const fixturePath = path.join(fixtureRoot, "desktop-release.yml");
+  try {
+    await writeFile(
+      fixturePath,
+      source.replace(
+        "RELEASE_COMMIT: ${{ needs.preflight.outputs.commit }}",
+        "RELEASE_COMMIT: ${{ needs.preflight.outputs.commit }}\n      RELEASE_DIR: ${{ runner.temp }}/desktop-release-assets",
+      ),
+    );
+    await assert.rejects(
+      auditWorkflow(fixturePath),
+      (error) => code(error) === "WORKFLOW_RUNNER_CONTEXT_INVALID",
+    );
+  } finally {
+    await rm(fixtureRoot, { recursive: true, force: true });
+  }
+});
+
 test("workflow audit rejects restoring Finder DMG or moving custom DMG after notarization", async () => {
   const repoRoot = path.resolve(toolRoot, "../..");
   const source = await readFile(path.join(repoRoot, ".github/workflows/desktop-release.yml"), "utf8");

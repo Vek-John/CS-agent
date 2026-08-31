@@ -1243,6 +1243,28 @@ Updater 已有 metadata、minisign、safe extraction、backup、swap、rollback 
 
 快照覆盖最终 bundled 首屏，真实 Demo 的解析/选择/Canvas 由无界面 WKWebView 验证；锁屏状态下没有重新录制完整有窗口的全场教练交互。Beautiful UI 只作为 MIT 设计参考，没有 vendored 其源码；Liquid Gooey 是新增运行依赖，后续若浏览器兼容或包体成本不再值得，应保留普通状态 pill 的确定性降级。公开 GitHub Release 仍被 cs2d/Valve 权利、正式 updater 公钥、Developer ID 与 notarization 阻塞；新的 ad-hoc DMG 不能被称为公开 macOS release。
 
+### 4.53 2026-08-31：GitHub runner context 只能在 runner 可用的 workflow 位置读取
+
+**触发**
+
+Desktop release workflow 首次推送后在 GitHub Actions 以 0 秒、无 job 的方式失败。仓库自带的文本审计能验证 tag、secret、签名和发布顺序，但没有覆盖 GitHub 表达式的上下文可用性。
+
+**决定**
+
+不在 `jobs.<job_id>.env` 中读取 `${{ runner.temp }}`。改为在 Apple Silicon job 的首个 shell step 中读取 runner 已提供的 `$RUNNER_TEMP`，并通过 `$GITHUB_ENV` 向后续 step 传递 `RELEASE_DIR`。这保留临时目录的自动清理边界，不改变发布资产、权利 Gate 或凭据边界。
+
+**落点**
+
+更新 `.github/workflows/desktop-release.yml`；`auditWorkflow` 新增 runner-only context 拒绝规则和对应回归 fixture，避免只靠 GitHub 远程 0 秒失败发现同类问题。
+
+**验证**
+
+`node --test tools/desktop-release/audit.test.mjs` 与 `node tools/desktop-release/audit.mjs workflow --path .github/workflows/desktop-release.yml` 通过；正式 tag 触发仍留待 rights、Apple 和 updater 凭据配齐后的首轮验收。
+
+**限制 / 下一步**
+
+本地 static audit 只锁定当前 workflow 使用的高风险 context，不是 GitHub Actions schema 的完整替代。公开发布仍必须先完成权利批准、正式 updater key、Developer ID/notarization 凭据和 `desktop-release` Environment。
+
 ## 5. 常用问题排查表
 
 | 现象 | 首先检查 | 常见根因 | 不要做什么 |

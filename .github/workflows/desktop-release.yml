@@ -74,7 +74,6 @@ jobs:
       RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
       RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
       RELEASE_COMMIT: ${{ needs.preflight.outputs.commit }}
-      RELEASE_DIR: ${{ runner.temp }}/desktop-release-assets
       TARGET_TRIPLE: aarch64-apple-darwin
       CS_AGENT_BUILD_SHA: ${{ needs.preflight.outputs.commit }}
     steps:
@@ -90,6 +89,7 @@ jobs:
           test "$(uname -m)" = "arm64"
           test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
           test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$RELEASE_COMMIT"
+          echo "RELEASE_DIR=$RUNNER_TEMP/desktop-release-assets" >> "$GITHUB_ENV"
 
       - name: distribution:audit secrets
         env:

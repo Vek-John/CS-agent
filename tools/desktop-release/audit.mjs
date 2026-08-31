@@ -441,6 +441,7 @@ export async function auditWorkflow(path) {
     /ref:\s*\$\{\{\s*needs\.preflight\.outputs\.commit\s*\}\}/u,
     /RELEASE_COMMIT:\s*\$\{\{\s*needs\.preflight\.outputs\.commit\s*\}\}/u,
     /CS_AGENT_BUILD_SHA:\s*\$\{\{\s*needs\.preflight\.outputs\.commit\s*\}\}/u,
+    /echo "RELEASE_DIR=\$RUNNER_TEMP\/desktop-release-assets" >> "\$GITHUB_ENV"/u,
     /permissions:\s*\n\s*contents:\s*write/u,
     /distribution:audit rights/u,
     /distribution:audit secrets/u,
@@ -458,6 +459,7 @@ export async function auditWorkflow(path) {
   }
   assert(!/branches:\s*\[?main/u.test(source), "WORKFLOW_TRIGGER_TOO_BROAD");
   assert(!/CS_AGENT_BUILD_SHA:\s*\$\{\{\s*github\.sha\s*\}\}/u.test(source), "WORKFLOW_BUILD_SHA_NOT_TAG_PINNED");
+  assert(!/\$\{\{\s*runner\.temp\s*\}\}/u.test(source), "WORKFLOW_RUNNER_CONTEXT_INVALID");
   assert(!/-----BEGIN .*PRIVATE KEY-----/u.test(source), "PRIVATE_MATERIAL_BUNDLED");
   assert(!/tauri signer sign[^\n]*(?:\s-k\s|--private-key)/u.test(source), "WORKFLOW_PRIVATE_KEY_ON_COMMAND_LINE");
   assert(!/bundle_dmg\.sh|osascript|--bundles\s+dmg/u.test(source), "WORKFLOW_FINDER_DMG_FORBIDDEN");
