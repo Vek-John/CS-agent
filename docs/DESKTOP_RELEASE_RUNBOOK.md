@@ -24,6 +24,8 @@
 - Release Notes 必须写明 Apple Silicon/macOS 13+、无自动更新、Gatekeeper 可能拒绝打开、不应关闭 Gatekeeper，并列出 build SHA 和 DMG SHA-256。
 - Preview 不得更名或促销为 stable/signed/notarized；后续正式版仍必须走 `desktop-v*` protected workflow。
 
+当前已发布 Preview：[`desktop-preview-v0.1.0`](https://github.com/Vek-John/CS-agent/releases/tag/desktop-preview-v0.1.0)，绑定 commit `6f1b841102147c2fd26a5d598af8c84c867af72e`；DMG 为 206,236,857 bytes，SHA-256 `4bb715af35231c633ede3b61df62313b9d6787a5d47230912201253192fe99de`。GitHub 远端 asset digest 已与本地校验一致。
+
 ## 固定发布身份
 
 - 版本唯一源：`apps/desktop/package.json`。

@@ -1265,6 +1265,30 @@ Desktop release workflow 首次推送后在 GitHub Actions 以 0 秒、无 job �
 
 本地 static audit 只锁定当前 workflow 使用的高风险 context，不是 GitHub Actions schema 的完整替代。两个 approval variable 都是非 secret 的明文变量，仅能表达“已完成权利审核”，不能取代 rights JSON、HTTPS evidence 或 GitHub Environment 人工批准。公开发布仍必须先完成权利批准、正式 updater key、Developer ID/notarization 凭据和 `desktop-release` Environment。
 
+### 4.54 2026-08-31：未公证 Preview 必须与 stable/updater 通道完全隔离
+
+**触发**
+
+项目所有者确认已取得第三方内容再分发授权，并明确要求在没有 Apple Developer Program 的情况下继续公开发布。直接删除 Developer ID/notary/updater Gate 会把未公证产物伪装成正式更新，而完全拒绝发布又无法实现所有者明确授权的预览目标。
+
+**决定**
+
+保留 `desktop-vX.Y.Z` 正式 workflow、`distribution:audit`、updater 占位公钥和全部 Developer ID/notary Gate；新增隔离的 `desktop-preview-vX.Y.Z` GitHub Pre-release 契约。Preview 只包含 ad-hoc Apple Silicon DMG 与覆盖该 DMG 的 `SHA256SUMS`，不上传 `latest.json`、updater archive 或 signature，因此不能被当前自动更新链路消费。Release 标题和首段明确披露未使用 Developer ID、未公证、Gatekeeper 可能拒绝和无自动更新。
+
+**落点**
+
+`ARCHITECTURE.md` 5.3.0、README、Changelog、Distribution Audit 说明和 Release Runbook 共同冻结 Preview/stable 分离。本轮不改 `DESKTOP_DISTRIBUTION_AUDIT.json`、`tauri.conf.json` 的 updater 公钥、正式 workflow 触发器或 updater 代码。
+
+**验证**
+
+Preview tag `desktop-preview-v0.1.0` 指向 commit `6f1b841102147c2fd26a5d598af8c84c867af72e`。首次普通本地 build 会把运行时 build SHA 设为 `development`；一轮手工扩展错误的短 SHA 在打包前被中止，其 265 MB 临时 prepare 目录已精确清理。最终构建直接使用 `git rev-parse HEAD` 返回的完整 SHA 注入 `CS_AGENT_BUILD_SHA`，并从 Mach-O strings 反查到相同值。
+
+`pnpm check` 通过：109 files passed / 2 skipped，763 tests passed / 4 skipped，TypeScript 和 Web production build 通过。`desktop:test:unit` 通过 Runtime 10/10、prepare/bootstrap/DMG 20/20、stub 1/1 与 Rust 38/38；重建后 bundled sidecar smoke、strict ad-hoc codesign、双 arm64 Mach-O 和 DMG partial/final `hdiutil verify` 通过。最终 DMG 为 206,236,857 bytes，SHA-256 `4bb715af35231c633ede3b61df62313b9d6787a5d47230912201253192fe99de`。GitHub 远端 Release 为 `draft=false` / `prerelease=true`，只有 DMG 和 99-byte `SHA256SUMS`，远端 DMG digest 与本地完全一致，公开页与 checksum asset 均可访问。
+
+**限制 / 下一步**
+
+该 Preview 只支持 Apple Silicon/macOS 13+，没有 Developer ID、Team ID、notarization ticket 或公开自动更新；Gatekeeper 在默认策略下可能拒绝打开。权利状态仅记录了项目所有者本轮确认，正式 machine-readable rights evidence 尚未入库；因此该 Pre-release 不能提升为 stable，也不能用来证明正式 updater 链路已通过。
+
 ## 5. 常用问题排查表
 
 | 现象 | 首先检查 | 常见根因 | 不要做什么 |
