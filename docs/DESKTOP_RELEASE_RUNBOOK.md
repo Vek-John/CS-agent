@@ -30,7 +30,7 @@
 2. 完成 Valve/game asset 再分发审查，或移除/替换受影响资源；
 3. 更新 `THIRD_PARTY_NOTICES.md`，不再保留 unresolved/local-only/review-required 状态；
 4. 更新 `DESKTOP_DISTRIBUTION_AUDIT.json`：批准位为 true、两项 status 为 `APPROVED_FOR_PUBLIC_REDISTRIBUTION`，并填写 HTTPS evidence、reviewer、时间；
-5. 在受保护 `desktop-release` GitHub Environment 设置 `DESKTOP_DISTRIBUTION_APPROVED=true` 并要求人工批准；
+5. 在仓库 Actions Variables 设置 `DESKTOP_DISTRIBUTION_PREFLIGHT_APPROVED=true`，只供无 secret 的 Linux rights preflight 使用；另在受保护 `desktop-release` GitHub Environment 设置 `DESKTOP_DISTRIBUTION_APPROVED=true` 并要求人工批准；
 6. 将正式 minisign/Tauri updater 公钥提交到 Tauri config，并由私钥签名后在 CI 反向验证；
 7. 配置并验证下列受保护 secret：
    - `APPLE_CERTIFICATE_BASE64`
@@ -72,8 +72,8 @@ pnpm release:check
 
 `.github/workflows/desktop-release.yml` 只接受已有 `desktop-v*` tag 或显式指定的已有 tag：
 
-1. 在 Linux runner 验证已有 tag→HEAD、版本、target、rights JSON、notices 和 Environment approval，并输出该 tag 的精确 commit；
-2. 进入 Apple Silicon runner 前验证所有受保护 secret 仅“存在”，不打印内容；
+1. 在 Linux runner 使用仓库级 `DESKTOP_DISTRIBUTION_PREFLIGHT_APPROVED` 验证已有 tag→HEAD、版本、target、rights JSON 和 notices，并输出该 tag 的精确 commit；该 job 不声明 Environment，因此不读取 Environment secret 或变量；
+2. 通过 `desktop-release` Environment 人工批准后，Apple Silicon job 使用该 Environment 内的 `DESKTOP_DISTRIBUTION_APPROVED=true`，并验证所有受保护 secret 仅“存在”，不打印内容；
 3. Apple Silicon job 只 checkout preflight 输出的精确 commit，再次验证 tag、`HEAD` 与 `CS_AGENT_BUILD_SHA` 完全相等；随后使用 lockfile 和 pinned Node/pnpm/Rust，执行 `desktop:prepare`、desktop unit/real sidecar、typecheck；
 4. 将 Developer ID 证书导入临时 Keychain，使用临时 Tauri config overlay 构建 App，再复用 Finder-free DMG 构建器；检查入库 config 保持 ad-hoc；
 5. 提交 Apple notarization，要求 `Accepted`，对 app 和 DMG staple 并 validate；

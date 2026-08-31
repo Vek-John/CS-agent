@@ -54,7 +54,7 @@ jobs:
       - name: distribution:audit rights
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
-          DESKTOP_DISTRIBUTION_APPROVED: ${{ vars.DESKTOP_DISTRIBUTION_APPROVED }}
+          DESKTOP_DISTRIBUTION_APPROVED: ${{ vars.DESKTOP_DISTRIBUTION_PREFLIGHT_APPROVED }}
         run: >-
           node tools/desktop-release/audit.mjs preflight
           --repo .

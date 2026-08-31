@@ -443,6 +443,8 @@ export async function auditWorkflow(path) {
     /CS_AGENT_BUILD_SHA:\s*\$\{\{\s*needs\.preflight\.outputs\.commit\s*\}\}/u,
     /echo "RELEASE_DIR=\$RUNNER_TEMP\/desktop-release-assets" >> "\$GITHUB_ENV"/u,
     /permissions:\s*\n\s*contents:\s*write/u,
+    /DESKTOP_DISTRIBUTION_APPROVED:\s*\$\{\{\s*vars\.DESKTOP_DISTRIBUTION_PREFLIGHT_APPROVED\s*\}\}/u,
+    /DESKTOP_DISTRIBUTION_APPROVED:\s*\$\{\{\s*vars\.DESKTOP_DISTRIBUTION_APPROVED\s*\}\}/u,
     /distribution:audit rights/u,
     /distribution:audit secrets/u,
     /distribution:audit bundle/u,

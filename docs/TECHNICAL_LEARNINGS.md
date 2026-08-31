@@ -1247,15 +1247,15 @@ Updater 已有 metadata、minisign、safe extraction、backup、swap、rollback 
 
 **触发**
 
-Desktop release workflow 首次推送后在 GitHub Actions 以 0 秒、无 job 的方式失败。仓库自带的文本审计能验证 tag、secret、签名和发布顺序，但没有覆盖 GitHub 表达式的上下文可用性。
+Desktop release workflow 首次推送后在 GitHub Actions 以 0 秒、无 job 的方式失败。仓库自带的文本审计能验证 tag、secret、签名和发布顺序，但没有覆盖 GitHub 表达式的上下文可用性。同时，rights preflight 未声明 `desktop-release` Environment，因此不可能读到同名 Environment variable；只在文档中要求设置该变量会让正式 tag 在预检阶段继续失败。
 
 **决定**
 
-不在 `jobs.<job_id>.env` 中读取 `${{ runner.temp }}`。改为在 Apple Silicon job 的首个 shell step 中读取 runner 已提供的 `$RUNNER_TEMP`，并通过 `$GITHUB_ENV` 向后续 step 传递 `RELEASE_DIR`。这保留临时目录的自动清理边界，不改变发布资产、权利 Gate 或凭据边界。
+不在 `jobs.<job_id>.env` 中读取 `${{ runner.temp }}`。改为在 Apple Silicon job 的首个 shell step 中读取 runner 已提供的 `$RUNNER_TEMP`，并通过 `$GITHUB_ENV` 向后续 step 传递 `RELEASE_DIR`。Rights 批准则明确拆成两层：仓库级 `DESKTOP_DISTRIBUTION_PREFLIGHT_APPROVED` 只允许无 secret 的 Linux 预检继续；受保护 Environment 级 `DESKTOP_DISTRIBUTION_APPROVED` 只在人工批准后交给签名和发布 job。这保留临时目录的自动清理边界，也不让廉价预检广泛获得 Environment secret。
 
 **落点**
 
-更新 `.github/workflows/desktop-release.yml`；`auditWorkflow` 新增 runner-only context 拒绝规则和对应回归 fixture，避免只靠 GitHub 远程 0 秒失败发现同类问题。
+更新 `.github/workflows/desktop-release.yml` 和 `docs/DESKTOP_RELEASE_RUNBOOK.md`；`auditWorkflow` 新增 runner-only context 拒绝规则、两层 approval variable 静态契约和对应回归 fixture，避免只靠 GitHub 远程失败发现同类问题。
 
 **验证**
 
@@ -1263,7 +1263,7 @@ Desktop release workflow 首次推送后在 GitHub Actions 以 0 秒、无 job �
 
 **限制 / 下一步**
 
-本地 static audit 只锁定当前 workflow 使用的高风险 context，不是 GitHub Actions schema 的完整替代。公开发布仍必须先完成权利批准、正式 updater key、Developer ID/notarization 凭据和 `desktop-release` Environment。
+本地 static audit 只锁定当前 workflow 使用的高风险 context，不是 GitHub Actions schema 的完整替代。两个 approval variable 都是非 secret 的明文变量，仅能表达“已完成权利审核”，不能取代 rights JSON、HTTPS evidence 或 GitHub Environment 人工批准。公开发布仍必须先完成权利批准、正式 updater key、Developer ID/notarization 凭据和 `desktop-release` Environment。
 
 ## 5. 常用问题排查表
 

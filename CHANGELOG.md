@@ -32,5 +32,5 @@
 
 - Bundled Node `24.19.0` 同时携带完整 `LICENSE`，manifest/audit 复核 license SHA；CI updater verifier feature-gated 且不进入 App。
 - DMG fallback 只一键打开版本固定且重新校验的 GitHub asset；release workflow 将 tag、精确 commit、`HEAD` 与 build SHA 绑定为同一身份。
-- Release 临时目录改为在 runner 启动后通过 `RUNNER_TEMP`→`GITHUB_ENV` 注入，避免在 job 级 `env` 使用 GitHub 不支持的 `runner` context 而导致 workflow 0 秒配置失败。
+- Release 临时目录改为在 runner 启动后通过 `RUNNER_TEMP`→`GITHUB_ENV` 注入，避免在 job 级 `env` 使用 GitHub 不支持的 `runner` context 而导致 workflow 0 秒配置失败；right preflight 与最终签名 job 分别使用仓库级和受保护 Environment 批准变量。
 - **Public desktop Release 仍 blocked**：当前 arm64 App/DMG 已完成本地重建与复核；cs2d/Valve rights、正式 updater 公钥和 Apple Developer ID/notarization 尚未形成完整公开验收证据。
