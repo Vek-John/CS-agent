@@ -2,15 +2,18 @@
 
 > macOS Apple Silicon 上的 local-first CS2 Demo 教练。主产品是一场覆盖整场比赛的引导式复盘，而不是赛后报告或问题列表。
 
-## 发布状态：公开下载尚未开放
+## 发布状态：未公证 Preview 可下载，正式版尚未开放
 
-仓库已经实现并验证本地 Desktop 核心链路，最新资源与 verifier gate 合入后的本机 `.app`/DMG 也已重建复核；但它们只是 ad-hoc internal RC，**当前没有可供普通用户安全下载的公开 Release**。公开发行同时受三类外部事项阻塞：
+仓库已经实现并验证本地 Desktop 核心链路。项目所有者已确认再分发授权，并授权发布隔离的 **Apple Silicon 未签名/未公证 Preview**。它没有自动更新，Gatekeeper 可能拒绝打开；不要关闭 Gatekeeper，也不要把该 Preview 当作正式稳定版。
 
-- 固定的 cs2d 上游没有已记录的明确再分发许可；
-- Valve 雷达、武器和游戏资源仍是 `LOCALHOST_ONLY` / `REVIEW_REQUIRED`；
+下载页：[CS Agent Coach 0.1.0 Unnotarized Preview](https://github.com/Vek-John/CS-agent/releases/tag/desktop-preview-v0.1.0)
+
+正式稳定发行仍受以下事项阻塞：
+
+- 项目所有者确认的再分发授权尚未按正式 machine-readable audit 格式录入并复核；
 - Developer ID、notarization 凭据和 Tauri updater 正式公钥尚未在公开发布 Gate 中满足，配置里的 updater 公钥仍是显式阻断占位值。
 
-因此不要把本地 ad-hoc DMG、internal RC 或已有 updater 测试描述成已签名、已公证、可公开再分发的 macOS Release。当前状态见 [Desktop distribution audit](./docs/DESKTOP_DISTRIBUTION_AUDIT.md)，发布步骤见 [Desktop release runbook](./docs/DESKTOP_RELEASE_RUNBOOK.md)。
+因此不要把 Preview、本地 ad-hoc DMG 或已有 updater 测试描述成已签名、已公证或 stable macOS Release。当前状态见 [Desktop distribution audit](./docs/DESKTOP_DISTRIBUTION_AUDIT.md)，发布步骤见 [Desktop release runbook](./docs/DESKTOP_RELEASE_RUNBOOK.md)。
 
 ## 普通用户的目标安装体验
 
@@ -115,7 +118,7 @@ pnpm release:check        # release workflow/audit 静态检查；不会发布
 pnpm check                # 通用 tests + typecheck + Web production build
 ```
 
-`desktop:build` 使用检查入库的 ad-hoc identity `-`。Tauri 只构建 App；仓库脚本再用 `ditto`＋`hdiutil` 创建包含 `/Applications` 链接的 DMG，不依赖 Finder/AppleScript。它适合开发机和受控 internal RC，不是 Developer ID 签名或 notarization。若通过下载、聊天工具或浏览器传给另一台 Mac，quarantine/Gatekeeper 可能拒绝启动；不要要求测试者关闭 Gatekeeper，也不要把绕过警告当作签名验证。公开测试应等待正式发行 Gate 全部通过。
+`desktop:build` 使用检查入库的 ad-hoc identity `-`。Tauri 只构建 App；仓库脚本再用 `ditto`＋`hdiutil` 创建包含 `/Applications` 链接的 DMG，不依赖 Finder/AppleScript。它不是 Developer ID 签名或 notarization。若通过下载、聊天工具或浏览器传给另一台 Mac，quarantine/Gatekeeper 可能拒绝启动；不要要求测试者关闭 Gatekeeper，也不要把绕过警告当作签名验证。未公证 Preview 只是项目所有者明确授权的公开测试例外，正式发行仍必须等待 stable Gate 全部通过。
 
 ### Localhost 开发兼容路径
 

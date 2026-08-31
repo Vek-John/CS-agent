@@ -1,7 +1,7 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：5.2.0
+> 版本：5.3.0
 > 最后更新：2026-08-31
 > 适用范围：Web 2D 到桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
@@ -363,7 +363,7 @@ App 使用 `script-src 'self' 'nonce-…'`（无 eval/unsafe-inline）、`style-
 
 ### 4.5 Desktop updater 与 distribution gate
 
-官方 Tauri Updater 只负责 HTTPS update check、下载、minisign 验签、`latest.json` 与 SemVer 解析。启动后异步检查并按 24 小时频控，也提供手动检查；“下载”和“安装”是两个独立用户确认，活跃解析、写入、迁移、checkpoint 或 coaching session 触发 busy gate。关闭主窗口只隐藏且继续保持 review busy；只有 Settings 的“结束当前复盘”在成功导航 bundled maintenance page 后才解除该 gate，“稍后”或关闭 Settings 会恢复复盘。版本唯一源是 `apps/desktop/package.json`；release tag 为 `desktop-vX.Y.Z`，资产集合固定为 `dmg`、`app.tar.gz`、`.sig`、`latest.json` 与 `SHA256SUMS`。
+官方 Tauri Updater 只负责 HTTPS update check、下载、minisign 验签、`latest.json` 与 SemVer 解析。启动后异步检查并按 24 小时频控，也提供手动检查；“下载”和“安装”是两个独立用户确认，活跃解析、写入、迁移、checkpoint 或 coaching session 触发 busy gate。关闭主窗口只隐藏且继续保持 review busy；只有 Settings 的“结束当前复盘”在成功导航 bundled maintenance page 后才解除该 gate，“稍后”或关闭 Settings 会恢复复盘。版本唯一源是 `apps/desktop/package.json`；正式稳定 release tag 为 `desktop-vX.Y.Z`，资产集合固定为 `dmg`、`app.tar.gz`、`.sig`、`latest.json` 与 `SHA256SUMS`。
 
 本地与 CI 的 DMG 必须复用同一个无 Finder 生命周期依赖的构建器：Tauri 只构建并签名 `.app`，受控脚本使用 `ditto` 复制 bundle、加入固定 `/Applications` symlink，再由 `hdiutil` 生成并双重校验压缩 DMG。新镜像只有在校验通过后才替换旧镜像；最终校验失败必须恢复旧字节并清理 partial/staging。Release workflow 静态审计必须固定 `app build → create:dmg → notarize → bundle audit` 顺序，禁止回退到 `osascript`/Finder DMG。
 
@@ -371,7 +371,9 @@ Tauri updater plugin `2.10` 的 macOS install 路径没有本项目要求的 res
 
 Release workflow 必须先把已有 `desktop-vX.Y.Z` tag 解析为精确 commit；后续 job 只 checkout 该 commit，并复核 tag、`HEAD` 和 `CS_AGENT_BUILD_SHA` 都相等。版本、tag、build SHA、签名与 immutable asset URL 必须绑定同一发布身份，不能在 job 间跟随移动分支。
 
-正式发布必须通过 `distribution:audit`。当前 cs2d 上游没有 LICENSE，Valve 雷达/游戏资源在 `THIRD_PARTY_NOTICES.md` 中为 `LOCALHOST_ONLY`/`REVIEW_REQUIRED` 语义，因此只允许本机开发或 internal RC；公开 release workflow 保持 blocked，直至权利状态更新并复核。没有 Apple Developer 身份、签名与 notarization 凭据时只能生成 ad-hoc、未公证构建，不得称为正式 macOS release。
+项目所有者可以明确授权一个与稳定通道隔离的未公证 Preview。Preview tag 固定为 `desktop-preview-vX.Y.Z`，GitHub 必须标记 Pre-release，且只上传与 tag commit 精确一致的 Apple Silicon ad-hoc DMG 和覆盖该 DMG 的 `SHA256SUMS`。Preview 不得上传 `latest.json`、updater archive 或 `.sig`，不得使用 `desktop-v*` tag，不得被自动更新发现或称为 signed/notarized/stable。Release Notes 必须在首屏说明 Gatekeeper 可能拒绝打开、没有自动更新、目标为 Apple Silicon/macOS 13+，并记录精确 build SHA 与权利批准来源。
+
+正式稳定发布仍必须通过 `distribution:audit`。当前入库记录仍将 cs2d 与 Valve 资源标为未公开复核，正式公开 workflow 保持 blocked，直至权利记录更新并复核。没有 Apple Developer 身份、签名与 notarization 凭据时只能生成 ad-hoc、未公证构建，不得称为正式 macOS release；Preview 例外不会弱化该稳定 Gate。
 
 ## 5. 建议仓库结构
 
@@ -1508,7 +1510,7 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 | OutcomeImpact | Accepted | 完整曲线始终可见；结构化影响可提前进入 OutcomePackage，但只有结果播放后才能呈现文案；并发死亡/下包降低归因，不把全知曲线当 Observation |
 | Desktop Keychain | Implemented | macOS generic password 保存 Provider key；WebView 仅 `status/set/delete`、永不 `get`；secret 只经 Rust→sidecar stdin 内存，不进 SQLite/log/env/argv/front state |
 | Desktop updater | Implemented / Public blocked | 已实现 check/download/minisign、分开确认、显式 end/resume review gate、`DRAINING` 后等待 Next handler＋response active count 归零的 SQLite backup、同卷 `RENAME_SWAP`、health confirmation/rollback、版本固定 DMG 一键 fallback；本地临时签名 0.1.0→0.1.1 HTTPS/验签/篡改/解包 smoke 与原子安装纵向 fixture 已通过，正式公钥、rights、Developer ID/notarization 尚未完成公开验收 |
-| Desktop distribution | Implemented / Public blocked | 版本、tag、固定资产、audit 与 protected workflow 已实现；rights、正式公钥、Developer ID/notarization 未满足时公开 workflow 必须 blocked |
+| Desktop distribution | Preview allowed / Stable blocked | 稳定通道的版本、tag、固定资产、audit 与 protected workflow 已实现；rights、正式公钥、Developer ID/notarization 未满足时正式 workflow 必须 blocked。项目所有者明确授权时可发布隔离 tag、无 updater 资产且明确警示的 ad-hoc GitHub Pre-release |
 | 个人记忆 | Implemented | 桌面由 SQLite、Web 由 PostgreSQL 保存；consent、晋级、revision、tombstone、导出/删除与 late-event 防复活一致，只影响优先级，不改写当前 Demo 事实 |
 | 视频弱标注 | Accepted | 仅作为已授权离线教学行为启动语料；无原 Demo 时只使用媒体时间，不产生精确 tick 或黄金集 |
 | 强化学习 | Deferred | 无可靠环境与奖励前不采用 |
@@ -1556,3 +1558,4 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 | 5.1.0 | 2026-08-31 | 由 ADR-0008 对齐已实现桌面边界：Desktop 成为主产品；App `127.0.0.1`＋Viewer `[::1]` host/cookie 隔离；Host＋43 字符 HttpOnly cookie 后注入 trusted origin，admin token 只驻内存；Node exact FS permission＋`--jitless`＋child deny＋LICENSE hash；SQLite Memory/checkpoint、local invalidator、Unicode feature hash、quiescent backup/export/delete、Keychain Provider、原子 updater/rollback 与 verifier feature gate 落地；本机 App/DMG 已重建复核，public Release 仍受 rights、正式公钥、Developer ID/notarization 阻塞。 |
 | 5.1.1 | 2026-08-31 | 将本地与 CI 的 DMG 统一为 Finder-free `ditto`＋`hdiutil` 构建：Tauri 只产出签名 App，DMG 在校验后原子替换，失败恢复旧镜像；workflow audit 固定 app→DMG→notary→bundle audit 顺序。 |
 | 5.2.0 | 2026-08-31 | 由 ADR-0009 将两个 desktop socket 都收敛到 `127.0.0.1:0`，同时用 App literal IPv4 / Viewer hidden localhost browser authority 保持 Cookie 隔离；Ready/HTTP 升 v2，Viewer 增加 session-cookie guard，App CSP 收紧为精确 frame origin，并以真实 WKWebView Worker/WASM smoke 验证。 |
+| 5.3.0 | 2026-08-31 | 增加项目所有者明确授权的未公证 Preview 通道：`desktop-preview-vX.Y.Z` 只发 GitHub Pre-release、ad-hoc Apple Silicon DMG 与其 SHA256，不生成 updater 资产且必须显著披露 Gatekeeper/签名限制；正式 `desktop-v*` 权利、Developer ID、notarization 与 updater Gate 保持不变。 |

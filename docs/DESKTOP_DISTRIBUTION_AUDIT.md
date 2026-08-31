@@ -1,6 +1,6 @@
 # Desktop Distribution Audit
 
-当前状态：**Public Release blocked**。
+当前状态：**Stable Public Release blocked；owner-authorized unnotarized Preview allowed**。
 
 本文件是 [DESKTOP_DISTRIBUTION_AUDIT.json](./DESKTOP_DISTRIBUTION_AUDIT.json) 的人类可读说明，不是 license grant，也不覆盖 `ARCHITECTURE.md`。
 
@@ -21,7 +21,8 @@
 
 - public `desktop-v*` workflow 必须在 cheap preflight rights Gate 失败；
 - local/internal ad-hoc app/DMG 不能称为 signed、notarized 或 publicly redistributable；
-- 不得发布 `latest.json`、updater archive/signature 或 GitHub Release；
+- 项目所有者明确授权的 `desktop-preview-v*` 只能作为 GitHub Pre-release，只含 ad-hoc Apple Silicon DMG 与其 `SHA256SUMS`，并显著标记未签名/未公证/无自动更新；
+- Preview 不得发布 `latest.json`、updater archive/signature，也不得成为 `desktop-v*` stable Release；
 - 代码层 updater 测试、quiescent backup、原子回滚与最终 internal bundle 验证不能替代正式公钥、Developer ID、notary 与 rights 证据。
 
 Audit CLI 要求 `THIRD_PARTY_NOTICES.md`、机器可读批准记录、Environment approval、公钥/签名和最终资产相互一致，单文件修改不能放行。解除步骤与 CI 顺序见 [DESKTOP_RELEASE_RUNBOOK.md](./DESKTOP_RELEASE_RUNBOOK.md)。

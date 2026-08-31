@@ -2,9 +2,9 @@
 
 本 Runbook 只描述发布工程，不授予第三方权利，也不取代 [ARCHITECTURE.md](../ARCHITECTURE.md)、历史冻结的 [ADR-0007](./adr/ADR-0007-local-first-tauri-desktop.md) 与实施修订 [ADR-0008](./adr/ADR-0008-desktop-runtime-implementation-amendments.md)。
 
-## 当前结论：Public Release blocked
+## 当前结论：Stable blocked，未公证 Preview 已获 owner 授权
 
-现在不得创建或宣传公开桌面 Release，原因不是“还没写 workflow”，而是以下 Gate 尚未同时成立：
+现在不得创建或宣传正式稳定桌面 Release，原因不是“还没写 workflow”，而是以下 Gate 尚未同时成立：
 
 1. 固定 cs2d 上游没有已记录的明确再分发授权；
 2. Valve 雷达/武器/游戏资产仍为 `LOCALHOST_ONLY` / `REVIEW_REQUIRED`；
@@ -12,6 +12,17 @@
 4. Developer ID、Team ID、notarization 和 updater 私钥只定义了受保护 CI 输入，尚无一轮满足 rights 后的公开验收证据。
 
 机器可读 Gate 是 [DESKTOP_DISTRIBUTION_AUDIT.json](./DESKTOP_DISTRIBUTION_AUDIT.json)，当前 `publicReleaseApproved=false`。CLI 还会独立检查 `THIRD_PARTY_NOTICES.md`、受保护环境变量、公钥和 tag；改单个文件不能批准发布。
+
+2026-08-31，项目所有者确认已取得所用第三方内容的再分发授权，并明确要求在没有 Apple Developer Program 的情况下继续发布。该确认只授权下述未公证 Preview，不伪造权利证据、Apple 签名或 notarization 成功状态，也不修改正式 `distribution:audit` 结论。
+
+## 未公证 Preview 契约
+
+- Tag 固定为 `desktop-preview-vX.Y.Z`，必须指向构建 DMG 的精确 commit。
+- GitHub Release 必须标记 Pre-release，标题和首段必须写明“未签名、未公证”。
+- 只上传 `CS-Agent-Coach_X.Y.Z_aarch64.dmg` 和仅覆盖该文件的 `SHA256SUMS`。
+- 不上传 `latest.json`、`.app.tar.gz` 或 `.sig`；入库 updater 公钥继续保持阻断占位值。
+- Release Notes 必须写明 Apple Silicon/macOS 13+、无自动更新、Gatekeeper 可能拒绝打开、不应关闭 Gatekeeper，并列出 build SHA 和 DMG SHA-256。
+- Preview 不得更名或促销为 stable/signed/notarized；后续正式版仍必须走 `desktop-v*` protected workflow。
 
 ## 固定发布身份
 
@@ -66,7 +77,7 @@ pnpm release:check
 
 `desktop:smoke:update-local` 不访问 GitHub、不安装到 `/Applications`：它复制当前真实 App 为 0.1.1、用运行时临时 Tauri key 签名 archive、通过自签 CA 的本地 HTTPS 流式下载、调用 production Rust verifier、拒绝篡改并验证解包后的 arm64/codesign/version；私钥和全部大文件在同一 controller 的临时目录中清理。Rust 纵向 fixture 另以真实 `RENAME_SWAP` 验证 1.2.3→1.2.4、pending receipt、用户数据不变和 health 后清理旧 App。它证明更新工程，不是 Developer ID/notary/public Release 证据。
 
-`pnpm desktop:build` 使用 ad-hoc identity `-`，只能用于开发机或受控 internal RC。Tauri 只产出 App；`apps/desktop/scripts/create-dmg.mjs` 使用 `ditto`＋`hdiutil` 创建并双重校验 DMG，不启动 Finder/AppleScript，失败时保留旧镜像。它不是 Developer ID 签名、notarization 或公开再分发证据，也不生成/发布 `latest.json`。通过浏览器或聊天工具传输会引入 quarantine，Gatekeeper 可能阻止打开；不要要求测试者关闭 Gatekeeper。
+`pnpm desktop:build` 使用 ad-hoc identity `-`，默认只能用于开发机或受控 internal RC；只有满足上述隔离 Preview 契约时才可作为公开 Pre-release DMG。Tauri 只产出 App；`apps/desktop/scripts/create-dmg.mjs` 使用 `ditto`＋`hdiutil` 创建并双重校验 DMG，不启动 Finder/AppleScript，失败时保留旧镜像。它不是 Developer ID 签名、notarization 或公开再分发证据，也不生成/发布 `latest.json`。通过浏览器或聊天工具传输会引入 quarantine，Gatekeeper 可能阻止打开；不要要求测试者关闭 Gatekeeper。
 
 ## CI 精确流程
 
@@ -85,7 +96,7 @@ pnpm release:check
 
 Workflow 不创建 tag、不推 commit，也不上传约 318 MB prepared runtime 中间产物。
 
-## 固定公开资产
+## 正式稳定版固定公开资产
 
 版本 `X.Y.Z` 只能发布：
 
