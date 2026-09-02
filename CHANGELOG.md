@@ -13,20 +13,30 @@
 - Desktop SQLite Memory/checkpoint、atomic migration、`local-unicode-feature-hash/1.0.0` 256 维 Unicode 1–3 gram 词法向量、精确 cosine、导出/删除、backup 与 update rollback seam。
 - macOS Keychain Provider 设置，支持 `NONE`、DeepSeek 和 OpenAI-compatible。
 - fail-closed distribution audit、Developer ID/notarization/updater 资产 workflow 和 release runbook。
+- 本地内容寻址 Demo 资料库、可分页/搜索的复盘历史、Review/Revision/Artifact/RuntimeHead 持久化，以及重命名、重新分析、换玩家复盘和显式删除入口。
+- 设置页中的 Demo/复盘/原始文件/产物/缓存占用统计、资料库完整性验证、资料库目录入口与可重建缓存清理。
+- Memory 机会身份与 evidence 身份分层：同一 Demo、玩家、稳定 cue source 和 taxonomy 只形成一个机会，重新分析版本只追加证据。
 
 ### Changed
 
 - Desktop 成为主产品；localhost 与 Cloudflare 降为开发/部署兼容 adapter。
 - 播放主画面继续占据核心空间，长期记忆入口并入顶栏，教练侧栏与时间轴提高字号、对比和空间层级。
 - Demo 继续通过 WKWebView 原生文件选择并在 Viewer Worker/WASM 内解析。
+- Desktop Demo 在解析前先经一次性 capability 和 64 KiB backpressure pipeline 流式写入应用资料库；内容寻址发布后保持 `IMPORTING`，真实 parser 再以一次性 VALIDATE capability 提交 `READY` 或 `CORRUPT`。恢复时由 Viewer 直接读取托管原始文件，Host、Rust、Agent 和 LLM 均不接触 raw Demo bytes。
+- 默认点击历史记录只回放已保存的 Analysis、ReviewPlan、Narration、教学产物和稳定进度；只有显式“重新分析”或“为另一个玩家创建复盘”才生成新 Revision。
+- Revision READY 现在要求服务端真实校验 Analysis/CandidateSet/ReviewPlan/Narration/Recovery，并把 RuntimeHead 原子绑定到 Recovery Artifact ID/key/revision 与精确 session/run/boundary/checkpoint；Viewer 对幂等 pause/seek 显式回传播放状态，并用 mount acknowledgement 消除首次 restore seek 竞态。
+- 首次导入只在 parser VALIDATE 已提交 READY 后才按 `DEMO_IMPORT_SUCCEEDED → REPLAY_READY` 开放选人；连续点击历史由 Host open epoch、Viewer abort＋串行 parser generation 和 requestId/demoId/hash 精确回执共同保证 latest-wins。
+- Review Revision 增加 artifact contract 版本：新 v2 继续要求独立 CandidateSet Artifact；migration 006 让迁移前 v1 READY 记录从 checksummed AnalysisBundle 内的同一 CandidateSet 兼容恢复。
+- Settings 物理验证只能降级既有 READY Demo，不得绕过 parser 晋升；RESTORE 在 bridge 入口丢弃迟到的所有 `ANALYSIS_*` 事件。
 - Desktop 删除使用 SQLite/tombstone/deletion marker 与本地 no-op invalidator，不依赖 Cloudflare Outbox；Web/Cloudflare 严格通知/invalidation 保持不变。
-- Updater 使用下载/安装分开确认、显式“结束当前复盘”/恢复 gate、`DRAINING` 后等待 Next handler＋response active count 归零的 SQLite backup、同卷原子交换与首次 health confirmation；关闭主窗口只隐藏且保持 busy。
+- Updater 使用下载/安装分开确认、显式“结束当前复盘”/恢复 gate、`DRAINING` 后等待 Next、Viewer Library 和 admin 资料库 handler＋response 统一 active count 归零的 SQLite backup、同卷原子交换与首次 health confirmation；shutdown 复用同一静默点，关闭主窗口只隐藏且保持 busy。
 
 ### Security
 
-- Secret 不进入 environment/argv/URL/SQLite/log/WebView 返回值；remote coaching WebView 保持零 Tauri capability。
+- Secret 不进入 environment/argv/URL/SQLite/log/WebView 返回值；remote coaching WebView 只拥有 `open_settings` 窄导航 capability，没有文件、Provider、资料库管理或通用 Tauri 权限。
 - Protected sidecar 在 Host＋43 字符 cookie 校验后覆盖注入 trusted app origin，Desktop coaching/Memory 写路由共享该 origin gate。
 - Sidecar 使用精确 filesystem permission、`--jitless` 与 child deny。
+- Demo 与大型产物路径只保存为资料库相对路径，拒绝 symlink/path escape；导入、发布与删除使用 job/Saga 状态并在受限 Node 24 下通过异步 `FileHandle.sync()` 保留目录耐久性屏障；启动 reconcile 可完成 final 已发布但 temp 已删除的 PUBLISHING import。
 
 ### Distribution
 

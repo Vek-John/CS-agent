@@ -4,12 +4,20 @@ import {
   COACH_AGENT_RECOVERY_VERSION,
   COACH_AGENT_SESSION_VERSION,
   COACH_AGENT_STATE_VERSION,
+  AgentToolResultSchema,
   SessionRecoveryRecordSchema,
+  SessionWrapUpResultSchema,
+  CueCaseSchema,
+  LearningThreadSchema,
   reconnectDispositionFromLedger,
+  type AgentToolResult,
+  type CueCase,
   type CoachAgentEvent,
   type HostToolLedgerSummary,
+  type LearningThread,
   type PreparedNarrationArtifact,
   type SessionRecoveryRecord,
+  type SessionWrapUpResult,
 } from "@cs-coach/coach-agent/client";
 import type {
   CoachingRouteState,
@@ -17,7 +25,10 @@ import type {
   NarrationBundle,
   ReviewPlan,
 } from "@cs-coach/contracts";
-import type { Cs2dAnalysisBundle } from "@cs-coach/cs2d-analysis-adapter";
+import {
+  deserializeCs2dAnalysisBundle,
+  type Cs2dAnalysisBundle,
+} from "@cs-coach/cs2d-analysis-adapter";
 import {
   captureSessionRecovery,
   rehydrateSessionRecovery,
@@ -31,7 +42,13 @@ import {
   createCs2dReviewPreparationDependencies,
   type ReviewPreparationDependencies,
 } from "../coaching/cs2d-route-integration";
-import { assertValidReviewPlan } from "@cs-coach/review-planner";
+import {
+  assertValidNarrationBundle,
+  assertValidReviewPlan,
+  buildCoachingPackage,
+  buildOutcomeImpactForCue,
+  buildOutcomePackage,
+} from "@cs-coach/review-planner";
 
 export interface RecoverySessionIdentity {
   readonly recoveryId: string;
@@ -45,6 +62,129 @@ export interface RecoveryAgentCheckpointMeta {
   readonly currentSessionPhase: string;
   readonly routeCursor: number;
   readonly sessionStatus: "ACTIVE" | "TAKEN_OVER" | "CANCELLED" | "COMPLETED";
+}
+
+export interface StoredReviewArtifactInput {
+  readonly analysis: unknown;
+  readonly candidateSet: unknown;
+  readonly plan: unknown;
+  readonly narrationByCue: Readonly<Record<string, unknown>>;
+  readonly cueCases: Readonly<Record<string, unknown>>;
+  readonly learningThreads: readonly unknown[];
+  readonly summary: unknown | null;
+  readonly selectedPlayerId: string;
+  readonly demoContentHash: string;
+  readonly routeId?: string;
+  readonly routeHash?: string;
+}
+
+export interface ValidatedStoredReviewArtifacts {
+  readonly analysis: Cs2dAnalysisBundle;
+  readonly plan: ReviewPlan;
+  readonly narrationByCue: Readonly<Record<string, NarrationBundle>>;
+  readonly cueCases: Readonly<Record<string, CueCase>>;
+  readonly learningThreads: readonly LearningThread[];
+  readonly summary: SessionWrapUpResult | null;
+}
+
+/** Prevents a valid recovery snapshot from being paired with another Revision. */
+export function assertRecoveryMatchesActiveRevision(
+  record: SessionRecoveryRecord,
+  plan: ReviewPlan,
+): void {
+  const routeFingerprint = buildInitialCoachingRouteState(plan).routeFingerprint;
+  if (record.routeId !== plan.id || record.routeHash !== routeFingerprint) {
+    throw new Error("Stored recovery route does not match the active Revision.");
+  }
+}
+
+/**
+ * Re-enters every persisted artifact through the same domain validators used
+ * on first analysis. Storage checksums protect bytes; this protects identity,
+ * schema, cue bindings, observable-state timing, and presentation policy.
+ */
+export function validateStoredReviewArtifacts(
+  input: StoredReviewArtifactInput,
+): ValidatedStoredReviewArtifacts {
+  const serialized = JSON.stringify(input.analysis);
+  if (!serialized) throw new Error("Stored AnalysisBundle is missing.");
+  const analysis = deserializeCs2dAnalysisBundle(serialized);
+  if (
+    analysis.selected_steam_id !== input.selectedPlayerId ||
+    analysis.metadata.demo_content_hash?.toLowerCase() !== input.demoContentHash.toLowerCase()
+  ) {
+    throw new Error("Stored analysis identity does not match the Review.");
+  }
+  const canonical = (value: unknown): string => {
+    if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+    if (value && typeof value === "object") return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(",")}}`;
+    return JSON.stringify(value) ?? "undefined";
+  };
+  if (canonical(input.candidateSet) !== canonical(analysis.candidate_set)) {
+    throw new Error("Stored CandidateSet does not match the AnalysisBundle.");
+  }
+  const plan = assertValidReviewPlan(
+    analysis.match_timeline,
+    input.plan as ReviewPlan,
+  );
+  if (plan.player_id !== input.selectedPlayerId || plan.demo_id !== analysis.demo_id) {
+    throw new Error("Stored ReviewPlan identity does not match the analysis.");
+  }
+  const routeState = buildInitialCoachingRouteState(plan);
+  if (
+    (input.routeId && input.routeId !== plan.id) ||
+    (input.routeHash && input.routeHash !== routeState.routeFingerprint)
+  ) {
+    throw new Error("Stored ReviewPlan route identity does not match the Revision.");
+  }
+
+  const cueById = new Map(plan.cues.map((cue) => [cue.id, cue]));
+  const narrationByCue: Record<string, NarrationBundle> = {};
+  for (const [cueId, value] of Object.entries(input.narrationByCue)) {
+    const cue = cueById.get(cueId);
+    if (!cue || !cue.candidate_id) {
+      throw new Error("Stored narration references an unknown cue.");
+    }
+    const coaching = buildCoachingPackage(
+      cue,
+      analysis.candidate_set,
+      analysis.observation_evidence,
+    );
+    const impact = buildOutcomeImpactForCue(
+      cue,
+      analysis.candidate_set,
+      analysis.win_probability_timeline,
+      analysis.match_timeline,
+      analysis.selected_steam_id,
+    );
+    assertValidNarrationBundle(
+      value,
+      coaching,
+      buildOutcomePackage(cue, analysis.candidate_set, impact),
+    );
+    narrationByCue[cueId] = value;
+  }
+
+  const cueCases = Object.fromEntries(Object.entries(input.cueCases).map(([cueId, value]) => {
+    const parsed = CueCaseSchema.parse(value);
+    if (parsed.cueId !== cueId || !cueById.has(cueId)) {
+      throw new Error("Stored CueCase identity does not match the ReviewPlan.");
+    }
+    return [cueId, parsed];
+  }));
+  const learningThreads = input.learningThreads.map((value) => {
+    const parsed = LearningThreadSchema.parse(value);
+    if (parsed.evidenceCueIds.some((cueId) => !cueById.has(cueId))) {
+      throw new Error("Stored LearningThread references an unknown cue.");
+    }
+    return parsed;
+  });
+  const summary = input.summary === null
+    ? null
+    : SessionWrapUpResultSchema.parse(input.summary);
+  return { analysis, plan, narrationByCue, cueCases, learningThreads, summary };
 }
 
 export function shouldPersistToolTransitionToRecovery(source: "DEFAULT" | "MANUAL"): boolean {
@@ -369,6 +509,38 @@ export function reconciledRecoveryLedger(record: SessionRecoveryRecord): HostToo
     observationCode: result.observation.code,
     result,
   };
+}
+
+/**
+ * Reuses independently persisted ToolResult artifacts when the committed
+ * Recovery snapshot was captured at POSTED. Results for older calls remain
+ * available in history but cannot alter a checkpoint that does not name them.
+ */
+export function mergePersistedToolResults(
+  record: SessionRecoveryRecord,
+  toolResultsByCall: Readonly<Record<string, unknown>>,
+): SessionRecoveryRecord {
+  const results = new Map<string, AgentToolResult>();
+  for (const [callId, value] of Object.entries(toolResultsByCall)) {
+    const result = AgentToolResultSchema.parse(value);
+    if (result.callId !== callId) throw new Error("Stored ToolResult key does not match callId.");
+    results.set(callId, result);
+  }
+  if (results.size === 0) return record;
+  const toolLedger = record.toolLedger.map((entry) => {
+    const result = results.get(entry.callId);
+    if (!result) return entry;
+    if (entry.result && JSON.stringify(entry.result) !== JSON.stringify(result)) {
+      throw new Error("Stored ToolResult conflicts with the Recovery ledger.");
+    }
+    return {
+      ...entry,
+      status: entry.status === "RESUMED" ? "RESUMED" as const : "RESULTED" as const,
+      observationCode: result.observation.code,
+      result,
+    };
+  });
+  return SessionRecoveryRecordSchema.parse({ ...record, toolLedger });
 }
 
 export function buildReconnectReplayEvent(record: SessionRecoveryRecord): Extract<CoachAgentEvent, { type: "RECONNECT_REPLAY" }> {

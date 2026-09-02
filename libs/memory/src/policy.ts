@@ -2,6 +2,7 @@ import type {
   MemoryEventType,
   MemoryProposal,
   MemoryRecord,
+  MemorySourceRef,
   MemoryStatus,
   MemoryWriteDecision,
 } from "./domain";
@@ -66,6 +67,83 @@ function preserveHigherLifecycle(current: MemoryRecord | undefined, proposed: Me
   return lifecycleRank(current.status) > lifecycleRank(proposed) ? current.status : proposed;
 }
 
+const BEHAVIOR_OPPORTUNITY_SOURCE_PREFIX = "behavior-opportunity-source-";
+
+function opportunityMarkers(refs: readonly MemorySourceRef[]): string[] {
+  return refs
+    .filter((ref) =>
+      ref.namespace === "SESSION" &&
+      ref.refId.startsWith(BEHAVIOR_OPPORTUNITY_SOURCE_PREFIX),
+    )
+    .map((ref) => ref.refId);
+}
+
+function evidenceSourceSignature(refs: readonly MemorySourceRef[]): string | undefined {
+  const parts = [...new Set(refs
+    .filter((ref) =>
+      ref.namespace === "DEMO_FACT" ||
+      ref.namespace === "OBSERVATION_CLAIM" ||
+      ref.namespace === "PRO_EVIDENCE",
+    )
+    .map((ref) => `${ref.namespace}:${ref.refId}`))]
+    .sort();
+  return parts.length > 0 ? parts.join("|") : undefined;
+}
+
+function sourceRefGroups(refs: readonly MemorySourceRef[], demoContentHash: string): MemorySourceRef[][] {
+  const groups = new Map<string, MemorySourceRef[]>();
+  for (const ref of refs) {
+    if (ref.demoContentHash !== demoContentHash) continue;
+    const key = [ref.sessionId, ref.cueId, ref.caseId ?? ""].join("|");
+    const group = groups.get(key) ?? [];
+    group.push(ref);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
+
+function sameOpportunitySource(
+  currentRefs: readonly MemorySourceRef[],
+  incomingRefs: readonly MemorySourceRef[],
+  incomingCueId: string,
+): boolean {
+  const currentMarkers = opportunityMarkers(currentRefs);
+  const incomingMarkers = opportunityMarkers(incomingRefs);
+  if (currentMarkers.length > 0 && incomingMarkers.length > 0) {
+    return currentMarkers.some((marker) => incomingMarkers.includes(marker));
+  }
+
+  // Legacy proposals did not carry the marker. Typed parser/observation
+  // provenance remains stable across route reordering and provides the
+  // compatibility bridge without treating inference or Advice IDs as facts.
+  const currentEvidence = evidenceSourceSignature(currentRefs);
+  const incomingEvidence = evidenceSourceSignature(incomingRefs);
+  if (currentEvidence && incomingEvidence) return currentEvidence === incomingEvidence;
+
+  // Last-resort compatibility for already-persisted proposals that predate
+  // both source markers and typed evidence. New events always carry a marker.
+  return currentRefs.some((ref) => ref.cueId === incomingCueId);
+}
+
+function repeatsDiagnosedOpportunity(
+  current: MemoryRecord | undefined,
+  proposal: MemoryProposal,
+  eventType: MemoryEventType | undefined,
+): boolean {
+  if (!current || eventType !== "CUE_DIAGNOSED") return false;
+  // The aggregate lookup already fixes the taxonomy/logical key. Compare each
+  // prior provenance group by its stable candidate/evidence source, never by
+  // the route-local c1/c2 ordinal. Explicit corrections and transfer
+  // applications have their own lifecycle paths.
+  return sourceRefGroups(current.sourceRefs, proposal.origin.demoContentHash).some(
+    (group) => sameOpportunitySource(
+      group,
+      proposal.origin.typedSourceRefs,
+      proposal.origin.cueId,
+    ),
+  );
+}
+
 /**
  * Deterministic lifecycle/write policy.  It has no I/O and gives LLM output
  * no direct persistence authority: callers still need MemoryService's
@@ -126,6 +204,11 @@ export class MemoryWritePolicy {
     if (proposal.consentState !== "GRANTED") {
       return { ...base, accepted: false, action: "NOOP", reason: "CONSENT_REQUIRED" };
     }
+    if (existing?.status === "DELETED") {
+      // Tombstones outrank every replay/idempotency/source comparison: an old
+      // event can never observe a path that would recreate deleted content.
+      return { ...base, accepted: false, action: "NOOP", reason: "DELETED_TOMBSTONE", revision: existing.revision, status: "DELETED" };
+    }
     if (existing?.lastIdempotencyKey === proposal.idempotencyKey) {
       return {
         ...base,
@@ -136,12 +219,15 @@ export class MemoryWritePolicy {
         status: existing.status,
       };
     }
-    if (existing?.status === "DELETED") {
-      // A replayed old event must never resurrect a tombstoned logical key.
-      if (type === "MEMORY_DELETED" || proposal.operation === "DELETE") {
-        return { ...base, accepted: false, action: "NOOP", reason: "DELETED_TOMBSTONE", revision: existing.revision, status: "DELETED" };
-      }
-      return { ...base, accepted: false, action: "NOOP", reason: "DELETED_TOMBSTONE", revision: existing.revision, status: "DELETED" };
+    if (existing && repeatsDiagnosedOpportunity(existing, proposal, type)) {
+      return {
+        ...base,
+        accepted: false,
+        action: "NOOP",
+        reason: "DUPLICATE_SOURCE",
+        revision: existing.revision,
+        status: existing.status,
+      };
     }
     // An explicit user deletion is stronger than a prior correction.  Check
     // it before the correction-precedence guard so corrected memories remain

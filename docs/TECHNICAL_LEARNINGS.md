@@ -1047,7 +1047,7 @@ Homebrew PostgreSQL **17.11** 以 service 形式运行，`cs_agent_local` 连接
 
 通过 [ADR-0007](./adr/ADR-0007-local-first-tauri-desktop.md) 冻结 Apple Silicon `aarch64` 首发：Tauri `2.11.5` 只监督一个自包含 desktop runtime sidecar，sidecar 打包 pinned Node `24.19.0` 与 Next standalone traced resources，并在同一进程中持有两个 OS 分配的 `127.0.0.1:0` 端口（Next UI/API 与独立 cs2d Viewer）。不用 `localhost` hostname、LAN、通配监听或 grandchildren。Next UI/Route Handler、cs2d File → Worker/WASM、Playback bridge、Outcome Gate、完整时间线和 observable-state 证据边界全部复用；raw Demo/Replay 不跨 iframe。
 
-supervision 使用 stdin init 与 token admin transport 的严格版本 envelope。nonce/token 不进入 argv、environment、disk、log 或 WebView；Keychain generic password secret 只经 Rust → sidecar 内存。main coaching remote origin 零 Tauri capability；bundled bootstrap/settings/update window 只有 AppManifest allowlist 中的窄 `status/set/delete` 等命令，不提供 broad shell/fs/http/process/dialog/opener，Secret 永不 `get`。Demo 继续由 WKWebView 原生 HTML File chooser 选择，路径/bytes 不跨 Rust。
+supervision 使用 stdin init 与 token admin transport 的严格版本 envelope。nonce/token 不进入 argv、environment、disk、log 或 WebView；Keychain generic password secret 只经 Rust → sidecar 内存。后续 Review History 修订仅给 main coaching remote origin 增加 `open_settings` 窄导航 capability；bundled bootstrap/settings/update window 只有 AppManifest allowlist 中的窄 `status/set/delete` 等命令，所有窗口仍不提供 broad shell/fs/http/process/dialog/opener，Secret 永不 `get`。Demo 继续由 WKWebView 原生 HTML File chooser 选择，路径/bytes 不跨 Rust。
 
 Application Support SQLite 成为桌面 Memory 真相，并以不同表/Adapter 同时承载 preferences、consent、events/revisions/tombstones/evidence/Float32 embeddings 与 LangGraph checkpoint。`memory-sqlite` 实现既有 `MemoryRepository`/`AuthorizationStore`，checkpoint saver 独立实现 `BaseCheckpointSaver`；Memory Domain 与 Session/Agent 不合并。SQLite 固定 WAL、foreign keys、FULL synchronous、busy timeout、checksummed migrations、single writer；embedding 只做 bounded exact cosine，首发不加载 `sqlite-vec`。IndexedDB 仍只保存 Host Recovery，恢复与 SQLite checkpoint 精确双状态握手。Web 的 Cloudflare/DO/PostgreSQL Adapter 和历史保留，但退出桌面默认；`MemoryWritePolicy`、跨 Demo 晋级、consent、revision、tombstone 和 late-event 防复活不变。
 
@@ -1288,6 +1288,106 @@ Preview tag `desktop-preview-v0.1.0` 指向 commit `6f1b841102147c2fd26a5d598af8
 **限制 / 下一步**
 
 该 Preview 只支持 Apple Silicon/macOS 13+，没有 Developer ID、Team ID、notarization ticket 或公开自动更新；Gatekeeper 在默认策略下可能拒绝打开。权利状态仅记录了项目所有者本轮确认，正式 machine-readable rights evidence 尚未入库；因此该 Pre-release 不能提升为 stable，也不能用来证明正式 updater 链路已通过。
+
+### 4.55 2026-09-02：永久复盘必须把媒体、分析版本、运行头与记忆证据拆成不同身份
+
+**触发**
+
+原有桌面流程只把 File 留在当前 WKWebView：应用退出后无法再次打开同一 Demo，ReviewPlan、Narration、教学结论和 Agent checkpoint 也没有统一的复盘归属。若简单把整个 Replay 或大 Analysis JSON 塞进 SQLite，会同时破坏 Viewer-only raw media 边界、备份大小和内存上限；若把每次重新分析都当成新 Memory 机会，又会让同一行为在长期记忆中重复增长。
+
+真实 App 验收还暴露了两个只在完整纵向链路出现的问题。第一，打包的 Node 24 Permission Model 会以 `ERR_ACCESS_DENIED` 禁用同步 `fsyncSync`，导致 60.6 MB Demo 已写完却在目录耐久性屏障处失败。第二，首次 RuntimeHead 把 AnalysisBundle 的内部 `demo_id` 误当作 DemoAsset UUID，Review/Revision/Artifacts 已生成但稳定起点无法提交。
+
+**决定**
+
+新增 `review-library` 深模块，以同一个 desktop SQLite owner 管理 `DemoAsset 1:N Review 1:N ReviewRevision 1:N ReviewArtifact`、单一 RuntimeHead、导入/产物/删除 job 与 Memory evidence claim。原始 Demo 使用 SHA-256 内容寻址文件；大型 AnalysisBundle 使用应用目录内 gzip 文件，小型控制面 JSON 留在 SQLite。数据库只保存受策略验证的相对路径，所有发布先写同卷 partial、校验、同步、硬链接发布，再提交索引；删除走可恢复 Saga/tombstone。SQLite backup 继续只备份小型数据库，不复制原始 Demo。
+
+Viewer 用一次性、对象绑定、短期 Bearer capability 直接向 Viewer-origin sidecar 流式写入或读取 Demo；Host 只交换 DTO 和控制命令，Rust、Next、Agent、Memory 与 LLM 都不接触 raw bytes 或完整 Replay。默认历史点击先恢复持久化控制面，再让 Viewer 读取托管 Demo，并设置 playback-only gate；只有显式重新分析或换玩家才创建新 Revision。
+
+目录同步改为异步 `fs.promises.open(directory)`＋`FileHandle.sync()`＋close：它与文件同步表达相同 durability barrier，同时是受限 Node 24 允许的 API。`HistoryPersistenceController` 在创建或 adopt Review 时绑定 DemoAsset UUID，提交 RuntimeHead 时强制覆盖调用者传入的同名字段，防止 parser artifact identity 越过持久化边界。Memory 则把稳定 opportunity key 与 revision evidence key 分开：相同 Demo hash、玩家、稳定 cue source 与 taxonomy 只 claim 一次，分析版本只作为附加 evidence。
+
+**落点**
+
+新增 `libs/review-library`、desktop migrations 003/004、Review History API/Sidebar/restore/persistence controller、cs2d managed-library patch、Viewer raw-byte endpoints、Settings 资料库管理、ADR-0010。更新 desktop runtime/Rust supervisor、Memory evidence ingest/policy、checkpoint identity helper、Architecture、README、Changelog 与真实 sidecar smoke。
+
+**验证**
+
+`pnpm check` 通过：**113 files passed / 2 skipped、797 tests passed / 4 skipped**，TypeScript 与普通 Next production build通过；Desktop webpack production build和 cs2d `vue-tsc` 通过。桌面门禁继续为 runtime **10/10**、prepare/bootstrap/DMG **20/20**、stub sidecar **1/1**、Rust **40/40**。真实 sidecar smoke 现在在 Node `24.19.0 --permission --jitless` 下执行两次启动：第一次走受保护 Next capability＋Viewer raw endpoint 导入，第二次以同一 hash/同一 Demo UUID 去重；该测试在旧 `fsyncSync` 实现上可稳定变红，改用 `FileHandle.sync()` 后通过。
+
+真实 ad-hoc Tauri App 通过原生文件选择器导入 `demoTests/test_demo.dem`（Finder 60.6 MB，60,601,900 bytes），落盘 SHA-256 为 `84a1a4191302bdd2a3bbb5a727842093744b1fb1a228aeec630369e44b622cb2`，解析为 `de_mirage`、10 名玩家、9 回合。选定 `povergo` 后生成 20 个教学点，Review 为 `IN_PROGRESS`、Revision 为 `READY`，RuntimeHead 的 Demo UUID 与 DemoAsset 一致。冷重启后直接点击该历史记录恢复到第 1 回合、讲解 1/20；点击前后精确保持 2 Reviews、2 Revisions、37 Artifacts、1 RuntimeHead、40 Agent checkpoints 和 0 Memory events，证明默认恢复没有生成新版本、讲解或 Agent checkpoint。Settings 显示 1 个 Demo、2 条复盘、58 MB 原始文件、806 KB 产物，并报告“已校验 1 个 Demo 和 2 个大型产物”。
+
+**限制 / 下一步**
+
+Parser 的既有 WASM 接口仍需要在 Viewer 内把完整 Demo 转为 ArrayBuffer；资料库传输是流式且 bounded，但解析峰值内存尚未变成真正增量解析。真实 UI 覆盖了导入、解析、换玩家、新 RuntimeHead、冷重启和 route-start 恢复；更深的 CUE_PAUSED/WRAP_UP checkpoint 恢复由状态机与数据库测试覆盖，没有在本轮再手工走完 20 个教学点。清理缓存和删除入口因会改变本地数据没有在最终 UI 验收中点击；其 job/Saga 行为由单元测试覆盖。公开 macOS stable 发行仍独立受 Developer ID、notarization 与 updater 正式密钥约束。
+
+### 4.56 2026-09-02：READY 与 RuntimeHead 必须分别通过语义门和精确恢复点门
+
+**触发**
+
+第一次独立终审指出，ROUTE_START 虽已改为“关键产物落盘后再提交”，但后续 CUE_PAUSED/WRAP_UP 仍并行 fire-and-forget 写 `SESSION_RECOVERY` 与 RuntimeHead；DAL 只检查“存在某类 Artifact”，冷恢复又选择时间上最新的 Recovery。这样可能形成新 head 指向旧 snapshot。终审还用伪 JSON 证明低层 checksum/type 计数不足以代表 Revision 语义 READY，并发现 Demo 删除无法覆盖 `source_review_id=NULL` 的同哈希 Memory evidence。
+
+真实 App 冷恢复同时出现 `PLAYBACK_LANDING_TIMEOUT`：Viewer 已在 canonical tick 73 显示画面，Host 进度仍为 `—`。Host 侧缓存最后状态的第一版修复仍失败，说明唯一一次初始 `PLAYBACK_STATE` 发生在 `REPLAY_READY` 前后竞态中，幂等 pause/seek 又没有产生新的响应。
+
+**决定**
+
+所有稳定边界改为严格顺序：先持久化本次 `SESSION_RECOVERY`，再提交 RuntimeHead。提交输入携带精确 Recovery artifact key；Review History 服务先复用当前 Analysis adapter、ReviewPlan、Narration/CueCase、SessionRecovery 等领域 validator 验证指定 Revision，资料库事务再逐项核对 session、run、Demo hash、玩家、route、boundary、cursor、cue、checkpoint 和计数。冷恢复只选择与 RuntimeHead 完整身份匹配的 snapshot。新 Revision 记录真实 adapter 1.4.0、Agent graph v3、prompt 与 Director metadata；`CANDIDATE_SET` 成为 READY 必需 Artifact。
+
+Demo 删除 job snapshot 额外保存内容哈希；删除整个 Demo 时按 hash 将包括无唯一 Review 归属在内的 evidence 标为 DELETED 并写 tombstone，同时保留 opportunity claim 防止重新导入后重计。Viewer bridge 对 pause/seek 即使状态不变也显式回传 `PLAYBACK_STATE`，并在 `ViewerStage` mount、命令监听器安装完成后的 next tick 再发布一次初始状态；该改动继续位于受控 cs2d patch stack。
+
+**落点**
+
+`apps/web/lib/review-history/artifact-validation.ts` 成为 Review History 应用服务的语义门；`libs/review-library` 保留文件/checksum、指定 Revision 读取、精确 Recovery/head 事务和删除 Saga。Host 的首个 durability promise 串行保存 Analysis、CandidateSet、Plan、已就绪 Narration、Recovery 与 head，后续 Narration 等待该 promise 后追加；中途稳定边界也不再并行提交。Architecture 5.4/ADR-0010 同步记录了这两个层次，避免把“可存储 JSON”误写成“可恢复 READY”。
+
+**验证**
+
+真实领域 fixture 证明当前 Analysis/Plan/Narration/Recovery 集可通过 READY，route/run 漂移会被拒绝；Route Handler 回归证明伪 Analysis JSON 返回 `REVISION_ARTIFACTS_INCOMPLETE` 且不会调用 commit。资料库测试覆盖错误 Recovery key/run、READY/FALLBACK Narration、指定 Revision materialize 和无 Review 归属 evidence 的 hash tombstone。最终 `pnpm check` 为 **120 files passed / 2 skipped、817 tests passed / 4 skipped**，TypeScript 与 Next production build 通过；Runtime **10/10**、prepare/bootstrap/DMG **21/21**、stub **1/1**、Rust **42/42**、真实受限 sidecar 双启动、cs2d typecheck/build 与 patch reverse-check 通过。
+
+真实 App 已连续复现两次旧 Viewer 时序下的 tick 73/Host `—` 超时，第二次排除了单纯 Host 容差问题；mount 后显式确认的 Viewer 产物随后完成 typecheck、production build、受控 patch 校验与 ad-hoc App 重建。最终点击复验开始前 macOS 自动锁屏，Computer Use 无权解锁，因此这一条 UI 结论仍待屏幕解锁后补齐，不能把构建通过写成实际落位通过。
+
+**限制 / 下一步**
+
+当前 WASM Parser 仍需完整 Blob/ArrayBuffer；列表与删除明细有界为 50，删除确认显示精确总数和前 8 条明细，impact token 覆盖全部关联。最终 mount-ack UI 点击、Settings 新删除选择器的只读视觉检查仍受锁屏阻塞；不得为了通过验收修改系统锁屏设置，也不得未经确认点击真实删除操作。
+
+### 4.57 2026-09-03：永久历史需要 parser、恢复身份和事件时序三类独立门
+
+**触发**
+
+第二轮独立 Spec 审查证明“文件已安全落盘”和“Review 可安全恢复”之间仍有多个不能互相替代的边界。最初导入会在真实 parser 前把 Demo 标成 READY，Settings 的物理 verify 又能把 `IMPORTING/CORRUPT` 重新升成 READY；RuntimeHead 只保存 Recovery key 时，同 key 多 revision 无法唯一指向 snapshot；历史打开期间迟到的 `ANALYSIS_PROGRESS/TELEMETRY/FAILED` 仍可覆盖已恢复控制面。默认 answer/disagreement/skip 的诊断产物、独立 ToolResult 和 exact Recovery identity 也需要在 head 前完整持久化。
+
+真实生产 WKWebView 纵向测试又抓到两个单元测试不容易暴露的事件竞态。第一，Viewer 先发 `PLAYER_SELECTED`，下一个 Vue tick 才挂载 `ViewerStage` 命令 listener，Host 的首次 pause/seek 会被父级 no-op handler 消费并在十秒后 `PLAYBACK_LANDING_TIMEOUT`。第二，首次导入时 Viewer 选人可能快于 React 对 `REPLAY_READY` 的 rerender，`PLAYER_SELECTED` handler 读到旧 `replay=undefined`，从而漏建 Review。大文件采样还显示原逐 chunk `await FileHandle.write` 的 RSS 裕量过小，WriteStream `flush:true` 又会在 Node Permission Model 下调用被禁用的 `fs.fsync`。
+
+最终双轴复审继续找出四个跨边界窗口：backup 的旧 active count 没有覆盖 Viewer import/read/finalize 与已进入的 admin 删除；import 已 link/fsync final、删除 temp、但尚未提交 SQLite 时崩溃会留下永远 PUBLISHING 的 final-only job；parser 完成会由 watcher 在 VALIDATE READY 前暴露选人；连续点击历史时，Host HTTP controller、Host async state commit 与 Viewer parser 各自都可能让慢 A 覆盖快 B。另一个容易误判的细节是 Node `response.writableEnded` 只说明调用过 `end()`，并不代表字节已经 `finish/close`。
+
+最新 debug App 解锁后的可见验收又证明“新增完整性门”本身也需要版本化：真实 `povergo` Review 是独立 CandidateSet Artifact 成为强制项之前写成的 READY Revision，checksummed AnalysisBundle 内已有完整 67-candidate set，但历史层把“缺少新投影”误判成“旧分析不可恢复”。永久历史不能因为后来把同一数据拆成独立 Artifact 就强迫用户重新调用 LLM。
+
+**决定**
+
+Demo 导入改成三层门：64 KiB high-water-mark 的 `Readable → hash/size/header Transform → FileHandle WriteStream` pipeline 先发布内容寻址文件和 `IMPORTING` 行；同一用户 File 经真实 Worker/WASM parser 后，Viewer 才以一次性、Demo-bound VALIDATE capability 提交 READY 或 CORRUPT。失去内存 capability 的中断 IMPORTING 在启动时变 CORRUPT；Settings verify 只允许把既有 READY 降级，绝不语义晋升。受限 Node 的 durability 顺序固定为 pipeline finish → `FileHandle.sync()` → WriteStream destroy/close acknowledgement → directory sync；不用同步 `fsyncSync` 或 `flush:true`。
+
+Migration 005 为 RuntimeHead 增加 Recovery Artifact ID/key/revision 三元身份；只有能唯一匹配的旧行才回填，其他旧 head 恢复失败关闭。Artifact append 复用真实 Analysis/CandidateSet/Plan/Narration/CueCase/Recovery validator，并要求 Analysis → CandidateSet → Plan → session Artifact 的依赖顺序；每个稳定边界先写精确 Recovery，再提交 head。answer/disagreement/skip 先持久化用户交互和完整诊断投影，再镜像 Agent 结果；ToolResult 以独立 Artifact 校验并只合并到匹配的 POSTED ledger。
+
+历史打开严格拆成 SQLite control plane 和 Viewer source 两阶段。RESTORE 在 bridge 入口丢弃全部迟到 `ANALYSIS_*`；Viewer 不运行胜率 Worker，只有 `ViewerStage` 已安装命令 bridge 并发出 `host-ready` 后才发 PLAYER_SELECTED。Host 在收到 REPLAY_READY 的同一消息 turn 写 `replayRef`，选人建 Review 和恢复 tick-rate 都读取该 ref。main remote window 只增加 `open_settings` 命令，用于显示/聚焦 bundled Settings；文件、Keychain、删除、验证、统计与通用 Tauri 权限仍未开放。
+
+backup/shutdown 改用统一 activity tracker：Next、Viewer Library `IMPORT/VALIDATE/READ` 与 admin 资料库操作都在 READY 检查后、首个 await 前登记，只有 handler 结束且 response 真正 `finish/close` 才退休；DRAINING 后新入口返回 503。`publishImport` 在 final 已存在时先复核 exact hash/size，再允许无 temp 完成数据库提交。managed parser watcher 不再自行发布 Replay；首次导入必须先 VALIDATE READY，随后按 `DEMO_IMPORT_SUCCEEDED → REPLAY_READY` 发布并解锁选人。历史恢复则在 Host 每个 await 后检查 open epoch，Viewer 用 AbortController＋串行 parse tail＋load generation 屏蔽不可取消 parser 的旧结果，Host 再以 requestId/demoId/hash 做第二层精确校验；PLAYER_SELECTED 与全部 ANALYSIS_* 在 desktop managed mode 下还必须绑定当前已接受 Replay，已排队的旧 postMessage 不能写入新 Review。
+
+Migration 006 为 Revision 增加 `artifact_contract_version`：既有行默认 v1，新建行显式 v2。v2 的 append/READY/head 仍要求独立 CANDIDATE_SET；v1 只有在 Revision 已 READY 时，恢复层才从 checksummed、随后仍会经过 Analysis/Candidate/Plan/Recovery 现有领域校验的 AnalysisBundle 读取 embedded CandidateSet。兼容层不回写伪 Artifact，也不放宽任何新 Revision 的持久化门。
+
+**落点**
+
+核心落点为 `libs/review-library`、desktop migrations 005/006、Review History Artifact/restore/persistence controller、Playback Host、受控 cs2d managed-library patch、Viewer import/finalize/read endpoints、Settings capability/页面，以及 Memory opportunity evidence 集成测试。`ARCHITECTURE.md` 升至 5.5.2，ADR-0010、README 与 Changelog 同步上述合同。
+
+**验证**
+
+最终全仓 `pnpm check` 通过：**123 files passed / 2 skipped、840 tests passed / 4 skipped**，TypeScript、普通 Next production build 均通过。桌面 webpack/Viewer/runtime prepare 产出 **7,428 files / 431,265,701 bytes**；desktop runtime **12/12**、prepare/bootstrap/DMG **21/21**、stub sidecar **1/1**、Rust **42/42** 均通过。受限 Node 24.19.0 `--permission --jitless` 的真实 sidecar 双启动、cs2d `vue-tsc`、patch **6/6** 与 patch reverse-check、Swift typecheck、Node syntax check、`git diff --check` 均通过。最新 `tauri build --debug --target aarch64-apple-darwin --bundles app` 成功，ad-hoc bundle 通过 `codesign --verify --deep --strict`；实际启动得到 Tauri PID 39491、受限 sidecar PID 39550 和 `RUNTIME_READY`。
+
+最终 `smoke:webkit-demo` 使用生产 `/desktop`、真实原生 file chooser 和 `demoTests/test_demo.dem`：文件为 **60,601,900 bytes**，SHA-256 为 `84a1a4191302bdd2a3bbb5a727842093744b1fb1a228aeec630369e44b622cb2`，真实 parser 得到 de_mirage、10 名玩家、9 回合，并进入首位玩家和 Canvas。为避免把全场 CS-Net 时长混进历史恢复断言，测试随后只经正式 Review History HTTP API 写入一组由当前领域 validator 接受的确定性 1-cue Artifact/RuntimeHead 到临时 SQLite，明确标记 `seededHistoryFixture=true`；刷新生产 App 后实际点击历史行，恢复到“讲解 1/1”和非空播放位置。点击前清零的 document-start fetch spy 与 Resource Timing 同时证明 Director、Narrator、Reflection、Adaptive、Wrap-up 和 `/api/memory/events` 为 **0**；观察到的 API 只有该 Review detail 与 viewer-source 各 **1**。最终一次 XHR send→sidecar publish RSS delta 为 **56,377,344 bytes < 60,601,900-byte file**；前一次最终代码样本为 **58,867,712 bytes**，另一次相同 pipeline 样本为 **18,268,160 bytes**，说明运行噪声存在，不能据此宣称任意尺寸下 RSS 恒定。
+
+独立 Memory 集成测试使用真实临时 SQLite owner、ReviewLibrary、SqliteMemoryRepository 与 MemoryService：同一 Review 打开五次、同 cue 回看五次、同机会从恢复路径重复发出五次后，claim/evidence/event/record 均保持 1，`occurrenceCount=1`，独立 Demo hash 仍只有一个。Demo 删除测试在删除前 stat 内容寻址文件成功，删除后明确得到 `ENOENT`；数据库、其他 Review、checkpoint、evidence tombstone 与失败重试另有回归覆盖。
+
+真实 Settings 可见验收显示 1 个 Demo、2 条复盘、58 MB 原始文件、806 KB 产物、0 B 缓存，并且 Review/Demo 删除入口分离且默认禁用；没有点击删除。真实用户 SQLite 已通过 migration 006，`integrity_check=ok`、foreign-key check 为空，仍为 1 Demo、2 Reviews、2 Revisions、37 Artifacts、1 RuntimeHead、40 checkpoints、0 Memory events/records/claims。领域集成测试以真实 Analysis/Plan/Narration/Recovery fixture 验证 v1 embedded CandidateSet 恢复，v1 PREPARING 和 v2 缺独立 CandidateSet 均失败关闭；独立终审最终报告 No P1/P2 findings。
+
+**限制 / 下一步**
+
+当前 Viewer WASM parser 仍把完整 Blob 转为 ArrayBuffer；上述 RSS 只测 sidecar raw transport/publish，不代表 WebView parser 增量内存，也不证明更大文件的 RSS 常量界。无头历史测试的 Artifact 是 validator-backed deterministic fixture，不等于本轮重新跑完真实 CS-Net/Director/Narrator；真实用户数据库中的 20-cue v1 Review 与数据仍保留。修复 migration 006 并重启最新 App 后 macOS 再次锁屏，因此该真实 v1 Review 的最终可见 re-click 未完成；不能绕过锁屏，但相同兼容路径已有真实领域 fixture、实际数据库 migration/integrity 与新 v2 WebKit 纵向链路证据。没有在真实用户库点击任何删除或重新分析操作。更深 CUE_PAUSED/WRAP_UP 由状态机、SQLite 和 Artifact 测试覆盖，而非本轮手工看完整场。
 
 ## 5. 常用问题排查表
 

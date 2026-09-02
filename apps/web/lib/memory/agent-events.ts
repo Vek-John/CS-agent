@@ -9,8 +9,120 @@ import {
 } from "@cs-coach/memory";
 import type { CoachAgentEvent, CoachAgentResult } from "@cs-coach/coach-agent";
 import type { CueCase } from "@cs-coach/contracts";
+import type { ClaimMemoryOpportunityInput } from "@cs-coach/review-library";
 
 const PRODUCER_VERSION = "local-coach-agent-memory.v1";
+const BEHAVIOR_OPPORTUNITY_SOURCE_PREFIX = "behavior-opportunity-source-";
+
+type BehaviorSourceRef = MemoryProposal["origin"]["typedSourceRefs"][number];
+
+function stableEvidenceSourceParts(refs: readonly BehaviorSourceRef[]): string[] {
+  return refs
+    .filter((ref) =>
+      ref.namespace === "DEMO_FACT" ||
+      ref.namespace === "OBSERVATION_CLAIM" ||
+      ref.namespace === "PRO_EVIDENCE",
+    )
+    .map((ref) => `${ref.namespace}:${ref.refId.trim()}`)
+    .sort();
+}
+
+function behaviorOpportunitySourceRefId(
+  event: Extract<CoachAgentEvent, { type: "SUBMIT_REFLECTION" | "SUBMIT_DISAGREEMENT" }>,
+  cueCase: CueCase,
+  refs: readonly BehaviorSourceRef[],
+): string {
+  const input = event.input as unknown as DiagnosisInputProvenance;
+  const candidateId = bounded(cueCase.candidateId ?? input.candidateId ?? input.material?.candidateId, 160);
+  const evidenceParts = stableEvidenceSourceParts(refs);
+  const sourceParts = candidateId
+    ? ["candidate", candidateId]
+    : evidenceParts.length > 0
+      ? ["evidence", ...evidenceParts]
+      : ["legacy-cue", event.cueId];
+  return `${BEHAVIOR_OPPORTUNITY_SOURCE_PREFIX}${stableMemoryToken(sourceParts.join("|"))}`;
+}
+
+function behaviorOpportunitySourceId(proposal: MemoryProposal): string {
+  const marker = proposal.origin.typedSourceRefs.find(
+    (ref) =>
+      ref.namespace === "SESSION" &&
+      ref.refId.startsWith(BEHAVIOR_OPPORTUNITY_SOURCE_PREFIX),
+  );
+  if (marker) return marker.refId;
+  const evidenceParts = stableEvidenceSourceParts(proposal.origin.typedSourceRefs);
+  if (evidenceParts.length > 0) {
+    return `${BEHAVIOR_OPPORTUNITY_SOURCE_PREFIX}${stableMemoryToken(["evidence", ...evidenceParts].join("|"))}`;
+  }
+  // Existing v1 events did not carry an explicit source marker. Retaining a
+  // cue fallback keeps those already-posted events readable and idempotent.
+  return `legacy-cue-${proposal.origin.cueId}`;
+}
+
+/**
+ * A behavior-evidence identity must survive a Host session replacement.  The
+ * route hash is the analysis-evidence revision: reopening the same Review
+ * revision keeps the key stable, while an explicit reanalysis can retain a
+ * separately versioned provenance record without pretending it is a new Demo.
+ */
+export function stableBehaviorEvidenceKey(input: {
+  readonly userId: string;
+  readonly demoContentHash: string;
+  readonly selectedPlayerId: string;
+  readonly stableCueSourceId: string;
+  readonly taxonomyCode: string;
+  readonly analysisEvidenceRevision: string;
+  readonly effect: "DIAGNOSIS" | "TRANSFER_APPLICATION";
+  readonly evidenceRevision?: number;
+}): string {
+  return `behavior-evidence-${stableMemoryToken([
+    input.userId,
+    input.demoContentHash,
+    input.selectedPlayerId,
+    input.stableCueSourceId,
+    input.taxonomyCode,
+    input.analysisEvidenceRevision,
+    input.effect,
+    String(input.evidenceRevision ?? 0),
+  ].join("|"))}`;
+}
+
+/**
+ * Projects a posted behavior event into the desktop database's stable
+ * opportunity claim. The analysis revision remains on the evidence row; it is
+ * deliberately absent from the unique opportunity identity.
+ */
+export function desktopBehaviorOpportunityClaim(
+  event: MemoryEvent,
+  selectedPlayerId: string,
+  analysisEvidenceRevision: string,
+): ClaimMemoryOpportunityInput | undefined {
+  const eventType = event.type ?? event.eventType;
+  if (eventType !== "CUE_DIAGNOSED" && eventType !== "TRANSFER_RULE_APPLIED")
+    return undefined;
+  const parsed = MemoryProposalSchema.safeParse(event.payload);
+  if (!parsed.success) return undefined;
+  const proposal = parsed.data as unknown as MemoryProposal;
+  const effect = eventType === "CUE_DIAGNOSED" ? "diagnosis" : "transfer-application";
+  const sourceId = behaviorOpportunitySourceId(proposal);
+  return {
+    userId: event.userId,
+    demoContentHash: proposal.origin.demoContentHash.toLowerCase(),
+    selectedPlayerId,
+    stableCueSourceId: `${sourceId}:${effect}`.slice(0, 200),
+    taxonomyCode: proposal.logicalKey,
+    analysisEvidenceRevision,
+    evidenceKey: event.idempotencyKey,
+    evidence: {
+      eventType,
+      proposalId: proposal.proposalId,
+      cueId: proposal.origin.cueId,
+      caseId: proposal.origin.caseId ?? null,
+      sourceThreadId: proposal.origin.sourceThreadId ?? null,
+      verdictRevision: proposal.verdict?.revision ?? null,
+    },
+  };
+}
 
 function bounded(value: unknown, max = 1_200): string {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";
@@ -21,10 +133,14 @@ interface ProvenanceItem {
 }
 
 interface DiagnosisInputProvenance {
+  readonly candidateId?: unknown;
+  readonly material?: {
+    readonly candidateId?: unknown;
+    readonly evidence?: readonly ProvenanceItem[];
+  };
   readonly decisionFacts?: readonly ProvenanceItem[];
   readonly playerActionFacts?: readonly ProvenanceItem[];
   readonly outcomeFacts?: readonly ProvenanceItem[];
-  readonly material?: { readonly evidence?: readonly ProvenanceItem[] };
 }
 
 function provenanceRefs(event: Extract<CoachAgentEvent, { type: "SUBMIT_REFLECTION" | "SUBMIT_DISAGREEMENT" }>, cueCase: CueCase) {
@@ -44,7 +160,9 @@ function provenanceRefs(event: Extract<CoachAgentEvent, { type: "SUBMIT_REFLECTI
   for (const evidence of input.material?.evidence ?? []) add("PRO_EVIDENCE", evidence.id, "bounded coaching evidence");
   for (const ref of Array.isArray(cueCase?.diagnosticResult?.evidenceRefs) ? cueCase.diagnosticResult.evidenceRefs : []) add("OBSERVATION_CLAIM", ref, "diagnostic observation claim");
   for (const ref of Array.isArray(cueCase?.verdict?.evidenceRefs) ? cueCase.verdict.evidenceRefs : []) add("OBSERVATION_CLAIM", ref, "verdict observation claim");
-  return refs.slice(0, 48);
+  // Leave room for claims, verdict/rule provenance and the stable source
+  // marker while respecting MemoryProposal's 64-ref bound.
+  return refs.slice(0, 45);
 }
 
 function eventForProposal(proposal: MemoryProposal, eventType: MemoryEventType, userId: string, sessionId: string, demoContentHash: string): MemoryEvent {
@@ -80,7 +198,7 @@ export function buildLocalAgentMemoryEvents(
   if (event.type === "COMPLETE_SESSION") {
     if (result.state.sessionStatus !== "COMPLETED") return [];
     const identity = result.identity;
-    const idempotencyKey = `memory-session-${stableMemoryToken(`${userId}|${identity.sessionId}|${identity.demoContentHash}`)}`;
+    const idempotencyKey = `memory-session-${stableMemoryToken(`${userId}|${identity.demoContentHash}|${identity.selectedPlayerId}|${identity.routeHash}`)}`;
     return [MemoryEventSchema.parse({
       schemaVersion: "memory-event.v1",
       eventId: `memory-event-${stableMemoryToken(idempotencyKey)}`,
@@ -101,27 +219,58 @@ export function buildLocalAgentMemoryEvents(
   const learningThread = result.state.learningThreads?.find((thread) => thread.evidenceCueIds.includes(event.cueId)) ?? result.state.learningThreads?.at(-1);
   if (!cueCase || !learningThread || !["AWAITING_CONFIRMATION", "COMPLETED", "DISAGREED"].includes(cueCase.status) || !cueCase.verdict || !cueCase.diagnosticResult) return [];
   const identity = result.identity;
-  const base = buildMemoryProposal({
+  const sourceRefs = provenanceRefs(event, cueCase);
+  const built = buildMemoryProposal({
     userId,
     sessionId: identity.sessionId,
     demoContentHash: identity.demoContentHash,
     cueCase,
     learningThread,
     outcomeGateStatus: event.outcomeGateStatus,
-    provenanceRefs: provenanceRefs(event, cueCase),
+    provenanceRefs: sourceRefs,
     producerVersion: PRODUCER_VERSION,
   });
+  const sourceRefId = behaviorOpportunitySourceRefId(event, cueCase, built.origin.typedSourceRefs);
+  const base = MemoryProposalSchema.parse({
+    ...built,
+    origin: {
+      ...built.origin,
+      typedSourceRefs: [
+        ...built.origin.typedSourceRefs,
+        {
+          namespace: "SESSION",
+          refId: sourceRefId,
+          demoContentHash: identity.demoContentHash,
+          sessionId: identity.sessionId,
+          cueId: event.cueId,
+          caseId: cueCase.caseId,
+          threadId: learningThread.threadId,
+          label: "stable behavior opportunity source",
+        },
+      ],
+    },
+  }) as unknown as MemoryProposal;
   // The event envelope ID is transport metadata and may change on a client
-  // retry. Use the deterministic cue/revision aggregate identity instead so
+  // retry. Use the deterministic source/revision aggregate identity instead so
   // local fallback and Durable Object producers converge on one idempotency
   // key and never count a retried reflection twice.
   const revision = Number(cueCase.verdict?.revision ?? cueCase.attemptBudget?.disagreement ?? 0);
   const eventType: MemoryEvent["type"] = event.type === "SUBMIT_DISAGREEMENT" ? "USER_CORRECTED_COACH" : "CUE_DIAGNOSED";
+  const diagnosisEvidenceKey = stableBehaviorEvidenceKey({
+    userId,
+    demoContentHash: identity.demoContentHash,
+    selectedPlayerId: identity.selectedPlayerId,
+    stableCueSourceId: sourceRefId,
+    taxonomyCode: base.logicalKey,
+    analysisEvidenceRevision: identity.routeHash,
+    effect: "DIAGNOSIS",
+    evidenceRevision: revision,
+  });
   let proposal = MemoryProposalSchema.parse({
     ...base,
-    proposalId: `proposal-${stableMemoryToken(`${base.proposalId}|${eventType}|${revision}`)}`,
+    proposalId: `proposal-${stableMemoryToken(`${diagnosisEvidenceKey}|${eventType}`)}`,
     eventType,
-    idempotencyKey: `memory-idem-${stableMemoryToken(`${userId}|${eventType}|${identity.sessionId}|${identity.demoContentHash}|${event.cueId}|${revision}|${base.logicalKey}`)}`,
+    idempotencyKey: `memory-idem-${stableMemoryToken(`${diagnosisEvidenceKey}|${eventType}`)}`,
   }) as unknown as MemoryProposal;
   if (event.type === "SUBMIT_DISAGREEMENT") {
     proposal = MemoryProposalSchema.parse({
@@ -144,13 +293,23 @@ export function buildLocalAgentMemoryEvents(
         ? "CONFLICT"
         : undefined;
     if (outcome) {
+      const applicationEvidenceKey = stableBehaviorEvidenceKey({
+        userId,
+        demoContentHash: identity.demoContentHash,
+        selectedPlayerId: identity.selectedPlayerId,
+        stableCueSourceId: sourceRefId,
+        taxonomyCode: base.logicalKey,
+        analysisEvidenceRevision: identity.routeHash,
+        effect: "TRANSFER_APPLICATION",
+        evidenceRevision: revision,
+      });
       const application = MemoryProposalSchema.parse({
         ...base,
-        proposalId: `proposal-${stableMemoryToken(`${base.proposalId}|application|${outcome}`)}`,
+        proposalId: `proposal-${stableMemoryToken(`${applicationEvidenceKey}|${outcome}`)}`,
         operation: "UPDATE",
         eventType: "TRANSFER_RULE_APPLIED",
         applicationOutcome: outcome,
-        idempotencyKey: `memory-idem-${stableMemoryToken(`${userId}|TRANSFER_RULE_APPLIED|${identity.sessionId}|${identity.demoContentHash}|${event.cueId}|${revision}|${base.logicalKey}|${outcome}`)}`,
+        idempotencyKey: `memory-idem-${stableMemoryToken(`${applicationEvidenceKey}|${outcome}`)}`,
       }) as unknown as MemoryProposal;
       events.push(eventForProposal(application, "TRANSFER_RULE_APPLIED", userId, identity.sessionId, identity.demoContentHash));
     }

@@ -1,9 +1,12 @@
-import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { SqliteDatabaseOwner } from "./database";
+import { stageSqliteRestore } from "./backup";
+import type { SqliteBackupManifest } from "./backup";
 import {
   DESKTOP_MEMORY_MIGRATION_ID,
   DESKTOP_MEMORY_SQL,
@@ -128,5 +131,78 @@ describe("desktop migration backup gate", () => {
     } finally {
       unchanged.close();
     }
+  });
+
+  it("accepts only a known checksum-correct migration prefix and upgrades the staging copy", async () => {
+    const root = await directory();
+    const source = join(root, "old.sqlite3");
+    const stage = join(root, "stage.sqlite3");
+    createMemoryOnlyDatabase(source);
+    const old = new DatabaseSync(source);
+    old
+      .prepare(
+        "INSERT INTO app_users(user_id,updated_at) VALUES('preserved','2026-08-30T00:00:00.000Z')",
+      )
+      .run();
+    old.close();
+
+    const oldManifest: SqliteBackupManifest = {
+      schemaVersion: "desktop-sqlite-backup.v1",
+      createdAt: "2026-08-30T00:00:00.000Z",
+      databaseSha256: createHash("sha256")
+        .update(await readFile(source))
+        .digest("hex"),
+      migrationLedger: [
+        {
+          migrationId: DESKTOP_MIGRATIONS[0].id,
+          checksum: DESKTOP_MIGRATIONS[0].checksum,
+        },
+      ],
+    };
+    await stageSqliteRestore(source, stage, oldManifest);
+    const upgraded = new DatabaseSync(stage, { readOnly: true });
+    try {
+      expect(
+        DESKTOP_MIGRATIONS.map((migration) =>
+          upgraded
+            .prepare(
+              "SELECT migration_id FROM desktop_schema_migrations WHERE migration_id=?",
+            )
+            .get(migration.id),
+        ),
+      ).toEqual(
+        DESKTOP_MIGRATIONS.map((migration) => ({
+          migration_id: migration.id,
+        })),
+      );
+      expect(
+        upgraded.prepare("SELECT user_id FROM app_users").all(),
+      ).toEqual([{ user_id: "preserved" }]);
+      expect(
+        upgraded
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='demo_assets'",
+          )
+          .get(),
+      ).toEqual({ name: "demo_assets" });
+    } finally {
+      upgraded.close();
+    }
+  });
+
+  it("rejects a non-prefix or unknown future ledger before creating staging", async () => {
+    const root = await directory();
+    const source = join(root, "future.sqlite3");
+    createMemoryOnlyDatabase(source);
+    const db = new DatabaseSync(source);
+    db.prepare(
+      "INSERT INTO desktop_schema_migrations(migration_id,checksum,applied_at) VALUES('desktop-future-999','unknown','2026-08-30T00:00:00.000Z')",
+    ).run();
+    db.close();
+
+    await expect(
+      stageSqliteRestore(source, join(root, "must-not-exist.sqlite3")),
+    ).rejects.toThrow("SQLITE_MIGRATION_DRIFT:desktop-future-999");
+    expect(await readdir(root)).not.toContain("must-not-exist.sqlite3");
   });
 });

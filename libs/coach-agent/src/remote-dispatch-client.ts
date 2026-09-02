@@ -5,6 +5,7 @@ export {
   serializeRemoteCoachAgentDispatchEnvelope,
   RemoteCoachAgentDispatchEnvelopeSchema,
 } from "./remote-dispatch";
+export { checkpointThreadIdForSession } from "./identity";
 export {
   COACH_AGENT_EVENT_VERSION,
   COACH_AGENT_GRAPH_VERSION,

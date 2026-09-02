@@ -52,14 +52,16 @@ import type {
 import type {
   AgentToolResult,
   AgentToolRequest,
+  CoachAgentEvent,
   CoachAgentResult,
   HostToolLedgerSummary,
   SessionRecoveryRecord,
   SessionRecoveryResult,
   SessionSummaryInput,
   SessionWrapUpRequest,
-  SessionWrapUpResult
+  SessionWrapUpResult,
 } from "@cs-coach/coach-agent/client";
+import { checkpointThreadIdForSession, COACH_AGENT_GRAPH_VERSION, SessionRecoveryRecordSchema } from "@cs-coach/coach-agent/client";
 import { deterministicSessionWrapUpResult, SessionWrapUpRequestSchema } from "@cs-coach/coach-agent/client";
 import {
   deserializeCs2dAnalysisBundle,
@@ -81,10 +83,13 @@ import {
   checkpointForRecoveryBoundary,
   normalizeRecoveryAnalysis,
   reconciledRecoveryLedger,
+  mergePersistedToolResults,
   restoreRecoveryArtifacts,
   shouldReconnectRecoveryAgent,
   shouldPersistToolTransitionToRecovery,
   isPreAgentRouteStartRecovery,
+  assertRecoveryMatchesActiveRevision,
+  validateStoredReviewArtifacts,
   type RecoveryAgentCheckpointMeta,
   type RecoverySessionIdentity,
 } from "../../lib/recovery/cs2d-session-recovery";
@@ -92,6 +97,7 @@ import { createSessionRecoveryRuntime } from "../../lib/recovery/session-recover
 import {
   createReviewPreparationOrchestrator,
   createCs2dReviewPreparationDependencies,
+  buildInitialCoachingRouteState,
   type ReviewPreparationDependencies
 } from "../../lib/coaching/cs2d-route-integration";
 import {
@@ -154,6 +160,15 @@ import {
 } from "./session-recovery-status";
 import { CoachSetupFlow, type CoachSetupStep } from "./coach-setup-flow";
 import { LiquidPhaseStatus } from "./liquid-phase-status";
+import { ReviewHistorySidebar, type ReviewHistoryItem } from "../history/review-history-sidebar";
+import { createReviewHistoryApi, ReviewHistoryApiError } from "../../lib/review-history/api";
+import { HistoryRestoreController, HistoryRestoreError } from "../../lib/review-history/history-restore-controller";
+import { HistoryPersistenceController } from "../../lib/review-history/history-persistence-controller";
+import {
+  ignoreHistoryAnalysisEvent,
+  runHistoryAnalysisGeneration,
+} from "../../lib/review-history/generation-gate";
+import { openDesktopSettings } from "../../lib/desktop/open-settings";
 import {
   acceptedPlaybackEvent,
   adjacentRoundIndex,
@@ -174,9 +189,16 @@ import {
   teachingDiagnosticsEnabled,
   canBeginManualCueVisit,
   cuePresentedActionForTerminal,
+  isRecoveryPlaybackLanding,
+  managedReplayMatchesExpected,
+  managedReplayContextIsCurrent,
+  managedReplayContextRequired,
+  managedRequestMatchesExpected,
   nearestCoachingCue,
+  persistTeachingBeforeRuntimeHead,
   type CoachAgentEntryMode,
-  type Cs2dDeployTarget
+  type Cs2dDeployTarget,
+  type ExpectedManagedReplayIdentity,
 } from "../../lib/playback/cs2d-playback-host";
 
 type HostPhase = "BOOTING" | "WAITING_FOR_DEMO" | "READY" | "ERROR";
@@ -256,6 +278,22 @@ type RecoveryLanding = {
   readonly analysis: Cs2dAnalysisBundle;
 };
 
+function targetTickForRecovery(
+  record: SessionRecoveryRecord,
+  staged: ReturnType<typeof restoreRecoveryArtifacts>,
+): number {
+  const boundary = record.boundary;
+  if (boundary.kind === "CUE_PAUSED") {
+    const cue = staged.plan.cues.find((candidate) => candidate.id === boundary.cueId);
+    if (!cue) throw new Error("Stored recovery cue is not present in the frozen plan.");
+    return cue.decision_tick;
+  }
+  if (boundary.kind === "WRAP_UP") {
+    return staged.plan.segments.at(-1)?.end_tick ?? 0;
+  }
+  return staged.plan.segments[0]?.start_tick ?? 0;
+}
+
 function recoveryEventId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`.slice(0, 160);
 }
@@ -289,6 +327,7 @@ export function Cs2dPlaybackHost({
   }, []);
   const stage2Mode = coachAgentMode === "STAGE2";
   const stage3Mode = coachAgentMode === "STAGE3";
+  const desktopLibraryEnabled = deployTarget === "desktop";
   const config = useMemo(() => {
     const resolvedParentOrigin = parentOrigin ?? (typeof window === "undefined"
       ? "http://localhost:3000"
@@ -307,9 +346,15 @@ export function Cs2dPlaybackHost({
   // React hydrates the server-rendered frame.
   const [phase, setPhase] = useState<HostPhase>(viewerUrl ? "WAITING_FOR_DEMO" : "BOOTING");
   const [replay, setReplay] = useState<ReplayReadyEvent>();
+  const replayRef = useRef<ReplayReadyEvent | undefined>(undefined);
   const [selected, setSelected] = useState<PlayerSelectedEvent>();
   const selectedPlayerIdRef = useRef<string | undefined>(undefined);
+  const historyRestorePlayerRef = useRef<string | undefined>(undefined);
+  const historyRestoreTickRef = useRef<number | undefined>(undefined);
+  const historyRestoreModeRef = useRef<"RESTORE" | "REANALYZE" | "SELECT_PLAYER">("RESTORE");
+  const historyPlaybackOnlyRef = useRef(false);
   const [playback, setPlayback] = useState<PlaybackStateEvent>();
+  const playbackRef = useRef<PlaybackStateEvent | undefined>(undefined);
   const [bundle, setBundle] = useState<Cs2dAnalysisBundle>();
   const [plan, setPlan] = useState<ReviewPlan>();
   const routeStateRef = useRef<CoachingRouteState | undefined>(undefined);
@@ -322,6 +367,7 @@ export function Cs2dPlaybackHost({
   const recoveryModeRef = useRef(false);
   const recoveryHandshakeReadyRef = useRef(true);
   const recoveryLandingRef = useRef<RecoveryLanding | undefined>(undefined);
+  const storedHistoryRecoveryLandingRef = useRef<RecoveryLanding | undefined>(undefined);
   const recoveryLandingTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const stableRecoveryKeyRef = useRef<string | undefined>(undefined);
   const completedRecoveryRef = useRef<string | undefined>(undefined);
@@ -383,6 +429,16 @@ export function Cs2dPlaybackHost({
   const [winRateVerticalZoom, setWinRateVerticalZoom] = useState(1);
   const [timelinePanning, setTimelinePanning] = useState(false);
   const [gameAssetCatalog, setGameAssetCatalog] = useState<GameAssetCatalog>();
+  const [historyItems, setHistoryItems] = useState<readonly ReviewHistoryItem[]>([]);
+  const [historyActiveReviewId, setHistoryActiveReviewId] = useState<string>();
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string>();
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyNextCursor, setHistoryNextCursor] = useState<string>();
+  const [historyImportProgress, setHistoryImportProgress] = useState<{ completedBytes: number; totalBytes: number }>();
+  const historyDurabilityReadyRef = useRef<Promise<void> | undefined>(undefined);
+  const historyOpenEpochRef = useRef(0);
+  const expectedManagedSourceRef = useRef<ExpectedManagedReplayIdentity | undefined>(undefined);
 
   useEffect(() => {
     setDiagnosticsEnabled(teachingDiagnosticsEnabled(window.location.search));
@@ -492,6 +548,41 @@ export function Cs2dPlaybackHost({
       updatedAt: Date.now(),
     });
     acceptRecoveryResult(persisted);
+    const durable = persisted.record ?? stable;
+    // Only Agent-confirmed stable boundaries become durable library heads;
+    // PLAYBACK_STATE ticks intentionally never enter this path.
+    if (durable.boundary.kind === "CUE_PAUSED" || durable.boundary.kind === "WRAP_UP") {
+      if (!durable.agentCheckpointId) {
+        setHistoryError("稳定恢复点缺少 Agent checkpoint；上一个恢复点仍然有效。");
+        return;
+      }
+      const recoveryArtifactKey = `${durable.boundary.boundaryId}:${durable.agentCheckpointId}`;
+      try {
+        const history = historyPersistenceControllerRef.current;
+        if (!history) return;
+        await history.artifact(
+          "SESSION_RECOVERY",
+          recoveryArtifactKey,
+          durable as unknown as Record<string, unknown>,
+          "session-recovery-record.v2",
+        );
+        await history.stableHead({
+          recoveryArtifactKey,
+          sessionId: durable.sessionId, runId: durable.runId,
+          demoContentHash: durable.demoContentHash, selectedPlayerId: durable.selectedPlayerId, routeId: durable.routeId,
+          routeHash: durable.routeHash, recoveryBoundary: durable.boundary.kind,
+          checkpointThreadId: checkpointThreadIdForSession(durable.sessionId), checkpointNamespace: "", checkpointId: durable.agentCheckpointId,
+          ...(durable.boundary.kind === "CUE_PAUSED" ? { currentCueId: durable.boundary.cueId } : {}),
+          defaultRouteCursor: durable.boundary.segmentIndex, completedCueCount: durable.cueProgress.completedCueIds.length,
+          totalCueCount: (durable.frozenReviewPlan as ReviewPlan).cues.length, stableProgress: durable.cueProgress,
+          ...(durable.boundary.kind === "WRAP_UP"
+            ? { reviewStatus: "COMPLETED", completedAt: new Date(durable.updatedAt).toISOString() }
+            : { reviewStatus: "IN_PROGRESS" }),
+        });
+      } catch {
+        setHistoryError("稳定恢复点未能完整提交；上一个恢复点仍然有效。");
+      }
+    }
   }, [acceptRecoveryResult, currentStableRecoveryRecord]);
 
   const persistToolTransition = useCallback(async (transition: Stage3ToolLedgerTransition) => {
@@ -504,6 +595,11 @@ export function Cs2dPlaybackHost({
     const record = recoveryRecordRef.current;
     if (!runtime || !record || transition.request.runId !== record.runId) return;
     const result = transition.result;
+    if (result) {
+      void historyPersistenceControllerRef.current
+        ?.artifact("TOOL_RESULT", transition.request.callId, result, "agent-tool-result.v1")
+        .catch(() => setHistoryError("教学工具结果保存失败。"));
+    }
     const entry: HostToolLedgerSummary = {
       callId: transition.request.callId,
       cueId: transition.request.cueId,
@@ -594,6 +690,313 @@ export function Cs2dPlaybackHost({
     iframeRef.current?.contentWindow?.postMessage(playbackCommandMessage(command), config.origin);
   }, [config.origin]);
 
+  const reviewHistoryApi = useMemo(() => createReviewHistoryApi(), []);
+  const refreshReviewHistory = useCallback(async () => {
+    if (!desktopLibraryEnabled) {
+      setHistoryItems([]);
+      setHistoryError(undefined);
+      return;
+    }
+    setHistoryLoading(true);
+    try {
+      const page = await reviewHistoryApi.list(historySearch || undefined);
+      setHistoryItems(page.items);
+      setHistoryNextCursor(page.nextCursor);
+      setHistoryError(undefined);
+    }
+    catch { setHistoryError("无法读取本地复盘历史。"); }
+    finally { setHistoryLoading(false); }
+  }, [desktopLibraryEnabled, historySearch, reviewHistoryApi]);
+  useEffect(() => { void refreshReviewHistory(); }, [refreshReviewHistory]);
+  const loadMoreReviewHistory = useCallback(async () => {
+    if (!historyNextCursor || historyLoading) return;
+    setHistoryLoading(true);
+    try {
+      const page = await reviewHistoryApi.list(historySearch || undefined, historyNextCursor);
+      setHistoryItems((current) => [...current, ...page.items.filter((item) => !current.some((existing) => existing.id === item.id))]);
+      setHistoryNextCursor(page.nextCursor);
+    } catch {
+      setHistoryError("无法加载更多复盘。");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [historyLoading, historyNextCursor, historySearch, reviewHistoryApi]);
+  const historyRestoreControllerRef = useRef<HistoryRestoreController | undefined>(undefined);
+  const historyPersistenceControllerRef = useRef<HistoryPersistenceController | undefined>(undefined);
+  if (!historyPersistenceControllerRef.current) historyPersistenceControllerRef.current = new HistoryPersistenceController({
+    createReview: reviewHistoryApi.create,
+    startRevision: reviewHistoryApi.startRevision,
+    appendArtifact: reviewHistoryApi.appendArtifact,
+    commitRuntimeHead: reviewHistoryApi.commitRuntimeHead,
+    markFailed: reviewHistoryApi.markFailed,
+  });
+  if (!historyRestoreControllerRef.current) {
+    historyRestoreControllerRef.current = new HistoryRestoreController({
+      loadDetail: reviewHistoryApi.detail,
+      requestViewerSource: reviewHistoryApi.viewerSource,
+      loadManagedDemo: (source, mode) => send({ type: "loadManagedDemo", ...source, mode } as PlaybackCommand),
+    });
+  }
+  const clearRecoveryLandingTimeout = useCallback(() => {
+    if (recoveryLandingTimeoutRef.current === undefined) return;
+    clearTimeout(recoveryLandingTimeoutRef.current);
+    recoveryLandingTimeoutRef.current = undefined;
+  }, []);
+  const openHistoryReview = useCallback(async (
+    reviewId: string,
+    mode: "RESTORE" | "REANALYZE" | "SELECT_PLAYER" = "RESTORE",
+    startOver = false,
+  ) => {
+    const openEpoch = ++historyOpenEpochRef.current;
+    const assertCurrentOpen = () => {
+      if (historyOpenEpochRef.current !== openEpoch) {
+        throw new HistoryRestoreError("STALE_REQUEST", "已切换到另一条复盘。");
+      }
+    };
+    expectedManagedSourceRef.current = undefined;
+    invalidateGeneration();
+    clearRecoveryLandingTimeout();
+    guidedSeekEpochRef.current += 1;
+    guidedSeekGateRef.current = undefined;
+    recoveryLandingRef.current = undefined;
+    storedHistoryRecoveryLandingRef.current = undefined;
+    recoveryModeRef.current = false;
+    recoveryRecordRef.current = undefined;
+    latestAgentCheckpointRef.current = undefined;
+    selectedPlayerIdRef.current = undefined;
+    recoveryHandshakeReadyRef.current = mode !== "RESTORE";
+    bundleRef.current = undefined;
+    planRef.current = undefined;
+    routeStateRef.current = undefined;
+    narrationByCueRef.current = {};
+    playbackRef.current = undefined;
+    replayRef.current = undefined;
+    historyDurabilityReadyRef.current = undefined;
+    setSelected(undefined);
+    setBundle(undefined);
+    setPlan(undefined);
+    setRouteState(undefined);
+    setNarrationByCue({});
+    setSession(undefined);
+    setTeachingCases({});
+    setTeachingThreads([]);
+    setAnalysisError(undefined);
+    setAnalysisProgress(undefined);
+    setAnalysisTelemetry(undefined);
+    setReviewPreparationStatus({ phase: "ROUTE", detail: "正在读取已保存的复盘控制面。" });
+    setHistoryActiveReviewId(reviewId); setHistoryError(undefined);
+    historyRestoreModeRef.current = mode;
+    historyPlaybackOnlyRef.current = mode === "RESTORE";
+    try {
+      const controller = historyRestoreControllerRef.current!;
+      const restored = await controller.open(reviewId, mode);
+      assertCurrentOpen();
+      historyRestorePlayerRef.current = restored.detail.review.selectedPlayerId;
+      if (mode !== "RESTORE") {
+        historyPersistenceControllerRef.current!.adopt(reviewId, undefined, restored.detail.review.demoId, mode);
+        setReviewPreparationStatus({
+          phase: "ROUTE",
+          detail: mode === "SELECT_PLAYER"
+            ? "正在打开托管 Demo，请选择另一名玩家。"
+            : "正在从托管 Demo 创建新分析版本。",
+        });
+        const withViewer = await controller.attachViewerSource(restored, mode);
+        assertCurrentOpen();
+        if (!withViewer.managedSource) throw new Error("Managed Viewer source is unavailable.");
+        expectedManagedSourceRef.current = withViewer.managedSource;
+        controller.activate(withViewer, mode);
+        return;
+      }
+
+      if (restored.missingArtifacts.length > 0 || !restored.plan || !restored.analysis) {
+        setReviewPreparationStatus({ phase: "ERROR", detail: "这条复盘缺少必须产物；已保留原记录。" });
+        setHistoryError("该复盘产物不完整，请明确选择“重新分析”。");
+        return;
+      }
+      const persistedRecord = SessionRecoveryRecordSchema.safeParse(restored.recoverySnapshot);
+      if (!startOver && !persistedRecord.success) {
+        setReviewPreparationStatus({ phase: "ERROR", detail: "保存的恢复点版本无效；已保留原记录。" });
+        setHistoryError("该复盘恢复点不可用，请明确选择“重新分析”或“从头查看”。");
+        return;
+      }
+      const analysisHash = (restored.analysis as { metadata?: { demo_content_hash?: unknown } }).metadata?.demo_content_hash;
+      const storedDemoContentHash = persistedRecord.success
+        ? persistedRecord.data.demoContentHash
+        : typeof analysisHash === "string" ? analysisHash : undefined;
+      if (!storedDemoContentHash) throw new Error("Stored analysis has no Demo content hash.");
+      const validated = validateStoredReviewArtifacts({
+        analysis: restored.analysis,
+        candidateSet: restored.candidateSet,
+        plan: restored.plan,
+        narrationByCue: restored.narrationByCue,
+        cueCases: restored.cueCases,
+        learningThreads: restored.learningThreads,
+        summary: restored.summary,
+        selectedPlayerId: restored.detail.review.selectedPlayerId,
+        demoContentHash: storedDemoContentHash,
+        routeId: restored.detail.revision?.routeId,
+        routeHash: restored.detail.revision?.routeHash,
+      });
+      const record = !startOver && persistedRecord.success
+        ? mergePersistedToolResults(persistedRecord.data, restored.toolResultsByCall)
+        : undefined;
+      const normalizedAnalysis = record
+        ? normalizeRecoveryAnalysis(validated.analysis, record)
+        : validated.analysis;
+      const recovered = record ? restoreRecoveryArtifacts(record) : undefined;
+      if (
+        recovered && (
+          !record ||
+          recovered.plan.id !== validated.plan.id
+        )
+      ) {
+        throw new Error("Stored recovery plan does not match the active Revision.");
+      }
+      if (record) assertRecoveryMatchesActiveRevision(record, validated.plan);
+      const restoredPlan = recovered?.plan ?? validated.plan;
+      const restoredNarration = {
+        ...(recovered?.narrationByCue ?? {}),
+        ...validated.narrationByCue,
+      };
+      const fullArtifactRoute = buildInitialCoachingRouteState(restoredPlan, { narrationByCue: restoredNarration });
+      const restoredRoute = recovered
+        ? { ...fullArtifactRoute, consumedCueIds: recovered.routeState.consumedCueIds }
+        : fullArtifactRoute;
+      const identity = startOver
+        ? createRecoverySessionIdentity()
+        : { recoveryId: record!.recoveryId, sessionId: record!.sessionId, runId: record!.runId };
+      recoveryIdentityRef.current = identity; setRecoveryIdentity(identity);
+      historyPersistenceControllerRef.current!.adopt(reviewId, restored.detail.revision?.id, restored.detail.review.demoId);
+      bundleRef.current = normalizedAnalysis;
+      planRef.current = restoredPlan; routeStateRef.current = restoredRoute;
+      narrationByCueRef.current = restoredNarration;
+      setBundle(normalizedAnalysis); setPlan(restoredPlan); setRouteState(restoredRoute); setNarrationByCue(restoredNarration);
+      setTeachingCases(validated.cueCases);
+      setTeachingThreads(validated.learningThreads);
+      if (validated.summary) {
+        setStage3WrapUpResult(validated.summary);
+        setStage3WrapUpStatus("READY");
+      } else {
+        setStage3WrapUpResult(undefined);
+        setStage3WrapUpStatus("IDLE");
+      }
+      let initial = recovered?.session ?? createCoachingSession(restoredPlan, identity.sessionId, restoredRoute);
+      if (recovered) {
+        for (const [cueId, readiness] of Object.entries(restoredRoute.readiness)) {
+          if (readiness !== "READY" && readiness !== "FALLBACK") continue;
+          initial = reduceCoachingSession(restoredPlan, initial, {
+            type: "NARRATION_READY",
+            cueId,
+            readiness,
+          });
+        }
+      }
+      historyRestoreTickRef.current = mode === "RESTORE" ? initial.current_tick : undefined;
+      setSession(recovered ? initial : reduceCoachingSession(restoredPlan, initial, { type: "START" }));
+      setReviewPreparationStatus({ phase: "READY", detail: "已恢复已保存的复盘产物；正在后台加载托管 Demo。" });
+      if (record && recovered) {
+        const runtime = recoveryRuntimeRef.current;
+        if (!runtime) throw new Error("Recovery runtime is unavailable.");
+        const adopted = await runtime.dispatch({
+          type: "SESSION_STARTED",
+          eventId: recoveryEventId("history-session-adopted"),
+          record,
+        });
+        assertCurrentOpen();
+        acceptRecoveryResult(adopted);
+        if (adopted.status === "REJECTED") throw new Error(adopted.reason ?? "Stored recovery record was rejected.");
+        recoveryRecordRef.current = record;
+        recoveryModeRef.current = true;
+        recoveryHandshakeReadyRef.current = false;
+        storedHistoryRecoveryLandingRef.current = {
+          recoveryId: record.recoveryId,
+          targetTick: targetTickForRecovery(record, recovered),
+          staged: { ...recovered, narrationByCue: restoredNarration, routeState: restoredRoute },
+          record,
+          analysis: normalizedAnalysis,
+        };
+      }
+      const missingNarrationCount = restoredPlan.cues.filter((cue) => !restoredNarration[cue.id]).length;
+      if (missingNarrationCount > 0 || (restored.detail.artifactIssues?.length ?? 0) > 0) {
+        setHistoryError(`已恢复可用产物；${missingNarrationCount} 个讲解或损坏产物需要显式重新分析。`);
+      }
+      try {
+        const withViewer = await controller.attachViewerSource(restored, "RESTORE");
+        assertCurrentOpen();
+        if (!withViewer.managedSource) throw new Error("Managed Viewer source is unavailable.");
+        expectedManagedSourceRef.current = withViewer.managedSource;
+        controller.activate(withViewer, "RESTORE");
+      } catch (error) {
+        if (error instanceof HistoryRestoreError && error.code === "STALE_REQUEST") throw error;
+        setReviewPreparationStatus({ phase: "READY", detail: "已恢复标题、讲解、回答与进度；Viewer 媒体暂不可用。" });
+        setHistoryError("已保留并显示复盘控制面，但托管 Demo 暂时无法加载；可重试或在设置中验证资料库。");
+      }
+    } catch (error) {
+      if (historyOpenEpochRef.current !== openEpoch || (error instanceof HistoryRestoreError && error.code === "STALE_REQUEST")) return;
+      setReviewPreparationStatus({ phase: "ERROR", detail: "保存的产物未通过身份或版本校验。" });
+      setHistoryError("无法安全恢复这条复盘；请明确选择“重新分析”，原始记录未改变。");
+    }
+  }, [acceptRecoveryResult, clearRecoveryLandingTimeout, invalidateGeneration]);
+  const reanalyzeHistoryReview = useCallback(async (reviewId: string) => {
+    try {
+      await openHistoryReview(reviewId, "REANALYZE");
+    } catch { setHistoryError("无法创建重新分析版本；原有复盘未改变。"); }
+  }, [openHistoryReview]);
+
+  const handleSuccessfulDemoImport = useCallback(async (
+    payload: Extract<PlaybackBridgeEvent, { type: "DEMO_IMPORT_SUCCEEDED" }>,
+    operationEpoch: number,
+  ) => {
+    const isCurrent = () => historyOpenEpochRef.current === operationEpoch &&
+      managedRequestMatchesExpected(expectedManagedSourceRef.current, payload.requestId);
+    setHistoryImportProgress(undefined);
+    await refreshReviewHistory();
+    if (!isCurrent()) return;
+    if (!payload.deduplicated) return;
+    try {
+      const impact = await reviewHistoryApi.demoImpact(payload.demoId);
+      if (!isCurrent()) return;
+      const latest = impact.reviews[0];
+      if (!latest) return;
+      const openExisting = window.confirm(
+        `这份 Demo 已在资料库中，共有 ${impact.reviewCount} 条复盘。\n\n` +
+        `确定：打开最近复盘“${latest.title}”\n` +
+        "取消：继续为这次导入创建新复盘",
+      );
+      if (!isCurrent()) return;
+      if (openExisting) await openHistoryReview(latest.id);
+    } catch {
+      if (!isCurrent()) return;
+      setHistoryError("Demo 已安全去重，但无法读取已有复盘；仍可选择玩家创建新复盘。");
+    }
+  }, [openHistoryReview, refreshReviewHistory, reviewHistoryApi]);
+
+  const deleteDemoWithImpact = useCallback(async (review: ReviewHistoryItem) => {
+    try {
+      const impact = await reviewHistoryApi.demoImpact(review.demoId);
+      const listed = impact.reviews
+        .map((item) => `• ${item.title}（${item.selectedPlayerName}）`)
+        .join("\n");
+      const remainder = impact.truncated
+        ? `\n• 以及另外 ${Math.max(0, impact.reviewCount - impact.reviews.length)} 条复盘`
+        : "";
+      const confirmed = window.confirm(
+        `删除托管 Demo“${impact.originalFilename}”会同时永久删除 ${impact.reviewCount} 条复盘：\n\n` +
+        `${listed || "• 当前没有复盘"}${remainder}\n\n此操作不可撤销。是否继续？`,
+      );
+      if (!confirmed) return;
+      await reviewHistoryApi.removeDemo(review.demoId, impact.impactToken);
+      if (historyItems.some((item) => item.id === historyActiveReviewId && item.demoId === review.demoId)) {
+        setHistoryActiveReviewId(undefined);
+      }
+      await refreshReviewHistory();
+    } catch (error) {
+      setHistoryError(error instanceof ReviewHistoryApiError && error.code === "DELETION_IMPACT_CHANGED"
+        ? "删除前关联复盘发生了变化；请重新查看影响范围后再确认。"
+        : "删除 Demo 失败；资料库记录未被当作已删除。");
+    }
+  }, [historyActiveReviewId, historyItems, refreshReviewHistory, reviewHistoryApi]);
+
   const chooseRecoveryDemo = useCallback(() => {
     const runtime = recoveryRuntimeRef.current;
     const record = recoveryRecordRef.current;
@@ -608,12 +1011,6 @@ export function Cs2dPlaybackHost({
       recoveryId: record.recoveryId,
     }).then(acceptRecoveryResult);
   }, [acceptRecoveryResult]);
-
-  const clearRecoveryLandingTimeout = useCallback(() => {
-    if (recoveryLandingTimeoutRef.current === undefined) return;
-    clearTimeout(recoveryLandingTimeoutRef.current);
-    recoveryLandingTimeoutRef.current = undefined;
-  }, []);
 
   const discardRecovery = useCallback(() => {
     const runtime = recoveryRuntimeRef.current;
@@ -892,6 +1289,8 @@ export function Cs2dPlaybackHost({
     const runtime = recoveryRuntimeRef.current;
     const record = recoveryRecordRef.current;
     if (!runtime || !record || !recoveryModeRef.current) return false;
+    const openEpoch = historyOpenEpochRef.current;
+    const isCurrent = () => historyOpenEpochRef.current === openEpoch;
     recoveryHandshakeReadyRef.current = false;
     if (!payload.demoContentHash) {
       void runtime.dispatch({
@@ -900,7 +1299,9 @@ export function Cs2dPlaybackHost({
         recoveryId: record.recoveryId,
         reason: "当前 Demo 没有可验证内容哈希；基础回放仍可继续。",
         degraded: false,
-      }).then(acceptRecoveryResult);
+      }).then((result) => {
+        if (isCurrent()) acceptRecoveryResult(result);
+      });
       return true;
     }
     void runtime.dispatch({
@@ -911,6 +1312,7 @@ export function Cs2dPlaybackHost({
       demoContentHash: payload.demoContentHash,
       availablePlayerIds: payload.players.map((player) => player.playerId),
     }).then((result) => {
+      if (!isCurrent()) return;
       acceptRecoveryResult(result);
       const select = result.effects.find((effect) => effect.type === "SELECT_PLAYER");
       if (select?.type === "SELECT_PLAYER") send({ type: "selectPlayer", playerId: select.playerId });
@@ -964,6 +1366,8 @@ export function Cs2dPlaybackHost({
   const completeRecoveryLanding = useCallback(async (landing: RecoveryLanding) => {
     const runtime = recoveryRuntimeRef.current;
     if (!runtime) return;
+    const openEpoch = historyOpenEpochRef.current;
+    const isCurrent = () => historyOpenEpochRef.current === openEpoch;
     try {
       let currentRecord = recoveryRecordRef.current ?? landing.record;
       if (!shouldReconnectRecoveryAgent(currentRecord) && !isPreAgentRouteStartRecovery(currentRecord)) {
@@ -976,6 +1380,7 @@ export function Cs2dPlaybackHost({
           reason: "Agent状态未协调；基础回放仍可继续。",
           degraded: true,
         });
+        if (!isCurrent()) return;
         acceptRecoveryResult(failed);
         setReviewPreparationStatus({ phase: "ERROR", detail: "Agent状态未协调；基础回放仍可继续。" });
         return;
@@ -983,6 +1388,7 @@ export function Cs2dPlaybackHost({
       if (shouldReconnectRecoveryAgent(currentRecord)) {
         const reconnect = buildReconnectReplayEvent(currentRecord);
         const agent = await stage3ControllerRef.current!.reconnect(reconnect);
+        if (!isCurrent()) return;
         if (agent.status === "DORMANT" || agent.restored !== "MATCHED") throw new Error("Agent checkpoint 与恢复记录不匹配。");
         latestAgentCheckpointRef.current = {
           checkpointId: agent.checkpoint.checkpointId,
@@ -1001,6 +1407,7 @@ export function Cs2dPlaybackHost({
             agentCheckpointId: agent.checkpoint.checkpointId,
             updatedAt: Date.now(),
           });
+          if (!isCurrent()) return;
           acceptRecoveryResult(ledgerResult);
           currentRecord = ledgerResult.record ?? currentRecord;
         } else {
@@ -1015,6 +1422,7 @@ export function Cs2dPlaybackHost({
             agentCheckpointId: agent.checkpoint.checkpointId,
             updatedAt: Date.now(),
           });
+          if (!isCurrent()) return;
           acceptRecoveryResult(checkpointResult);
           currentRecord = checkpointResult.record ?? currentRecord;
         }
@@ -1024,6 +1432,7 @@ export function Cs2dPlaybackHost({
         eventId: recoveryEventId("recovery-handshake-complete"),
         recoveryId: currentRecord.recoveryId,
       });
+      if (!isCurrent()) return;
       acceptRecoveryResult(completed);
       recoveryModeRef.current = false;
       recoveryHandshakeReadyRef.current = true;
@@ -1036,9 +1445,17 @@ export function Cs2dPlaybackHost({
       setSession(landing.record.boundary.kind === "ROUTE_START"
         ? reduceCoachingSession(landing.staged.plan, landing.staged.session, { type: "START" })
         : landing.staged.session);
-      setReviewPreparationStatus({ phase: "READY", detail: "已恢复到最近教学点，后续讲解在后台继续准备。" });
-      startRecoveryNarrationQueue({ ...landing, record: currentRecord }, landing.analysis);
+      setReviewPreparationStatus({
+        phase: "READY",
+        detail: historyPlaybackOnlyRef.current
+          ? "已恢复到最近教学点；只使用保存的讲解产物。"
+          : "已恢复到最近教学点，后续讲解在后台继续准备。",
+      });
+      if (!historyPlaybackOnlyRef.current) {
+        startRecoveryNarrationQueue({ ...landing, record: currentRecord }, landing.analysis);
+      }
     } catch (error) {
+      if (!isCurrent()) return;
       recoveryHandshakeReadyRef.current = false;
       setSession(landing.staged.session);
       const reason = error instanceof Error ? error.message.slice(0, 180) : "Agent 恢复失败；基础回放仍可继续。";
@@ -1049,16 +1466,61 @@ export function Cs2dPlaybackHost({
         reason,
         degraded: true,
       });
+      if (!isCurrent()) return;
       acceptRecoveryResult(failed);
       setReviewPreparationStatus({ phase: "ERROR", detail: "Agent 状态未恢复；基础回放仍可继续。" });
     }
   }, [acceptRecoveryResult, startRecoveryNarrationQueue]);
+
+  const beginRecoveryLanding = useCallback((landing: RecoveryLanding) => {
+    const runtime = recoveryRuntimeRef.current;
+    if (!runtime) return;
+    recoveryLandingRef.current = landing;
+    clearRecoveryLandingTimeout();
+    recoveryLandingTimeoutRef.current = setTimeout(() => {
+      if (recoveryLandingRef.current !== landing) return;
+      recoveryLandingRef.current = undefined;
+      recoveryLandingTimeoutRef.current = undefined;
+      recoveryHandshakeReadyRef.current = false;
+      setReviewPreparationStatus({ phase: "ERROR", detail: "回放未能落到恢复位置；基础回放仍可继续。" });
+      void runtime.dispatch({
+        type: "RECOVERY_HANDSHAKE_FAILED",
+        eventId: recoveryEventId("recovery-landing-timeout"),
+        recoveryId: landing.record.recoveryId,
+        reason: "PLAYBACK_LANDING_TIMEOUT",
+        degraded: true,
+      }).then(acceptRecoveryResult);
+    }, 10_000);
+    bundleRef.current = landing.analysis;
+    planRef.current = landing.staged.plan;
+    routeStateRef.current = landing.staged.routeState;
+    narrationByCueRef.current = landing.staged.narrationByCue;
+    setBundle(landing.analysis);
+    setPlan(landing.staged.plan);
+    setRouteState(landing.staged.routeState);
+    setNarrationByCue(landing.staged.narrationByCue);
+    setAnalysisError(undefined);
+    setAnalysisProgress(undefined);
+    setReviewPreparationStatus({ phase: "NARRATION", detail: "冻结路线已验证，正在回到最近教学点。" });
+    const currentPlayback = playbackRef.current;
+    if (isRecoveryPlaybackLanding(currentPlayback, landing.targetTick, replay?.tickRate ?? 64)) {
+      recoveryLandingRef.current = undefined;
+      clearRecoveryLandingTimeout();
+      setPlayback(currentPlayback);
+      void completeRecoveryLanding(landing);
+      return;
+    }
+    send({ type: "pause" });
+    send({ type: "seekCanonicalTick", canonicalTick: landing.targetTick });
+  }, [acceptRecoveryResult, clearRecoveryLandingTimeout, completeRecoveryLanding, replay?.tickRate, send]);
 
   const handleRecoveryAnalysisReady = useCallback((payload: Extract<PlaybackBridgeEvent, { type: "ANALYSIS_READY" }>) => {
     const runtime = recoveryRuntimeRef.current;
     const record = recoveryRecordRef.current;
     const replayHash = replayHashRef.current;
     if (!runtime || !record || !recoveryModeRef.current || !replayHash) return false;
+    const openEpoch = historyOpenEpochRef.current;
+    const isCurrent = () => historyOpenEpochRef.current === openEpoch;
     try {
       const rebuilt = deserializeCs2dAnalysisBundle(payload.bundleJson);
       const normalized = normalizeRecoveryAnalysis(rebuilt, record);
@@ -1077,53 +1539,16 @@ export function Cs2dPlaybackHost({
           planner: rebuilt.review_plan.planner_version,
         },
       }).then((result) => {
+        if (!isCurrent()) return;
         acceptRecoveryResult(result);
         if (result.status === "REJECTED") return;
-        const boundary = record.boundary;
-        const targetTick = boundary.kind === "CUE_PAUSED"
-          ? staged.plan.cues.find((cue) => cue.id === boundary.cueId)!.decision_tick
-          : boundary.kind === "WRAP_UP"
-            ? staged.plan.segments.at(-1)?.end_tick ?? 0
-            : staged.plan.segments[0]?.start_tick ?? 0;
-        const landing: RecoveryLanding = { recoveryId: record.recoveryId, targetTick, staged, record, analysis: normalized };
-        recoveryLandingRef.current = landing;
-        clearRecoveryLandingTimeout();
-        recoveryLandingTimeoutRef.current = setTimeout(() => {
-          if (recoveryLandingRef.current !== landing) return;
-          recoveryLandingRef.current = undefined;
-          recoveryLandingTimeoutRef.current = undefined;
-          recoveryHandshakeReadyRef.current = false;
-          planRef.current = undefined;
-          routeStateRef.current = undefined;
-          setPlan(undefined);
-          setRouteState(undefined);
-          setNarrationByCue({});
-          setSession(undefined);
-          setTeachingCases({});
-          setTeachingThreads([]);
-          setDiagnosticBusyCueId(undefined);
-          setDiagnosticError(undefined);
-          setReviewPreparationStatus({ phase: "ERROR", detail: "回放未能落到恢复位置；基础回放仍可继续。" });
-          void runtime.dispatch({
-            type: "RECOVERY_HANDSHAKE_FAILED",
-            eventId: recoveryEventId("recovery-landing-timeout"),
-            recoveryId: record.recoveryId,
-            reason: "PLAYBACK_LANDING_TIMEOUT",
-            degraded: true,
-          }).then(acceptRecoveryResult);
-        }, 10_000);
-        bundleRef.current = normalized;
-        planRef.current = staged.plan;
-        routeStateRef.current = staged.routeState;
-        setBundle(normalized);
-        setPlan(staged.plan);
-        setRouteState(staged.routeState);
-        setNarrationByCue(staged.narrationByCue);
-        setAnalysisError(undefined);
-        setAnalysisProgress(undefined);
-        setReviewPreparationStatus({ phase: "NARRATION", detail: "冻结路线已验证，正在回到最近教学点。" });
-        send({ type: "pause" });
-        send({ type: "seekCanonicalTick", canonicalTick: targetTick });
+        beginRecoveryLanding({
+          recoveryId: record.recoveryId,
+          targetTick: targetTickForRecovery(record, staged),
+          staged,
+          record,
+          analysis: normalized,
+        });
       });
     } catch (error) {
       const reason = error instanceof Error ? error.message.slice(0, 180) : "恢复分析校验失败。";
@@ -1133,11 +1558,48 @@ export function Cs2dPlaybackHost({
         recoveryId: record.recoveryId,
         reason,
         degraded: false,
-      }).then(acceptRecoveryResult);
+      }).then((result) => {
+        if (isCurrent()) acceptRecoveryResult(result);
+      });
       setAnalysisError(reason);
     }
     return true;
-  }, [acceptRecoveryResult, clearRecoveryLandingTimeout, send]);
+  }, [acceptRecoveryResult, beginRecoveryLanding]);
+
+  const handleStoredHistoryPlayerSelected = useCallback((payload: PlayerSelectedEvent): boolean => {
+    const landing = storedHistoryRecoveryLandingRef.current;
+    const runtime = recoveryRuntimeRef.current;
+    if (!landing || !runtime || historyRestoreModeRef.current !== "RESTORE") return false;
+    const openEpoch = historyOpenEpochRef.current;
+    storedHistoryRecoveryLandingRef.current = undefined;
+    if (payload.playerId !== landing.record.selectedPlayerId) {
+      setHistoryError("保存的玩家身份与 Viewer 不一致；请明确选择重新分析。");
+      return true;
+    }
+    void runtime.dispatch({
+      type: "ANALYSIS_READY",
+      eventId: recoveryEventId("history-analysis-adopted"),
+      recoveryId: landing.record.recoveryId,
+      demoContentHash: landing.record.demoContentHash,
+      selectedPlayerId: payload.playerId,
+      routeId: landing.record.routeId,
+      routeHash: landing.record.routeHash,
+      versions: {
+        parser: landing.analysis.review_plan.generation_manifest.parser_version,
+        analysisAdapter: landing.analysis.metadata.adapter_version,
+        planner: landing.analysis.review_plan.planner_version,
+      },
+    }).then((result) => {
+      if (historyOpenEpochRef.current !== openEpoch) return;
+      acceptRecoveryResult(result);
+      if (result.status === "REJECTED") {
+        setHistoryError("保存的恢复身份未通过校验；原记录未改变。");
+        return;
+      }
+      beginRecoveryLanding(landing);
+    });
+    return true;
+  }, [acceptRecoveryResult, beginRecoveryLanding]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>) => {
@@ -1150,10 +1612,92 @@ export function Cs2dPlaybackHost({
       if (!envelope) return;
       const payload: PlaybackBridgeEvent = envelope.payload;
 
+      if (ignoreHistoryAnalysisEvent(historyPlaybackOnlyRef.current, payload.type)) return;
+      if (
+        managedReplayContextRequired(payload.type) &&
+        !managedReplayContextIsCurrent(
+          desktopLibraryEnabled,
+          expectedManagedSourceRef.current,
+          replayRef.current,
+        )
+      ) return;
+
+      if (payload.type === "DEMO_IMPORT_REQUESTED") {
+        historyOpenEpochRef.current += 1;
+        historyRestoreControllerRef.current?.cancel();
+        expectedManagedSourceRef.current = { requestId: payload.requestId };
+        setHistoryImportProgress({ completedBytes: 0, totalBytes: payload.byteSize });
+        void reviewHistoryApi.importCapability({ requestId: payload.requestId, originalFilename: payload.originalFilename, byteSize: payload.byteSize })
+          .then(({ capabilityToken }) => {
+            if (!managedRequestMatchesExpected(expectedManagedSourceRef.current, payload.requestId)) return;
+            send({ type: "persistSelectedDemo", requestId: payload.requestId, capabilityToken } as PlaybackCommand);
+          })
+          .catch(() => {
+            if (!managedRequestMatchesExpected(expectedManagedSourceRef.current, payload.requestId)) return;
+            setHistoryImportProgress(undefined);
+            setHistoryError("无法为 Demo 导入申请本地资料库权限。");
+          });
+        return;
+      }
+      if (payload.type === "DEMO_IMPORT_FAILED") {
+        const standalonePickerFailure = payload.code === "INVALID_DEMO_EXTENSION" || payload.code === "EMPTY_DEMO";
+        if (!standalonePickerFailure && !managedRequestMatchesExpected(expectedManagedSourceRef.current, payload.requestId)) return;
+        if (standalonePickerFailure) {
+          historyOpenEpochRef.current += 1;
+          historyRestoreControllerRef.current?.cancel();
+        }
+        expectedManagedSourceRef.current = undefined;
+        setHistoryImportProgress(undefined);
+        const message = {
+          INVALID_DEMO_EXTENSION: "请选择 .dem 比赛文件。",
+          EMPTY_DEMO: "Demo 文件为空，无法导入。",
+          INVALID_DEMO_FORMAT: "Demo 头或文件格式无效，未建立可用复盘。",
+          DEMO_SIZE_MISMATCH: "Demo 传输大小与选定文件不一致，已中止导入。",
+          MANAGED_DEMO_PARSE_FAILED: "Demo 解析失败，资料库记录已标记为损坏。",
+          CONTENT_HASH_MISMATCH: "Demo 内容哈希与资料库记录不一致，已停止恢复。",
+          DEMO_VALIDATION_REJECTED: "Demo 已写入，但未能完成解析验证。",
+          DEMO_IMPORT_AUTHORIZATION_REJECTED: "Demo 导入权限已失效，请重新选择文件。",
+          MANAGED_DEMO_LOAD_FAILED: "托管 Demo 读取失败，请在设置中验证资料库。",
+        }[payload.code] ?? payload.message;
+        setHistoryError(message);
+        return;
+      }
+      if (payload.type === "DEMO_IMPORT_SUCCEEDED") {
+        if (!managedRequestMatchesExpected(expectedManagedSourceRef.current, payload.requestId)) return;
+        expectedManagedSourceRef.current = {
+          requestId: payload.requestId,
+          demoId: payload.demoId,
+          contentHash: payload.contentHash,
+        };
+        void handleSuccessfulDemoImport(payload, historyOpenEpochRef.current);
+        return;
+      }
+      if (payload.type === "DEMO_IMPORT_PROGRESS") {
+        if (!managedRequestMatchesExpected(expectedManagedSourceRef.current, payload.requestId)) return;
+        setHistoryImportProgress({ completedBytes: payload.completedBytes, totalBytes: payload.totalBytes });
+        return;
+      }
+
       if (payload.type === "REPLAY_READY") {
+        if (payload.sourceKind === "MANAGED_LIBRARY" && !managedReplayMatchesExpected(expectedManagedSourceRef.current, payload)) return;
+        if (payload.sourceKind !== "MANAGED_LIBRARY") expectedManagedSourceRef.current = undefined;
         selectedPlayerIdRef.current = undefined;
+        playbackRef.current = undefined;
+        replayRef.current = payload;
+        replayHashRef.current = payload.demoContentHash;
         setReplay(payload);
         setPlayback(undefined);
+        if (historyActiveReviewId && payload.sourceKind === "MANAGED_LIBRARY") {
+          setPhase("READY");
+          if (historyRestoreModeRef.current === "RESTORE" && handleRecoveryReplayReady(payload)) return;
+          const playerId = historyRestoreModeRef.current === "SELECT_PLAYER" ? undefined : historyRestorePlayerRef.current;
+          if (playerId) send({ type: "selectPlayer", playerId });
+          return;
+        }
+        setHistoryActiveReviewId(undefined);
+        historyPlaybackOnlyRef.current = false;
+        historyDurabilityReadyRef.current = undefined;
+        historyPersistenceControllerRef.current?.reset();
         resetAnalysis();
         setPhase("READY");
         handleRecoveryReplayReady(payload);
@@ -1161,6 +1705,26 @@ export function Cs2dPlaybackHost({
       }
       if (payload.type === "PLAYER_SELECTED") {
         selectedPlayerIdRef.current = payload.playerId;
+        if (historyActiveReviewId && historyRestoreModeRef.current !== "SELECT_PLAYER") {
+          setSelected(payload);
+          if (handleStoredHistoryPlayerSelected(payload)) return;
+          const restoreTick = historyRestoreModeRef.current === "RESTORE"
+            ? historyRestoreTickRef.current
+            : undefined;
+          if (restoreTick !== undefined) {
+            send({ type: "pause" });
+            send({ type: "seekCanonicalTick", canonicalTick: restoreTick });
+          }
+          return;
+        }
+        const currentReplay = replayRef.current;
+        if (currentReplay?.sourceKind === "MANAGED_LIBRARY" && currentReplay.demoId) {
+          const title = `${currentReplay.map} · ${payload.displayName}`;
+          void historyPersistenceControllerRef.current!.createForPlayer({ demoId: currentReplay.demoId, selectedPlayerId: payload.playerId, selectedPlayerName: payload.displayName, title, mapName: currentReplay.map })
+            .then((reviewId) => { setHistoryActiveReviewId(reviewId); void refreshReviewHistory(); })
+            .catch(() => setHistoryError("已加载 Demo，但无法创建复盘记录。"));
+        }
+        historyDurabilityReadyRef.current = undefined;
         invalidateGeneration();
         invalidateGuidedSeek();
         planRef.current = undefined;
@@ -1194,6 +1758,7 @@ export function Cs2dPlaybackHost({
         return;
       }
       if (payload.type === "ANALYSIS_FAILED") {
+        historyDurabilityReadyRef.current = undefined;
         if (!analysisEventMatchesSelectedPlayer(selectedPlayerIdRef.current, payload.selectedPlayerId)) return;
         invalidateGeneration();
         invalidateGuidedSeek();
@@ -1213,9 +1778,11 @@ export function Cs2dPlaybackHost({
         setReviewPreparationStatus(undefined);
         userTookOverRef.current = false;
         setUserTookOver(false);
+        void historyPersistenceControllerRef.current?.markFailed().then(refreshReviewHistory).catch(() => setHistoryError("分析失败，且复盘状态未能保存。"));
         return;
       }
       if (payload.type === "ANALYSIS_READY") {
+        void runHistoryAnalysisGeneration(historyPlaybackOnlyRef.current, async () => {
         if (!analysisEventMatchesSelectedPlayer(selectedPlayerIdRef.current, payload.selectedPlayerId)) return;
         if (handleRecoveryAnalysisReady(payload)) return;
         invalidateGeneration();
@@ -1292,6 +1859,17 @@ export function Cs2dPlaybackHost({
               const nextNarration = { ...narrationByCueRef.current, [preparationEvent.cueId]: preparationEvent.result.narration };
               narrationByCueRef.current = nextNarration;
               setNarrationByCue(nextNarration);
+              const durabilityReady = historyDurabilityReadyRef.current;
+              if (durabilityReady) {
+                void durabilityReady
+                  .then(() => historyPersistenceControllerRef.current?.artifact(
+                    "NARRATION_BUNDLE",
+                    preparationEvent.cueId,
+                    preparationEvent.result.narration,
+                    "narration-bundle.v1",
+                  ))
+                  .catch(() => setHistoryError("讲解已生成，但保存到资料库失败。"));
+              }
               const finalPlan = planRef.current;
               const readyCount = Object.values(preparationEvent.routeState.readiness).filter((value) => value !== "PENDING").length;
               setReviewPreparationStatus({
@@ -1316,6 +1894,9 @@ export function Cs2dPlaybackHost({
                 phase: "ERROR",
                 detail: `教学路线准备失败：${preparationEvent.reason.slice(0, 240)}`
               });
+              void historyPersistenceControllerRef.current?.markFailed()
+                .then(refreshReviewHistory)
+                .catch(() => setHistoryError("讲解准备失败，且复盘状态未能保存。"));
               return;
             }
             if (preparationEvent.type === "READY_TO_START") {
@@ -1324,7 +1905,7 @@ export function Cs2dPlaybackHost({
               routeStateRef.current = preparationEvent.routeState;
               setRouteState(preparationEvent.routeState);
               setAnalysisProgress(undefined);
-              setReviewPreparationStatus({ phase: "READY", detail: "教学路线与前两个讲解包已就绪。" });
+              setReviewPreparationStatus({ phase: "NARRATION", detail: "教学路线已就绪，正在提交可恢复起点。" });
               const identity = createRecoverySessionIdentity();
               recoveryIdentityRef.current = identity;
               setRecoveryIdentity(identity);
@@ -1354,25 +1935,94 @@ export function Cs2dPlaybackHost({
                 initialSession,
                 { type: "START" },
               ));
-              const runtime = recoveryRuntimeRef.current;
-              if (!runtime) {
+              const activateSession = async () => {
+                const runtime = recoveryRuntimeRef.current;
+                if (runtime) {
+                  const result = await runtime.dispatch({
+                    type: "SESSION_STARTED",
+                    eventId: recoveryEventId("recovery-session-started"),
+                    record,
+                  });
+                  acceptRecoveryResult(result);
+                }
                 startSession();
-                return;
-              }
-              void runtime.dispatch({
-                type: "SESSION_STARTED",
-                eventId: recoveryEventId("recovery-session-started"),
-                record,
-              }).then((result) => {
-                acceptRecoveryResult(result);
-                startSession();
+              };
+              const durabilityCommit = (async () => {
+                if (desktopLibraryEnabled) {
+                  const history = historyPersistenceControllerRef.current!;
+                  await history.beginRevision({
+                    routeId: preparationEvent.plan.id,
+                    routeHash: preparationEvent.routeState.routeFingerprint,
+                    analysisVersion: nextBundle.metadata.adapter_version,
+                    graphVersion: COACH_AGENT_GRAPH_VERSION,
+                    promptVersion: preparationEvent.plan.director_decision_set?.manifest.promptVersion ?? preparationEvent.plan.generation_manifest.prompt_version,
+                    modelMetadata: {
+                      directorStatus: preparationEvent.plan.director_decision_set?.manifest.status ?? "UNKNOWN",
+                      directorProvider: preparationEvent.plan.director_decision_set?.manifest.provider ?? "UNKNOWN",
+                      ...(preparationEvent.plan.director_decision_set?.manifest.model
+                        ? { directorModel: preparationEvent.plan.director_decision_set.manifest.model }
+                        : {}),
+                      parserVersion: preparationEvent.plan.generation_manifest.parser_version,
+                      plannerVersion: preparationEvent.plan.planner_version,
+                    },
+                  });
+                  await history.artifact("ANALYSIS_BUNDLE", nextBundle.demo_id, JSON.parse(payload.bundleJson), "cs2d-analysis-bundle.v1");
+                  await history.artifact("CANDIDATE_SET", nextBundle.candidate_set.id, nextBundle.candidate_set as unknown as Record<string, unknown>, "candidate-set.v1");
+                  await history.artifact("REVIEW_PLAN", preparationEvent.plan.id, preparationEvent.plan, "review-plan.v1");
+                  for (const [cueId, narration] of Object.entries(narrationByCueRef.current)) {
+                    await history.artifact("NARRATION_BUNDLE", cueId, narration, "narration-bundle.v1");
+                  }
+                  await history.artifact("SESSION_RECOVERY", record.boundary.boundaryId, record as unknown as Record<string, unknown>, "session-recovery-record.v2");
+                  await history.stableHead({
+                    recoveryArtifactKey: record.boundary.boundaryId,
+                    sessionId: identity.sessionId,
+                    runId: identity.runId,
+                    demoContentHash: nextBundle.metadata.demo_content_hash ?? replayHashRef.current ?? "",
+                    selectedPlayerId: nextBundle.selected_steam_id,
+                    routeId: preparationEvent.plan.id,
+                    routeHash: preparationEvent.routeState.routeFingerprint,
+                    recoveryBoundary: "ROUTE_START",
+                    defaultRouteCursor: 0,
+                    completedCueCount: 0,
+                    totalCueCount: preparationEvent.routeState.selectedCueCount,
+                    stableProgress: {
+                      routeFrozen: true,
+                      readiness: preparationEvent.routeState.readiness,
+                    },
+                  });
+                  await refreshReviewHistory();
+                }
+              })();
+              historyDurabilityReadyRef.current = durabilityCommit;
+              void durabilityCommit.then(async () => {
+                if (preparationEvent.generationId !== String(generationRef.current)) return;
+                setReviewPreparationStatus({ phase: "READY", detail: "教学路线与可恢复起点已就绪。" });
+                await activateSession();
+              }).catch(async () => {
+                if (preparationEvent.generationId !== String(generationRef.current)) return;
+                historyDurabilityReadyRef.current = undefined;
+                setHistoryError("复盘产物未能完整提交；当前会话仍可继续，历史记录已标记失败。");
+                setReviewPreparationStatus({ phase: "ERROR", detail: "教学路线可用，但可恢复起点保存失败。" });
+                if (desktopLibraryEnabled) {
+                  await historyPersistenceControllerRef.current?.markFailed().catch(() => undefined);
+                  await refreshReviewHistory().catch(() => undefined);
+                }
+                await activateSession();
               });
             }
           });
         } catch (error) {
           setAnalysisError(error instanceof Error ? error.message : "分析结果校验失败。");
           setReviewPreparationStatus({ phase: "ERROR", detail: "教学路线输入校验失败。" });
+          if (desktopLibraryEnabled) {
+            void historyPersistenceControllerRef.current?.markFailed()
+              .then(refreshReviewHistory)
+              .catch(() => setHistoryError("分析结果无效，且复盘失败状态未能保存。"));
+          }
         }
+        }).catch(() => {
+          setAnalysisError("分析生成门未能安全执行。");
+        });
         return;
       }
       if (payload.type === "TEACHING_TOOL_ACK") {
@@ -1438,6 +2088,8 @@ export function Cs2dPlaybackHost({
         return;
       }
 
+      if (payload.type !== "PLAYBACK_STATE") return;
+      playbackRef.current = payload;
       const pendingSeek = guidedSeekGateRef.current;
       if (pendingSeek) {
         if (pendingSeek.epoch !== guidedSeekEpochRef.current || !isGuidedSeekLanding(pendingSeek, payload.canonicalTick)) {
@@ -1449,8 +2101,7 @@ export function Cs2dPlaybackHost({
       }
       const recoveryLanding = recoveryLandingRef.current;
       if (recoveryLanding) {
-        const tolerance = Math.max(1, Math.round((replay?.tickRate ?? 64) / 64));
-        if (Math.abs(payload.canonicalTick - recoveryLanding.targetTick) > tolerance || payload.playing) return;
+        if (!isRecoveryPlaybackLanding(payload, recoveryLanding.targetTick, replayRef.current?.tickRate ?? 64)) return;
         recoveryLandingRef.current = undefined;
         clearRecoveryLandingTimeout();
         setPlayback(payload);
@@ -1471,7 +2122,7 @@ export function Cs2dPlaybackHost({
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [clearRecoveryLandingTimeout, completeRecoveryLanding, config.origin, handleRecoveryAnalysisReady, handleRecoveryReplayReady, invalidateGeneration, invalidateGuidedSeek, replay?.tickRate, resetAnalysis, reviewPreparationDependencies, stage2Mode, stage3Mode]);
+  }, [clearRecoveryLandingTimeout, completeRecoveryLanding, config.origin, desktopLibraryEnabled, handleRecoveryAnalysisReady, handleRecoveryReplayReady, handleStoredHistoryPlayerSelected, handleSuccessfulDemoImport, historyActiveReviewId, invalidateGeneration, invalidateGuidedSeek, refreshReviewHistory, resetAnalysis, reviewHistoryApi, reviewPreparationDependencies, send, stage2Mode, stage3Mode]);
 
   const transition = useCallback((action: SessionAction) => {
     const activePlan = planRef.current;
@@ -1506,6 +2157,11 @@ export function Cs2dPlaybackHost({
       }
       return reduceCoachingSession(activePlan, next, action);
     });
+    const activeSession = liveSessionRef.current;
+    if (activeSession) {
+      const key = `${activeSession.id}:${action.type}:${activeSession.current_cue_id ?? activeSession.current_segment_index}`.slice(0, 160);
+      void historyPersistenceControllerRef.current?.artifact("USER_INTERACTION", key, { action, sessionId: activeSession.id, cueId: activeSession.current_cue_id ?? null }, "user-interaction.v1").catch(() => setHistoryError("复盘操作保存失败。"));
+    }
   }, [clearUserTakeover, diagnosticsEnabled]);
 
   const transitionKey = session ? guidedTransitionKey(session) : "idle";
@@ -1658,7 +2314,7 @@ export function Cs2dPlaybackHost({
     ? cue.facts.filter((fact) => fact.availability === "DECISION" && fact.available_at_tick <= cue.decision_tick && cue.observable_fact_refs.includes(fact.id))
     : []);
 
-  const applyTeachingDiagnosis = useCallback((output: ReturnType<typeof runTeachingDiagnosis>) => {
+  const applyTeachingDiagnosis = useCallback(async (output: ReturnType<typeof runTeachingDiagnosis>): Promise<boolean> => {
     const nextCase = output.cueCase;
     setTeachingCases((current) => ({ ...current, [nextCase.cueId]: nextCase }));
     setTeachingThreads((current) => [
@@ -1673,6 +2329,26 @@ export function Cs2dPlaybackHost({
           learningThread: output.learningThread,
         })
       : current);
+    const caseRevision = (nextCase.verdict?.revision ?? 0) + 1;
+    const threadRevision = output.learningThread.evidenceCueIds.length * 4 + caseRevision;
+    const history = historyPersistenceControllerRef.current;
+    if (!history) return true;
+    try {
+      // A diagnostic checkpoint may become the next RuntimeHead only after
+      // every user-facing projection it represents is durable.
+      await history.artifact("CUE_CASE", nextCase.cueId, nextCase, "cue-case.v1", caseRevision);
+      if (nextCase.diagnosticResult) {
+        await history.artifact("DIAGNOSTIC_RESULT", nextCase.diagnosticResult.resultId, nextCase.diagnosticResult, "diagnostic-result.v1");
+      }
+      if (nextCase.transferRule) {
+        await history.artifact("TRANSFER_RULE", nextCase.transferRule.ruleId, nextCase.transferRule, "transfer-rule.v1", caseRevision);
+      }
+      await history.artifact("LEARNING_THREAD", output.learningThread.threadId, output.learningThread, "learning-thread.v1", threadRevision);
+      return true;
+    } catch {
+      setHistoryError("教学诊断产物未能完整保存；上一个恢复点仍然有效。");
+      return false;
+    }
   }, []);
 
   const diagnosisContext = useCallback((): TeachingDiagnosisHostContext | undefined => {
@@ -1692,6 +2368,21 @@ export function Cs2dPlaybackHost({
   }, [activePlan, bundle, cue, selected?.playerId]);
 
   const submitTeachingReflection = useCallback(async (reflection: UserReflection) => {
+    let interactionDurable = true;
+    const history = historyPersistenceControllerRef.current;
+    if (history) {
+      try {
+        await history.artifact(
+          "USER_INTERACTION",
+          reflection.reflectionId ?? `reflection-${reflection.cueId}`,
+          { kind: "REFLECTION", reflection },
+          "user-reflection.v1",
+        );
+      } catch {
+        interactionDurable = false;
+        setHistoryError("用户反思未能保存；上一个恢复点仍然有效。");
+      }
+    }
     const context = diagnosisContext();
     if (!context) {
       const currentCue = liveCueRef.current ?? cue;
@@ -1705,6 +2396,12 @@ export function Cs2dPlaybackHost({
         reflection,
       };
       setTeachingCases((current) => ({ ...current, [currentCue.id]: fallback }));
+      void historyPersistenceControllerRef.current?.artifact(
+        "CUE_CASE",
+        currentCue.id,
+        fallback,
+        "cue-case.v1",
+      ).catch(() => setHistoryError("基础教学记录保存失败。"));
       const active = planRef.current ?? activePlan;
       setSession((current) => active && current
         ? reduceCoachingSession(active, current, { type: "RECORD_TEACHING_CASE", cueCase: fallback, reflection })
@@ -1722,6 +2419,7 @@ export function Cs2dPlaybackHost({
       if (!requestIsLive()) return;
       const input = buildTeachingDiagnosisInput(context, reflection);
       let output: ReturnType<typeof runTeachingDiagnosis> | undefined;
+      let agentResult: { readonly event: CoachAgentEvent; readonly result: CoachAgentResult } | undefined;
       // The graph is the preferred path.  A local deterministic implementation
       // is retained as the bounded fallback when the remote Agent is absent.
       if (stage3IdentityContext && routeState && replay?.demoContentHash) {
@@ -1739,6 +2437,7 @@ export function Cs2dPlaybackHost({
           if (!requestIsLive()) return;
           const result = await dispatchCoachAgentEvent(event);
           if (!requestIsLive()) return;
+          agentResult = { event, result };
           const graphCase = result.state.cueCases?.[reflection.cueId];
           const graphThread = result.state.learningThreads?.find((thread) => thread.evidenceCueIds.includes(reflection.cueId));
           if (graphCase && graphThread) output = { cueCase: graphCase, learningThread: graphThread };
@@ -1749,7 +2448,16 @@ export function Cs2dPlaybackHost({
       if (!requestIsLive()) return;
       if (!output) output = runTeachingDiagnosis(context, reflection);
       if (!requestIsLive()) return;
-      applyTeachingDiagnosis(output);
+      const durability = await persistTeachingBeforeRuntimeHead({
+        interactionDurable,
+        persistDiagnosis: () => applyTeachingDiagnosis(output),
+        ...(agentResult && requestIsLive()
+          ? { mirror: () => mirrorAgentResult(agentResult.event, agentResult.result) }
+          : {}),
+      });
+      if (durability === "MIRROR_FAILED") {
+        setHistoryError("诊断已完成，但新的恢复点未能提交；上一个恢复点仍然有效。");
+      }
     } catch (error) {
       if (!requestIsLive()) return;
       setDiagnosticError(error instanceof Error ? error.message.slice(0, 180) : "诊断失败，已保留基础讲解。");
@@ -1760,6 +2468,12 @@ export function Cs2dPlaybackHost({
         reflection,
       };
       setTeachingCases((current) => ({ ...current, [context.cue.id]: fallback }));
+      void historyPersistenceControllerRef.current?.artifact(
+        "CUE_CASE",
+        context.cue.id,
+        fallback,
+        "cue-case.v1",
+      ).catch(() => setHistoryError("基础教学记录保存失败。"));
       const active = planRef.current ?? activePlan;
       setSession((current) => active && current
         ? reduceCoachingSession(active, current, { type: "RECORD_TEACHING_CASE", cueCase: fallback, reflection })
@@ -1767,25 +2481,96 @@ export function Cs2dPlaybackHost({
     } finally {
       if (diagnosisRequestEpochRef.current === requestEpoch) setDiagnosticBusyCueId(undefined);
     }
-  }, [activePlan, applyTeachingDiagnosis, buildStage3Identity, cue, diagnosisContext, isTeachingDiagnosisRequestLive, replay?.demoContentHash, routeState, stage3IdentityContext]);
+  }, [activePlan, applyTeachingDiagnosis, buildStage3Identity, cue, diagnosisContext, isTeachingDiagnosisRequestLive, mirrorAgentResult, replay?.demoContentHash, routeState, stage3IdentityContext]);
 
-  const skipTeachingReflection = useCallback(() => {
+  const skipTeachingReflection = useCallback(async () => {
     const currentCue = liveCueRef.current ?? cue;
     const liveSession = liveSessionRef.current;
     if (!currentCue || !liveSession || liveSession.current_cue_id !== currentCue.id || liveSession.phase !== "PAUSED_FOR_COACHING" ||
       liveSession.outcome_completion?.cueId !== currentCue.id || liveSession.outcome_completion.status !== "COMPLETE") return;
     const reflection = reflectionForSkip(currentCue.id);
-    const fallback = {
+    const requestEpoch = ++diagnosisRequestEpochRef.current;
+    const requestGeneration = generationRef.current;
+    const requestIsLive = () => isTeachingDiagnosisRequestLive(currentCue.id, requestGeneration, requestEpoch);
+    let interactionDurable = true;
+    const history = historyPersistenceControllerRef.current;
+    if (history) {
+      try {
+        await history.artifact(
+          "USER_INTERACTION",
+          reflection.reflectionId ?? `reflection-skip-${currentCue.id}`,
+          { kind: "REFLECTION_SKIPPED", reflection },
+          "user-reflection.v1",
+        );
+      } catch {
+        interactionDurable = false;
+        setHistoryError("跳过选择未能保存；上一个恢复点仍然有效。");
+      }
+    }
+    if (!requestIsLive()) return;
+    let skippedCase: CueCase = {
       ...baselineCueCase(currentCue, "用户跳过 Reflection Gate；使用 Baseline Narration。"),
       reflection,
     };
-    setTeachingCases((current) => ({ ...current, [currentCue.id]: fallback }));
+    let agentUnavailable = false;
+    let agentResult: { readonly event: CoachAgentEvent; readonly result: CoachAgentResult } | undefined;
+    const context = diagnosisContext();
+    if (context && stage3IdentityContext && routeState && replay?.demoContentHash) {
+      try {
+        const identity = buildStage3Identity(stage3IdentityContext);
+        const event = SubmitReflectionEventSchema.parse(buildTeachingDiagnosisSubmissionEvent(
+          context,
+          reflection,
+          {
+            eventType: "SUBMIT_REFLECTION",
+            eventId: `diagnosis-skip-${currentCue.id}-${crypto.randomUUID()}`,
+            identity,
+          },
+        ));
+        const result = await dispatchCoachAgentEvent(event);
+        if (!requestIsLive()) return;
+        const graphCase = result.state.cueCases?.[currentCue.id];
+        if (graphCase) skippedCase = graphCase;
+        agentResult = { event, result };
+      } catch {
+        agentUnavailable = true;
+        if (requestIsLive()) setDiagnosticError("Agent 未能记录跳过，已保留本地 Baseline 记录。");
+      }
+    }
+    if (!requestIsLive()) return;
+    setTeachingCases((current) => ({ ...current, [currentCue.id]: skippedCase }));
     const active = planRef.current ?? activePlan;
     setSession((current) => active && current
-      ? reduceCoachingSession(active, current, { type: "RECORD_TEACHING_CASE", cueCase: fallback, reflection })
+      ? reduceCoachingSession(active, current, { type: "RECORD_TEACHING_CASE", cueCase: skippedCase, reflection })
       : current);
-    setDiagnosticError(undefined);
-  }, [activePlan, cue]);
+    if (!agentUnavailable) setDiagnosticError(undefined);
+    const durability = await persistTeachingBeforeRuntimeHead({
+      interactionDurable,
+      persistDiagnosis: async () => {
+        const persistence = historyPersistenceControllerRef.current;
+        if (!persistence) return true;
+        try {
+          await persistence.artifact(
+            "CUE_CASE",
+            currentCue.id,
+            skippedCase,
+            "cue-case.v1",
+            (skippedCase.verdict?.revision ?? 0) + 1,
+          );
+          return true;
+        } catch {
+          setHistoryError("跳过记录未能保存；上一个恢复点仍然有效。");
+          return false;
+        }
+      },
+      ...(agentResult && requestIsLive()
+        ? { mirror: () => mirrorAgentResult(agentResult.event, agentResult.result) }
+        : {}),
+    });
+    if (durability === "MIRROR_FAILED") {
+      setHistoryError("跳过选择已记录，但新的恢复点未能提交；上一个恢复点仍然有效。");
+    }
+  }, [activePlan, buildStage3Identity, cue, diagnosisContext, isTeachingDiagnosisRequestLive, mirrorAgentResult, replay?.demoContentHash, routeState, stage3IdentityContext]);
 
   const confirmTeachingDiagnosis = useCallback(() => {
     const currentCue = liveCueRef.current ?? cue;
@@ -1795,6 +2580,13 @@ export function Cs2dPlaybackHost({
     if (currentCase) {
       const completedCase: CueCase = { ...currentCase, status: "COMPLETED" };
       setTeachingCases((current) => ({ ...current, [currentCue.id]: completedCase }));
+      void historyPersistenceControllerRef.current?.artifact(
+        "CUE_CASE",
+        completedCase.cueId,
+        completedCase,
+        "cue-case.v1",
+        (completedCase.verdict?.revision ?? 0) + 2,
+      ).catch(() => setHistoryError("教学确认保存失败。"));
       setSession((current) => current
         ? reduceCoachingSession(active, current, { type: "CONFIRM_TEACHING_CASE", cueId: currentCue.id })
         : current);
@@ -1804,6 +2596,21 @@ export function Cs2dPlaybackHost({
   }, [activePlan, cue, session?.manual_cue_visit, transition]);
 
   const disagreeTeachingDiagnosis = useCallback(async (reflection: UserReflection) => {
+    let interactionDurable = true;
+    const history = historyPersistenceControllerRef.current;
+    if (history) {
+      try {
+        await history.artifact(
+          "USER_INTERACTION",
+          reflection.reflectionId ?? `disagreement-${reflection.cueId}`,
+          { kind: "DISAGREEMENT", reflection },
+          "user-reflection.v1",
+        );
+      } catch {
+        interactionDurable = false;
+        setHistoryError("用户异议未能保存；上一个恢复点仍然有效。");
+      }
+    }
     const context = diagnosisContext();
     const currentCue = liveCueRef.current ?? cue;
     if (!context || !currentCue) return;
@@ -1818,6 +2625,7 @@ export function Cs2dPlaybackHost({
     setDiagnosticError(undefined);
     try {
       let output: ReturnType<typeof runTeachingDiagnosis> | undefined;
+      let agentResult: { readonly event: CoachAgentEvent; readonly result: CoachAgentResult } | undefined;
       if (stage3IdentityContext && routeState && replay?.demoContentHash) {
         try {
           const identity = buildStage3Identity(stage3IdentityContext);
@@ -1834,6 +2642,7 @@ export function Cs2dPlaybackHost({
           if (!requestIsLive()) return;
           const result = await dispatchCoachAgentEvent(event);
           if (!requestIsLive()) return;
+          agentResult = { event, result };
           const graphCase = result.state.cueCases?.[currentCue.id];
           const graphThread = result.state.learningThreads?.find((thread) => thread.evidenceCueIds.includes(currentCue.id));
           if (graphCase && graphThread) output = { cueCase: graphCase, learningThread: graphThread };
@@ -1853,14 +2662,23 @@ export function Cs2dPlaybackHost({
         });
       }
       if (!requestIsLive()) return;
-      applyTeachingDiagnosis(output);
+      const durability = await persistTeachingBeforeRuntimeHead({
+        interactionDurable,
+        persistDiagnosis: () => applyTeachingDiagnosis(output),
+        ...(agentResult && requestIsLive()
+          ? { mirror: () => mirrorAgentResult(agentResult.event, agentResult.result) }
+          : {}),
+      });
+      if (durability === "MIRROR_FAILED") {
+        setHistoryError("补充诊断已完成，但新的恢复点未能提交；上一个恢复点仍然有效。");
+      }
     } catch (error) {
       if (!requestIsLive()) return;
       setDiagnosticError(error instanceof Error ? error.message.slice(0, 180) : "补充信息未能应用；将保持条件化结论。");
     } finally {
       if (diagnosisRequestEpochRef.current === requestEpoch) setDiagnosticBusyCueId(undefined);
     }
-  }, [applyTeachingDiagnosis, cue, diagnosisContext, isTeachingDiagnosisRequestLive, replay?.demoContentHash, routeState, stage3IdentityContext]);
+  }, [applyTeachingDiagnosis, cue, diagnosisContext, isTeachingDiagnosisRequestLive, mirrorAgentResult, replay?.demoContentHash, routeState, stage3IdentityContext]);
 
   stage3IdentityRef.current = stage3IdentityContext;
   // Async Stage2 work must consult these refs immediately before postMessage or
@@ -1916,7 +2734,7 @@ export function Cs2dPlaybackHost({
   }, [acceptRecoveryResult, currentStableRecoveryRecord, narrationByCue, routeState, session, userTookOver]);
 
   useEffect(() => {
-    if (!stage2Mode || !activePlan || !routeState || !session || !cue || !stage2Cue) return;
+    if (historyPlaybackOnlyRef.current || !stage2Mode || !activePlan || !routeState || !session || !cue || !stage2Cue) return;
     // The adaptive panel is the presentation surface while this flag is on;
     // the legacy Stage2 map harness remains available behind the flag-off
     // path for regression work.
@@ -2041,6 +2859,7 @@ export function Cs2dPlaybackHost({
 
   useEffect(() => {
     if (
+      historyPlaybackOnlyRef.current ||
       !stage3Mode ||
       stage2Mode ||
       !activePlan ||
@@ -2106,7 +2925,7 @@ export function Cs2dPlaybackHost({
 
   useEffect(() => {
     const visit = session?.manual_cue_visit;
-    if (!stage3Mode || !visit || !activePlan || !routeState || !cue || cue.id !== visit.cue_id ||
+    if (historyPlaybackOnlyRef.current || !stage3Mode || !visit || !activePlan || !routeState || !cue || cue.id !== visit.cue_id ||
       !presentableNarration || !recoveryIdentity || !replay?.demoContentHash || !session.outcome_completion ||
       session.outcome_completion.status !== "COMPLETE" || session.phase !== "PAUSED_FOR_COACHING" ||
       session.presented_cue_ids.includes(cue.id) || stage3State.visitId === visit.visit_id) return;
@@ -2132,7 +2951,7 @@ export function Cs2dPlaybackHost({
   }, [activePlan, cue, session, stage3State]);
 
   useEffect(() => {
-    if (!stage3Mode || !stage3IdentityContext || !session || session.manual_cue_visit || !cue || !segment ||
+    if (historyPlaybackOnlyRef.current || !stage3Mode || !stage3IdentityContext || !session || session.manual_cue_visit || !cue || !segment ||
       !session.presented_cue_ids.includes(cue.id) || session.phase !== "PLAYING") return;
     stage3ControllerRef.current?.observePresentedCue(stage3IdentityContext, cue.id, segment.id, session.current_segment_index);
   }, [cue, segment, session, stage3IdentityContext, stage3Mode]);
@@ -2146,7 +2965,7 @@ export function Cs2dPlaybackHost({
   }, [nearestManualCue, nearestManualReadiness]);
 
   useEffect(() => {
-    if (!stage3Mode || !stage3IdentityContext || !activePlan || !session || !segment || userTookOverRef.current) return;
+    if (historyPlaybackOnlyRef.current || !stage3Mode || !stage3IdentityContext || !activePlan || !session || !segment || userTookOverRef.current) return;
     // Teaching segments are entered through START_CUE. All deterministic
     // ordinary/skip/freeze segments get an observer event instead; no Policy
     // call is attached to this lifecycle path.
@@ -2191,6 +3010,7 @@ export function Cs2dPlaybackHost({
       const result = await requestSessionWrapUp(projection);
       if (generation !== generationRef.current || userTookOverRef.current || result === undefined) return;
       setStage3WrapUpResult(result);
+      void historyPersistenceControllerRef.current?.artifact("SESSION_SUMMARY", "session-summary", result, "session-wrap-up.v1").catch(() => setHistoryError("全场总结保存失败。"));
       setStage3WrapUpStatus(result.status === "SUCCEEDED" ? "READY" : "FALLBACK");
       if (result.status !== "SUCCEEDED") setStage3WrapUpError("模型总结不可用，已使用确定性主题摘要。");
     } catch (error) {
@@ -2209,7 +3029,7 @@ export function Cs2dPlaybackHost({
   }, [activePlan, narrationByCue, stage3Mode]);
 
   useEffect(() => {
-    if (!stage3Mode || !stage3IdentityContext || !session || userTookOverRef.current) return;
+    if (historyPlaybackOnlyRef.current || !stage3Mode || !stage3IdentityContext || !session || userTookOverRef.current) return;
     if (session.phase !== "WRAP_UP" && session.phase !== "COMPLETED") return;
     void stage3ControllerRef.current?.completeSession(stage3IdentityContext).then((result) => {
       if (result) void requestStage3WrapUp(result, generationRef.current, stage3IdentityContext.runId);
@@ -2289,6 +3109,30 @@ export function Cs2dPlaybackHost({
       </header>
 
       <section className="cs2d-host-workspace">
+        {desktopLibraryEnabled ? <div className="cs2d-history-dock">
+          <ReviewHistorySidebar
+            items={historyItems}
+            activeReviewId={historyActiveReviewId}
+            loading={historyLoading}
+            error={historyError}
+            importProgress={historyImportProgress}
+            hasMore={Boolean(historyNextCursor)}
+            onImportDemo={() => send({ type: "requestDemoPicker" } as PlaybackCommand)}
+            onSearchChange={setHistorySearch}
+            onLoadMore={() => void loadMoreReviewHistory()}
+            onOpenReview={(reviewId) => void openHistoryReview(reviewId)}
+            onStartOver={(review) => void openHistoryReview(review.id, "RESTORE", true)}
+            onRenameReview={(review) => { const title = window.prompt("复盘名称", review.title); if (title) void reviewHistoryApi.rename(review.id, title).then(refreshReviewHistory).catch(() => setHistoryError("重命名失败。")); }}
+            onReanalyzeReview={(review) => { if (window.confirm("重新分析会创建一个新版本，保留当前复盘。是否继续？")) void reanalyzeHistoryReview(review.id); }}
+            onCreateForAnotherPlayer={(review) => void openHistoryReview(review.id, "SELECT_PLAYER")}
+            onDeleteReview={(review) => { if (window.confirm(`删除“${review.title}”这条复盘？原始 Demo 会保留。`)) void reviewHistoryApi.removeReview(review.id).then(() => { if (historyActiveReviewId === review.id) setHistoryActiveReviewId(undefined); return refreshReviewHistory(); }).catch(() => setHistoryError("删除复盘失败。")); }}
+            onDeleteDemo={(review) => void deleteDemoWithImpact(review)}
+            onOpenLibrary={() => void refreshReviewHistory()}
+            onOpenStats={() => void openDesktopSettings().then((opened) => {
+              if (!opened) setHistoryError("无法打开设置；仍可使用 ⌘, 重试。");
+            }).catch(() => setHistoryError("无法打开设置；仍可使用 ⌘, 重试。"))}
+          />
+        </div> : null}
         <div className="cs2d-host-stage">
           <iframe
             ref={iframeRef}

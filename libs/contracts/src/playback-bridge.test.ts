@@ -36,6 +36,61 @@ describe("cs2d playback bridge", () => {
       ...ready,
       payload: { ...ready.payload, demoContentHash: "not-a-sha", hashLatencyMs: 12.5 },
     })).toBe(false);
+    expect(isPlaybackEventEnvelope({
+      ...ready,
+      payload: {
+        ...ready.payload,
+        demoContentHash: "a".repeat(64),
+        hashLatencyMs: 12.5,
+        requestId: "load_01",
+        demoId: "demo_01",
+        sourceKind: "MANAGED_LIBRARY",
+      },
+    })).toBe(true);
+    expect(isPlaybackEventEnvelope({
+      ...ready,
+      payload: { ...ready.payload, requestId: "load_01", demoId: "demo_01", sourceKind: "MANAGED_LIBRARY" },
+    })).toBe(false);
+    expect(isPlaybackEventEnvelope({
+      ...ready,
+      payload: {
+        ...ready.payload,
+        demoContentHash: "a".repeat(64),
+        hashLatencyMs: 12.5,
+        demoId: "demo_01",
+        sourceKind: "MANAGED_LIBRARY",
+      },
+    })).toBe(false);
+  });
+  it("validates managed Demo import events without accepting bytes, paths, or loose metadata", () => {
+    const request = {
+      channel: PLAYBACK_BRIDGE_CHANNEL,
+      direction: "event",
+      payload: {
+        type: "DEMO_IMPORT_REQUESTED",
+        schemaVersion: "cs2d-demo-import-requested.v1",
+        requestId: "import_01",
+        originalFilename: "match.dem",
+        byteSize: 4096,
+      },
+    } as const;
+    expect(isPlaybackEventEnvelope(request)).toBe(true);
+    expect(isPlaybackEventEnvelope({ ...request, payload: { ...request.payload, absolutePath: "/tmp/match.dem" } })).toBe(false);
+    expect(isPlaybackEventEnvelope({ ...request, payload: { ...request.payload, originalFilename: "../match.dem" } })).toBe(false);
+    expect(isPlaybackEventEnvelope({ ...request, payload: { ...request.payload, bytes: new Uint8Array() } })).toBe(false);
+    expect(isPlaybackEventEnvelope({ ...request, payload: { ...request.payload, byteSize: 4 * 1024 * 1024 * 1024 + 1 } })).toBe(false);
+    expect(isPlaybackEventEnvelope({ ...request, payload: {
+      type: "DEMO_IMPORT_PROGRESS", schemaVersion: "cs2d-demo-import-progress.v1", requestId: "import_01",
+      completedBytes: 1024, totalBytes: 4096,
+    } })).toBe(true);
+    expect(isPlaybackEventEnvelope({ ...request, payload: {
+      type: "DEMO_IMPORT_SUCCEEDED", schemaVersion: "cs2d-demo-import-succeeded.v1", requestId: "import_01",
+      demoId: "demo_01", contentHash: "a".repeat(64), originalFilename: "match.dem", byteSize: 4096, deduplicated: false,
+    } })).toBe(true);
+    expect(isPlaybackEventEnvelope({ ...request, payload: {
+      type: "DEMO_IMPORT_FAILED", schemaVersion: "cs2d-demo-import-failed.v1", requestId: "import_01",
+      code: "IMPORT_REJECTED", message: "Demo import failed",
+    } })).toBe(true);
   });
   it("validates every command and rejects additional data", () => {
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "play" }))).toBe(true);
@@ -46,6 +101,22 @@ describe("cs2d playback bridge", () => {
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "setSpeed", speed: 8 }))).toBe(true);
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "setCamera", mode: "full" }))).toBe(true);
     expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "setCamera", mode: "target" }))).toBe(true);
+    expect(isPlaybackCommandEnvelope(commandEnvelope({ type: "requestDemoPicker" }))).toBe(true);
+    expect(isPlaybackCommandEnvelope(commandEnvelope({
+      type: "persistSelectedDemo", requestId: "import_01", capabilityToken: "a".repeat(43),
+    }))).toBe(true);
+    expect(isPlaybackCommandEnvelope(commandEnvelope({
+      type: "loadManagedDemo", requestId: "restore_01", demoId: "demo_01", capabilityToken: "b".repeat(43),
+      originalFilename: "match.dem", byteSize: 4096, contentHash: "c".repeat(64), mode: "RESTORE",
+    }))).toBe(true);
+    expect(isPlaybackCommandEnvelope(commandEnvelope({
+      type: "persistSelectedDemo", requestId: "import_01", capabilityToken: "short",
+    }))).toBe(false);
+    expect(isPlaybackCommandEnvelope(commandEnvelope({
+      type: "loadManagedDemo", requestId: "restore_01", demoId: "../demo", capabilityToken: "b".repeat(43),
+      originalFilename: "match.dem", byteSize: 4096, contentHash: "c".repeat(64), mode: "RESTORE",
+    }))).toBe(false);
+    expect(isPlaybackCommandEnvelope({ ...commandEnvelope({ type: "requestDemoPicker" }), payload: { type: "requestDemoPicker", path: "/tmp" } })).toBe(false);
     expect(isPlaybackCommandEnvelope(commandEnvelope({
       type: "focusMapEvidence",
       schemaVersion: "cs2d-teaching-tool-command.v1",

@@ -114,6 +114,47 @@ function makeProposal(suffix = "1", demoHash = `demo-${suffix}`) {
   });
 }
 
+function withDiagnosedSource(
+  proposal: ReturnType<typeof makeProposal>,
+  input: { cueId: string; sessionId: string; sourceRefId: string },
+): ReturnType<typeof makeProposal> {
+  const sourceRef = {
+    namespace: "DEMO_FACT" as const,
+    refId: input.sourceRefId,
+    demoContentHash: proposal.origin.demoContentHash,
+    sessionId: input.sessionId,
+    cueId: input.cueId,
+    caseId: `case-${input.cueId}`,
+    threadId: proposal.origin.sourceThreadId,
+    label: "stable parsed Demo source",
+  };
+  const sourceMarker = {
+    ...sourceRef,
+    namespace: "SESSION" as const,
+    refId: `behavior-opportunity-source-${input.sourceRefId}`,
+    label: "stable behavior opportunity source",
+  };
+  return {
+    ...proposal,
+    origin: {
+      ...proposal.origin,
+      sessionId: input.sessionId,
+      cueId: input.cueId,
+      caseId: `case-${input.cueId}`,
+      typedSourceRefs: [
+        ...proposal.origin.typedSourceRefs.map((ref) => ({
+          ...ref,
+          sessionId: input.sessionId,
+          cueId: input.cueId,
+          caseId: `case-${input.cueId}`,
+        })),
+        sourceRef,
+        sourceMarker,
+      ],
+    },
+  };
+}
+
 function makeEvent(proposal: ReturnType<typeof makeProposal>, suffix = "1"): MemoryEvent {
   return {
     schemaVersion: MEMORY_EVENT_VERSION,
@@ -240,6 +281,52 @@ describe("Memory Domain", () => {
     expect(result.record?.status).toBe("CANDIDATE");
     expect(result.record?.active).toBe(false);
     expect(result.record?.source).toBe("AGENT_INFERRED");
+  });
+
+  it("does not count the same Demo source again when reanalysis moves it from c1 to c2", async () => {
+    const repository = new InMemoryMemoryRepository();
+    const service = makeService(repository);
+    const original = withDiagnosedSource(
+      makeProposal("1", "demo-stable-opportunity"),
+      { cueId: "c1", sessionId: "session-analysis-v1", sourceRefId: "demo-fact-source-a" },
+    );
+    const first = await service.ingestEvent(userId, makeEvent(original, "stable-first"));
+    expect(first.record?.occurrenceCount).toBe(1);
+
+    const reanalyzed = withDiagnosedSource({
+      ...makeProposal("2", "demo-stable-opportunity"),
+      proposalId: "proposal-stable-reanalysis",
+      idempotencyKey: "idem-stable-reanalysis",
+      createdAt: "2026-08-28T00:00:09.000Z",
+    }, { cueId: "c2", sessionId: "session-analysis-v2", sourceRefId: "demo-fact-source-a" });
+    const duplicate = await service.ingestEvent(
+      userId,
+      makeEvent(reanalyzed, "stable-reanalysis"),
+    );
+    expect(duplicate.accepted).toBe(false);
+    expect(duplicate.decision.reason).toBe("DUPLICATE_SOURCE");
+    expect(duplicate.record?.occurrenceCount).toBe(1);
+  });
+
+  it("counts a different Demo source when reanalysis reuses the c1 route ordinal", async () => {
+    const repository = new InMemoryMemoryRepository();
+    const service = makeService(repository);
+    const firstProposal = withDiagnosedSource(
+      makeProposal("1", "demo-distinct-opportunities"),
+      { cueId: "c1", sessionId: "session-source-a", sourceRefId: "demo-fact-source-a" },
+    );
+    const first = await service.ingestEvent(userId, makeEvent(firstProposal, "source-a"));
+    expect(first.record?.occurrenceCount).toBe(1);
+
+    const secondProposal = withDiagnosedSource({
+      ...makeProposal("2", "demo-distinct-opportunities"),
+      proposalId: "proposal-distinct-source-b",
+      idempotencyKey: "idem-distinct-source-b",
+    }, { cueId: "c1", sessionId: "session-source-b", sourceRefId: "demo-fact-source-b" });
+    const distinct = await service.ingestEvent(userId, makeEvent(secondProposal, "source-b"));
+
+    expect(distinct.accepted).toBe(true);
+    expect(distinct.record?.occurrenceCount).toBe(2);
   });
 
   it("rejects a changed payload when an event idempotency key already exists", async () => {

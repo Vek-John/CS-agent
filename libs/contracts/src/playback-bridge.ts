@@ -1,5 +1,6 @@
 /** Compact control plane between the Next coaching shell and the cs2d iframe. */
 export const PLAYBACK_BRIDGE_CHANNEL = "cs2d-playback-bridge.v1" as const;
+export const MAX_MANAGED_DEMO_BYTE_SIZE = 4 * 1024 * 1024 * 1024;
 
 export interface PlaybackPlayerSummary {
   playerId: string;
@@ -27,6 +28,41 @@ export interface ReplayReadyEvent {
   demoContentHash?: string;
   /** Worker-side SHA-256 latency; diagnostics only, never player-facing. */
   hashLatencyMs?: number;
+  /** Present only when this Replay is backed by the desktop managed library. */
+  requestId?: string;
+  demoId?: string;
+  sourceKind?: "MANAGED_LIBRARY";
+}
+export interface DemoImportRequestedEvent {
+  type: "DEMO_IMPORT_REQUESTED";
+  schemaVersion: "cs2d-demo-import-requested.v1";
+  requestId: string;
+  originalFilename: string;
+  byteSize: number;
+}
+export interface DemoImportProgressEvent {
+  type: "DEMO_IMPORT_PROGRESS";
+  schemaVersion: "cs2d-demo-import-progress.v1";
+  requestId: string;
+  completedBytes: number;
+  totalBytes: number;
+}
+export interface DemoImportSucceededEvent {
+  type: "DEMO_IMPORT_SUCCEEDED";
+  schemaVersion: "cs2d-demo-import-succeeded.v1";
+  requestId: string;
+  demoId: string;
+  contentHash: string;
+  originalFilename: string;
+  byteSize: number;
+  deduplicated: boolean;
+}
+export interface DemoImportFailedEvent {
+  type: "DEMO_IMPORT_FAILED";
+  schemaVersion: "cs2d-demo-import-failed.v1";
+  requestId: string;
+  code: string;
+  message: string;
 }
 export interface PlayerSelectedEvent {
   type: "PLAYER_SELECTED";
@@ -203,8 +239,13 @@ export type PlaybackBridgeEvent =
   | AnalysisProgressEvent
   | AnalysisTelemetryEvent
   | AnalysisFailedEvent
+  | DemoImportRequestedEvent
+  | DemoImportProgressEvent
+  | DemoImportSucceededEvent
+  | DemoImportFailedEvent
   | TeachingToolAckEvent;
 export type PlaybackCameraMode = "full" | "target";
+export type ManagedDemoLoadMode = "RESTORE" | "REANALYZE" | "SELECT_PLAYER";
 
 export type PlaybackCommand =
   | { type: "play" }
@@ -215,6 +256,18 @@ export type PlaybackCommand =
   | { type: "selectRound"; roundIndex: number }
   | { type: "setSpeed"; speed: number }
   | { type: "setCamera"; mode: PlaybackCameraMode }
+  | { type: "requestDemoPicker" }
+  | { type: "persistSelectedDemo"; requestId: string; capabilityToken: string }
+  | {
+      type: "loadManagedDemo";
+      requestId: string;
+      demoId: string;
+      capabilityToken: string;
+      originalFilename: string;
+      byteSize: number;
+      contentHash: string;
+      mode: ManagedDemoLoadMode;
+    }
   | TeachingToolCommand
   | {
       type: "focusMapEvidence";
@@ -255,6 +308,19 @@ function nonEmpty(value: unknown): value is string {
 }
 function sha256Digest(value: unknown): value is string {
   return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
+}
+function boundedOpaqueId(value: unknown): value is string {
+  return typeof value === "string" && value.length >= 1 && value.length <= 160 && /^[A-Za-z0-9_-]+$/u.test(value);
+}
+function capabilityToken(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{43}$/u.test(value);
+}
+function demoFilename(value: unknown): value is string {
+  return typeof value === "string" && value.length >= 1 && value.length <= 255 &&
+    !/[\\/\u0000-\u001f\u007f]/u.test(value) && value.toLowerCase().endsWith(".dem");
+}
+function byteSize(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value <= MAX_MANAGED_DEMO_BYTE_SIZE;
 }
 function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
   const actual = Object.keys(value).sort();
@@ -306,12 +372,38 @@ function isEvent(value: unknown): value is PlaybackBridgeEvent {
   if (value.type === "REPLAY_READY") {
     const baseKeys = ["type", "schemaVersion", "map", "tickRate", "startCanonicalTick", "endCanonicalTick", "roundCount", "rounds", "players", "freezeSkipped"];
     const hasHash = Object.prototype.hasOwnProperty.call(value, "demoContentHash") || Object.prototype.hasOwnProperty.call(value, "hashLatencyMs");
-    if (!exactKeys(value, hasHash ? [...baseKeys, "demoContentHash", "hashLatencyMs"] : baseKeys)) return false;
+    const hasManagedSource = Object.prototype.hasOwnProperty.call(value, "requestId") || Object.prototype.hasOwnProperty.call(value, "demoId") || Object.prototype.hasOwnProperty.call(value, "sourceKind");
+    const keys = hasManagedSource
+      ? [...baseKeys, "demoContentHash", "hashLatencyMs", "requestId", "demoId", "sourceKind"]
+      : hasHash ? [...baseKeys, "demoContentHash", "hashLatencyMs"] : baseKeys;
+    if (!exactKeys(value, keys)) return false;
     return value.schemaVersion === "cs2d-replay-ready.v1" && nonEmpty(value.map) && finite(value.tickRate) && value.tickRate > 0 &&
       finite(value.startCanonicalTick) && finite(value.endCanonicalTick) && value.endCanonicalTick >= value.startCanonicalTick &&
       safeIndex(value.roundCount) && Array.isArray(value.rounds) && value.rounds.length === value.roundCount && value.rounds.every(isRound) &&
       Array.isArray(value.players) && value.players.length > 0 && value.players.length <= 64 && value.players.every(isPlayer) &&
-      value.freezeSkipped === true && (!hasHash || (sha256Digest(value.demoContentHash) && finite(value.hashLatencyMs) && value.hashLatencyMs >= 0));
+      value.freezeSkipped === true && (!hasHash || (sha256Digest(value.demoContentHash) && finite(value.hashLatencyMs) && value.hashLatencyMs >= 0)) &&
+      (!hasManagedSource || (hasHash && boundedOpaqueId(value.requestId) && boundedOpaqueId(value.demoId) && value.sourceKind === "MANAGED_LIBRARY"));
+  }
+  if (value.type === "DEMO_IMPORT_REQUESTED") {
+    return exactKeys(value, ["type", "schemaVersion", "requestId", "originalFilename", "byteSize"]) &&
+      value.schemaVersion === "cs2d-demo-import-requested.v1" && boundedOpaqueId(value.requestId) &&
+      demoFilename(value.originalFilename) && byteSize(value.byteSize);
+  }
+  if (value.type === "DEMO_IMPORT_PROGRESS") {
+    return exactKeys(value, ["type", "schemaVersion", "requestId", "completedBytes", "totalBytes"]) &&
+      value.schemaVersion === "cs2d-demo-import-progress.v1" && boundedOpaqueId(value.requestId) &&
+      safeIndex(value.completedBytes) && byteSize(value.totalBytes) && value.completedBytes <= value.totalBytes;
+  }
+  if (value.type === "DEMO_IMPORT_SUCCEEDED") {
+    return exactKeys(value, ["type", "schemaVersion", "requestId", "demoId", "contentHash", "originalFilename", "byteSize", "deduplicated"]) &&
+      value.schemaVersion === "cs2d-demo-import-succeeded.v1" && boundedOpaqueId(value.requestId) && boundedOpaqueId(value.demoId) &&
+      sha256Digest(value.contentHash) && demoFilename(value.originalFilename) && byteSize(value.byteSize) && typeof value.deduplicated === "boolean";
+  }
+  if (value.type === "DEMO_IMPORT_FAILED") {
+    return exactKeys(value, ["type", "schemaVersion", "requestId", "code", "message"]) &&
+      value.schemaVersion === "cs2d-demo-import-failed.v1" && boundedOpaqueId(value.requestId) &&
+      typeof value.code === "string" && /^[A-Z][A-Z0-9_]{0,63}$/u.test(value.code) &&
+      typeof value.message === "string" && value.message.length >= 1 && value.message.length <= 256;
   }
   if (value.type === "PLAYER_SELECTED") {
     return exactKeys(value, ["type", "playerId", "displayName", "side", "selectionIndex"]) &&
@@ -369,6 +461,17 @@ export function isPlaybackCommandEnvelope(value: unknown): value is PlaybackComm
   if (payload.type === "selectRound") return exactKeys(payload, ["type", "roundIndex"]) && safeIndex(payload.roundIndex);
   if (payload.type === "setSpeed") return exactKeys(payload, ["type", "speed"]) && finite(payload.speed) && payload.speed > 0 && payload.speed <= 16;
   if (payload.type === "setCamera") return exactKeys(payload, ["type", "mode"]) && (payload.mode === "full" || payload.mode === "target");
+  if (payload.type === "requestDemoPicker") return exactKeys(payload, ["type"]);
+  if (payload.type === "persistSelectedDemo") {
+    return exactKeys(payload, ["type", "requestId", "capabilityToken"]) &&
+      boundedOpaqueId(payload.requestId) && capabilityToken(payload.capabilityToken);
+  }
+  if (payload.type === "loadManagedDemo") {
+    return exactKeys(payload, ["type", "requestId", "demoId", "capabilityToken", "originalFilename", "byteSize", "contentHash", "mode"]) &&
+      boundedOpaqueId(payload.requestId) && boundedOpaqueId(payload.demoId) && capabilityToken(payload.capabilityToken) &&
+      demoFilename(payload.originalFilename) && byteSize(payload.byteSize) && sha256Digest(payload.contentHash) &&
+      (payload.mode === "RESTORE" || payload.mode === "REANALYZE" || payload.mode === "SELECT_PLAYER");
+  }
   if (payload.type === "focusMapEvidence") {
     const point = payload.focusWorld;
     return exactKeys(payload, ["type", "schemaVersion", "tool", "callId", "runId", "generation", "cueId", "annotationRef", "focusWorld", "label"]) &&

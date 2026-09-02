@@ -10,7 +10,7 @@ import {
 import { dirname, resolve } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import type { SqliteDatabaseOwner } from "./database";
-import { DESKTOP_MIGRATIONS } from "./migrations";
+import { DESKTOP_MIGRATIONS, runDesktopMigrations } from "./migrations";
 import type { DesktopMigrationPlan } from "./migrations";
 
 export interface SqliteBackupManifest {
@@ -24,15 +24,22 @@ function sha(path: string): string {
 }
 function validatedLedger(
   rows: readonly { migration_id: string; checksum: string }[],
+  requireComplete: boolean,
 ): readonly { migrationId: string; checksum: string }[] {
-  if (rows.length !== DESKTOP_MIGRATIONS.length)
+  if (requireComplete && rows.length !== DESKTOP_MIGRATIONS.length)
     throw new Error("SQLITE_MIGRATION_LEDGER_INCOMPLETE");
   const actual = new Map(rows.map((row) => [row.migration_id, row.checksum]));
-  for (const migration of DESKTOP_MIGRATIONS) {
-    if (actual.get(migration.id) !== migration.checksum)
-      throw new Error(`SQLITE_MIGRATION_DRIFT:${migration.id}`);
+  for (const row of rows) {
+    const known = DESKTOP_MIGRATIONS.find(
+      (migration) => migration.id === row.migration_id,
+    );
+    if (!known || known.checksum !== row.checksum)
+      throw new Error(`SQLITE_MIGRATION_DRIFT:${row.migration_id}`);
   }
-  return DESKTOP_MIGRATIONS.map((migration) => ({
+  const prefix = DESKTOP_MIGRATIONS.slice(0, rows.length);
+  if (prefix.some((migration) => !actual.has(migration.id)))
+    throw new Error("SQLITE_MIGRATION_LEDGER_NOT_PREFIX");
+  return prefix.map((migration) => ({
     migrationId: migration.id,
     checksum: migration.checksum,
   }));
@@ -45,7 +52,7 @@ function readValidatedLedger(
       "SELECT migration_id,checksum FROM desktop_schema_migrations ORDER BY migration_id",
     )
     .all() as Array<{ migration_id: string; checksum: string }>;
-  return validatedLedger(rows);
+  return validatedLedger(rows, true);
 }
 function readAppliedLedger(
   db: DatabaseSync,
@@ -61,25 +68,29 @@ function readAppliedLedger(
       "SELECT migration_id,checksum FROM desktop_schema_migrations ORDER BY migration_id",
     )
     .all() as Array<{ migration_id: string; checksum: string }>;
-  return rows.map((row) => {
-    const known = DESKTOP_MIGRATIONS.find(
-      (migration) => migration.id === row.migration_id,
-    );
-    if (!known || known.checksum !== row.checksum)
-      throw new Error(`SQLITE_MIGRATION_DRIFT:${row.migration_id}`);
-    return { migrationId: row.migration_id, checksum: row.checksum };
-  });
+  return validatedLedger(rows, false);
 }
-function verifyManifest(path: string, manifest: SqliteBackupManifest): void {
+function verifyManifest(
+  path: string,
+  manifest: SqliteBackupManifest,
+  sourceLedger: readonly { migrationId: string; checksum: string }[],
+): void {
   if (
     manifest.schemaVersion !== "desktop-sqlite-backup.v1" ||
     manifest.databaseSha256 !== sha(path)
   )
     throw new Error("SQLITE_BACKUP_CHECKSUM_MISMATCH");
-  const expected = DESKTOP_MIGRATIONS.map(
-    (migration) => `${migration.id}:${migration.checksum}`,
+  const manifestLedger = validatedLedger(
+    manifest.migrationLedger.map((migration) => ({
+      migration_id: migration.migrationId,
+      checksum: migration.checksum,
+    })),
+    false,
   );
-  const actual = manifest.migrationLedger.map(
+  const expected = sourceLedger.map(
+    (migration) => `${migration.migrationId}:${migration.checksum}`,
+  );
+  const actual = manifestLedger.map(
     (migration) => `${migration.migrationId}:${migration.checksum}`,
   );
   if (
@@ -197,18 +208,46 @@ export async function stageSqliteRestore(
     stage = resolve(stagingPath);
   if (sourcePath === stage) throw new Error("INVALID_RESTORE_STAGING_PATH");
   if (existsSync(stage)) throw new Error("SQLITE_RESTORE_STAGING_EXISTS");
-  verifySqliteDatabase(sourcePath);
-  if (manifest) verifyManifest(sourcePath, manifest);
+  const inspection = new DatabaseSync(sourcePath, { readOnly: true });
+  let sourceLedger;
+  try {
+    const integrity = inspection.prepare("PRAGMA integrity_check").all() as Array<
+      Record<string, unknown>
+    >;
+    if (
+      integrity.length !== 1 ||
+      String(Object.values(integrity[0])[0]).toLowerCase() !== "ok"
+    )
+      throw new Error("SQLITE_INTEGRITY_CHECK_FAILED");
+    if (inspection.prepare("PRAGMA foreign_key_check").all().length > 0)
+      throw new Error("SQLITE_FOREIGN_KEY_CHECK_FAILED");
+    sourceLedger = readAppliedLedger(inspection);
+  } finally {
+    inspection.close();
+  }
+  if (manifest) verifyManifest(sourcePath, manifest, sourceLedger);
   const sourceDb = new DatabaseSync(sourcePath, { readOnly: true });
   try {
     await backup(sourceDb, stage);
     chmodSync(stage, 0o600);
-    verifySqliteDatabase(stage);
   } catch (error) {
     rmSync(stage, { force: true });
     throw error;
   } finally {
     sourceDb.close();
+  }
+  try {
+    const stagedDb = new DatabaseSync(stage);
+    try {
+      stagedDb.exec("PRAGMA foreign_keys=ON; PRAGMA synchronous=FULL");
+      runDesktopMigrations(stagedDb);
+    } finally {
+      stagedDb.close();
+    }
+    verifySqliteDatabase(stage);
+  } catch (error) {
+    rmSync(stage, { force: true });
+    throw error;
   }
   return stage;
 }

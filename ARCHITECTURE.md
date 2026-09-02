@@ -1,8 +1,8 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：5.3.0
-> 最后更新：2026-08-31
+> 版本：5.5.2
+> 最后更新：2026-09-03
 > 适用范围：Web 2D 到桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
 > 当前产品范围：[MVP_SCOPE.md](./MVP_SCOPE.md)
@@ -32,7 +32,7 @@
 
 运行形态必须显式区分：Web/Cloudflare 形态可继续使用 Durable Object checkpoint、PostgreSQL Memory 和 Cloudflare 部署 Adapter；Apple Silicon 桌面形态默认使用 Tauri 监督宿主、自包含 Node/Next sidecar、同一 SQLite 文件中的独立 Memory 与 checkpoint Adapter，不要求 Cloudflare、Durable Object 或 PostgreSQL。两种 Adapter 都满足既有领域 interface；任何部署产品都不得成为 Parser、Renderer、`CoachingSession` reducer 或 Memory Domain 的第二实现。LangGraph 是 CoachingRuntime 的长期编排边界，不是这些领域模块的替代品。
 
-[ADR-0007](./docs/adr/ADR-0007-local-first-tauri-desktop.md) 保留桌面架构在实现前的冻结历史；[ADR-0008](./docs/adr/ADR-0008-desktop-runtime-implementation-amendments.md) 记录首次实现修订；[ADR-0009](./docs/adr/ADR-0009-ipv4-loopback-browser-authorities.md) 进一步取代其中 `[::1]` Viewer、宽 `frame-src` 与 Ready v1 的具体细节。当前架构事实以本文、ADR-0008 未被取代部分和 ADR-0009 为准。
+[ADR-0007](./docs/adr/ADR-0007-local-first-tauri-desktop.md) 保留桌面架构在实现前的冻结历史；[ADR-0008](./docs/adr/ADR-0008-desktop-runtime-implementation-amendments.md) 记录首次实现修订；[ADR-0009](./docs/adr/ADR-0009-ipv4-loopback-browser-authorities.md) 进一步取代其中 `[::1]` Viewer、宽 `frame-src` 与 Ready v1 的具体细节；[ADR-0010](./docs/adr/ADR-0010-local-demo-library-and-review-history.md) 取代 raw Demo 不进入 sidecar 与 main remote origin 绝对零 capability 的两项限制，只增加受管 Demo seam 和 `open_settings` 导航。当前架构事实以本文及这些 ADR 尚未被后续决定取代的部分为准。
 
 ### 0.3 架构审查问题
 
@@ -148,9 +148,11 @@ Graph 通过 `AgentEffect` 请求 Host 执行外部动作。Host 必须重新校
 
 Coach Agent、Director、Narrator 和 Policy 没有长期记忆写权限。它们最多产生受限、可审计的 `MemoryProposal`；Memory Service 负责授权、跨 Demo 晋级、纠正/删除策略，当前运行形态的 Adapter 负责唯一写入（桌面 `memory-sqlite`，Web `memory-postgres`）。Memory sink 或 Brief 故障必须回退 Baseline，不得阻断 Session 或 Outcome Gate。
 
-### 2.13 重新选择同一 Demo 后恢复
+### 2.13 托管 Demo 与会话恢复
 
-页面刷新或关闭不会持久化 Replay；用户重新进入时，浏览器如果找到未完成 `SessionRecoveryRecord`，只能先进入 `DORMANT` 并提示重新选择同一 Demo。`ReplayAvailability=ABSENT/LOADING` 时不得调用 Director、Narrator、Coach Policy 或推进 Graph。用户选择的 File 继续只进入 cs2d iframe/Worker，由它在浏览器内计算 SHA-256 并解析；File、Demo bytes、raw Replay 与 frames 不进入 Host record、Durable Object 或网络请求。
+页面刷新或关闭不会持久化 Replay。桌面首次导入时，用户选择的 `File` 先由 cs2d Viewer 使用 sidecar 签发的短期、一次性 IMPORT capability，经 Viewer 自己的 loopback authority 流式写入应用托管资料库；sidecar 同步计算 SHA-256、校验 Demo 文件头并完成内容寻址落盘，之后 Viewer 才把同一 `File` 交给现有 Worker/WASM 解析。Host、Agent、LLM、Memory、Checkpoint 和日志始终不能读取原始 bytes 或绝对路径。localhost/Web Adapter 不具备该桌面资料库时继续维持既有浏览器本地选择语义。
+
+桌面重新进入时，持久化的 Review control plane 先从 SQLite 立即恢复；Viewer 随后通过只绑定一个已登记 `demoId` 的短期 READ capability 从托管文件后台重建 Replay。`ReplayAvailability=ABSENT/LOADING` 时不得调用 Director、Narrator、Coach Policy 或推进 Graph。历史恢复的玩家绑定使用 playback-only 命令，不启动胜率 Worker、Director、Narrator、Reflection parser、Adaptive Narrator、Embedding 或 Coach Policy；Artifact 缺失/损坏只能显式提示“重新分析”，不得以历史点击静默补算。没有托管 Review 的旧版 `SessionRecoveryRecord` 可以继续进入兼容的 DORMANT/重新选择流程。
 
 恢复采用双状态 `RecoveryHandshake`：浏览器 Host Recovery Store 拥有冻结 `ReviewPlan`、合法 Session 进度、讲解产物和工具 ledger 摘要；Agent checkpoint 则由运行形态 Adapter 拥有——桌面为 SQLite `BaseCheckpointSaver`，Web/Cloudflare 可为每 session 一个 Durable Object。两侧以会话唯一 `sessionId/runId`、Demo hash、selected player、route id/hash、parser/planner/graph/state/session/recovery 版本、`RecoveryBoundary` 与最近 checkpoint id 精确校验。任一项不匹配都拒绝恢复，用户可以重选文件或创建具有新身份的新复盘。
 
@@ -176,6 +178,18 @@ Coach Agent 对 manual visit 使用独立的结构化事件和 visit ID。该事
 
 长期记忆继续区分 USER claim、推断、Advice 和 Evidence。不得复制 `CueCase`、`Fact` 或 `ObservableState`；不得保存 raw Demo、frames、完整 tick 流或播放器缓存。Memory Brief 是结构化优先的只读投影，最多包含 2 个 active thread、3 条 memory 和 2 条 correction；进入 Agent 前还要去除身份/provenance ID，并按确定性近似裁剪到不超过 800 tokens。Web 的可选 pgvector 或桌面的 bounded exact cosine 都只能补充语义召回，失败时回到结构化结果；桌面首发不加载 `sqlite-vec`。
 
+### 2.16 本地 Demo 资料库与复盘历史
+
+桌面 `LocalReviewLibrary` 是一个深模块，位于受保护 App control plane、Viewer 原始文件 ingress、Application Support 文件系统与共享 SQLite owner 之间。其 interface 只接受 opaque `demoId`/`reviewId`/`revisionId`、有界 JSON Artifact 和短期 capability；路径解析、流式哈希、文件/数据库 Saga、引用检查、删除重试、校验与磁盘统计全部隐藏在实现内。生产 Adapter 使用 Application Support＋SQLite，测试 Adapter 使用临时目录/数据库；调用方不得绕过该 seam 直接拼接资料库路径或写表。
+
+固定关系为 `DemoAsset 1─N Review 1─N ReviewRevision 1─N ReviewArtifact`。`DemoAsset` 是 SHA-256 内容唯一的不可变 `.dem`；`Review` 是面向一个选中玩家、出现在历史侧栏的用户对象；`ReviewRevision` 是一次明确分析版本，重新分析只能追加 Revision；`ReviewArtifact` 保存 AnalysisBundle、CandidateSet、ReviewPlan、逐 cue Narration、CueCase、Tool Result 与 Session Summary。Revision 的 `artifactContractVersion=2` 要求独立 CandidateSet Artifact；迁移前的 v1 READY Revision 可以从已校验和的 AnalysisBundle 内恢复完全相同的 embedded CandidateSet，但不能据此创建新的 v2 READY/head。小型且不可重建的用户/LLM JSON 留在 SQLite；大型白名单 AnalysisBundle 使用 `library/artifacts/<review>/<revision>/` 下的校验和 gzip 文件；raw Replay、frames 和逐 tick 大对象永不成为 Artifact。
+
+资料库布局复用 Tauri `dataDir`：现有 `cs-agent.sqlite3` 保持数据库路径，托管文件位于 `library/demos/<hash-prefix>/<sha256>.dem`，Artifact 位于 `library/artifacts/`，临时文件位于 `library/tmp/`。数据库只保存资料库根下的规范相对路径。导入 job、Artifact job 与删除 job 把文件系统和 SQLite 当作双资源 Saga。导入在文件 fsync、内容哈希/最小头校验和不可覆盖的同卷发布后只建立 `IMPORTING` Demo；Viewer 必须再用同一选定文件经过真实 Worker/WASM parser，并以一次性、绑定 Demo 的 VALIDATE capability 明确提交 `READY` 或 `CORRUPT`。只有 `READY` 可读；启动时未完成的 `IMPORTING` 收敛为 `CORRUPT`，物理 verify 只能降级既有 `READY`，绝不能替代 parser 晋升状态。
+
+`ReviewRuntimeHead` 保存完整 session/run、Demo hash、selected player、route hash、合法 RecoveryBoundary、精确 checkpoint pointer，以及唯一 `SESSION_RECOVERY` Artifact 的 `artifactId + artifactKey + artifactRevision` 三元身份。任意 playback tick 只作非权威 UI 进度；Session 恢复仍由 `libs/session` 从 frozen plan 推导。历史列表只查询分页摘要，不加载 Artifact。点击历史先恢复标题、路线、全部已生成 Narration、CueCase/Verdict/LearningThread、ToolResult、总结与稳定进度，再后台恢复 Viewer；RESTORE 在 bridge 分发入口丢弃所有迟到 `ANALYSIS_*` 事件，已完成的 Artifact 不触发任何 LLM、Embedding 或胜率 Worker。
+
+行为记忆的机会身份稳定为 `user + demoContentHash + selectedPlayerId + stableCueSourceId + taxonomyCode`。分析证据 Revision 只版本化 provenance；同一机会的新分析不得增加 occurrence/opportunity，`COUNT(DISTINCT demoContentHash)` 也不得增加。数据库 unique claim、MemoryWritePolicy 与稳定 event idempotency key 三层共同执行该规则。`REVIEW_OPENED`、`REPLAY_STARTED` 和 `CUE_REWATCHED` 永不产生 MemoryProposal。删除 Review/Demo 保留最小 evidence tombstone，使删后重新导入相同内容不能复活或重复计数。
+
 ## 3. 系统上下文与演进
 
 ```mermaid
@@ -185,10 +199,13 @@ flowchart TB
     Desktop --> Sidecar["单一 desktop runtime sidecar\npinned Node + Next standalone"]
     Sidecar --> Host["127.0.0.1:0\nNext UI / Route Handler"]
     Sidecar --> Viewer["127.0.0.1:0 socket\nlocalhost browser authority\n独立 cs2d viewer"]
+    Viewer -->|"header-only 短期 capability\n原始 Demo 流"| Library["LocalReviewLibrary\n流式哈希 / Saga / 引用校验"]
+    Library --> ManagedFiles[("Application Support\nlibrary/demos + artifacts + tmp")]
+    Library --> SQLite
     Host --> Runtime["Coach Agent Runtime\nTypeScript StateGraph"]
     Host --> Memory["Memory Domain\nports / service / brief / policy"]
     Memory --> SQLiteAdapter["memory-sqlite Adapter"]
-    SQLiteAdapter --> SQLite[("Application Support SQLite\nMemory 真相 + Agent checkpoint\n不同表 / 不同 Adapter")]
+    SQLiteAdapter --> SQLite[("Application Support SQLite\nMemory + checkpoint + Review metadata\n不同表 / 不同 Adapter")]
     Runtime --> SQLiteSaver["SQLite BaseCheckpointSaver"]
     SQLiteSaver --> SQLite
     Runtime --> Director["Teaching Director\n教学点选择"]
@@ -221,7 +238,7 @@ flowchart TB
 
 **桌面默认形态**：首发目标为 Apple Silicon `aarch64`，使用 Tauri `2.11.5` 作为监督宿主。Tauri 只负责受控启动、窗口、Keychain、更新和进程退出；它不是第二个 Parser、Session、Agent 或 Memory module。产品仍在既有 Next UI/Route Handler 中运行，主交付仍是覆盖整场、显式跳过、先看结果再回到决策点讲解的 coaching session。
 
-桌面随 app 打包一个自包含 desktop runtime sidecar：固定 Node `24.19.0` binary 与 Next standalone traced resources 在同一 sidecar 进程内运行。该进程拥有两个由操作系统分配的随机端口，两个 TCP socket 都只绑定 `127.0.0.1:0`；App browser origin 使用 `127.0.0.1:<port>`，Viewer browser origin 使用隐藏的 `localhost:<port>`，以不同 Cookie host 保持跨源隔离。`localhost` 不是额外监听；禁止 IPv6、LAN、`0.0.0.0` 和通配地址。sidecar 使用精确 filesystem permission、`--jitless` 与 child permission deny，不 spawn grandchildren。Next 仍通过 iframe/bridge 驱动 cs2d 的 File → Worker/WASM 单次解析、Playback bridge 与 Outcome Gate；raw Demo、raw Replay 和逐帧数据不跨 iframe。
+桌面随 app 打包一个自包含 desktop runtime sidecar：固定 Node `24.19.0` binary 与 Next standalone traced resources 在同一 sidecar 进程内运行。该进程拥有两个由操作系统分配的随机端口，两个 TCP socket 都只绑定 `127.0.0.1:0`；App browser origin 使用 `127.0.0.1:<port>`，Viewer browser origin 使用隐藏的 `localhost:<port>`，以不同 Cookie host 保持跨源隔离。`localhost` 不是额外监听；禁止 IPv6、LAN、`0.0.0.0` 和通配地址。sidecar 使用精确 filesystem permission、`--jitless` 与 child permission deny，不 spawn grandchildren。Next 仍通过 iframe/bridge 驱动 cs2d 的 File → Worker/WASM 单次解析、Playback bridge 与 Outcome Gate；raw Replay 和逐帧数据不跨 iframe。原始 Demo 只能从 Viewer authority 经专用、一次性 capability 流入 `LocalReviewLibrary`，不经 Next Route Handler、Rust command、Agent 或 LLM。
 
 **Web/Cloudflare 形态**：现有 Web 2D、Cloudflare Worker/DO、PostgreSQL 与对象存储 Adapter 可以继续维护或部署，但它们不再是桌面默认链路或桌面前置条件。Web 历史契约保留；相同领域 interface 在不同运行形态选择不同 Adapter，不在桌面上叠一层远程透传。
 
@@ -233,8 +250,8 @@ flowchart TB
 - Parser 在资源受限、默认无外网的 Worker 中运行；
 - Web 客户端只通过授权 interface 或短期签名 URL 访问远程对象；桌面默认不需要对象存储；
 - LLM 只接收最小化的结构化上下文，不接收原始 Demo 和非必要身份；
-- Tauri 是高信任监督宿主，但 main coaching remote origin 拥有零 Tauri capability；只有 bundled bootstrap/settings/update window 可以调用 AppManifest allowlist 中的窄命令；
-- 前端没有 shell、filesystem、HTTP、process、dialog 或 opener 的 broad permission。Demo 继续由 WKWebView 原生 HTML File chooser 选择，使路径与 bytes 不跨 Rust seam；
+- Tauri 是高信任监督宿主；main coaching remote origin 只拥有自定义 `open_settings` 导航 capability，bundled bootstrap/settings/update window 另按 AppManifest allowlist 调用各自窄命令；所有窗口都没有通用 shell/fs/http/process/dialog/opener 权限；
+- 前端没有 shell、filesystem、HTTP、process、dialog 或 opener 的 broad permission。Demo 继续由 WKWebView 原生 HTML File chooser 选择，使真实路径永不离开 WebView；原始 bytes 仅能由 Viewer 对它自己的 loopback authority 执行带一次性 header capability 的流式 IMPORT/READ，不获得任意路径读权；
 - sidecar readiness、health、backup 与 shutdown 使用严格版本 envelope；session token 只由 Rust 写入 App host 的 HttpOnly/Strict cookie store，不进入 URL、argv、environment、disk、log 或 WebView 可读 JavaScript 状态；admin token 只驻留 Rust/sidecar 内存，完全不进入 WebView。protected sidecar 只有在严格 Host 与唯一 43 字符 cookie 都通过后才覆盖注入可信 `x-cs-agent-app-origin`，客户端同名 header 不可冒充；所有 desktop coaching 与 Memory mutating Route Handler 复用同一 trusted-origin helper。Rust 只通过 sidecar stdin 传入初始化包（data/cache/log 标准目录与 Keychain Provider secret），并通过带 token 的 admin transport 监督；
 - 长期记忆只在 `MEMORY_ENABLED` 与匿名 principal consent 同时开启时访问；服务端用签名 opaque token 作为无语义内部 `userId`，客户端不得提交可信 userId；
 - 桌面 SQLite 是桌面 Memory 的唯一真相，SQLite saver 是桌面 Agent checkpoint；二者同文件但使用不同表和 Adapter，Memory Domain 与 Session/Agent 领域不合并。Web 可继续以 PostgreSQL 为 Memory 真相、Durable Object 保存 Agent checkpoint/Outbox，pgvector 只保存可重建派生索引。
@@ -294,14 +311,15 @@ flowchart LR
 5. `worker`：cs2d iframe 内的 Parser/胜率 Worker 负责单次解析、结构化 Replay、场景索引、Observation 和本地模型推理；raw Replay 不跨 iframe；
 6. `memory`：长期记忆领域模型、proposal/lifecycle policy、Memory Brief、consent 和 recall/write interfaces；
 7. `memory-sqlite`：桌面默认 `MemoryRepository`/`AuthorizationStore` Adapter、迁移、结构化召回与 bounded exact cosine；
-8. `memory-postgres`：保留给 Web/Cloudflare 的 PostgreSQL typed SQL Adapter、核心/可选向量 migration、Outbox consumer 与 `NoopCacheProvider`；
-9. `corpus-cli`：职业语料导入与离线批处理，复用领域库。
+8. `review-library`：桌面托管 Demo、Review/Revision/Artifact、短期 Viewer capability、文件—SQLite Saga、删除、校验与磁盘统计的唯一 Adapter；
+9. `memory-postgres`：保留给 Web/Cloudflare 的 PostgreSQL typed SQL Adapter、核心/可选向量 migration、Outbox consumer 与 `NoopCacheProvider`；
+10. `corpus-cli`：职业语料导入与离线批处理，复用领域库。
 
 ### 4.2 默认技术选型
 
 | 层 | 基线 | 说明 |
 |---|---|---|
-| Web | Next.js、React、TypeScript | 上传、会话 UI 和总结 |
+| Web | Next.js、React、TypeScript | 导入协调、历史、会话 UI 和总结；桌面 Host 不承载 Demo bytes |
 | 2D 回放 | 固定版本 `zenojunior/cs2d` Vue/Canvas renderer | 浏览器内真实雷达、多楼层、10 人 HUD、投掷物、事件与时间轴；主仓库保存 patch，不复制整仓源码 |
 | API | Next.js Route Handler；Cloudflare custom Worker 为可选 Web Adapter | 桌面 Route Handler 在 sidecar；Provider secret 只在可信 runtime 内存，浏览器只发送白名单 JSON 包与紧凑 Agent 事件 |
 | 教练运行时 | `@langchain/langgraph` TypeScript `StateGraph`＋确定性领域节点 | Graph API 显式节点/条件边；不用 ReAct、多 Agent 模板或 Provider 绑定领域化 |
@@ -312,6 +330,7 @@ flowchart LR
 | Desktop Agent Checkpoint | SQLite 自定义 `BaseCheckpointSaver` | 与 Memory 同一数据库文件但不同表/Adapter；Host Recovery 仍在 IndexedDB，必须精确双状态握手 |
 | Web Agent Checkpoint | Cloudflare Durable Object storage 自定义 `BaseCheckpointSaver` | 保留的 Web Adapter；每 session 一个对象，桌面不依赖 |
 | 桌面长期记忆数据库 | Node built-in SQLite | Application Support 下单一文件；`memory-sqlite` 是桌面 Memory 真相 Adapter，不是 Session Domain |
+| 桌面 Demo 资料库 | `review-library`＋Application Support 文件＋共享 SQLite owner | SHA-256 内容寻址 `.dem`、有界 JSON/白名单 gzip Artifact；数据库只存规范相对路径，不存 Demo BLOB |
 | Web 长期记忆数据库 | PostgreSQL | 保留给 Web/Cloudflare 的 `memory-postgres` Adapter；不是桌面前置条件 |
 | 语义索引 | 桌面 Float32 BLOB exact cosine；Web 可选 pgvector | 桌面 bounded exact scan，首发不加载 `sqlite-vec`；Web pgvector 仍是可选派生索引 |
 | 轨迹文件 | Parquet + PyArrow / DuckDB | 不把全量 tick 塞入关系库 |
@@ -335,7 +354,7 @@ flowchart LR
 
 5.1.0 已实现 Tauri 宿主、pinned Node/Next sidecar、SQLite Memory/checkpoint Adapter、Keychain Provider、窄 capability、受限日志、资源准备、真实 sidecar smoke seam，以及带 quiescent backup/atomic swap/rollback 的 updater。最终本机 `.app`/DMG 已重建并通过 prepared＋bundled 双启动、SQLite consent/export/persistence/delete、完整 Demo GUI 旅程、资源/架构/完整性审计；CI signature verifier 为 Cargo feature-gated 工具且未进入 App。这些是本机候选产物证据，不是 public distribution 许可：third-party rights、正式 updater 公钥、Developer ID/notarization 和由其产生的公开资产仍必须通过独立 distribution Gate。
 
-本地 Demo 只进入浏览器 File/Worker/WASM 管线，不经过 Next 上传 API。cs2d 一次解析后同时驱动全知 renderer 与 Adapter；raw Replay 不跨 iframe，教练壳只接收白名单分析包。
+桌面本地 Demo 由 Viewer 以一次性 IMPORT capability 流式进入 Application Support 资料库，不经过 Next 上传 API；sidecar 内容寻址发布后保持 `IMPORTING`，Viewer 再对同一 `File` 执行现有 Worker/WASM parser，并用一次性 VALIDATE capability 收敛为 `READY` 或 `CORRUPT`。历史恢复只为 `READY` Demo 签发 demo-bound READ capability；RESTORE 的玩家绑定等待 `ViewerStage` 命令 bridge 发出 mount acknowledgement 后才通知 Host seek，且不运行胜率 Worker。cs2d 单次解析后同时驱动全知 renderer 与 Adapter；raw Replay 不跨 iframe，教练壳只接收白名单分析包。localhost/Web 不安装该桌面 Adapter 时继续使用只在当前页面存活的 File 管线。
 
 当前 Adapter 仍可用确定性规则生成兼容的候选 ReviewPlan，作为 Director 尚未完全接入时的回退；目标流程必须通过 SceneIndex、Teaching Director 和 PlanCompiler 生成正式 ReviewPlan。两条路径共享同一 Replay、canonical tick、Observation 和校验器。
 
@@ -355,7 +374,7 @@ Stage 0 已验证 `@langchain/langgraph` 的 TypeScript Graph 在 Cloudflare `no
 
 Tauri 宿主与 desktop runtime 之间只有一个窄 supervision seam。sidecar 启动后先从 stdin 读取一次性、严格版本化的 init envelope，其中只含标准 data/cache/log/resource 绝对路径与 Rust 从 macOS Keychain 读取的 Provider secret；之后 readiness、health、backup 与 admin shutdown 均使用严格版本 envelope。session token 由 Rust 在导航前写入 `127.0.0.1` App host 的 `HttpOnly; SameSite=Strict; Path=/` cookie，不能被 WebView JavaScript 读取且不进入 URL；该 token 固定为 32-byte base64url 的 43 字符值。admin token 不进入 WebView，只驻留 Rust/sidecar 内存。版本、token、Host 或进程身份不匹配立即拒绝，不能静默兼容。
 
-main coaching window 加载 sidecar 的 remote origin，拥有零 Tauri capability。只有随 app bundle 固定的 bootstrap/settings/update window 可以调用自定义窄命令；命令与窗口必须同时出现在 AppManifest allowlist。前端不获得通用 shell、filesystem、HTTP、process、dialog 或 opener 权限。选择 Demo 使用 WKWebView/HTML 原生 File chooser，使 Rust、Tauri command 与 Next Host 都不接触文件路径或 bytes；文件继续只进入 cs2d iframe 的 File → Worker/WASM seam。
+main coaching window 加载 sidecar 的 remote origin，并且只获准调用自定义 `open_settings` 命令，将现有 bundled Settings window 显示/聚焦；它没有文件、Provider、资料库管理或其他 Tauri capability。随 app bundle 固定的 bootstrap/settings/update window 只能调用各自 AppManifest allowlist 中的窄命令；命令与窗口必须同时列入 capability。前端不获得通用 shell、filesystem、HTTP、process、dialog 或 opener 权限。选择 Demo 使用 WKWebView/HTML 原生 File chooser，使真实文件路径不离开 WebView；Rust command、Next Host、Agent 与 LLM 都不接触 bytes。Viewer 只能把当次 `File` 流送到自己 authority 下的固定 IMPORT endpoint，使用绑定该 Demo 的 VALIDATE endpoint，或使用绑定已登记 `READY demoId` 的 READ endpoint；三者都禁止 query/cookie 授权，且 capability 短期、一次性。
 
 sidecar 创建两个只 bind `127.0.0.1` 的独立随机端口，并以冻结的 `DesktopOriginPair` 暴露 `127.0.0.1:<app-port>` 与 `localhost:<viewer-port>` browser origins；Ready/HTTP wire contract 为 v2。Rust 只在 readiness 成功后把 host-only cookie 写给 `127.0.0.1` 并导航到 Next origin。protected sidecar 先严格验证请求 Host 与唯一 43 字符 session cookie，再覆盖注入 `x-cs-agent-app-origin=<exact App origin>`；Viewer 在路径/资产处理前拒绝任何同名 session cookie。所有 desktop coaching 与 Memory mutating Route Handler 共用 trusted-origin helper，客户端自报 header、Origin 或 deploy target 不能绕过它。Next 必须通过受控 custom-server handler 承载完整页面和 `/_next/static`。Desktop iframe URL 的 SSR 与 hydration 都使用 runtime 注入的精确 App origin作为 `parentOrigin`，不依赖 referrer且不携带 token；受控 Viewer 保留 `/cs2d/` public base。Host/Viewer 双向消息同时校验 source 与 exact origin。
 
@@ -367,7 +386,7 @@ App 使用 `script-src 'self' 'nonce-…'`（无 eval/unsafe-inline）、`style-
 
 本地与 CI 的 DMG 必须复用同一个无 Finder 生命周期依赖的构建器：Tauri 只构建并签名 `.app`，受控脚本使用 `ditto` 复制 bundle、加入固定 `/Applications` symlink，再由 `hdiutil` 生成并双重校验压缩 DMG。新镜像只有在校验通过后才替换旧镜像；最终校验失败必须恢复旧字节并清理 partial/staging。Release workflow 静态审计必须固定 `app build → create:dmg → notarize → bundle audit` 顺序，禁止回退到 `osascript`/Finder DMG。
 
-Tauri updater plugin `2.10` 的 macOS install 路径没有本项目要求的 restore 保证，因此桌面不得调用其破坏性 install。下载与 minisign 验证后，受审查的 macOS installer 只允许在与当前 app 同一 volume 的 staging 上校验 bundle 签名与权限，再使用 `renamex_np(RENAME_SWAP)` 原子交换。若原子能力、权限或签名验证任一不可用，当前 app 保持不变并进入 DMG fallback；用户点击一次只会打开由版本构造并再次校验的 GitHub immutable asset URL `/releases/download/desktop-v{version}/CS-Agent-Coach_{version}_aarch64.dmg`，manifest/前端不能注入任意 URL。新版本第一次启动并通过 sidecar/数据库 health 后才清理旧 bundle；失败时旧 bundle 保留可恢复。任何数据库 migration 前先创建 SQLite backup 并运行 integrity check，失败不触碰当前数据库或 app。backup admin 请求必须先把 runtime 切到 `DRAINING`，拒绝新的 Next 请求，并同时等待既有 Next handler 已返回、response 已 `finish/close`，active count 归零后才 drain SQLite writer/checkpoint 与复制数据库。该计数只覆盖 Next/API 活动；iframe parser 是纯本地计算且不产生 server write。
+Tauri updater plugin `2.10` 的 macOS install 路径没有本项目要求的 restore 保证，因此桌面不得调用其破坏性 install。下载与 minisign 验证后，受审查的 macOS installer 只允许在与当前 app 同一 volume 的 staging 上校验 bundle 签名与权限，再使用 `renamex_np(RENAME_SWAP)` 原子交换。若原子能力、权限或签名验证任一不可用，当前 app 保持不变并进入 DMG fallback；用户点击一次只会打开由版本构造并再次校验的 GitHub immutable asset URL `/releases/download/desktop-v{version}/CS-Agent-Coach_{version}_aarch64.dmg`，manifest/前端不能注入任意 URL。新版本第一次启动并通过 sidecar/数据库 health 后才清理旧 bundle；失败时旧 bundle 保留可恢复。任何数据库 migration 前先创建 SQLite backup 并运行 integrity check，失败不触碰当前数据库或 app。backup admin 请求必须先把 runtime 切到 `DRAINING`，拒绝新的 Next 与 Viewer Library 请求，并等待统一 active count 归零后才 drain SQLite writer/checkpoint 与复制数据库。统一计数覆盖 Next handler/response、Viewer Library `IMPORT/VALIDATE/READ` 与 Settings/admin 资料库操作；请求必须同时满足 handler 已返回且 response 已 `finish/close` 才退休，`end()` 已调用但未 flush 不算完成。纯 Viewer Worker/WASM parser 仍是页面内计算，本身不计数；但它触发的 VALIDATE 属于受计数的 server write。shutdown 停止接收后也必须等待同一计数收敛，不能在尾部 Saga 仍写入时关闭 SQLite owner。
 
 Release workflow 必须先把已有 `desktop-vX.Y.Z` tag 解析为精确 commit；后续 job 只 checkout 该 commit，并复核 tag、`HEAD` 和 `CS_AGENT_BUILD_SHA` 都相等。版本、tag、build SHA、签名与 immutable asset URL 必须绑定同一发布身份，不能在 job 间跟随移动分支。
 
@@ -1134,42 +1153,53 @@ stateDiagram-v2
 ```mermaid
 sequenceDiagram
     participant U as 用户
-    participant C as 客户端
-    participant A as API
-    participant W as Worker
-    participant S as 存储
+    participant V as cs2d Viewer
+    participant H as Host control plane
+    participant L as LocalReviewLibrary
+    participant W as Viewer Worker/WASM
 
-    U->>C: 上传 Demo 并选择玩家
-    C->>S: 预签名上传
-    C->>A: 创建分析任务
-    A->>W: 入队
-    W->>S: 读取 Demo
+    U->>V: 导入 .dem
+    V->>H: 只发文件名 / 大小 / requestId
+    H->>L: 签发一次性 IMPORT capability
+    H-->>V: capability（无路径）
+    V->>L: 流式 POST File（header-only capability）
+    L->>L: tmp .partial + SHA-256 + 文件头校验 + fsync
+    L->>L: 内容寻址原子发布 + DemoAsset IMPORTING
+    L-->>V: demoId / contentHash / 去重结果 / 一次性 VALIDATE
+    V->>W: 持久化成功后才解析同一 File
     W->>W: 单次解析生成 GroundTruth ReplayBundle
-    W->>W: 构建 MatchTimeline 与 SceneIndex
-    W->>W: 整场胜率只推理一次
-    W->>W: CandidateGenerator 完成全场 CandidateSet
+    V->>L: parser 结果 + VALIDATE capability
+    L->>L: IMPORTING → READY / CORRUPT
+    L-->>V: READY 后才允许暴露 Replay 与选人
+    W-->>H: REPLAY_READY（requestId/demoId/hash）
+    U->>V: 选择目标玩家
+    V-->>H: PLAYER_SELECTED
+    H->>L: 创建 Review；冻结路线后以真实 adapter/graph/prompt metadata 创建 PREPARING Revision
     W->>W: 为目标玩家派生 ObservableState
-    W->>S: 保存回合索引、CandidateSet 与粗粒度轨迹
+    W->>W: 构建 MatchTimeline 与 SceneIndex
+    W->>W: 为所选玩家执行一次整场胜率推理
+    W->>W: CandidateGenerator 完成全场 CandidateSet
+    W-->>H: 白名单 AnalysisBundle
+    H->>L: 暂存待提交的 AnalysisBundle / CandidateSet
     W->>W: 组装匿名 DirectorPacket
     W->>W: Teaching Director 返回 DirectorDecisionSet
     W->>W: PlanCompiler 校验并冻结整场 ReviewPlan
     W->>W: 按选中 cue 构建 CoachingPackage + OutcomePackage
     W->>W: Narrator 优先准备前两个密封 NarrationBundle
-    W->>S: 发布 STARTABLE ReviewPlan
-    W->>A: 标记可开始
-    A-->>C: SSE 通知进入复盘
+    H->>L: 顺序保存 Analysis/Candidate/Plan/Narration/Recovery
+    H->>L: 真实领域校验后原子提交精确 ROUTE_START head，Revision READY
     par 用户开始观看
-        C->>A: 创建 CoachingSession
+        H->>H: 创建 CoachingSession
     and Worker 保持领先
         W->>W: 按 frozen route 顺序准备剩余 NarrationBundle
         W->>W: 可选职业检索与讲解准备
-        W->>S: 只更新未消费 cue 的 narration readiness
+        H->>L: 只追加未消费 cue 的新 Artifact
     end
     W->>W: 完成全场习惯聚合与覆盖校验
-    W->>S: 标记 ReviewPlan COMPLETE
+    H->>L: 在 CUE_PAUSED / WRAP_UP 稳定边界更新 RuntimeHead
 ```
 
-当前 cs2d Worker/WASM 在浏览器读取完整本地文件并生成一份 Replay，不把文件上传到 Next，也不为全知/教练证据重复解析。Host 解析 UI 只展示阶段和真实百分比，不暴露 parser tick；Replay 就绪后才允许选择分析主体。未来若接入 cs2d 的逐回合 `header_ready → index_ready → round_ready`，只允许增量发布同一 Replay 的索引/切片，不改变 canonical tick 或下游领域契约。
+当前 cs2d Worker/WASM 在浏览器读取完整本地文件并生成一份 Replay，不把文件上传到 Next，也不为全知/教练证据重复解析。桌面导入对同一 `File` 先执行一次流式托管，这是不可重建的用户资产写入，不是第二次 Parser；整份 Replay 仍只由 Viewer 页/Worker 拥有。Host 解析 UI 只展示阶段和真实百分比，不暴露 parser tick；Replay 就绪后才允许选择分析主体。未来若接入 cs2d 的逐回合 `header_ready → index_ready → round_ready`，只允许增量发布同一 Replay 的索引/切片，不改变 canonical tick 或下游领域契约。
 
 “轻量整场扫描”和逐回合发布是同一次 Parser 事实产物的索引、切片与缓存，不是为全知/玩家视角分别解析 Demo。逐回合 `header_ready → index_ready → round_ready` 只改变可消费范围；任何已发布 round artifact 都引用同一个内容哈希、parser version、timeline version 和 canonical tick 空间。Director、PlanCompiler 和 Narrator 只处理对应的结构化包，不重新读取 Demo。
 
@@ -1207,7 +1237,7 @@ Coach Agent 活动只显示简短玩家状态，例如“正在看完整处理�
 
 ### 10.1 Desktop SQLite 与 Web PostgreSQL
 
-桌面默认在 Application Support 下保存一个 SQLite 文件。它同时容纳 preferences、consent、Memory events/records/revisions/tombstones/typed evidence、embeddings 与 LangGraph checkpoint，但表前缀、migration ledger、事务入口和 Adapter 必须分离：`memory-sqlite` 实现既有 `MemoryRepository`/`AuthorizationStore` interface，SQLite checkpoint saver 独立实现 `BaseCheckpointSaver`。共享物理文件不合并 Memory Domain、Session Domain 或 Agent state，也不允许任一 Adapter 绕过另一方的 interface。
+桌面默认在 Application Support 下保存一个 SQLite 文件。它同时容纳 preferences、consent、Memory events/records/revisions/tombstones/typed evidence、embeddings、LangGraph checkpoint，以及 DemoAsset/Review/Revision/Artifact metadata 与 RuntimeHead，但表前缀、migration ledger、事务入口和 Adapter 必须分离：`memory-sqlite` 实现既有 `MemoryRepository`/`AuthorizationStore` interface，SQLite checkpoint saver 独立实现 `BaseCheckpointSaver`，`review-library` 是唯一复盘资产入口。共享物理文件不合并 Memory Domain、Session Domain、Agent state 或 Review Library，也不允许任一 Adapter 绕过另一方的 interface。
 
 SQLite 使用 pinned Node `24.19.0` built-in sqlite。每次连接必须启用 WAL、`foreign_keys=ON`、`synchronous=FULL` 与显式 busy timeout；写入通过一个进程内 single-writer queue 串行，读取可并发但必须遵守 bounded query/result。migration 具有独立 schema/version、内容 checksum 与 applied ledger；checksum 漂移、未知 future migration、integrity check 失败或 backup 失败时 fail closed，不猜测升级。文件与备份为 `0600`，所属目录为 `0700`。
 
@@ -1215,27 +1245,35 @@ SQLite 使用 pinned Node `24.19.0` built-in sqlite。每次连接必须启用 W
 
 Web/Cloudflare 继续保留 PostgreSQL Adapter：核心结构化 migration 保存匿名 principal 与 consent、Memory Proposal/Record、不可变 revision、typed provenance、tombstone、Outbox consumer 状态和结构化召回索引；可选 pgvector migration 与核心 migration 分离。只有 `libs/memory-postgres` 可以访问这些表。PostgreSQL 是该 Web 运行形态的 Memory 真相，但不是桌面依赖或桌面 checkpoint saver。
 
-### 10.2 对象存储
+Review 表的关系固定为 `demo_assets 1─N reviews 1─N review_revisions 1─N review_artifacts`，并以 `review_runtime_heads` 指向最近可恢复的稳定边界。历史列表只读 `reviews + demo_assets` 分页摘要；只有点击具体 Review 才按指定 active Revision SQL-select 并读取其有界 Artifact。写入 JSON/checksum 是存储校验，不代表语义 READY：Review History 应用服务必须在 Artifact append 与 RuntimeHead commit 前复用 Analysis adapter、ReviewPlan、Narration、CueCase、SessionRecovery 等真实领域 validator；DAL 再在同一写事务中校验精确 Recovery artifact 的 ID/key/revision、session/run/boundary/checkpoint 与 head 一致。旧 head 若没有可唯一回填的三元 Artifact 身份必须失败关闭。SQLite 小型 backup 只保存数据库真相和相对路径，不隐式复制全部 `.dem`；完整资料库导出是独立后续能力。
+
+### 10.2 本地 Demo 与 Artifact 文件
+
+`<Application Support>/library/` 只包含三个受管根：`demos/<hash-prefix>/<sha256>.dem`、`artifacts/<reviewId>/<revisionId>/`和 `tmp/`。Demo 以小写 SHA-256 唯一，文件名不参与去重；`.dem` 不入 SQLite BLOB。只有白名单且大型的 `AnalysisBundle` 可写 checksum 保护的 gzip，用户回答、讲解、诊断、Verdict、TransferRule、LearningThread、Tool Result 和 Summary 等不可重建小 JSON 留在 SQLite。
+
+IMPORT、Artifact 发布与删除都有独立 job 表。Demo 写入顺序是“登记 job → 精确 tmp 文件 → 有界 backpressure pipeline 流式哈希/大小/最小头校验 → file fsync → 同卷不覆盖发布 → directory fsync → SQLite `IMPORTING` → Viewer 真实 parser → 一次性 VALIDATE → `READY|CORRUPT`”。受限 Node 24 下 file/directory barrier 必须使用 permission-aware 的异步 `FileHandle.sync()`；同步 `fsyncSync` 和 WriteStream `flush:true` 的底层 `fs.fsync` 都会被 Permission Model 拒绝，不能作为 desktop runtime 实现。启动 reconcile 只能在精确 `library/tmp` 内清理超时 partial并把失去内存 capability 的 `IMPORTING` 收敛为 `CORRUPT`；不允许扫描用户目录或自动删除 READY Demo。Settings verify 校验路径、大小和 checksum，但非 READY 状态必须保持非 READY，重新导入并经 parser 接受才可晋升。删除 Review 保留共享 Demo；删除 Demo 先展示完整关联总数与有界、可识别的 Review 明细，并用覆盖完整关联集合的 impact token 防止确认后的竞态，再以可重试 Saga 清理文件、表和 checkpoint。Review 删除按来源把 Memory evidence 改为不可用；Demo 删除按内容哈希覆盖包括 `source_review_id=NULL` 在内的 evidence，同时保留最小 opportunity/tombstone 防复活记录。
+
+### 10.3 对象存储
 
 保存原始 Demo、Parquet 轨迹、回放分块、地图资源、讲解包快照和可选导出。对象键包含租户/匿名主体、内容哈希和派生版本，禁止公开桶。
 
-### 10.3 Redis
+### 10.4 Redis
 
 首版不实现 Redis。需要缓存接口时只提供 `NoopCacheProvider`；Redis 不能成为事实源、Memory store、删除状态来源、幂等真相或 LangGraph saver。Outbox retry/dead-letter 状态分别由 Durable Object Outbox 和 PostgreSQL consumer 记录。
 
-### 10.4 Coach Agent Checkpoint
+### 10.5 Coach Agent Checkpoint
 
 桌面使用 SQLite 自定义 LangGraph `BaseCheckpointSaver`，保存紧凑版本化 Agent state、pending writes 与有限 trace，默认 retention 20；它与 `memory-sqlite` 共用数据库文件但不共用表、repository 或领域模型。Web/Cloudflare 继续允许每 session 一个 Durable Object saver 与独立 Memory Outbox。两者都不得保存长期 Memory Brief、跨 Demo record、raw Replay、frames 或完整 tick 流；Graph 活跃请求中的有界 Brief 在 checkpoint 前剥离，恢复后由当前 Memory Adapter 重新加载。
 
 进程内 MemorySaver 只用于明确的测试/开发且报告 `recoverableAfterRefresh=false`。IndexedDB saver 只保留为未选中的 Stage 0 能力实验；IndexedDB 在桌面与 Web 都只承担 Host Recovery Store，不能变成 Agent saver。
 
-### 10.5 Host Recovery Store
+### 10.6 Host Recovery Store
 
 浏览器原生 IndexedDB 保存有界 `SessionRecoveryRecord`，只用于少量未完成复盘的恢复，不是 LangGraph saver、Replay cache、Memory store 或历史列表。默认最多 3 条未完成记录、TTL 7 天、单条 JSON 不超过 1 MiB；完成会话立即删除。记录可包含会话身份与版本、冻结 ReviewPlan、最近 RecoveryBoundary、cue 摘要、最近 Agent checkpoint id、最多 64 条工具 ledger 摘要，以及当前 cue 与随后最多两个合法讲解产物；不得把跨 Demo Memory Record 或 principal cookie 放入该记录。
 
 禁止保存 raw Demo、File/ArrayBuffer、Replay、frames、完整 AnalysisBundle、地图纹理、模型权重、Prompt、chain-of-thought、API Key 或任意浏览器外可执行工具参数。IndexedDB 不可用时，当前标签页继续回放并明确提示刷新后不可恢复。
 
-### 10.6 LongTermMemory 保留与删除
+### 10.7 LongTermMemory 保留与删除
 
 accepted memory 的保留由用户删除、principal retention policy 和 consent 管理；candidate、失败 proposal、retry 和 dead-letter 必须有界保留并可清理。删除必须在当前 Memory Adapter 的单一事务内为所有 current record 写入不可变 tombstone，并通过用户级 deletion marker 阻断未物化的迟到事件；旧 event/outbox、重试和向量命中不得复活记录。撤回 consent 立即阻断教学 recall/proposal/write/embedding/outbox；用户可从独立管理面发起仅按 opaque ID 的隐私删除；重新 opt-in 不复活已删除 revision。`MemoryWritePolicy`、跨 Demo 晋级、consent、revision、tombstone 和 late-event 防复活规则在 SQLite/PostgreSQL Adapter 间完全相同。
 
@@ -1245,7 +1283,7 @@ Outbox 在真正发送前复核当前 consent authority：authority 暂时不可
 
 Memory 管理面显示来源、置信度、限制、revision 和授权状态，支持确认候选、导出、纠正、删除和删除全部。Web 使用签名 opaque anonymous principal token 作为无语义内部 `userId`；桌面使用 sidecar session-cookie 保护下的稳定非 secret 本地 principal，不读取 Cloudflare/env signing secret。Web 清 cookie 不恢复主体，正式认证不属于本版本。
 
-### 10.7 分层缓存
+### 10.8 分层缓存
 
 缓存键必须包含内容哈希和所有影响语义的版本，不能只用文件名或 Demo ID：
 
@@ -1374,8 +1412,9 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 
 ## 14. 安全、隐私与版权
 
-- 上传前说明处理目的、保存时间和删除方式；
-- 桌面原始 Demo 只进入 WKWebView File chooser 与 cs2d Worker/WASM，不上传、不经 Rust、不写 Memory/checkpoint；Web 可选上传路径仍须默认私有、加密传输/存储并按策略删除；
+- 导入前说明处理目的、保存时间和删除方式；
+- 桌面原始 Demo 由 WKWebView File chooser 交给 cs2d Viewer；真实路径不离开 WebView，bytes 只经 Viewer 自身 loopback authority 的短期、一次性 IMPORT/READ capability 流入/流出托管资料库，不经 Rust command、Next Host、Agent、LLM、Memory 或 checkpoint。原始 Demo 不上传互联网，不写 SQLite BLOB；Web 可选上传路径仍须默认私有、加密传输/存储并按策略删除；
+- Viewer 原始文件 endpoint 只接受精确 Host、方法、路径和 `Authorization` header，拒绝 query token、cookie、压缩 body、绝对路径与路径穿越；capability 只绑定单个 request/Demo、长度与 TTL 有界且首次使用后失效；
 - 压缩包防路径穿越、压缩炸弹和异常文件名；
 - Parser 限制 CPU、内存、时间、磁盘和网络；
 - 匿名会话链接使用高熵令牌，数据库只存哈希；
@@ -1385,7 +1424,7 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 - macOS secret 使用 Keychain generic password。WebView 只能调用窄 `status`、`set`、`delete` 命令，永远不能 `get`；secret 只经 Rust → sidecar stdin init 进入内存，不进入 SQLite、日志、environment、argv 或前端持久状态；
 - data/cache/log 使用 macOS 标准目录，目录权限 `0700`、敏感文件 `0600`。日志必须轮转、限额并脱敏；不得记录 sidecar token、nonce、secret、Demo 路径、Memory 正文或用户身份；
 - bundled Node `24.19.0` 必须从固定 archive 提取完整 `LICENSE`；prepared manifest 记录 Node binary 与 license SHA，bundle audit 同时复核，`THIRD_PARTY_NOTICES.md` 保留 binary 来源及 Node/随附第三方许可说明。精确 repo build-root 只允许等长清理，不能误报上游 Node binary 自带的 `/Users/runner`；CI updater signature verifier 只通过 `release-verifier` Cargo feature 构建，不进入最终 App；
-- main coaching remote origin 拥有零 Tauri capability；bundled bootstrap/settings/update window 只允许 AppManifest 明列的自定义窄命令，不授予前端通用 shell/fs/http/process/dialog/opener permission；
+- main coaching remote origin 只拥有 `open_settings` 这一项自定义导航 capability；它不能读写文件、Provider secret 或资料库，bundled bootstrap/settings/update window 也只允许 AppManifest 明列的各自窄命令，所有前端均无通用 shell/fs/http/process/dialog/opener permission；
 - Memory 默认关闭；consent 撤回立即阻断 recall/write/embedding/outbox，并通过管理面提供幂等删除。Web/Cloudflare 开启时必须配置可验证的 anonymous principal secret、DO 内部认证与实时 consent authority，并按既有 fail-closed/invalidation 规则运行；桌面由本地 AuthorizationStore、single-writer 与 SQLite deletion marker 收敛；
 - 职业语料记录来源、赛事、许可/公开状态、导入时间和删除能力；
 - 雷达与其他游戏资产记录来源、构建版本、内容哈希和权利状态；当前 cs2d 缺少 LICENSE，Valve 资源为 `LOCALHOST_ONLY/REVIEW_REQUIRED` 发布状态，`distribution:audit` 通过前桌面只允许本机/internal RC，公开 workflow 必须 blocked；
@@ -1397,9 +1436,10 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 ## 15. 可靠性与成本
 
 - Tauri 监督宿主只管理一个 sidecar；readiness/health/shutdown envelope 版本不匹配立即失败，退出先有界 drain 再终止，不允许遗留 grandchildren；
-- updater 启动后异步检查并 24 小时频控，手动检查可绕过频控；下载与安装分别确认，busy gate 阻止活跃解析/会话/数据库写入时安装；关闭主窗口只隐藏并保持 busy，显式“结束当前复盘”成功导航 maintenance page 后才解除；backup 进入 `DRAINING` 后拒绝新 Next 请求，并等待 handler＋response active count 清零再触碰 SQLite；
+- updater 启动后异步检查并 24 小时频控，手动检查可绕过频控；下载与安装分别确认，busy gate 阻止活跃解析/会话/数据库写入时安装；关闭主窗口只隐藏并保持 busy，显式“结束当前复盘”成功导航 maintenance page 后才解除；backup 进入 `DRAINING` 后拒绝新 Next 与 Viewer Library 请求，并等待覆盖 Next、Viewer `IMPORT/VALIDATE/READ`、admin 资料库操作的统一 handler＋response active count 清零再触碰 SQLite；shutdown 复用同一静默点；
 - macOS 更新只有在 HTTPS、minisign、bundle signature、同卷 staging 和 `RENAME_SWAP` 全部成立时才原子交换；否则保持当前 app，并只允许一键打开版本固定且重新校验的 GitHub DMG URL。新版本 health 成功才清旧 bundle，失败保留旧 bundle；
 - SQLite migration 前必须完成 backup 与 integrity check；WAL、foreign keys、FULL synchronous、busy timeout、checksum migration 和 single writer 均为发布门禁；
+- Demo/Artifact 的文件发布与 SQLite 不假装共享事务；必须用 job 状态机、fsync、同卷原子发布、内容哈希与启动 reconcile 收敛。并发导入同一内容最终只能有一个 READY DemoAsset/终态文件；
 - 任务阶段幂等，重试不产生重复派生物；
 - 原始文件哈希去重，派生结果按版本缓存；
 - 轨迹按回合分块，客户端按需加载；
@@ -1414,6 +1454,7 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 - Web 长期记忆写入先进入 Durable Object Outbox，再由 PostgreSQL consumer 以 `userId + idempotencyKey` 幂等应用；桌面由 SQLite single-writer 事务以同一幂等语义本地应用；
 - 当前 Memory/checkpoint Adapter 或 embedding 任一故障都回退 Baseline；桌面 SQLite 故障不自动切换云数据库，Web PostgreSQL/DO/consumer 故障也不反向改变桌面真相；向量故障不阻塞结构化 recall；
 - 删除任务用状态机记录，覆盖当前 Memory Adapter、typed provenance、向量派生索引及适用的 Outbox；purge 事务锁定 principal、状态化全部 current records、写入 deletion marker 并脱敏旧事件；tombstone/marker 阻止旧事件复活；
+- Review 删除与 Demo 删除是两个不同操作；前者不动共享 Demo，后者必须显示精确影响总数、有界明细，并以全关联集合的 impact token 再确认后才执行。文件清理失败保留可重试 job，不得把残留文件重新当成有效 READY 资产；
 - 数据库每日备份并定期执行恢复演练。
 
 ## 16. 可观测性
@@ -1424,6 +1465,7 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 - 每场 segment/cue 数、覆盖校验和置信度分布；
 - 播放命令延迟、失败、重试和 tick 漂移；
 - 会话完成、追问、回看、跳过展开和恢复；
+- Demo 导入字节/速度/去重、partial reconcile、资料库校验问题数、Review 恢复阶段、Artifact checksum/schema 失败与删除 job 收敛；
 - LLM 延迟、成本、模板降级和引用校验失败；
 - AgentTrace 的 graphVersion/node/cue/input hash/selected capability/evidence/tool result/fallback/latency/token/provider/checkpoint/final status；
 - 职业检索样本量与低证据比例；
@@ -1481,8 +1523,10 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 | 桌面长期形态 | Implemented | Tauri `2.11.5`、Apple Silicon `aarch64` 首发；监督唯一 Node `24.19.0`/Next standalone sidecar，复用既有 2D 带看，不另造 Parser/Session/Memory |
 | Desktop runtime seam | Implemented | 同一 sidecar 的两个 socket 都只 bind `127.0.0.1:0`；App/Viewer browser authority 分别为 literal IPv4/隐藏 localhost；Host＋43 字符 cookie 后覆盖注入 trusted origin，Viewer cookie guard；精确 CSP 与 Ready/HTTP v2 |
 | localhost、桌面与 Web Adapter | Implemented | Desktop 是主产品；localhost 是开发/调试 Adapter；Cloudflare/DO/PostgreSQL 保留为 Web Adapter，均不是普通桌面用户前置 |
-| Tauri capability | Implemented | main coaching remote origin 零 capability；bundled bootstrap/settings/update 只有 AppManifest allowlist 窄命令，无前端 broad shell/fs/http/process/dialog/opener permission |
-| Demo 文件选择 | Implemented | WKWebView 原生 HTML File chooser 继续把 Demo 交给 cs2d File→Worker/WASM；路径/bytes 不跨 Rust、Next Host 或 iframe bridge |
+| Tauri capability | Implemented | main coaching remote origin 仅有 `open_settings` 导航 capability；bundled bootstrap/settings/update 只有 AppManifest allowlist 窄命令，所有前端均无 broad shell/fs/http/process/dialog/opener permission |
+| Demo 导入与托管 | Implemented | WKWebView HTML File chooser 把 Demo 交给 cs2d Viewer；路径不离开 WebView。Viewer 用 header-only 一次性 capability 和有界 pipeline 流式托管为 IMPORTING，同一 File 经 Worker/WASM parser 后再 VALIDATE 为 READY/CORRUPT；只有 READY 后才发布带 requestId/demoId/hash 的 REPLAY_READY 并开放选人；Rust/Next Host/Agent/LLM 不读 bytes |
+| LocalReviewLibrary | Implemented | Application Support 下 SHA-256 内容寻址 Demo、规范相对路径、有界 JSON/白名单 gzip Artifact；流式 import、fsync/原子发布、job reconcile（含 temp 已删但 final 已发布的 PUBLISHING 窗口）、引用安全删除、verify 和 stats 封装在单一深模块 |
+| Review 模型与历史 | Implemented | `DemoAsset 1─N Review 1─N Revision 1─N Artifact`；左侧历史分页/搜索/分组，新分析只追加 artifact contract v2 Revision，列表不加载大 Artifact；migration 006 将既有 Revision 标为 v1，允许从 checksummed AnalysisBundle 兼容恢复其 embedded CandidateSet，不放宽 v2 独立 Artifact 门 |
 | 分析启动策略 | Accepted | 完整 CandidateSet 与 frozen route 先完成；前两个候选 narration READY/FALLBACK 后开始，余下按路线顺序准备 |
 | 讲解缓冲与冻结 | Accepted | 后台只能补未消费 cue 的 narration；追上准备头时在自然边界 BUFFERING，CONSUMED/FROZEN route/focus 不可改写 |
 | 回合缓存策略 | Accepted | 内容寻址、版本化、按回合/候选分块；bulk Replay 留在所属 iframe/Worker，只跨 seam 传摘要与引用 |
@@ -1496,10 +1540,11 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 | 长期记忆真相源 | Implemented | 桌面 Application Support SQLite、Web PostgreSQL 分别是运行形态内唯一真相；桌面默认 `local-unicode-feature-hash/1.0.0` 256 维 Unicode 1–3 gram 词法向量＋Float32 bounded exact cosine，首发无 `sqlite-vec`；Web pgvector 可选 |
 | 长期记忆授权 | Implemented | Memory 默认 off 且 principal consent 必须 opt-in；桌面是 session-cookie 保护的稳定非 secret local principal，Provider secret 才进入 Keychain；Web opaque cookie 规则保留 |
 | 长期记忆生命周期 | Accepted | 单 cue 先 `CANDIDATE`；至少两个不同 Demo content hash 或用户明确确认才晋级；纠正产生不可变 revision，删除产生 tombstone，旧事件不得复活 |
+| 行为机会幂等 | Implemented | 机会唯一键为 user＋Demo hash＋player＋stable cue source＋taxonomy；analysis Revision 只追加 evidence provenance。历史打开/播放/回看不产生 proposal，同 Demo 重新分析不增加比赛机会或 independent Demo 计数 |
 | Memory Outbox / invalidation | Implemented | Web 保留严格 DO Outbox→PostgreSQL consumer notification/invalidation；桌面本地 event 与删除由 SQLite single-writer、tombstone/deletion marker 和 local no-op invalidator 收敛，不依赖 Cloudflare/网络；两者保持 consent/late-event 语义 |
 | Memory 失败回退 | Accepted | DB、DO、consumer、embedding、Brief 或 consent sink 故障均不阻塞基础回放、Outcome Gate、Session 和 Baseline；Redis 只保留 `NoopCacheProvider` 接口 |
 | AgentEffect / Host 工具 | Accepted | Graph 用 interrupt 发 ToolRequest，Host 校验 Session/Playback、按稳定 callId 去重并 Command resume；Graph 不直接写 React/iframe/reducer |
-| Session Recovery | Accepted | IndexedDB 只保存 Host Recovery Record；桌面 SQLite/Web DO 只保存 Agent checkpoint；重新选择同一 Demo 后精确双状态握手恢复，不重启 Director |
+| Session Recovery | Implemented | 桌面 ReviewRuntimeHead 绑定精确 Recovery Artifact ID/key/revision、session/run、Demo/player/route hash、RecoveryBoundary 与 SQLite checkpoint；历史先恢复 control plane，再用 demo-bound READ capability 恢复 Viewer。Host open epoch 在每个 await 后阻止旧点击提交，Viewer 以 abort＋串行 parser load generation 实现 latest-wins，Host 再按 requestId/demoId/hash 校验 REPLAY_READY；PLAYER_SELECTED 与全部 ANALYSIS_* 还必须绑定当前已接受的 managed Replay。等 ViewerStage bridge mount ack 后落位，RESTORE 不重启 Director/Narrator/Policy。旧 IndexedDB 记录仅作重选文件兼容路径 |
 | Recovery 状态权威 | Accepted | ReplayAvailability 由 Host/bridge 拥有，Session rehydrate 只经 `libs/session`，canonical seek 只经 Playback bridge；ABSENT/LOADING 时 Agent 保持 DORMANT且零 LLM |
 | Graph 与确定性底座边界 | Accepted | Director/PlanCompiler/Narrator/CoachingSession 继续权威；Graph 只编排已冻结 route 上的受限教学动作、失败恢复和会话主题 |
 | 模型数据访问 | Accepted | Director/Narrator/Question 只通过强类型领域工具和白名单包访问数据，不授予 LLM 任意 SQL 或数据库连接 |
@@ -1509,7 +1554,7 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 | 全场胜率模型 | Accepted | 固定 cs-net win-rate head 经独立 feature adapter 接入 cs2d iframe Worker；`WinProbabilityTimelineV1` 全场常显并与唯一时间轴共用横坐标；模型不可用时显式 `UNAVAILABLE`，不阻塞回放 |
 | OutcomeImpact | Accepted | 完整曲线始终可见；结构化影响可提前进入 OutcomePackage，但只有结果播放后才能呈现文案；并发死亡/下包降低归因，不把全知曲线当 Observation |
 | Desktop Keychain | Implemented | macOS generic password 保存 Provider key；WebView 仅 `status/set/delete`、永不 `get`；secret 只经 Rust→sidecar stdin 内存，不进 SQLite/log/env/argv/front state |
-| Desktop updater | Implemented / Public blocked | 已实现 check/download/minisign、分开确认、显式 end/resume review gate、`DRAINING` 后等待 Next handler＋response active count 归零的 SQLite backup、同卷 `RENAME_SWAP`、health confirmation/rollback、版本固定 DMG 一键 fallback；本地临时签名 0.1.0→0.1.1 HTTPS/验签/篡改/解包 smoke 与原子安装纵向 fixture 已通过，正式公钥、rights、Developer ID/notarization 尚未完成公开验收 |
+| Desktop updater | Implemented / Public blocked | 已实现 check/download/minisign、分开确认、显式 end/resume review gate、`DRAINING` 后等待 Next＋Viewer Library＋admin 资料库 handler/response 统一 active count 归零的 SQLite backup、同卷 `RENAME_SWAP`、health confirmation/rollback、版本固定 DMG 一键 fallback；本地临时签名 0.1.0→0.1.1 HTTPS/验签/篡改/解包 smoke 与原子安装纵向 fixture 已通过，正式公钥、rights、Developer ID/notarization 尚未完成公开验收 |
 | Desktop distribution | Preview allowed / Stable blocked | 稳定通道的版本、tag、固定资产、audit 与 protected workflow 已实现；rights、正式公钥、Developer ID/notarization 未满足时正式 workflow 必须 blocked。项目所有者明确授权时可发布隔离 tag、无 updater 资产且明确警示的 ad-hoc GitHub Pre-release |
 | 个人记忆 | Implemented | 桌面由 SQLite、Web 由 PostgreSQL 保存；consent、晋级、revision、tombstone、导出/删除与 late-event 防复活一致，只影响优先级，不改写当前 Demo 事实 |
 | 视频弱标注 | Accepted | 仅作为已授权离线教学行为启动语料；无原 Demo 时只使用媒体时间，不产生精确 tick 或黄金集 |
@@ -1559,3 +1604,7 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 | 5.1.1 | 2026-08-31 | 将本地与 CI 的 DMG 统一为 Finder-free `ditto`＋`hdiutil` 构建：Tauri 只产出签名 App，DMG 在校验后原子替换，失败恢复旧镜像；workflow audit 固定 app→DMG→notary→bundle audit 顺序。 |
 | 5.2.0 | 2026-08-31 | 由 ADR-0009 将两个 desktop socket 都收敛到 `127.0.0.1:0`，同时用 App literal IPv4 / Viewer hidden localhost browser authority 保持 Cookie 隔离；Ready/HTTP 升 v2，Viewer 增加 session-cookie guard，App CSP 收紧为精确 frame origin，并以真实 WKWebView Worker/WASM smoke 验证。 |
 | 5.3.0 | 2026-08-31 | 增加项目所有者明确授权的未公证 Preview 通道：`desktop-preview-vX.Y.Z` 只发 GitHub Pre-release、ad-hoc Apple Silicon DMG 与其 SHA256，不生成 updater 资产且必须显著披露 Gatekeeper/签名限制；正式 `desktop-v*` 权利、Developer ID、notarization 与 updater Gate 保持不变。 |
+| 5.4.0 | 2026-09-02 | 通过 ADR-0010 增加本地 Demo 资料库与持久 Review 历史：Viewer-only 短期 capability 流式导入/恢复、SHA-256 去重、Demo/Review/Revision/Artifact 分层、文件—SQLite Saga、零 LLM 两阶段恢复、稳定记忆机会键、引用安全删除与磁盘统计；不持久 raw Replay，不改变 Agent/Memory/更新系统边界。 |
+| 5.5.0 | 2026-09-03 | 收紧 Demo parser readiness 为 `IMPORTING→VALIDATE→READY/CORRUPT`，禁止 verify 晋升；RuntimeHead 精确绑定 Recovery Artifact ID/key/revision；历史恢复增加迟到分析事件门与 ViewerStage mount ack；main remote origin 仅增加 `open_settings` 窄导航 capability；Demo ingress 改为有界 backpressure pipeline，并保留 Node Permission Model 下的异步耐久性屏障。 |
+| 5.5.1 | 2026-09-03 | 将 backup/shutdown 静默点扩展为 Next、Viewer Library 与 admin 资料库操作的统一 handler＋response 计数；补齐 final-only PUBLISHING import reconcile；首次导入只在 VALIDATE READY 后暴露 Replay/选人；历史连续点击增加 Host open epoch、Viewer abort＋串行 parse generation 与 requestId/demoId/hash 双层 latest-wins 校验。 |
+| 5.5.2 | 2026-09-03 | 增加 Review Revision artifact contract 版本与 migration 006：新 v2 Revision 继续强制独立 CandidateSet Artifact；迁移前 v1 READY Revision 可从 checksummed AnalysisBundle 内的同一 CandidateSet 兼容恢复，避免永久历史因后加的存储投影门失效。 |

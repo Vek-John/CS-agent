@@ -18,6 +18,34 @@ export const CLOUDFLARE_CS2D_HOST_PATH = "/cs2d/?host=1";
 
 export type CoachAgentEntryMode = "STAGE2" | "STAGE3";
 
+export type TeachingBoundaryDurability =
+  | "COMMITTED"
+  | "NO_AGENT_CHECKPOINT"
+  | "ARTIFACTS_INCOMPLETE"
+  | "MIRROR_FAILED";
+
+/** Persists teaching projections before advancing the durable RuntimeHead. */
+export async function persistTeachingBeforeRuntimeHead(input: {
+  readonly interactionDurable: boolean;
+  readonly persistDiagnosis: () => Promise<boolean>;
+  readonly mirror?: () => Promise<void>;
+}): Promise<TeachingBoundaryDurability> {
+  let diagnosisDurable = false;
+  try {
+    diagnosisDurable = await input.persistDiagnosis();
+  } catch {
+    return "ARTIFACTS_INCOMPLETE";
+  }
+  if (!input.interactionDurable || !diagnosisDurable) return "ARTIFACTS_INCOMPLETE";
+  if (!input.mirror) return "NO_AGENT_CHECKPOINT";
+  try {
+    await input.mirror();
+    return "COMMITTED";
+  } catch {
+    return "MIRROR_FAILED";
+  }
+}
+
 /** Stage 3 is the product default; Stage 2 remains an explicit regression harness. */
 export function coachAgentEntryMode(search: string): CoachAgentEntryMode {
   return new URLSearchParams(search).get("coachAgent") === "stage2" ? "STAGE2" : "STAGE3";
@@ -109,7 +137,7 @@ export function cs2dHostConfig(
       || parsed.username
       || parsed.password
       || parsed.pathname !== "/"
-      || parsed.search
+      || (parsed.search && (parsed.searchParams.size !== 1 || parsed.searchParams.get("managedLibrary") !== "1"))
       || parsed.hash
       || parent.protocol !== "http:"
       || parent.hostname !== "127.0.0.1"
@@ -152,6 +180,54 @@ export function analysisEventMatchesSelectedPlayer(
   eventSelectedPlayerId: string
 ): boolean {
   return Boolean(currentSelectedPlayerId && currentSelectedPlayerId === eventSelectedPlayerId);
+}
+
+export interface ExpectedManagedReplayIdentity {
+  readonly requestId: string;
+  readonly demoId?: string;
+  readonly contentHash?: string;
+}
+
+export function managedRequestMatchesExpected(
+  expected: ExpectedManagedReplayIdentity | undefined,
+  requestId: string,
+): boolean {
+  return Boolean(expected && expected.requestId === requestId);
+}
+
+/** A managed Replay is accepted only for the exact load the Host most recently issued. */
+export function managedReplayMatchesExpected(
+  expected: ExpectedManagedReplayIdentity | undefined,
+  replay: ReplayReadyEvent,
+): boolean {
+  return replay.sourceKind === "MANAGED_LIBRARY" &&
+    Boolean(
+      expected?.demoId &&
+      expected.contentHash &&
+      replay.requestId === expected.requestId &&
+      replay.demoId === expected.demoId &&
+      replay.demoContentHash?.toLowerCase() === expected.contentHash.toLowerCase(),
+    );
+}
+
+const MANAGED_REPLAY_SCOPED_EVENT_TYPES = new Set([
+  "PLAYER_SELECTED",
+  "ANALYSIS_PROGRESS",
+  "ANALYSIS_TELEMETRY",
+  "ANALYSIS_FAILED",
+  "ANALYSIS_READY",
+]);
+
+export function managedReplayContextRequired(eventType: string): boolean {
+  return MANAGED_REPLAY_SCOPED_EVENT_TYPES.has(eventType);
+}
+
+export function managedReplayContextIsCurrent(
+  desktopLibraryEnabled: boolean,
+  expected: ExpectedManagedReplayIdentity | undefined,
+  replay: ReplayReadyEvent | undefined,
+): boolean {
+  return !desktopLibraryEnabled || Boolean(replay && managedReplayMatchesExpected(expected, replay));
 }
 
 /** Host-only gate: coaching evidence renders after the full outcome pass. */
@@ -334,6 +410,21 @@ export function adjacentRoundIndex(
   const base = Number.isInteger(currentIndex) ? currentIndex : 0;
   const step = Number.isFinite(delta) ? Math.trunc(delta) : 0;
   return Math.min(roundCount - 1, Math.max(0, base + step));
+}
+
+/**
+ * A seek can be idempotent: Viewer may already be paused at the requested
+ * canonical tick and therefore emit no second PLAYBACK_STATE. Treat the last
+ * verified state as an acknowledgement under the same one-tick tolerance.
+ */
+export function isRecoveryPlaybackLanding(
+  playback: PlaybackStateEvent | undefined,
+  targetTick: number,
+  tickRate: number,
+): playback is PlaybackStateEvent {
+  if (!playback || playback.playing || !Number.isFinite(targetTick)) return false;
+  const tolerance = Math.max(1, Math.round((Number.isFinite(tickRate) && tickRate > 0 ? tickRate : 64) / 64));
+  return Math.abs(playback.canonicalTick - targetTick) <= tolerance;
 }
 
 

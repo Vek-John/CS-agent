@@ -25,6 +25,103 @@ const updateFallback = document.querySelector("#update-fallback");
 const updateFallbackUrl = document.querySelector("#update-fallback-url");
 const updateOpenFallback = document.querySelector("#update-open-fallback");
 const archiveStatus = document.querySelector("#archive-status");
+const libraryStatus = document.querySelector("#library-status");
+const verifyLibrary = document.querySelector("#verify-library");
+const clearLibraryCache = document.querySelector("#clear-library-cache");
+const libraryReviewSelect = document.querySelector("#library-review-select");
+const libraryDemoSelect = document.querySelector("#library-demo-select");
+const deleteLibraryReview = document.querySelector("#delete-library-review");
+const deleteLibraryDemo = document.querySelector("#delete-library-demo");
+let libraryEntries = { reviews: [], demos: [] };
+
+function formatBytes(value) {
+  if (!Number.isFinite(value) || value < 0) return "—";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let amount = value;
+  let unit = 0;
+  while (amount >= 1024 && unit < units.length - 1) {
+    amount /= 1024;
+    unit += 1;
+  }
+  return `${amount >= 10 || unit === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[unit]}`;
+}
+
+async function refreshLibraryStats() {
+  libraryStatus.textContent = "正在读取资料库统计…";
+  try {
+    const stats = await invoke("review_library_stats");
+    document.querySelector("#library-demo-count").textContent = String(stats.demoCount);
+    document.querySelector("#library-review-count").textContent = String(stats.reviewCount);
+    document.querySelector("#library-demo-size").textContent = formatBytes(stats.rawDemoBytes);
+    document.querySelector("#library-artifact-size").textContent = formatBytes(stats.artifactBytes);
+    document.querySelector("#library-cache-size").textContent = formatBytes(stats.cacheBytes);
+    document.querySelector("#library-total-size").textContent = formatBytes(stats.totalBytes);
+    libraryStatus.textContent = "只统计应用管理目录；SQLite 小型备份不复制原始 Demo。";
+  } catch {
+    libraryStatus.textContent = "资料库尚未就绪；本地教练与既有数据没有被修改。";
+  }
+}
+
+function optionLabel(parts) {
+  return parts.filter((part) => typeof part === "string" && part.trim()).join(" · ");
+}
+
+function replaceOptions(select, items, placeholder, label) {
+  const selected = select.value;
+  select.replaceChildren(new Option(placeholder, ""));
+  for (const item of items) select.add(new Option(label(item), item.id));
+  select.value = items.some((item) => item.id === selected) ? selected : "";
+}
+
+function syncLibraryDeleteButtons() {
+  deleteLibraryReview.disabled = !libraryReviewSelect.value;
+  deleteLibraryDemo.disabled = !libraryDemoSelect.value;
+}
+
+async function refreshLibraryEntries() {
+  try {
+    const entries = await invoke("review_library_entries");
+    libraryEntries = {
+      reviews: entries.reviews.map((review) => ({ ...review, id: review.reviewId })),
+      demos: entries.demos.map((demo) => ({ ...demo, id: demo.demoId })),
+    };
+    replaceOptions(
+      libraryReviewSelect,
+      libraryEntries.reviews,
+      libraryEntries.reviews.length ? "选择一个复盘" : "尚无可删除复盘",
+      (review) => optionLabel([
+        review.title,
+        review.selectedPlayerName,
+        review.mapName,
+        review.scoreText,
+        review.status,
+      ]),
+    );
+    replaceOptions(
+      libraryDemoSelect,
+      libraryEntries.demos,
+      libraryEntries.demos.length ? "选择一个 Demo" : "尚无可删除 Demo",
+      (demo) => optionLabel([
+        demo.originalFilename,
+        demo.mapName,
+        `${demo.reviewCount} 个复盘`,
+        formatBytes(demo.byteSize),
+      ]),
+    );
+    syncLibraryDeleteButtons();
+  } catch {
+    libraryEntries = { reviews: [], demos: [] };
+    replaceOptions(libraryReviewSelect, [], "无法读取复盘列表", () => "");
+    replaceOptions(libraryDemoSelect, [], "无法读取 Demo 列表", () => "");
+    syncLibraryDeleteButtons();
+    libraryStatus.textContent = "无法读取资料库条目；本地数据没有被修改。";
+  }
+}
+
+async function refreshLibrary() {
+  await refreshLibraryStats();
+  await refreshLibraryEntries();
+}
 
 const updatePhaseText = {
   UNAVAILABLE: "公开更新尚未配置", IDLE: "可以检查更新", CHECKING: "正在检查签名发布",
@@ -193,6 +290,111 @@ document.querySelector("#open-logs").addEventListener("click", async () => {
     archiveStatus.textContent = `无法打开日志文件夹：${String(error)}`;
   }
 });
+document.querySelector("#open-library").addEventListener("click", async () => {
+  libraryStatus.textContent = "正在打开资料库目录…";
+  try {
+    await invoke("open_library_directory");
+    libraryStatus.textContent = "已在 Finder 中打开应用管理的资料库目录。";
+  } catch {
+    libraryStatus.textContent = "无法打开资料库目录。";
+  }
+});
+document.querySelector("#refresh-library").addEventListener("click", refreshLibrary);
+libraryReviewSelect.addEventListener("change", syncLibraryDeleteButtons);
+libraryDemoSelect.addEventListener("change", syncLibraryDeleteButtons);
+deleteLibraryReview.addEventListener("click", async () => {
+  const review = libraryEntries.reviews.find((item) => item.id === libraryReviewSelect.value);
+  if (!review) return;
+  const confirmed = window.confirm(
+    `确定永久删除复盘“${review.title}”？\n\n将删除该复盘的产物、恢复点和证据引用。原始 Demo“${review.originalFilename}”会保留。`,
+  );
+  if (!confirmed) return;
+  deleteLibraryReview.disabled = true;
+  deleteLibraryReview.setAttribute("aria-busy", "true");
+  libraryStatus.textContent = "正在删除所选复盘…";
+  try {
+    await invoke("review_library_delete_review", { input: { objectId: review.id } });
+    await refreshLibrary();
+    libraryStatus.textContent = `已删除复盘“${review.title}”；原始 Demo 已保留。`;
+  } catch {
+    libraryStatus.textContent = "复盘删除未完成；请刷新后再试。";
+  } finally {
+    deleteLibraryReview.removeAttribute("aria-busy");
+    syncLibraryDeleteButtons();
+  }
+});
+deleteLibraryDemo.addEventListener("click", async () => {
+  const demo = libraryEntries.demos.find((item) => item.id === libraryDemoSelect.value);
+  if (!demo) return;
+  deleteLibraryDemo.disabled = true;
+  deleteLibraryDemo.setAttribute("aria-busy", "true");
+  libraryStatus.textContent = "正在读取 Demo 删除影响…";
+  try {
+    const impact = await invoke("review_library_demo_impact", {
+      input: { objectId: demo.id },
+    });
+    const visibleReviews = impact.affectedReviews
+      .slice(0, 8)
+      .map((review) => `• ${review.title} · ${review.selectedPlayerName} · ${review.status}`)
+      .join("\n");
+    const hiddenCount = Math.max(0, impact.affectedReviewCount - Math.min(8, impact.affectedReviews.length));
+    const affectedText = impact.affectedReviewCount === 0
+      ? "没有关联复盘。"
+      : `${visibleReviews}${hiddenCount ? `\n• 另有 ${hiddenCount} 个复盘` : ""}`;
+    const confirmed = window.confirm(
+      `确定永久删除 Demo“${impact.originalFilename}”？\n\n将同时删除 ${impact.affectedReviewCount} 个复盘、原始文件、所有复盘产物、恢复点和证据引用：\n${affectedText}\n\n此操作无法撤销。`,
+    );
+    if (!confirmed) {
+      libraryStatus.textContent = "已取消 Demo 删除。";
+      return;
+    }
+    await invoke("review_library_delete_demo", {
+      input: { demoId: impact.demoId, impactToken: impact.impactToken },
+    });
+    await refreshLibrary();
+    libraryStatus.textContent = `已删除 Demo“${impact.originalFilename}”及 ${impact.affectedReviewCount} 个受影响复盘。`;
+  } catch (error) {
+    libraryStatus.textContent = String(error).includes("REVIEW_LIBRARY_IMPACT_CHANGED")
+      ? "Demo 的关联复盘已发生变化；已拒绝删除，请刷新影响范围后再确认。"
+      : "Demo 删除未完成；原始 Demo 和复盘未被完整移除。";
+  } finally {
+    deleteLibraryDemo.removeAttribute("aria-busy");
+    syncLibraryDeleteButtons();
+  }
+});
+verifyLibrary.addEventListener("click", async () => {
+  verifyLibrary.disabled = true;
+  verifyLibrary.setAttribute("aria-busy", "true");
+  libraryStatus.textContent = "正在逐个校验托管 Demo 与大型复盘产物…";
+  try {
+    const result = await invoke("review_library_verify");
+    const outcome = result.issueCount === 0
+      ? `资料库完整：已校验 ${result.checkedDemos} 个 Demo 和 ${result.checkedArtifacts} 个大型产物。`
+      : `发现 ${result.issueCount} 个问题；有问题的记录将不会被当作可用 Demo。`;
+    await refreshLibraryStats();
+    libraryStatus.textContent = outcome;
+  } catch {
+    libraryStatus.textContent = "资料库验证未完成；原始 Demo 和复盘没有被删除。";
+  } finally {
+    verifyLibrary.disabled = false;
+    verifyLibrary.setAttribute("aria-busy", "false");
+  }
+});
+clearLibraryCache.addEventListener("click", async () => {
+  clearLibraryCache.disabled = true;
+  clearLibraryCache.setAttribute("aria-busy", "true");
+  libraryStatus.textContent = "正在清理可重建缓存…";
+  try {
+    const result = await invoke("review_library_clear_cache");
+    await refreshLibraryStats();
+    libraryStatus.textContent = `已清理 ${formatBytes(result.removedBytes)} 可重建缓存；原始 Demo、用户回答和 LLM 产物已保留。`;
+  } catch {
+    libraryStatus.textContent = "缓存清理未完成；不可重建的资料没有被修改。";
+  } finally {
+    clearLibraryCache.disabled = false;
+    clearLibraryCache.setAttribute("aria-busy", "false");
+  }
+});
 
 try {
   applyStatus(await invoke("provider_status"));
@@ -209,5 +411,6 @@ try {
 }
 
 await refreshUpdateStatus();
+await refreshLibrary();
 const updatePoll = window.setInterval(refreshUpdateStatus, 1000);
 window.addEventListener("pagehide", () => window.clearInterval(updatePoll), { once: true });

@@ -72,7 +72,48 @@
           <p id="archive-status" class="field-note">正在读取本地数据能力…</p>
           <div class="actions settings-actions data-actions">
             <button id="manage-memory" type="button">管理、导出或清除记忆</button>
+            <button id="open-library" class="secondary" type="button">打开资料库目录</button>
             <button id="open-logs" class="secondary" type="button">打开日志文件夹</button>
+          </div>
+        </section>
+        <section class="paths" aria-labelledby="library-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="library-title">Demo 资料库</h2>
+              <p class="field-note">原始 Demo 与复盘产物分别统计；应用不会自动删除原始 Demo。</p>
+            </div>
+            <button id="refresh-library" class="secondary" type="button">刷新</button>
+          </div>
+          <dl>
+            <dt>Demo</dt><dd id="library-demo-count">—</dd>
+            <dt>复盘</dt><dd id="library-review-count">—</dd>
+            <dt>原始文件</dt><dd id="library-demo-size">—</dd>
+            <dt>复盘产物</dt><dd id="library-artifact-size">—</dd>
+            <dt>可重建缓存</dt><dd id="library-cache-size">—</dd>
+            <dt>总占用</dt><dd id="library-total-size">—</dd>
+          </dl>
+          <p id="library-status" class="field-note" role="status" aria-live="polite">正在读取资料库统计…</p>
+          <label for="library-review-select">选择要删除的复盘
+            <select id="library-review-select">
+              <option value="">尚无可删除复盘</option>
+            </select>
+          </label>
+          <p class="field-note">删除复盘会移除该复盘的产物、恢复点和证据引用，但保留共享的原始 Demo。</p>
+          <div class="actions settings-actions data-actions">
+            <button id="delete-library-review" class="danger" type="button" disabled>删除所选复盘</button>
+          </div>
+          <label for="library-demo-select">选择要删除的 Demo
+            <select id="library-demo-select">
+              <option value="">尚无可删除 Demo</option>
+            </select>
+          </label>
+          <p class="field-note">删除 Demo 会同时永久删除所有受影响的复盘、文件、恢复点和证据引用。确认前会先列出影响范围。</p>
+          <div class="actions settings-actions data-actions">
+            <button id="delete-library-demo" class="danger" type="button" disabled>查看影响并删除 Demo</button>
+          </div>
+          <div class="actions settings-actions data-actions">
+            <button id="verify-library" class="secondary" type="button">验证资料库</button>
+            <button id="clear-library-cache" class="secondary" type="button">清理可重建缓存</button>
           </div>
         </section>
       </section>

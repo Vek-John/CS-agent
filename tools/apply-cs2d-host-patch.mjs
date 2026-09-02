@@ -8,12 +8,14 @@ import { spawnSync } from 'node:child_process'
 export const CS2D_PIN = 'dbbe698c9b9c91f9a14cecea92374b4114bf60ec'
 const REPOSITORY = 'https://github.com/zenojunior/cs2d.git'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const patchFiles = [
+export const CS2D_PATCH_FILES = Object.freeze([
   resolve(root, 'tools/cs2d-host/patches/0001-cs2d-playback-host.patch'),
   resolve(root, 'tools/cs2d-host/patches/0002-cs2d-cloudflare-base.patch'),
   resolve(root, 'tools/cs2d-host/patches/0003-cs2d-stage2-map-focus.patch'),
   resolve(root, 'tools/cs2d-host/patches/0004-cs2d-session-recovery-player-select.patch'),
-]
+  resolve(root, 'tools/cs2d-host/patches/0005-managed-demo-library.patch'),
+  resolve(root, 'tools/cs2d-host/patches/0006-managed-demo-load-races.patch'),
+])
 
 export const CS2D_REUSE_DECISIONS = Object.freeze({
   APPLY_PATCHES: 'APPLY_PATCHES',
@@ -87,6 +89,72 @@ const REQUIRED_MARKERS = [
     name: 'strict recovery player selection command',
     path: 'apps/app/src/viewer/player/hostBridge.ts',
     pattern: /type:\s*['"]selectPlayer['"]/,
+  },
+  {
+    name: 'managed Demo bridge command',
+    managedLibrary: true,
+    path: 'apps/app/src/viewer/player/hostBridge.ts',
+    pattern: /type:\s*['"]loadManagedDemo['"]/,
+  },
+  {
+    name: 'header-only managed Demo import',
+    managedLibrary: true,
+    path: 'apps/app/src/viewer/DemoAnalyzerView.vue',
+    pattern: /setRequestHeader\(['"]Authorization['"],\s*`Bearer \$\{capabilityToken\}`\)/,
+  },
+  {
+    name: 'managed Demo import-before-parse gate',
+    managedLibrary: true,
+    path: 'apps/app/src/viewer/DemoAnalyzerView.vue',
+    pattern: /await uploadManagedDemo\([\s\S]*?await parseManagedFile\(pending\.file/,
+  },
+  {
+    name: 'managed Demo playback-only restore',
+    managedLibrary: true,
+    path: 'apps/app/src/viewer/DemoAnalyzerView.vue',
+    pattern: /managedSource\.value\?\.mode === ['"]RESTORE['"][\s\S]*?return/,
+  },
+  {
+    name: 'managed Demo restore bridge mount acknowledgement',
+    managedLibrary: true,
+    path: 'apps/app/src/viewer/DemoAnalyzerView.vue',
+    pattern: /while \(!hostStageReady\.value[\s\S]*?emitSelected\(\)[\s\S]*?return/,
+  },
+  {
+    name: 'managed Demo serialized latest-wins parse',
+    managedLibrary: true,
+    path: 'apps/app/src/viewer/DemoAnalyzerView.vue',
+    pattern: /managedLoadAbort\?\.abort\(\)[\s\S]*?managedParseTail[\s\S]*?assertManagedLoadCurrent\(generation\)/,
+  },
+  {
+    name: 'managed Demo parser validation before replay exposure',
+    managedLibrary: true,
+    path: 'apps/app/src/viewer/DemoAnalyzerView.vue',
+    pattern: /await finalizeManagedDemo\(result, ['"]READY['"]\)[\s\S]*?DEMO_IMPORT_SUCCEEDED[\s\S]*?emitPlaybackEvent\(replayReady\)/,
+  },
+  {
+    name: 'managed Demo watcher intermediate-result suppression',
+    managedLibrary: true,
+    path: 'apps/app/src/viewer/DemoAnalyzerView.vue',
+    pattern: /watch\([\s\S]*?parser\.replay\.value[\s\S]*?if \(managedLibraryMode\.value\) return/,
+  },
+  {
+    name: 'managed Replay exact request identity',
+    managedLibrary: true,
+    path: 'apps/app/src/viewer/player/hostBridge.ts',
+    pattern: /requestId: replay\.managedSource\.requestId[\s\S]*?sourceKind: ['"]MANAGED_LIBRARY['"]/,
+  },
+  {
+    name: 'ViewerStage host bridge ready event',
+    managedLibrary: true,
+    path: 'apps/app/src/viewer/player/ViewerStage.vue',
+    pattern: /stopHostBridge = listenForPlaybackCommands[\s\S]*?emit\(['"]host-ready['"]\)/,
+  },
+  {
+    name: 'managed Demo IndexedDB bypass',
+    managedLibrary: true,
+    path: 'apps/app/src/viewer/DemoAnalyzerView.vue',
+    pattern: /await parser\.parse\(file\)\s*\n\s*if \(managedLibraryMode\.value\) return\s*\n\s*\/\/ New parse done:\s*save to local history/,
   },
   {
     name: 'content-addressed local analysis identity',
@@ -229,9 +297,10 @@ function diffCheck(upstream) {
   }
 }
 
-function markerErrors(upstream) {
+function markerErrors(upstream, includeManagedLibrary = true) {
   const errors = []
   for (const marker of REQUIRED_MARKERS) {
+    if (!includeManagedLibrary && marker.managedLibrary) continue
     const file = resolve(upstream, marker.path)
     if (!existsSync(file)) {
       errors.push(`${marker.name}: missing ${marker.path}`)
@@ -287,8 +356,22 @@ function inspectPatchedCheckout(upstream) {
   const head = run('git', ['rev-parse', 'HEAD'], { cwd: upstream, capture: true }).stdout.trim()
   const paths = dirtyPaths(upstream)
   const check = diffCheck(upstream)
-  const patchesExactlyApplied = patchFiles.every((patch) => patchReverseApplies(patch, upstream))
-  const errors = paths.length > 0 || patchesExactlyApplied ? markerErrors(upstream) : []
+  const reverseStates = CS2D_PATCH_FILES.map((patch) => patchReverseApplies(patch, upstream))
+  const patchesExactlyApplied = reverseStates.every(Boolean)
+  // A reusable checkout may be a validated controlled superset (for example,
+  // generated model assets make older reverse checks intentionally inexact).
+  // Permit only the new final managed-library patch to advance that checkout,
+  // and only when it still applies cleanly on top of all validated base markers.
+  const managedLibraryPatch = CS2D_PATCH_FILES.at(-1)
+  const pendingManagedLibraryPatch = !reverseStates.at(-1) && Boolean(managedLibraryPatch) &&
+    run('git', ['apply', '--check', managedLibraryPatch], {
+      cwd: upstream,
+      capture: true,
+      allowFailure: true,
+    }).status === 0
+  const errors = paths.length > 0 || patchesExactlyApplied
+    ? markerErrors(upstream, !pendingManagedLibraryPatch)
+    : []
   const decision = classifyPatchedCheckout({
     head,
     dirtyPaths: paths,
@@ -296,11 +379,11 @@ function inspectPatchedCheckout(upstream) {
     patchesExactlyApplied,
     markerErrors: errors,
   })
-  return { decision, head, paths, diffCheck: check, patchesExactlyApplied, markerErrors: errors }
+  return { decision, head, paths, diffCheck: check, patchesExactlyApplied, markerErrors: errors, pendingManagedLibraryPatch }
 }
 
 function applyPatches(upstream) {
-  for (const patch of patchFiles) {
+  for (const patch of CS2D_PATCH_FILES) {
     const reverse = patchReverseApplies(patch, upstream)
     if (reverse) {
       process.stdout.write(`[cs2d-host] ${patchName(patch)} already applied at ${CS2D_PIN.slice(0, 7)}\n`)
@@ -338,6 +421,14 @@ async function main(argv = process.argv.slice(2)) {
   if (inspection?.decision === CS2D_REUSE_DECISIONS.EXACT_APPLIED) {
     process.stdout.write(`[cs2d-host] reused exact patched checkout at ${CS2D_PIN.slice(0, 7)}\n`)
   } else if (inspection?.decision === CS2D_REUSE_DECISIONS.CONTROLLED_SUPERSET) {
+    if (inspection.pendingManagedLibraryPatch) {
+      const managedLibraryPatch = CS2D_PATCH_FILES.at(-1)
+      if (!managedLibraryPatch) throw new Error('managed-library patch missing from controlled stack')
+      run('git', ['apply', managedLibraryPatch], { cwd: upstream })
+      process.stdout.write(`[cs2d-host] applied ${patchName(managedLibraryPatch)} at ${CS2D_PIN.slice(0, 7)}\n`)
+      const errors = markerErrors(upstream)
+      if (errors.length > 0) throw new Error(`cs2d patched checkout markers failed:\n${errors.join('\n')}`)
+    }
     process.stdout.write(`[cs2d-host] reused verified controlled patched checkout at ${CS2D_PIN.slice(0, 7)}\n`)
   } else {
     const head = run('git', ['rev-parse', 'HEAD'], { cwd: upstream, capture: true }).stdout.trim()
@@ -345,7 +436,7 @@ async function main(argv = process.argv.slice(2)) {
       throw new Error(`cs2d commit mismatch: expected ${CS2D_PIN}, received ${head || '<empty>'}`)
     }
     const paths = dirtyPaths(upstream)
-    const exact = patchFiles.every((patch) => patchReverseApplies(patch, upstream))
+    const exact = CS2D_PATCH_FILES.every((patch) => patchReverseApplies(patch, upstream))
     if (paths.length > 0 && !exact) {
       throw new Error(
         'cs2d checkout is dirty and not exactly patched; pass --reuse-patched-checkout only after marker validation',

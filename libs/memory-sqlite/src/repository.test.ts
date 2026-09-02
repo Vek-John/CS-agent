@@ -15,6 +15,7 @@ import {
   verifySqliteDatabase,
 } from "./backup";
 import { getSqliteDatabaseOwner, SqliteDatabaseOwner } from "./database";
+import { DESKTOP_MIGRATIONS } from "./migrations";
 import { SqliteMemoryRepository } from "./repository";
 
 const cleanup: string[] = [];
@@ -355,7 +356,7 @@ describe("SqliteMemoryRepository", () => {
     await h.service.ingestEvent("user-1", event(proposal("backup"), "backup"));
     const target = join(h.directory, "backup.sqlite3");
     const manifest = await createSqliteBackup(h.owner, target);
-    expect(manifest.migrationLedger).toHaveLength(2);
+    expect(manifest.migrationLedger).toHaveLength(DESKTOP_MIGRATIONS.length);
     expect(() => verifySqliteDatabase(target)).not.toThrow();
     const bytes = await readFile(target);
     bytes[0] = 0;

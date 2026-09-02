@@ -5,6 +5,7 @@ mod supervisor;
 pub mod updater;
 
 use provider::{DesktopPaths, ProviderManager, ProviderSaveInput, ProviderStatus};
+use serde::Deserialize;
 use std::{
     fs,
     os::unix::fs::PermissionsExt,
@@ -14,7 +15,11 @@ use std::{
         Arc,
     },
 };
-use supervisor::{PublicRuntimeStatus, Supervisor};
+use supervisor::{
+    PublicRuntimeStatus, ReviewLibraryCacheCleanup, ReviewLibraryDeleteResult,
+    ReviewLibraryDemoDeletionImpact, ReviewLibraryEntries, ReviewLibraryStats,
+    ReviewLibraryVerificationSummary, Supervisor,
+};
 use tauri::{
     menu::{Menu, MenuItemBuilder, MenuItemKind, PredefinedMenuItem},
     webview::{NewWindowResponse, WebviewWindowBuilder},
@@ -114,6 +119,122 @@ fn open_log_directory(app: AppHandle) -> Result<(), &'static str> {
     }
     local_log::record(&app, "LOG_DIRECTORY_OPENED");
     Ok(())
+}
+
+#[tauri::command]
+fn open_library_directory(app: AppHandle) -> Result<(), &'static str> {
+    let directory = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| "LIBRARY_DIRECTORY_UNAVAILABLE")?
+        .join("library");
+    fs::create_dir_all(&directory).map_err(|_| "LIBRARY_DIRECTORY_UNAVAILABLE")?;
+    fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))
+        .map_err(|_| "LIBRARY_DIRECTORY_UNAVAILABLE")?;
+    let status = Command::new("/usr/bin/open")
+        .env_clear()
+        .arg(&directory)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|_| "LIBRARY_DIRECTORY_UNAVAILABLE")?;
+    if !status.success() {
+        return Err("LIBRARY_DIRECTORY_UNAVAILABLE");
+    }
+    local_log::record(&app, "REVIEW_LIBRARY_OPENED");
+    Ok(())
+}
+
+#[tauri::command]
+async fn review_library_stats(
+    supervisor: tauri::State<'_, Supervisor>,
+) -> Result<ReviewLibraryStats, &'static str> {
+    supervisor
+        .review_library_stats()
+        .await
+        .ok_or("REVIEW_LIBRARY_UNAVAILABLE")
+}
+
+#[tauri::command]
+async fn review_library_verify(
+    supervisor: tauri::State<'_, Supervisor>,
+) -> Result<ReviewLibraryVerificationSummary, &'static str> {
+    supervisor
+        .review_library_verify()
+        .await
+        .ok_or("REVIEW_LIBRARY_VERIFY_UNAVAILABLE")
+}
+
+#[tauri::command]
+async fn review_library_clear_cache(
+    supervisor: tauri::State<'_, Supervisor>,
+) -> Result<ReviewLibraryCacheCleanup, &'static str> {
+    supervisor
+        .review_library_clear_cache()
+        .await
+        .ok_or("REVIEW_LIBRARY_CACHE_CLEANUP_UNAVAILABLE")
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReviewLibraryObjectInput {
+    object_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReviewLibraryDemoDeleteInput {
+    demo_id: String,
+    impact_token: String,
+}
+
+#[tauri::command]
+async fn review_library_entries(
+    supervisor: tauri::State<'_, Supervisor>,
+) -> Result<ReviewLibraryEntries, &'static str> {
+    supervisor
+        .review_library_entries()
+        .await
+        .ok_or("REVIEW_LIBRARY_UNAVAILABLE")
+}
+
+#[tauri::command]
+async fn review_library_demo_impact(
+    supervisor: tauri::State<'_, Supervisor>,
+    input: ReviewLibraryObjectInput,
+) -> Result<ReviewLibraryDemoDeletionImpact, &'static str> {
+    supervisor
+        .review_library_demo_impact(input.object_id)
+        .await
+        .ok_or("REVIEW_LIBRARY_IMPACT_UNAVAILABLE")
+}
+
+#[tauri::command]
+async fn review_library_delete_review(
+    app: AppHandle,
+    supervisor: tauri::State<'_, Supervisor>,
+    input: ReviewLibraryObjectInput,
+) -> Result<ReviewLibraryDeleteResult, &'static str> {
+    let result = supervisor
+        .review_library_delete_review(input.object_id)
+        .await
+        .ok_or("REVIEW_LIBRARY_DELETE_UNAVAILABLE")?;
+    local_log::record(&app, "REVIEW_LIBRARY_REVIEW_DELETED");
+    Ok(result)
+}
+
+#[tauri::command]
+async fn review_library_delete_demo(
+    app: AppHandle,
+    supervisor: tauri::State<'_, Supervisor>,
+    input: ReviewLibraryDemoDeleteInput,
+) -> Result<ReviewLibraryDeleteResult, &'static str> {
+    let result = supervisor
+        .review_library_delete_demo(input.demo_id, input.impact_token)
+        .await?;
+    local_log::record(&app, "REVIEW_LIBRARY_DEMO_DELETED");
+    Ok(result)
 }
 
 #[tauri::command]
@@ -376,6 +497,14 @@ pub fn run() {
             desktop_paths,
             open_memory,
             open_log_directory,
+            open_library_directory,
+            review_library_stats,
+            review_library_entries,
+            review_library_demo_impact,
+            review_library_delete_review,
+            review_library_delete_demo,
+            review_library_verify,
+            review_library_clear_cache,
             runtime_restart,
             update_status,
             update_check,

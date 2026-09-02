@@ -7,10 +7,14 @@ import {
 } from "@cs-coach/coach-agent";
 import { buildAgentMemoryBrief, type UserMemoryBrief } from "@cs-coach/memory";
 import { getSqliteCheckpointSaver } from "@cs-coach/memory-sqlite/server";
+import { currentDesktopReviewLibrary } from "@cs-coach/review-library/server";
 import { after as scheduleAfter } from "next/server";
 import { ensureRequestPrincipal, withCookie } from "../../../../lib/memory/api";
 import { getMemoryRuntime, memoryPersistenceUnavailable } from "../../../../lib/memory/server";
-import { buildLocalAgentMemoryEvents } from "../../../../lib/memory/agent-events";
+import {
+  buildLocalAgentMemoryEvents,
+  desktopBehaviorOpportunityClaim,
+} from "../../../../lib/memory/agent-events";
 import { sameOriginRequest } from "../../../../lib/desktop/request-origin";
 
 export const dynamic = "force-dynamic";
@@ -236,6 +240,23 @@ export async function POST(request: Request): Promise<Response> {
           // calls could let the secondary event observe no current row and
           // silently lose its application counters.
           for (const event of events) {
+            const opportunity = desktopBehaviorOpportunityClaim(
+              event,
+              result.identity.selectedPlayerId,
+              result.identity.routeHash,
+            );
+            if (opportunity) {
+              const library = currentDesktopReviewLibrary();
+              if (library) {
+                // The SQLite claim is the durable first-writer gate. A later
+                // analysis revision may update evidence provenance but must
+                // not reach the reducer as another behavior opportunity.
+                const claim = await library
+                  .claimMemoryOpportunity(opportunity)
+                  .catch(() => undefined);
+                if (!claim?.claimed) continue;
+              }
+            }
             await persistenceRuntime.service.ingestEvent(persistencePrincipalId, event).catch(() => undefined);
           }
         });

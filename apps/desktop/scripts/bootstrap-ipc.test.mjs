@@ -42,24 +42,42 @@ test("settings uses only the narrow provider and restart commands", async () => 
     "desktop_paths", "open_memory", "open_log_directory", "runtime_restart",
     "update_status", "update_check", "update_download_stage", "update_end_review",
     "update_install", "update_relaunch", "update_open_fallback",
+    "review_library_stats", "review_library_entries", "review_library_demo_impact",
+    "review_library_delete_review", "review_library_delete_demo",
+    "review_library_verify", "review_library_clear_cache", "open_library_directory",
     "hide_settings",
   ]) assert.match(source, new RegExp(`["]${command}["]`, "u"));
   assert.doesNotMatch(source, /provider_get|apiKey.*textContent/u);
   assert.doesNotMatch(source, /shell|filesystem|opener|update_private_key/u);
 });
 
-test("updater commands are settings-only and main coaching has no capability", async () => {
+test("updater commands stay settings-only while main can only open Settings", async () => {
   const settings = JSON.parse(await readFile(new URL("../src-tauri/capabilities/settings-local.json", import.meta.url), "utf8"));
   const bootstrap = JSON.parse(await readFile(new URL("../src-tauri/capabilities/bootstrap-local.json", import.meta.url), "utf8"));
+  const main = JSON.parse(await readFile(new URL("../src-tauri/capabilities/main-open-settings.json", import.meta.url), "utf8"));
   const config = JSON.parse(await readFile(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8"));
   const updaterPermissions = [
     "allow-update-status", "allow-update-check", "allow-update-download-stage",
     "allow-update-end-review", "allow-update-install", "allow-update-relaunch",
     "allow-update-open-fallback",
   ];
+  const libraryPermissions = [
+    "allow-review-library-stats", "allow-review-library-entries",
+    "allow-review-library-demo-impact", "allow-review-library-delete-review",
+    "allow-review-library-delete-demo", "allow-review-library-verify",
+    "allow-review-library-clear-cache",
+  ];
   assert.deepEqual(settings.windows, ["settings"]);
   assert.deepEqual(bootstrap.windows, ["bootstrap"]);
+  assert.deepEqual(main.windows, ["main"]);
+  assert.equal(main.local, false);
+  assert.deepEqual(main.permissions, ["allow-open-settings"]);
+  assert.deepEqual(main.remote.urls, ["http://127.0.0.1:*/*"]);
   for (const permission of updaterPermissions) {
+    assert.ok(settings.permissions.includes(permission));
+    assert.ok(!bootstrap.permissions.includes(permission));
+  }
+  for (const permission of libraryPermissions) {
     assert.ok(settings.permissions.includes(permission));
     assert.ok(!bootstrap.permissions.includes(permission));
   }
@@ -68,9 +86,23 @@ test("updater commands are settings-only and main coaching has no capability", a
   assert.ok(settings.permissions.includes("allow-open-memory"));
   assert.ok(settings.permissions.includes("allow-open-log-directory"));
   assert.ok(!bootstrap.permissions.includes("allow-hide-settings"));
-  assert.deepEqual(config.app.security.capabilities, ["bootstrap-local", "settings-local"]);
-  assert.ok(!config.app.security.capabilities.includes("main"));
+  assert.deepEqual(config.app.security.capabilities, ["bootstrap-local", "settings-local", "main-open-settings"]);
   assert.ok(!settings.permissions.some((permission) => permission.startsWith("updater:")));
+});
+
+test("settings exposes separate Review and Demo deletion with explicit impact confirmation", async () => {
+  const markup = await readFile(new URL("../bootstrap/settings.html", import.meta.url), "utf8");
+  const source = await readFile(new URL("../bootstrap/settings.js", import.meta.url), "utf8");
+  assert.match(markup, /id="library-review-select"/u);
+  assert.match(markup, /id="delete-library-review"[^>]+disabled/u);
+  assert.match(markup, /id="library-demo-select"/u);
+  assert.match(markup, /id="delete-library-demo"[^>]+disabled/u);
+  assert.match(source, /invoke\("review_library_demo_impact"/u);
+  assert.match(source, /impact\.affectedReviews/u);
+  assert.match(source, /impactToken: impact\.impactToken/u);
+  assert.match(source, /\u539f\u59cb Demo.*\u4f1a\u4fdd\u7559/u);
+  assert.match(source, /\u6b64\u64cd\u4f5c\u65e0\u6cd5\u64a4\u9500/u);
+  assert.doesNotMatch(source, /innerHTML/u);
 });
 
 test("settings update states remain explicit and respect accessibility preferences", async () => {

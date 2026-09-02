@@ -3,7 +3,7 @@ use crate::{
     protocol::{RuntimeInit, RuntimeReady, READY_SCHEMA, TARGET_TRIPLE},
     updater::VerifiedUpdateBackup,
 };
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     ffi::OsString,
     fs,
@@ -149,6 +149,79 @@ impl Supervisor {
         let response = request_admin_backup(origin, token).await?;
         let data_dir = app.path().app_data_dir().ok()?;
         validate_backup_response(response, &data_dir)
+    }
+
+    pub async fn review_library_stats(&self) -> Option<ReviewLibraryStats> {
+        let transport = {
+            let state = self.inner.lock().expect("supervisor lock poisoned");
+            state.app_origin.clone().zip(state.admin_token.clone())
+        };
+        let (origin, token) = transport?;
+        request_admin_library_stats(origin, token).await
+    }
+
+    pub async fn review_library_verify(&self) -> Option<ReviewLibraryVerificationSummary> {
+        let transport = {
+            let state = self.inner.lock().expect("supervisor lock poisoned");
+            state.app_origin.clone().zip(state.admin_token.clone())
+        };
+        let (origin, token) = transport?;
+        request_admin_library_verification(origin, token).await
+    }
+
+    pub async fn review_library_clear_cache(&self) -> Option<ReviewLibraryCacheCleanup> {
+        let transport = {
+            let state = self.inner.lock().expect("supervisor lock poisoned");
+            state.app_origin.clone().zip(state.admin_token.clone())
+        };
+        let (origin, token) = transport?;
+        request_admin_library_cache_cleanup(origin, token).await
+    }
+
+    pub async fn review_library_entries(&self) -> Option<ReviewLibraryEntries> {
+        let transport = {
+            let state = self.inner.lock().expect("supervisor lock poisoned");
+            state.app_origin.clone().zip(state.admin_token.clone())
+        };
+        let (origin, token) = transport?;
+        request_admin_library_entries(origin, token).await
+    }
+
+    pub async fn review_library_demo_impact(
+        &self,
+        demo_id: String,
+    ) -> Option<ReviewLibraryDemoDeletionImpact> {
+        let transport = {
+            let state = self.inner.lock().expect("supervisor lock poisoned");
+            state.app_origin.clone().zip(state.admin_token.clone())
+        };
+        let (origin, token) = transport?;
+        request_admin_library_demo_impact(origin, token, demo_id).await
+    }
+
+    pub async fn review_library_delete_review(
+        &self,
+        review_id: String,
+    ) -> Option<ReviewLibraryDeleteResult> {
+        let transport = {
+            let state = self.inner.lock().expect("supervisor lock poisoned");
+            state.app_origin.clone().zip(state.admin_token.clone())
+        };
+        let (origin, token) = transport?;
+        request_admin_library_delete_review(origin, token, review_id).await
+    }
+
+    pub async fn review_library_delete_demo(
+        &self,
+        demo_id: String,
+        impact_token: String,
+    ) -> Result<ReviewLibraryDeleteResult, &'static str> {
+        let transport = {
+            let state = self.inner.lock().expect("supervisor lock poisoned");
+            state.app_origin.clone().zip(state.admin_token.clone())
+        };
+        let (origin, token) = transport.ok_or("REVIEW_LIBRARY_UNAVAILABLE")?;
+        request_admin_library_delete_demo(origin, token, demo_id, impact_token).await
     }
 
     pub fn allows_navigation(&self, url: &Url) -> bool {
@@ -629,6 +702,426 @@ struct BackupResponse {
     migration_count: u64,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReviewLibraryStats {
+    pub schema_version: String,
+    pub demo_count: u64,
+    pub review_count: u64,
+    pub raw_demo_bytes: u64,
+    pub artifact_bytes: u64,
+    pub cache_bytes: u64,
+    pub total_bytes: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReviewLibraryVerificationSummary {
+    pub schema_version: String,
+    pub checked_demos: u64,
+    pub checked_artifacts: u64,
+    pub issue_count: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReviewLibraryCacheCleanup {
+    pub schema_version: String,
+    pub removed_bytes: u64,
+    pub cache_bytes: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReviewLibraryReviewEntry {
+    pub review_id: String,
+    pub demo_id: String,
+    pub original_filename: String,
+    pub selected_player_id: String,
+    pub selected_player_name: String,
+    pub title: String,
+    pub map_name: Option<String>,
+    pub score_text: Option<String>,
+    pub status: String,
+    pub active_revision_id: Option<String>,
+    pub current_cue_id: Option<String>,
+    pub current_playback_tick: Option<u64>,
+    pub completed_cue_count: u64,
+    pub total_cue_count: u64,
+    pub created_at: String,
+    pub last_opened_at: String,
+    pub completed_at: Option<String>,
+    pub demo_status: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReviewLibraryDemoEntry {
+    pub demo_id: String,
+    pub original_filename: String,
+    pub byte_size: u64,
+    pub map_name: Option<String>,
+    pub status: String,
+    pub imported_at: String,
+    pub last_opened_at: String,
+    pub review_count: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReviewLibraryEntries {
+    pub schema_version: String,
+    pub reviews: Vec<ReviewLibraryReviewEntry>,
+    pub demos: Vec<ReviewLibraryDemoEntry>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReviewLibraryAffectedReview {
+    pub review_id: String,
+    pub title: String,
+    pub selected_player_name: String,
+    pub status: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReviewLibraryDemoDeletionImpact {
+    pub schema_version: String,
+    pub demo_id: String,
+    pub original_filename: String,
+    pub affected_review_count: u64,
+    pub affected_reviews: Vec<ReviewLibraryAffectedReview>,
+    pub truncated: bool,
+    pub impact_token: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReviewLibraryDeleteResult {
+    pub deleted: bool,
+    pub target_id: String,
+    pub removed_review_count: u64,
+    pub removed_demo: bool,
+}
+
+fn bounded_string(value: &str, maximum: usize) -> bool {
+    !value.is_empty() && value.len() <= maximum && !value.as_bytes().contains(&0)
+}
+
+fn bounded_library_object_id(value: &str) -> bool {
+    bounded_string(value, 160)
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'-'))
+}
+
+fn valid_review_status(value: &str) -> bool {
+    matches!(
+        value,
+        "PREPARING" | "READY" | "IN_PROGRESS" | "COMPLETED" | "FAILED" | "STALE"
+    )
+}
+
+fn valid_demo_status(value: &str) -> bool {
+    matches!(value, "IMPORTING" | "READY" | "MISSING" | "CORRUPT")
+}
+
+fn validate_library_entries(value: ReviewLibraryEntries) -> Option<ReviewLibraryEntries> {
+    if value.schema_version != "review-library-entries.v1"
+        || value.reviews.len() > 50
+        || value.demos.len() > 50
+        || value.reviews.iter().any(|review| {
+            !bounded_library_object_id(&review.review_id)
+                || !bounded_library_object_id(&review.demo_id)
+                || !bounded_string(&review.original_filename, 255)
+                || !bounded_string(&review.selected_player_id, 160)
+                || !bounded_string(&review.selected_player_name, 160)
+                || !bounded_string(&review.title, 200)
+                || review.map_name.as_deref().is_some_and(|item| !bounded_string(item, 120))
+                || review.score_text.as_deref().is_some_and(|item| !bounded_string(item, 80))
+                || !valid_review_status(&review.status)
+                || review.active_revision_id.as_deref().is_some_and(|item| !bounded_library_object_id(item))
+                || review.current_cue_id.as_deref().is_some_and(|item| !bounded_string(item, 160))
+                || review.completed_cue_count > review.total_cue_count
+                || !bounded_string(&review.created_at, 64)
+                || !bounded_string(&review.last_opened_at, 64)
+                || review.completed_at.as_deref().is_some_and(|item| !bounded_string(item, 64))
+                || !valid_demo_status(&review.demo_status)
+        })
+        || value.demos.iter().any(|demo| {
+            !bounded_library_object_id(&demo.demo_id)
+                || !bounded_string(&demo.original_filename, 255)
+                || demo.map_name.as_deref().is_some_and(|item| !bounded_string(item, 120))
+                || !valid_demo_status(&demo.status)
+                || !bounded_string(&demo.imported_at, 64)
+                || !bounded_string(&demo.last_opened_at, 64)
+        })
+    {
+        return None;
+    }
+    Some(value)
+}
+
+fn validate_demo_deletion_impact(
+    value: ReviewLibraryDemoDeletionImpact,
+    expected_demo_id: &str,
+) -> Option<ReviewLibraryDemoDeletionImpact> {
+    let bounded_count = u64::try_from(value.affected_reviews.len()).ok()?;
+    if value.schema_version != "review-library-demo-deletion-impact.v1"
+        || value.demo_id != expected_demo_id
+        || !bounded_library_object_id(&value.demo_id)
+        || !bounded_string(&value.original_filename, 255)
+        || value.affected_reviews.len() > 50
+        || (!value.truncated && value.affected_review_count != bounded_count)
+        || (value.truncated && value.affected_review_count <= bounded_count)
+        || value.impact_token.len() != 64
+        || !value.impact_token.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        || value.affected_reviews.iter().any(|review| {
+            !bounded_library_object_id(&review.review_id)
+                || !bounded_string(&review.title, 200)
+                || !bounded_string(&review.selected_player_name, 160)
+                || !valid_review_status(&review.status)
+        })
+    {
+        return None;
+    }
+    Some(value)
+}
+
+fn validate_delete_result(
+    value: ReviewLibraryDeleteResult,
+    expected_target_id: &str,
+    removed_demo: bool,
+) -> Option<ReviewLibraryDeleteResult> {
+    (value.deleted && value.target_id == expected_target_id && value.removed_demo == removed_demo)
+        .then_some(value)
+}
+
+async fn request_admin_json<T>(
+    origin: String,
+    token: String,
+    method: &'static str,
+    request_path: &'static str,
+) -> Option<T>
+where
+    T: DeserializeOwned + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || {
+        let url = Url::parse(&origin).ok()?;
+        let port = url.port()?;
+        let address = SocketAddr::from(([127, 0, 0, 1], port));
+        let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(2)).ok()?;
+        let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
+        let request = format!(
+            "{method} {request_path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {token}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        );
+        stream.write_all(request.as_bytes()).ok()?;
+        let mut response = Vec::with_capacity(2048);
+        stream.take(16 * 1024).read_to_end(&mut response).ok()?;
+        if !response.starts_with(b"HTTP/1.1 200") {
+            return None;
+        }
+        let body_start = response.windows(4).position(|value| value == b"\r\n\r\n")?;
+        serde_json::from_slice::<T>(&response[body_start + 4..]).ok()
+    })
+    .await
+    .unwrap_or(None)
+}
+
+async fn request_dynamic_admin_library_json<T>(
+    origin: String,
+    token: String,
+    method: &'static str,
+    request_path: String,
+    impact_token: Option<String>,
+) -> Option<(u16, T)>
+where
+    T: DeserializeOwned + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || {
+        let url = Url::parse(&origin).ok()?;
+        let port = url.port()?;
+        if !request_path.starts_with("/_desktop/library/")
+            || request_path.len() > 240
+            || request_path.bytes().any(|byte| matches!(byte, b'\r' | b'\n' | b'?' | b'#'))
+        {
+            return None;
+        }
+        if impact_token.as_deref().is_some_and(|value| {
+            value.len() != 64
+                || !value.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        }) {
+            return None;
+        }
+        let address = SocketAddr::from(([127, 0, 0, 1], port));
+        let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(2)).ok()?;
+        let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+        let impact_header = impact_token
+            .map(|value| format!("X-Cs-Agent-Library-Impact-Token: {value}\r\n"))
+            .unwrap_or_default();
+        let request = format!(
+            "{method} {request_path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {token}\r\n{impact_header}Content-Length: 0\r\nConnection: close\r\n\r\n"
+        );
+        stream.write_all(request.as_bytes()).ok()?;
+        let mut response = Vec::with_capacity(4096);
+        stream.take(16 * 1024).read_to_end(&mut response).ok()?;
+        let status = if response.starts_with(b"HTTP/1.1 200") {
+            200
+        } else if response.starts_with(b"HTTP/1.1 409") {
+            409
+        } else {
+            return None;
+        };
+        let body_start = response.windows(4).position(|value| value == b"\r\n\r\n")?;
+        let body = serde_json::from_slice::<T>(&response[body_start + 4..]).ok()?;
+        Some((status, body))
+    })
+    .await
+    .unwrap_or(None)
+}
+
+async fn request_admin_library_entries(
+    origin: String,
+    token: String,
+) -> Option<ReviewLibraryEntries> {
+    let body: ReviewLibraryEntries =
+        request_admin_json(origin, token, "GET", "/_desktop/library/entries").await?;
+    validate_library_entries(body)
+}
+
+async fn request_admin_library_demo_impact(
+    origin: String,
+    token: String,
+    demo_id: String,
+) -> Option<ReviewLibraryDemoDeletionImpact> {
+    if !bounded_library_object_id(&demo_id) {
+        return None;
+    }
+    let path = format!("/_desktop/library/demos/{demo_id}/impact");
+    let (status, body): (u16, ReviewLibraryDemoDeletionImpact) =
+        request_dynamic_admin_library_json(origin, token, "GET", path, None).await?;
+    (status == 200)
+        .then(|| validate_demo_deletion_impact(body, &demo_id))
+        .flatten()
+}
+
+async fn request_admin_library_delete_review(
+    origin: String,
+    token: String,
+    review_id: String,
+) -> Option<ReviewLibraryDeleteResult> {
+    if !bounded_library_object_id(&review_id) {
+        return None;
+    }
+    let path = format!("/_desktop/library/reviews/{review_id}");
+    let (status, body): (u16, ReviewLibraryDeleteResult) =
+        request_dynamic_admin_library_json(origin, token, "DELETE", path, None).await?;
+    (status == 200)
+        .then(|| validate_delete_result(body, &review_id, false))
+        .flatten()
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AdminLibraryErrorResponse {
+    code: String,
+}
+
+async fn request_admin_library_delete_demo(
+    origin: String,
+    token: String,
+    demo_id: String,
+    impact_token: String,
+) -> Result<ReviewLibraryDeleteResult, &'static str> {
+    if !bounded_library_object_id(&demo_id)
+        || impact_token.len() != 64
+        || !impact_token
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
+        return Err("REVIEW_LIBRARY_INVALID_DELETE");
+    }
+    let path = format!("/_desktop/library/demos/{demo_id}");
+    let response = request_dynamic_admin_library_json::<serde_json::Value>(
+        origin,
+        token,
+        "DELETE",
+        path,
+        Some(impact_token),
+    )
+    .await
+    .ok_or("REVIEW_LIBRARY_UNAVAILABLE")?;
+    if response.0 == 409 {
+        let error = serde_json::from_value::<AdminLibraryErrorResponse>(response.1)
+            .map_err(|_| "REVIEW_LIBRARY_UNAVAILABLE")?;
+        return if error.code == "DELETION_IMPACT_CHANGED" {
+            Err("REVIEW_LIBRARY_IMPACT_CHANGED")
+        } else {
+            Err("REVIEW_LIBRARY_UNAVAILABLE")
+        };
+    }
+    let body = serde_json::from_value::<ReviewLibraryDeleteResult>(response.1)
+        .map_err(|_| "REVIEW_LIBRARY_UNAVAILABLE")?;
+    validate_delete_result(body, &demo_id, true).ok_or("REVIEW_LIBRARY_UNAVAILABLE")
+}
+
+async fn request_admin_library_verification(
+    origin: String,
+    token: String,
+) -> Option<ReviewLibraryVerificationSummary> {
+    let body: ReviewLibraryVerificationSummary =
+        request_admin_json(origin, token, "POST", "/_desktop/library/verify").await?;
+    let checked = body.checked_demos.checked_add(body.checked_artifacts)?;
+    (body.schema_version == "review-library-verification-summary.v1"
+        && body.issue_count <= checked)
+        .then_some(body)
+}
+
+async fn request_admin_library_cache_cleanup(
+    origin: String,
+    token: String,
+) -> Option<ReviewLibraryCacheCleanup> {
+    let body: ReviewLibraryCacheCleanup =
+        request_admin_json(origin, token, "POST", "/_desktop/library/clear-cache").await?;
+    (body.schema_version == "review-library-cache-cleanup.v1").then_some(body)
+}
+
+async fn request_admin_library_stats(
+    origin: String,
+    token: String,
+) -> Option<ReviewLibraryStats> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let url = Url::parse(&origin).ok()?;
+        let port = url.port()?;
+        let address = SocketAddr::from(([127, 0, 0, 1], port));
+        let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(2)).ok()?;
+        let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+        let request = format!(
+            "GET /_desktop/library/stats HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {token}\r\nConnection: close\r\n\r\n"
+        );
+        stream.write_all(request.as_bytes()).ok()?;
+        let mut response = Vec::with_capacity(2048);
+        stream.take(16 * 1024).read_to_end(&mut response).ok()?;
+        if !response.starts_with(b"HTTP/1.1 200") {
+            return None;
+        }
+        let body_start = response.windows(4).position(|value| value == b"\r\n\r\n")?;
+        let body = serde_json::from_slice::<ReviewLibraryStats>(&response[body_start + 4..]).ok()?;
+        let summed = body
+            .raw_demo_bytes
+            .checked_add(body.artifact_bytes)?
+            .checked_add(body.cache_bytes)?;
+        (body.schema_version == "review-library-stats.v1" && body.total_bytes == summed)
+            .then_some(body)
+    })
+    .await
+    .unwrap_or(None)
+}
+
 async fn request_admin_backup(origin: String, token: String) -> Option<BackupResponse> {
     tauri::async_runtime::spawn_blocking(move || {
         let Ok(url) = Url::parse(&origin) else {
@@ -1000,6 +1493,203 @@ mod tests {
         assert!(request.starts_with("POST /_desktop/backup HTTP/1.1\r\n"));
         assert!(request.contains("Authorization: Bearer "));
         assert!(!request.contains("Origin:"));
+    }
+
+    #[tokio::test]
+    async fn admin_library_stats_are_bounded_and_use_memory_only_bearer_transport() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 1024];
+            let read = stream.read(&mut request).unwrap();
+            let body = serde_json::json!({
+                "schemaVersion": "review-library-stats.v1",
+                "demoCount": 2,
+                "reviewCount": 3,
+                "rawDemoBytes": 1024,
+                "artifactBytes": 256,
+                "cacheBytes": 0,
+                "totalBytes": 1280
+            })
+            .to_string();
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .unwrap();
+            String::from_utf8_lossy(&request[..read]).into_owned()
+        });
+        let stats = request_admin_library_stats(
+            format!("http://127.0.0.1:{port}"),
+            "c".repeat(43),
+        )
+        .await
+        .expect("valid stats");
+        assert_eq!(stats.total_bytes, 1280);
+        let request = server.join().unwrap();
+        assert!(request.starts_with("GET /_desktop/library/stats HTTP/1.1\r\n"));
+        assert!(request.contains("Authorization: Bearer "));
+        assert!(!request.contains("Origin:"));
+    }
+
+    #[tokio::test]
+    async fn admin_library_maintenance_uses_strict_bounded_summaries() {
+        let verification_listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let verification_port = verification_listener.local_addr().unwrap().port();
+        let verification_server = thread::spawn(move || {
+            let (mut stream, _) = verification_listener.accept().unwrap();
+            let mut request = [0_u8; 1024];
+            let read = stream.read(&mut request).unwrap();
+            let body = serde_json::json!({
+                "schemaVersion": "review-library-verification-summary.v1",
+                "checkedDemos": 2,
+                "checkedArtifacts": 1,
+                "issueCount": 1
+            })
+            .to_string();
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .unwrap();
+            String::from_utf8_lossy(&request[..read]).into_owned()
+        });
+        let verified = request_admin_library_verification(
+            format!("http://127.0.0.1:{verification_port}"),
+            "v".repeat(43),
+        )
+        .await
+        .expect("valid verification summary");
+        assert_eq!(verified.issue_count, 1);
+        let request = verification_server.join().unwrap();
+        assert!(request.starts_with("POST /_desktop/library/verify HTTP/1.1\r\n"));
+        assert!(request.contains("Authorization: Bearer "));
+
+        let cleanup_listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let cleanup_port = cleanup_listener.local_addr().unwrap().port();
+        let cleanup_server = thread::spawn(move || {
+            let (mut stream, _) = cleanup_listener.accept().unwrap();
+            let mut request = [0_u8; 1024];
+            let read = stream.read(&mut request).unwrap();
+            let body = serde_json::json!({
+                "schemaVersion": "review-library-cache-cleanup.v1",
+                "removedBytes": 0,
+                "cacheBytes": 0
+            })
+            .to_string();
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .unwrap();
+            String::from_utf8_lossy(&request[..read]).into_owned()
+        });
+        let cleanup = request_admin_library_cache_cleanup(
+            format!("http://127.0.0.1:{cleanup_port}"),
+            "c".repeat(43),
+        )
+        .await
+        .expect("valid cleanup summary");
+        assert_eq!(cleanup.removed_bytes, 0);
+        let request = cleanup_server.join().unwrap();
+        assert!(request.starts_with("POST /_desktop/library/clear-cache HTTP/1.1\r\n"));
+        assert!(!request.contains("Origin:"));
+    }
+
+    #[test]
+    fn settings_library_entry_and_impact_dtos_are_strict_and_bounded() {
+        let entries = serde_json::from_value::<ReviewLibraryEntries>(serde_json::json!({
+            "schemaVersion": "review-library-entries.v1",
+            "reviews": [{
+                "reviewId": "review-a",
+                "demoId": "demo-a",
+                "originalFilename": "match.dem",
+                "selectedPlayerId": "player-a",
+                "selectedPlayerName": "Player A",
+                "title": "Mirage review",
+                "status": "READY",
+                "completedCueCount": 1,
+                "totalCueCount": 2,
+                "createdAt": "2026-09-02T00:00:00.000Z",
+                "lastOpenedAt": "2026-09-02T00:00:00.000Z",
+                "demoStatus": "READY"
+            }],
+            "demos": [{
+                "demoId": "demo-a",
+                "originalFilename": "match.dem",
+                "byteSize": 72,
+                "status": "READY",
+                "importedAt": "2026-09-02T00:00:00.000Z",
+                "lastOpenedAt": "2026-09-02T00:00:00.000Z",
+                "reviewCount": 1
+            }]
+        })).unwrap();
+        assert!(validate_library_entries(entries).is_some());
+        assert!(serde_json::from_value::<ReviewLibraryEntries>(serde_json::json!({
+            "schemaVersion": "review-library-entries.v1",
+            "reviews": [],
+            "demos": [],
+            "rawPath": "/private/demo.dem"
+        })).is_err());
+
+        let impact = serde_json::from_value::<ReviewLibraryDemoDeletionImpact>(serde_json::json!({
+            "schemaVersion": "review-library-demo-deletion-impact.v1",
+            "demoId": "demo-a",
+            "originalFilename": "match.dem",
+            "affectedReviewCount": 1,
+            "affectedReviews": [{
+                "reviewId": "review-a",
+                "title": "Mirage review",
+                "selectedPlayerName": "Player A",
+                "status": "READY"
+            }],
+            "truncated": false,
+            "impactToken": "a".repeat(64)
+        })).unwrap();
+        assert!(validate_demo_deletion_impact(impact, "demo-a").is_some());
+    }
+
+    #[tokio::test]
+    async fn settings_demo_delete_uses_only_bounded_ids_and_an_impact_header() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 4096];
+            let read = stream.read(&mut request).unwrap();
+            let body = serde_json::json!({
+                "deleted": true,
+                "targetId": "demo-a",
+                "removedReviewCount": 2,
+                "removedDemo": true
+            }).to_string();
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+                body.len(),
+                body
+            ).unwrap();
+            String::from_utf8_lossy(&request[..read]).into_owned()
+        });
+        let result = request_admin_library_delete_demo(
+            format!("http://127.0.0.1:{port}"),
+            "d".repeat(43),
+            "demo-a".to_owned(),
+            "a".repeat(64),
+        ).await.expect("valid deletion result");
+        assert_eq!(result.removed_review_count, 2);
+        let request = server.join().unwrap();
+        assert!(request.starts_with("DELETE /_desktop/library/demos/demo-a HTTP/1.1\r\n"));
+        assert!(request.contains("X-Cs-Agent-Library-Impact-Token: "));
+        assert!(request.contains("Content-Length: 0\r\n"));
+        assert!(!request.contains("/private/"));
     }
 
     #[test]

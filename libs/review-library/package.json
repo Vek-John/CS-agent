@@ -1,0 +1,13 @@
+{
+  "name": "@cs-coach/review-library",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts"
+  },
+  "dependencies": {
+    "@cs-coach/memory-sqlite": "workspace:*"
+  }
+}

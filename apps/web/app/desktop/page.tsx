@@ -19,7 +19,7 @@ export default async function DesktopPage() {
     <Cs2dPlaybackHost
       deployTarget="desktop"
       parentOrigin={appOrigin}
-      viewerUrl={`${viewerOrigin}/`}
+      viewerUrl={`${viewerOrigin}/?managedLibrary=1`}
     />
   );
 }

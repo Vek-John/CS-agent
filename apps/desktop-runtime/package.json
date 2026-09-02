@@ -8,7 +8,8 @@
     "test": "../../node_modules/.bin/tsx --test src/*.test.ts"
   },
   "dependencies": {
-    "@cs-coach/memory-sqlite": "workspace:*"
+    "@cs-coach/memory-sqlite": "workspace:*",
+    "@cs-coach/review-library": "workspace:*"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

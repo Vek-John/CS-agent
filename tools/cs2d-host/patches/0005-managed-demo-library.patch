@@ -1,0 +1,630 @@
+--- a/apps/app/src/viewer/player/hostBridge.ts
++++ b/apps/app/src/viewer/player/hostBridge.ts
+@@ -32,8 +32,45 @@
+   freezeSkipped: true
+   demoContentHash?: string
+   hashLatencyMs?: number
++  demoId?: string
++  sourceKind?: 'MANAGED_LIBRARY'
+ }
+ 
++export interface DemoImportRequestedMessage {
++  type: 'DEMO_IMPORT_REQUESTED'
++  schemaVersion: 'cs2d-demo-import-requested.v1'
++  requestId: string
++  originalFilename: string
++  byteSize: number
++}
++
++export interface DemoImportProgressMessage {
++  type: 'DEMO_IMPORT_PROGRESS'
++  schemaVersion: 'cs2d-demo-import-progress.v1'
++  requestId: string
++  completedBytes: number
++  totalBytes: number
++}
++
++export interface DemoImportSucceededMessage {
++  type: 'DEMO_IMPORT_SUCCEEDED'
++  schemaVersion: 'cs2d-demo-import-succeeded.v1'
++  requestId: string
++  demoId: string
++  contentHash: string
++  originalFilename: string
++  byteSize: number
++  deduplicated: boolean
++}
++
++export interface DemoImportFailedMessage {
++  type: 'DEMO_IMPORT_FAILED'
++  schemaVersion: 'cs2d-demo-import-failed.v1'
++  requestId: string
++  code: string
++  message: string
++}
++
+ export interface PlayerSelectedMessage {
+   type: 'PLAYER_SELECTED'
+   playerId: string
+@@ -128,6 +165,10 @@
+   | AnalysisProgressMessage
+   | AnalysisTelemetryMessage
+   | AnalysisFailedMessage
++  | DemoImportRequestedMessage
++  | DemoImportProgressMessage
++  | DemoImportSucceededMessage
++  | DemoImportFailedMessage
+   | TeachingToolAckMessage
+ 
+ export type PlaybackCameraMode = 'full' | 'target'
+@@ -140,7 +181,19 @@
+   | { type: 'selectRound'; roundIndex: number }
+   | { type: 'setSpeed'; speed: number }
+   | { type: 'setCamera'; mode: PlaybackCameraMode }
++  | { type: 'requestDemoPicker' }
++  | { type: 'persistSelectedDemo'; requestId: string; capabilityToken: string }
+   | {
++      type: 'loadManagedDemo'
++      requestId: string
++      demoId: string
++      capabilityToken: string
++      originalFilename: string
++      byteSize: number
++      contentHash: string
++      mode: 'RESTORE' | 'REANALYZE' | 'SELECT_PLAYER'
++    }
++  | {
+       type: 'teachingTool'
+       schemaVersion: 'cs2d-teaching-tool-command.v2'
+       tool: TeachingToolCommandArgs['tool']
+@@ -218,6 +271,8 @@
+     const configured = new URL(window.location.href).searchParams.get('parentOrigin')
+     if (configured) {
+       const parsed = new URL(configured)
++      const managedLibrary = new URL(window.location.href).searchParams.get('managedLibrary') === '1'
++      if (managedLibrary && (parsed.protocol !== 'http:' || parsed.hostname !== '127.0.0.1')) return null
+       if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.origin
+     }
+     return document.referrer ? new URL(document.referrer).origin : null
+@@ -246,6 +301,23 @@
+   return typeof value === 'number' && Number.isFinite(value)
+ }
+ 
++function isOpaqueId(value: unknown): value is string {
++  return typeof value === 'string' && value.length >= 1 && value.length <= 160 && /^[A-Za-z0-9_-]+$/.test(value)
++}
++
++function isCapabilityToken(value: unknown): value is string {
++  return typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value)
++}
++
++function isDemoFilename(value: unknown): value is string {
++  return typeof value === 'string' && value.length >= 1 && value.length <= 255 &&
++    !/[\\/\u0000-\u001f\u007f]/.test(value) && value.toLowerCase().endsWith('.dem')
++}
++
++function isByteSize(value: unknown): value is number {
++  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 && value <= 4 * 1024 * 1024 * 1024
++}
++
+ function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+   const actual = Object.keys(value).sort()
+   const expected = [...keys].sort()
+@@ -275,6 +347,17 @@
+       return hasExactKeys(payload, ['type', 'speed']) && isFiniteNumber(payload.speed) && payload.speed > 0 && payload.speed <= 16
+     case 'setCamera':
+       return hasExactKeys(payload, ['type', 'mode']) && (payload.mode === 'full' || payload.mode === 'target')
++    case 'requestDemoPicker':
++      return hasExactKeys(payload, ['type'])
++    case 'persistSelectedDemo':
++      return hasExactKeys(payload, ['type', 'requestId', 'capabilityToken']) &&
++        isOpaqueId(payload.requestId) && isCapabilityToken(payload.capabilityToken)
++    case 'loadManagedDemo':
++      return hasExactKeys(payload, ['type', 'requestId', 'demoId', 'capabilityToken', 'originalFilename', 'byteSize', 'contentHash', 'mode']) &&
++        isOpaqueId(payload.requestId) && isOpaqueId(payload.demoId) && isCapabilityToken(payload.capabilityToken) &&
++        isDemoFilename(payload.originalFilename) && isByteSize(payload.byteSize) &&
++        typeof payload.contentHash === 'string' && /^[a-f0-9]{64}$/i.test(payload.contentHash) &&
++        (payload.mode === 'RESTORE' || payload.mode === 'REANALYZE' || payload.mode === 'SELECT_PLAYER')
+     case 'teachingTool': {
+       const args = payload.args
+       if (!hasExactKeys(payload, ['type', 'schemaVersion', 'tool', 'callId', 'runId', 'generation', 'cueId', 'args']) ||
+@@ -337,6 +420,9 @@
+ export function listenForPlaybackCommands(
+   handlers: {
+     selectPlayer?: (playerId: string) => void
++    requestDemoPicker?: () => void
++    persistSelectedDemo?: (command: Extract<PlaybackCommand, { type: 'persistSelectedDemo' }>) => void
++    loadManagedDemo?: (command: Extract<PlaybackCommand, { type: 'loadManagedDemo' }>) => void
+     play: () => void
+     pause: () => void
+     seekCanonicalTick: (tick: number) => void
+@@ -374,6 +460,15 @@
+       case 'setCamera':
+         handlers.setCamera(command.mode)
+         break
++      case 'requestDemoPicker':
++        handlers.requestDemoPicker?.()
++        break
++      case 'persistSelectedDemo':
++        handlers.persistSelectedDemo?.(command)
++        break
++      case 'loadManagedDemo':
++        handlers.loadManagedDemo?.(command)
++        break
+       case 'teachingTool':
+         handlers.teachingTool(command)
+         break
+@@ -393,6 +488,7 @@
+   rounds: { number: number; freezeStartTick?: number; startTick: number; postEndTick?: number; endTick: number }[]
+   demoContentHash?: string
+   hashLatencyMs?: number
++  managedSource?: { demoId: string; contentHash: string }
+ }): ReplayReadyMessage {
+   const rounds = replay.rounds.map((round, roundIndex) => ({
+     roundIndex,
+@@ -418,5 +514,8 @@
+     ...(replay.demoContentHash && typeof replay.hashLatencyMs === 'number'
+       ? { demoContentHash: replay.demoContentHash, hashLatencyMs: replay.hashLatencyMs }
+       : {}),
++    ...(replay.managedSource && typeof replay.hashLatencyMs === 'number' && replay.demoContentHash === replay.managedSource.contentHash
++      ? { demoId: replay.managedSource.demoId, sourceKind: 'MANAGED_LIBRARY' as const }
++      : {}),
+   }
+ }
+--- a/apps/app/src/viewer/DemoAnalyzerView.vue
++++ b/apps/app/src/viewer/DemoAnalyzerView.vue
+@@ -40,10 +40,12 @@
+ const parser = useDemoParser()
+ 
+ const hostMode = computed(() => route.query.host === '1')
++const managedLibraryMode = computed(() => hostMode.value && route.query.managedLibrary === '1')
+ const CS_NET_DEFAULT_PROVIDER = 'webgpu-fp16' as const
+ const CS_NET_DEFAULT_BATCH_SIZE = 16 as const
+ const hostRouteQuery = computed(() => ({
+   host: '1',
++  ...(managedLibraryMode.value ? { managedLibrary: '1' } : {}),
+   ...(typeof route.query.parentOrigin === 'string' ? { parentOrigin: route.query.parentOrigin } : {}),
+   ...(typeof route.query.csThreads === 'string' ? { csThreads: route.query.csThreads } : {}),
+   csBatch: typeof route.query.csBatch === 'string' && /^\d+$/.test(route.query.csBatch) && Number(route.query.csBatch) > 0 ? route.query.csBatch : String(CS_NET_DEFAULT_BATCH_SIZE),
+@@ -51,6 +53,18 @@
+ }))
+ const hostSelectedPlayerId = ref<string | null>(null)
+ const hostSelectionLocked = computed(() => hostSelectedPlayerId.value !== null)
++const hostStageReady = ref(false)
++type ManagedLoadMode = 'RESTORE' | 'REANALYZE' | 'SELECT_PLAYER'
++interface ManagedSource {
++  requestId: string
++  demoId: string
++  contentHash: string
++  originalFilename: string
++  byteSize: number
++  mode: ManagedLoadMode
++}
++const managedSource = ref<ManagedSource | null>(null)
++const pendingManagedImport = ref<{ requestId: string; file: File } | null>(null)
+ 
+ type WinRateWorkerResponse =
+   | { type: 'progress'; requestId: number; phase: 'downloading' | 'inference' | 'ready'; completed: number; total: number; detail?: string }
+@@ -124,16 +138,41 @@ async function selectHostPlayer(playerId: string) {
+   const selectionIndex = replay?.players.findIndex((player) => player.steamId === playerId) ?? -1
+   const player = replay?.players[selectionIndex]
+   if (!player || selectionIndex < 0) return
++  hostStageReady.value = false
+   hostSelectedPlayerId.value = player.steamId
+-  emitPlaybackEvent({
++  const emitSelected = () => emitPlaybackEvent({
+     type: 'PLAYER_SELECTED',
+     playerId: player.steamId,
+     displayName: player.name,
+     side: player.startSide,
+     selectionIndex,
+   })
++  // Restoring a persisted Review is playback-only. Binding the renderer to the
++  // stored player must not invoke the win-rate Worker or emit ANALYSIS_READY.
++  // Wait for ViewerStage's command bridge mount acknowledgement before telling
++  // the Host to seek; otherwise the parent no-op bridge can consume the command.
++  if (managedSource.value?.mode === 'RESTORE') {
+     await nextTick()
+-    try {
++    const deadline = performance.now() + 5_000
++    while (!hostStageReady.value && performance.now() < deadline) {
++      await new Promise((resolve) => setTimeout(resolve, 25))
++    }
++    if (!hostStageReady.value) {
++      emitPlaybackEvent({
++        type: 'DEMO_IMPORT_FAILED',
++        schemaVersion: 'cs2d-demo-import-failed.v1',
++        requestId: managedSource.value.requestId,
++        code: 'MANAGED_DEMO_LOAD_FAILED',
++        message: 'Viewer 回放舞台未能就绪。',
++      })
++      return
++    }
++    emitSelected()
++    return
++  }
++  emitSelected()
++  await nextTick()
++  try {
+       const routeId = Array.isArray(route.params.id) ? route.params.id[0] : route.params.id
+       let winProbabilityTimeline: WinProbabilityTimelineV1 | undefined
+       try {
+@@ -188,11 +227,27 @@
+   () => parser.replay.value,
+   (replay, previous) => {
+     if (!hostMode.value || !replay || replay === previous) return
++    if (managedLibraryMode.value && (!managedSource.value ||
++      parser.demoContentHash.value?.toLowerCase() !== managedSource.value.contentHash)) {
++      const requestId = managedSource.value?.requestId ?? 'managed_replay'
++      managedSource.value = null
++      emitPlaybackEvent({
++        type: 'DEMO_IMPORT_FAILED',
++        schemaVersion: 'cs2d-demo-import-failed.v1',
++        requestId,
++        code: 'CONTENT_HASH_MISMATCH',
++        message: 'Demo 内容校验失败，请重新导入。',
++      })
++      parser.reset()
++      return
++    }
++    hostStageReady.value = false
+     hostSelectedPlayerId.value = null
+     emitPlaybackEvent(replayReadyMessage({
+       ...replay,
+       demoContentHash: parser.demoContentHash.value ?? undefined,
+       hashLatencyMs: parser.hashLatencyMs.value ?? undefined,
++      ...(managedSource.value ? { managedSource: managedSource.value } : {}),
+     }))
+   },
+ )
+@@ -407,6 +462,9 @@ function nextPreview() {
+ }
+ 
+ const stage = ref<InstanceType<typeof ViewerStageType> | null>(null)
++function onHostStageReady() {
++  hostStageReady.value = true
++}
+ // Leaving the 2D stage pauses playback (the stage stays mounted via v-show).
+ watch(activeTab, (tab) => {
+   if (tab !== 'viewer') stage.value?.pause()
+@@ -434,9 +492,232 @@
+ async function onFiles(files: FileList | null | undefined) {
+   const file = files?.[0]
+   if (!file) return
++  if (managedLibraryMode.value) {
++    const requestId = crypto.randomUUID()
++    if (!/\.dem$/i.test(file.name) || file.size <= 0) {
++      emitPlaybackEvent({
++        type: 'DEMO_IMPORT_FAILED',
++        schemaVersion: 'cs2d-demo-import-failed.v1',
++        requestId,
++        code: !/\.dem$/i.test(file.name) ? 'INVALID_DEMO_EXTENSION' : 'EMPTY_DEMO',
++        message: !/\.dem$/i.test(file.name)
++          ? '请选择 .dem 比赛文件。'
++          : 'Demo 文件为空，无法导入。',
++      })
++      parser.reset()
++      return
++    }
++    pendingManagedImport.value = { requestId, file }
++    emitPlaybackEvent({
++      type: 'DEMO_IMPORT_REQUESTED',
++      schemaVersion: 'cs2d-demo-import-requested.v1',
++      requestId,
++      originalFilename: file.name,
++      byteSize: file.size,
++    })
++    return
++  }
+   await handleFile(file)
++}
++
++interface ManagedImportResponse {
++  schemaVersion: 'desktop-library-import.v1'
++  demoId: string
++  contentHash: string
++  originalFilename: string
++  byteSize: number
++  deduplicated: boolean
++  validationToken?: string
++}
++
++function isManagedImportResponse(value: unknown, file: File): value is ManagedImportResponse {
++  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
++  const result = value as Record<string, unknown>
++  const keys = Object.keys(result).sort()
++  const expected = [
++    'schemaVersion', 'demoId', 'contentHash', 'originalFilename', 'byteSize', 'deduplicated',
++    ...(Object.prototype.hasOwnProperty.call(result, 'validationToken') ? ['validationToken'] : []),
++  ].sort()
++  return keys.length === expected.length && keys.every((key, index) => key === expected[index]) &&
++    result.schemaVersion === 'desktop-library-import.v1' && typeof result.demoId === 'string' && /^[A-Za-z0-9_-]{1,160}$/.test(result.demoId) &&
++    typeof result.contentHash === 'string' && /^[a-f0-9]{64}$/i.test(result.contentHash) &&
++    typeof result.originalFilename === 'string' && result.originalFilename.length > 0 && result.originalFilename.length <= 240 &&
++    /\.dem$/i.test(result.originalFilename) && result.byteSize === file.size && typeof result.deduplicated === 'boolean' &&
++    (result.validationToken === undefined || (typeof result.validationToken === 'string' && /^[A-Za-z0-9_-]{43}$/.test(result.validationToken)))
++}
++
++async function finalizeManagedDemo(result: ManagedImportResponse, outcome: 'READY' | 'CORRUPT') {
++  if (!result.validationToken) return
++  const response = await fetch('/_desktop/library/import/finalize', {
++    method: 'POST',
++    headers: {
++      Authorization: `Bearer ${result.validationToken}`,
++      'X-CS-Agent-Demo-Id': result.demoId,
++      'X-CS-Agent-Parse-Outcome': outcome,
++    },
++    credentials: 'omit',
++    cache: 'no-store',
++    redirect: 'error',
++  })
++  const body = await response.json().catch(() => null) as Record<string, unknown> | null
++  if (!response.ok || body?.schemaVersion !== 'desktop-library-validation.v1' ||
++    body.demoId !== result.demoId || body.status !== (outcome === 'READY' ? 'READY' : 'CORRUPT')) {
++    throw new Error('DEMO_VALIDATION_REJECTED')
++  }
++}
++
++function uploadManagedDemo(requestId: string, capabilityToken: string, file: File): Promise<ManagedImportResponse> {
++  return new Promise((resolve, reject) => {
++    const request = new XMLHttpRequest()
++    request.open('POST', '/_desktop/library/import')
++    request.responseType = 'json'
++    request.setRequestHeader('Authorization', `Bearer ${capabilityToken}`)
++    request.setRequestHeader('Content-Type', 'application/octet-stream')
++    request.setRequestHeader('X-CS-Agent-Import-Id', requestId)
++    request.upload.onprogress = (event) => {
++      emitPlaybackEvent({
++        type: 'DEMO_IMPORT_PROGRESS',
++        schemaVersion: 'cs2d-demo-import-progress.v1',
++        requestId,
++        completedBytes: Math.min(file.size, event.loaded),
++        totalBytes: file.size,
++      })
++    }
++    request.onerror = () => reject(new Error('IMPORT_TRANSPORT_FAILED'))
++    request.onabort = () => reject(new Error('IMPORT_CANCELLED'))
++    request.onload = () => {
++      if (request.status !== 201 || !isManagedImportResponse(request.response, file)) {
++        const code = request.response && typeof request.response === 'object' &&
++          typeof (request.response as Record<string, unknown>).code === 'string' &&
++          /^[A-Z][A-Z0-9_]{0,63}$/.test((request.response as Record<string, unknown>).code as string)
++          ? (request.response as Record<string, unknown>).code as string
++          : 'IMPORT_REJECTED'
++        reject(new Error(code))
++        return
++      }
++      resolve(request.response)
++    }
++    emitPlaybackEvent({
++      type: 'DEMO_IMPORT_PROGRESS',
++      schemaVersion: 'cs2d-demo-import-progress.v1',
++      requestId,
++      completedBytes: 0,
++      totalBytes: file.size,
++    })
++    // XHR uploads the File body from the Viewer authority and provides real
++    // network progress. It does not call file.arrayBuffer(); WASM parsing still
++    // needs a full ArrayBuffer later and is intentionally not called streaming.
++    request.send(file)
++  })
+ }
+ 
++async function persistSelectedDemo(command: { requestId: string; capabilityToken: string }) {
++  const pending = pendingManagedImport.value
++  if (!managedLibraryMode.value || !pending || pending.requestId !== command.requestId) return
++  pendingManagedImport.value = null
++  let result: ManagedImportResponse | null = null
++  try {
++    result = await uploadManagedDemo(command.requestId, command.capabilityToken, pending.file)
++    emitPlaybackEvent({
++      type: 'DEMO_IMPORT_PROGRESS',
++      schemaVersion: 'cs2d-demo-import-progress.v1',
++      requestId: command.requestId,
++      completedBytes: pending.file.size,
++      totalBytes: pending.file.size,
++    })
++    managedSource.value = {
++      requestId: command.requestId,
++      demoId: result.demoId,
++      contentHash: result.contentHash.toLowerCase(),
++      originalFilename: result.originalFilename,
++      byteSize: result.byteSize,
++      mode: 'SELECT_PLAYER',
++    }
++    // Persistence is a hard gate: parsing begins only after the sidecar has
++    // published and registered the Demo successfully.
++    await parser.parse(pending.file)
++    if (parser.status.value !== 'done') throw new Error('MANAGED_DEMO_PARSE_FAILED')
++    await finalizeManagedDemo(result, 'READY')
++    emitPlaybackEvent({
++      type: 'DEMO_IMPORT_SUCCEEDED',
++      schemaVersion: 'cs2d-demo-import-succeeded.v1',
++      requestId: command.requestId,
++      demoId: result.demoId,
++      contentHash: result.contentHash.toLowerCase(),
++      originalFilename: result.originalFilename,
++      byteSize: result.byteSize,
++      deduplicated: result.deduplicated,
++    })
++  } catch (error) {
++    if (result?.validationToken) {
++      await finalizeManagedDemo(result, 'CORRUPT').catch(() => undefined)
++    }
++    managedSource.value = null
++    const code = error instanceof Error && /^[A-Z][A-Z0-9_]{0,63}$/.test(error.message)
++      ? error.message
++      : 'IMPORT_REJECTED'
++    emitPlaybackEvent({
++      type: 'DEMO_IMPORT_FAILED',
++      schemaVersion: 'cs2d-demo-import-failed.v1',
++      requestId: command.requestId,
++      code,
++      message: code === 'MANAGED_DEMO_PARSE_FAILED'
++        ? 'Demo 解析失败，已标记为损坏文件。'
++        : code === 'DEMO_VALIDATION_REJECTED'
++          ? 'Demo 已写入，但未能完成解析验证。'
++          : 'Demo 导入失败：本地资料库拒绝了该文件。',
++    })
++  }
++}
++
++async function loadManagedDemo(command: {
++  requestId: string
++  demoId: string
++  capabilityToken: string
++  originalFilename: string
++  byteSize: number
++  contentHash: string
++  mode: ManagedLoadMode
++}) {
++  if (!managedLibraryMode.value) return
++  routeLoading.value = true
++  pendingManagedImport.value = null
++  try {
++    const response = await fetch(`/_desktop/library/demo/${encodeURIComponent(command.demoId)}`, {
++      method: 'GET',
++      headers: { Authorization: `Bearer ${command.capabilityToken}` },
++      credentials: 'omit',
++      cache: 'no-store',
++      redirect: 'error',
++    })
++    if (!response.ok || response.headers.get('content-type') !== 'application/octet-stream' ||
++      Number(response.headers.get('content-length')) !== command.byteSize) throw new Error('MANAGED_DEMO_READ_REJECTED')
++    const body = await response.blob()
++    if (body.size !== command.byteSize) throw new Error('MANAGED_DEMO_SIZE_MISMATCH')
++    managedSource.value = {
++      requestId: command.requestId,
++      demoId: command.demoId,
++      contentHash: command.contentHash.toLowerCase(),
++      originalFilename: command.originalFilename,
++      byteSize: command.byteSize,
++      mode: command.mode,
++    }
++    await parser.parse(new File([body], command.originalFilename, { type: 'application/octet-stream' }))
++    if (parser.status.value !== 'done') throw new Error('MANAGED_DEMO_PARSE_FAILED')
++  } catch {
++    managedSource.value = null
++    emitPlaybackEvent({
++      type: 'DEMO_IMPORT_FAILED',
++      schemaVersion: 'cs2d-demo-import-failed.v1',
++      requestId: command.requestId,
++      code: 'MANAGED_DEMO_LOAD_FAILED',
++      message: '托管 Demo 读取失败，请检查资料库。',
++    })
++  } finally {
++    routeLoading.value = false
++  }
++}
++
+ /** Ingests a single demo File (from the dropzone, file picker, or the extension). */
+ async function handleFile(file: File) {
+   // A `.cs2dv` is an exported, already-parsed replay: import it (no re-parsing).
+@@ -451,6 +732,7 @@
+     return
+   }
+   await parser.parse(file)
++  if (managedLibraryMode.value) return
+   // New parse done: save to local history and open via the URL (with id).
+   if (parser.status.value === 'done' && parser.replay.value) {
+     const id = await recent.save({
+@@ -468,6 +750,7 @@
+ 
+ /** Imports an exported `.cs2dv` (replay + voice + comments) without re-parsing. */
+ async function onImportArchive(file: File) {
++  if (managedLibraryMode.value) return
+   importError.value = null
+   importing.value = true
+   try {
+@@ -591,6 +874,9 @@
+   if (hostMode.value) {
+     stopHostSelectionBridge = listenForPlaybackCommands({
+       selectPlayer: (playerId) => { void selectHostPlayer(playerId) },
++      requestDemoPicker: pick,
++      persistSelectedDemo: (command) => { void persistSelectedDemo(command) },
++      loadManagedDemo: (command) => { void loadManagedDemo(command) },
+       play: () => {},
+       pause: () => {},
+       seekCanonicalTick: () => {},
+@@ -694,6 +980,7 @@ function onImportInput(e: Event) {
+           :active="activeTab === 'viewer' && !hostMode"
+           :host-mode="hostMode"
+           :host-target-player-id="hostMode ? hostSelectedPlayerId : null"
++          @host-ready="onHostStageReady"
+         />
+       </div>
+       <HeatmapView
+diff --git a/apps/app/src/viewer/player/ViewerStage.vue b/apps/app/src/viewer/player/ViewerStage.vue
+index ba931ed..3e1ff2b 100644
+--- a/apps/app/src/viewer/player/ViewerStage.vue
++++ b/apps/app/src/viewer/player/ViewerStage.vue
+@@ -72,6 +72,9 @@ const props = defineProps<{
+   /** Locked analysis subject, used for the host HUD and controlled camera cue. */
+   hostTargetPlayerId?: string | null
+ }>()
++const emit = defineEmits<{
++  (event: 'host-ready'): void
++}>()
+ 
+ const r = useReplay()
+ 
+@@ -198,13 +201,30 @@ const canonicalTick = computed(() => {
+   return Math.round(freezeStart + r.currentT.value * (r.replay.value?.demoTickRate || 64))
+ })
+ 
++function emitHostPlaybackState() {
++  if (!props.hostMode) return
++  emitPlaybackEvent({
++    type: 'PLAYBACK_STATE',
++    roundIndex: r.roundIndex.value,
++    canonicalTick: canonicalTick.value,
++    playing: r.playing.value,
++    speed: r.speed.value,
++  })
++}
++
+ let stopHostBridge: (() => void) | null = null
+ onMounted(() => {
+   if (!props.hostMode) return
+   stopHostBridge = listenForPlaybackCommands({
+     play: r.play,
+-    pause: r.pause,
+-    seekCanonicalTick: r.seekCanonicalTick,
++    pause: () => {
++      r.pause()
++      emitHostPlaybackState()
++    },
++    seekCanonicalTick: (tick) => {
++      r.seekCanonicalTick(tick)
++      emitHostPlaybackState()
++    },
+     selectRound: r.selectRound,
+     setSpeed: (next) => {
+       if (Number.isFinite(next) && next > 0 && next <= 16) r.speed.value = next
+@@ -291,6 +311,8 @@ onMounted(() => {
+       void nextTick(() => emitTeachingAck(command, 'SUCCEEDED', 'EVIDENCE_SHOWN', true, command.annotationRef))
+     },
+   })
++  emit('host-ready')
++  void nextTick(emitHostPlaybackState)
+ })
+ onUnmounted(() => stopHostBridge?.())
+ 
+@@ -341,15 +363,9 @@ watch(canonicalTick, (tick) => {
+ })
+ watch(
+   () => [props.hostMode, r.roundIndex.value, canonicalTick.value, r.playing.value, r.speed.value] as const,
+-  ([hostMode, roundIndex, tick, playing, speed]) => {
++  ([hostMode]) => {
+     if (!hostMode) return
+-    emitPlaybackEvent({
+-      type: 'PLAYBACK_STATE',
+-      roundIndex,
+-      canonicalTick: tick,
+-      playing,
+-      speed,
+-    })
++    emitHostPlaybackState()
+   },
+   { immediate: true },
+ )

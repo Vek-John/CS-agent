@@ -3,6 +3,13 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { createServer, type IncomingMessage, type RequestListener, type Server, type ServerResponse } from "node:http";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
+import { getSqliteDatabaseOwner } from "@cs-coach/memory-sqlite/server";
+import {
+  DesktopReviewLibrary,
+  ReviewLibraryError,
+  installDesktopReviewLibrary,
+  type LibraryStats,
+} from "@cs-coach/review-library/server";
 import type { DesktopRuntimeInit } from "./contracts";
 import { installRuntimeProviderConfig, RuntimeStartupError } from "./contracts";
 import {
@@ -22,6 +29,13 @@ import { bindDesktopOriginPair, DesktopOriginBindError, IPV4_LOOPBACK } from "./
 export const ADMIN_HEALTH_PATH = "/_desktop/health";
 export const ADMIN_SHUTDOWN_PATH = "/_desktop/shutdown";
 export const ADMIN_BACKUP_PATH = "/_desktop/backup";
+export const ADMIN_LIBRARY_STATS_PATH = "/_desktop/library/stats";
+export const ADMIN_LIBRARY_ENTRIES_PATH = "/_desktop/library/entries";
+export const ADMIN_LIBRARY_VERIFY_PATH = "/_desktop/library/verify";
+export const ADMIN_LIBRARY_CLEAR_CACHE_PATH = "/_desktop/library/clear-cache";
+export const ADMIN_LIBRARY_IMPACT_TOKEN_HEADER = "x-cs-agent-library-impact-token";
+const ADMIN_LIBRARY_REVIEWS_PREFIX = "/_desktop/library/reviews/";
+const ADMIN_LIBRARY_DEMOS_PREFIX = "/_desktop/library/demos/";
 const BLOCKED_DESKTOP_DEMO_PATH = "/api/local-demo";
 const UPDATE_QUIESCE_TIMEOUT_MS = 25_000;
 
@@ -248,6 +262,72 @@ function pathnameOf(req: IncomingMessage): string {
   }
 }
 
+function boundedAdminObjectId(value: string): string | undefined {
+  return /^[A-Za-z0-9._:-]{1,160}$/u.test(value) ? value : undefined;
+}
+
+function dynamicLibraryAdminRoute(pathname: string):
+  | { readonly kind: "REVIEW_DELETE"; readonly objectId: string }
+  | { readonly kind: "DEMO_IMPACT" | "DEMO_DELETE"; readonly objectId: string }
+  | undefined {
+  if (pathname.startsWith(ADMIN_LIBRARY_REVIEWS_PREFIX)) {
+    const objectId = boundedAdminObjectId(pathname.slice(ADMIN_LIBRARY_REVIEWS_PREFIX.length));
+    return objectId ? { kind: "REVIEW_DELETE", objectId } : undefined;
+  }
+  if (!pathname.startsWith(ADMIN_LIBRARY_DEMOS_PREFIX)) return undefined;
+  const suffix = pathname.slice(ADMIN_LIBRARY_DEMOS_PREFIX.length);
+  if (suffix.endsWith("/impact")) {
+    const objectId = boundedAdminObjectId(suffix.slice(0, -"/impact".length));
+    return objectId ? { kind: "DEMO_IMPACT", objectId } : undefined;
+  }
+  const objectId = boundedAdminObjectId(suffix);
+  return objectId ? { kind: "DEMO_DELETE", objectId } : undefined;
+}
+
+/**
+ * One quiescence boundary for every request that can observe or mutate the
+ * persisted Review Library. A request retires only after both its handler and
+ * response stream settle, so backups cannot race a still-streaming Demo.
+ */
+export class RuntimeActivityTracker {
+  #activeRequests = 0;
+
+  get activeRequests(): number {
+    return this.#activeRequests;
+  }
+
+  begin(response: ServerResponse): () => void {
+    this.#activeRequests += 1;
+    let handlerSettled = false;
+    let responseSettled = response.writableFinished || response.destroyed;
+    let retired = false;
+    const retire = () => {
+      if (retired || !handlerSettled || !responseSettled) return;
+      retired = true;
+      this.#activeRequests = Math.max(0, this.#activeRequests - 1);
+    };
+    const responseDone = () => {
+      responseSettled = true;
+      retire();
+    };
+    response.once("finish", responseDone);
+    response.once("close", responseDone);
+    return () => {
+      handlerSettled = true;
+      if (response.writableFinished || response.destroyed) responseSettled = true;
+      retire();
+    };
+  }
+
+  async waitForIdle(timeoutMs = UPDATE_QUIESCE_TIMEOUT_MS): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (this.#activeRequests > 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return this.#activeRequests === 0;
+  }
+}
+
 function createProtectedNextHandler(input: {
   next: RequestListener;
   sessionToken: string;
@@ -258,30 +338,29 @@ function createProtectedNextHandler(input: {
   setHealth: (health: RuntimeHealth) => void;
   requestShutdown: () => void;
   createUpdateBackup: () => Promise<DesktopUpdateBackupSummary>;
+  reviewLibrary: DesktopReviewLibrary;
+  activity: RuntimeActivityTracker;
 }): RequestListener {
-  let activeNextRequests = 0;
   let backupInProgress = false;
-
-  const waitForIdle = async (): Promise<boolean> => {
-    const deadline = Date.now() + UPDATE_QUIESCE_TIMEOUT_MS;
-    while (activeNextRequests > 0 && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    return activeNextRequests === 0;
-  };
 
   return async (req: IncomingMessage, res: ServerResponse) => {
     const expectedHost = new URL(input.appOrigin).host;
     if (req.headers.host !== expectedHost) return writeJson(res, 421, { code: "HOST_REJECTED" });
     const pathname = pathnameOf(req);
+    const dynamicLibraryAdmin = dynamicLibraryAdminRoute(pathname);
     if (pathname === BLOCKED_DESKTOP_DEMO_PATH || pathname.startsWith(`${BLOCKED_DESKTOP_DEMO_PATH}/`)) {
       res.setHeader("Cache-Control", "no-store");
       res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
       return writeJson(res, 404, { code: "NOT_FOUND" });
     }
-    if ([ADMIN_HEALTH_PATH, ADMIN_SHUTDOWN_PATH, ADMIN_BACKUP_PATH].includes(pathname)) {
+    if ([ADMIN_HEALTH_PATH, ADMIN_SHUTDOWN_PATH, ADMIN_BACKUP_PATH, ADMIN_LIBRARY_STATS_PATH, ADMIN_LIBRARY_ENTRIES_PATH, ADMIN_LIBRARY_VERIFY_PATH, ADMIN_LIBRARY_CLEAR_CACHE_PATH].includes(pathname) || dynamicLibraryAdmin) {
       if (!hasValidAdminAuthorization(req, input.adminToken)) return writeJson(res, 403, { code: "ADMIN_FORBIDDEN" });
       if (req.method !== "GET" && pathname === ADMIN_HEALTH_PATH) return writeJson(res, 405, { code: "METHOD_NOT_ALLOWED" });
+      if (req.method !== "GET" && pathname === ADMIN_LIBRARY_STATS_PATH) return writeJson(res, 405, { code: "METHOD_NOT_ALLOWED" });
+      if (req.method !== "GET" && pathname === ADMIN_LIBRARY_ENTRIES_PATH) return writeJson(res, 405, { code: "METHOD_NOT_ALLOWED" });
+      if (dynamicLibraryAdmin?.kind === "DEMO_IMPACT" && req.method !== "GET") return writeJson(res, 405, { code: "METHOD_NOT_ALLOWED" });
+      if ((dynamicLibraryAdmin?.kind === "REVIEW_DELETE" || dynamicLibraryAdmin?.kind === "DEMO_DELETE") && req.method !== "DELETE") return writeJson(res, 405, { code: "METHOD_NOT_ALLOWED" });
+      if (req.method !== "POST" && (pathname === ADMIN_LIBRARY_VERIFY_PATH || pathname === ADMIN_LIBRARY_CLEAR_CACHE_PATH)) return writeJson(res, 405, { code: "METHOD_NOT_ALLOWED" });
       if (req.method !== "POST" && pathname === ADMIN_SHUTDOWN_PATH) return writeJson(res, 405, { code: "METHOD_NOT_ALLOWED" });
       if (req.method !== "POST" && pathname === ADMIN_BACKUP_PATH) return writeJson(res, 405, { code: "METHOD_NOT_ALLOWED" });
       res.setHeader("Cache-Control", "no-store");
@@ -292,11 +371,125 @@ function createProtectedNextHandler(input: {
           schemaVersion: "desktop-runtime-health.v1",
           protocolVersion: "desktop-runtime-http.v2",
           status,
-          activeRequests: activeNextRequests,
+          activeRequests: input.activity.activeRequests,
           checkpointBackend: "SQLITE",
           recoverableAfterRefresh: status === "READY",
           pid: process.pid,
         });
+      }
+      if (pathname === ADMIN_LIBRARY_STATS_PATH) {
+        if (input.health() !== "READY") return writeJson(res, 503, { code: "RUNTIME_DRAINING" });
+        const finishActivity = input.activity.begin(res);
+        try {
+          const stats = await input.reviewLibrary.stats();
+          if (!isLibraryStats(stats)) throw new Error("LIBRARY_STATS_INVALID");
+          return writeJson(res, 200, stats);
+        } catch {
+          return writeJson(res, 503, { code: "LIBRARY_STATS_UNAVAILABLE" });
+        } finally {
+          finishActivity();
+        }
+      }
+      if (pathname === ADMIN_LIBRARY_ENTRIES_PATH) {
+        if (input.health() !== "READY") return writeJson(res, 503, { code: "RUNTIME_DRAINING" });
+        const finishActivity = input.activity.begin(res);
+        try {
+          return writeJson(res, 200, await input.reviewLibrary.listLibraryEntries());
+        } catch {
+          return writeJson(res, 503, { code: "LIBRARY_ENTRIES_UNAVAILABLE" });
+        } finally {
+          finishActivity();
+        }
+      }
+      if (dynamicLibraryAdmin?.kind === "DEMO_IMPACT") {
+        if (input.health() !== "READY") return writeJson(res, 503, { code: "RUNTIME_DRAINING" });
+        const finishActivity = input.activity.begin(res);
+        try {
+          return writeJson(
+            res,
+            200,
+            await input.reviewLibrary.previewDemoDeletion(dynamicLibraryAdmin.objectId),
+          );
+        } catch (error) {
+          return writeJson(
+            res,
+            error instanceof ReviewLibraryError && error.code === "DEMO_NOT_FOUND" ? 404 : 503,
+            { code: error instanceof ReviewLibraryError ? error.code : "LIBRARY_IMPACT_UNAVAILABLE" },
+          );
+        } finally {
+          finishActivity();
+        }
+      }
+      if (dynamicLibraryAdmin?.kind === "REVIEW_DELETE") {
+        if (input.health() !== "READY") return writeJson(res, 503, { code: "RUNTIME_DRAINING" });
+        const finishActivity = input.activity.begin(res);
+        try {
+          return writeJson(res, 200, await input.reviewLibrary.deleteReview(dynamicLibraryAdmin.objectId));
+        } catch (error) {
+          return writeJson(
+            res,
+            error instanceof ReviewLibraryError && error.code === "REVIEW_NOT_FOUND" ? 404 : 503,
+            { code: error instanceof ReviewLibraryError ? error.code : "LIBRARY_REVIEW_DELETE_FAILED" },
+          );
+        } finally {
+          finishActivity();
+        }
+      }
+      if (dynamicLibraryAdmin?.kind === "DEMO_DELETE") {
+        if (input.health() !== "READY") return writeJson(res, 503, { code: "RUNTIME_DRAINING" });
+        const rawImpactToken = req.headers[ADMIN_LIBRARY_IMPACT_TOKEN_HEADER];
+        const impactToken =
+          typeof rawImpactToken === "string" && /^[0-9a-f]{64}$/u.test(rawImpactToken)
+            ? rawImpactToken
+            : undefined;
+        if (!impactToken) return writeJson(res, 400, { code: "INVALID_IMPACT_TOKEN" });
+        const finishActivity = input.activity.begin(res);
+        try {
+          return writeJson(
+            res,
+            200,
+            await input.reviewLibrary.deleteDemo(dynamicLibraryAdmin.objectId, { impactToken }),
+          );
+        } catch (error) {
+          const status = error instanceof ReviewLibraryError && error.code === "DELETION_IMPACT_CHANGED"
+            ? 409
+            : error instanceof ReviewLibraryError && error.code === "DEMO_NOT_FOUND"
+              ? 404
+              : 503;
+          return writeJson(res, status, {
+            code: error instanceof ReviewLibraryError ? error.code : "LIBRARY_DEMO_DELETE_FAILED",
+          });
+        } finally {
+          finishActivity();
+        }
+      }
+      if (pathname === ADMIN_LIBRARY_VERIFY_PATH) {
+        if (input.health() !== "READY") return writeJson(res, 503, { code: "RUNTIME_DRAINING" });
+        const finishActivity = input.activity.begin(res);
+        try {
+          const result = await input.reviewLibrary.verify();
+          return writeJson(res, 200, {
+            schemaVersion: "review-library-verification-summary.v1",
+            checkedDemos: result.checkedDemos,
+            checkedArtifacts: result.checkedArtifacts,
+            issueCount: result.issues.length,
+          });
+        } catch {
+          return writeJson(res, 503, { code: "LIBRARY_VERIFY_UNAVAILABLE" });
+        } finally {
+          finishActivity();
+        }
+      }
+      if (pathname === ADMIN_LIBRARY_CLEAR_CACHE_PATH) {
+        if (input.health() !== "READY") return writeJson(res, 503, { code: "RUNTIME_DRAINING" });
+        const finishActivity = input.activity.begin(res);
+        try {
+          return writeJson(res, 200, await input.reviewLibrary.clearRebuildableCache());
+        } catch {
+          return writeJson(res, 503, { code: "LIBRARY_CACHE_CLEANUP_UNAVAILABLE" });
+        } finally {
+          finishActivity();
+        }
       }
       if (pathname === ADMIN_BACKUP_PATH) {
         if (backupInProgress || input.health() !== "READY") {
@@ -305,7 +498,7 @@ function createProtectedNextHandler(input: {
         backupInProgress = true;
         input.setHealth("DRAINING");
         try {
-          if (!await waitForIdle()) throw new Error("RUNTIME_NOT_IDLE");
+          if (!await input.activity.waitForIdle()) throw new Error("RUNTIME_NOT_IDLE");
           return writeJson(res, 201, await input.createUpdateBackup());
         } catch {
           input.setHealth("READY");
@@ -314,6 +507,7 @@ function createProtectedNextHandler(input: {
           backupInProgress = false;
         }
       }
+      input.setHealth("DRAINING");
       writeJson(res, 202, { schemaVersion: "desktop-runtime-shutdown.v1", protocolVersion: "desktop-runtime-http.v2", accepted: true });
       input.requestShutdown();
       return;
@@ -329,33 +523,27 @@ function createProtectedNextHandler(input: {
     req.headers["content-security-policy"] = headers["Content-Security-Policy"];
     req.headers[DESKTOP_VIEWER_ORIGIN_HEADER] = input.viewerOrigin;
     lockResponseSecurityHeaders(res, headers);
-    activeNextRequests += 1;
-    let handlerSettled = false;
-    let responseSettled = res.writableEnded || res.destroyed;
-    let retired = false;
-    const retire = () => {
-      if (!retired && handlerSettled && responseSettled) {
-        retired = true;
-        activeNextRequests = Math.max(0, activeNextRequests - 1);
-      }
-    };
-    const responseDone = () => {
-      responseSettled = true;
-      retire();
-    };
-    res.once("finish", responseDone);
-    res.once("close", responseDone);
+    const finishActivity = input.activity.begin(res);
     try {
       await input.next(req, res);
     } catch {
       if (!res.headersSent) writeJson(res, 500, { code: "NEXT_REQUEST_FAILED" });
       else res.destroy();
     } finally {
-      handlerSettled = true;
-      if (res.writableEnded || res.destroyed) responseSettled = true;
-      retire();
+      finishActivity();
     }
   };
+}
+
+function isLibraryStats(value: unknown): value is LibraryStats {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  const expected = ["artifactBytes", "cacheBytes", "demoCount", "rawDemoBytes", "reviewCount", "schemaVersion", "totalBytes"].sort();
+  return keys.length === expected.length && keys.every((key, index) => key === expected[index]) &&
+    record.schemaVersion === "review-library-stats.v1" &&
+    expected.filter((key) => key !== "schemaVersion").every((key) => typeof record[key] === "number" && Number.isSafeInteger(record[key]) && (record[key] as number) >= 0) &&
+    record.totalBytes === (record.rawDemoBytes as number) + (record.artifactBytes as number) + (record.cacheBytes as number);
 }
 
 export async function startDesktopRuntime(
@@ -368,9 +556,12 @@ export async function startDesktopRuntime(
   process.env.MEMORY_ENABLED = "true";
   process.env.CS_AGENT_DESKTOP_DB_PATH = path.join(init.dataDir, "cs-agent.sqlite3");
   Object.assign(process.env, { NODE_ENV: "production" });
+  let databaseOwner: ReturnType<typeof getSqliteDatabaseOwner> | undefined;
   const sessionToken = options.sessionToken ?? createRuntimeToken();
   const adminToken = options.adminToken ?? createRuntimeToken();
   let health: RuntimeHealth = "READY";
+  const runtimeHealth = () => health;
+  const activity = new RuntimeActivityTracker();
   let appOrigin: string | undefined;
   let viewerOrigin: string | undefined;
   let shutdownPromise: Promise<void> | undefined;
@@ -381,10 +572,19 @@ export async function startDesktopRuntime(
   let startupStage: "VIEWER" | "NEXT" | "APP" = "VIEWER";
 
   try {
+    const owner = getSqliteDatabaseOwner({ path: process.env.CS_AGENT_DESKTOP_DB_PATH });
+    databaseOwner = owner;
+    const library = new DesktopReviewLibrary({ owner, dataRoot: init.dataDir });
+    await library.initialize();
+    installDesktopReviewLibrary(library);
     const viewerHandler = await createViewerHandler(
       init.viewerRoot,
       () => appOrigin,
       () => viewerOrigin ? new URL(viewerOrigin).host : undefined,
+      {
+        isReady: () => runtimeHealth() === "READY",
+        begin: (response) => activity.begin(response),
+      },
     );
     viewerServer.on("request", viewerHandler);
 
@@ -409,13 +609,20 @@ export async function startDesktopRuntime(
       viewerOrigin,
       httpServer: appServer,
     });
-    const runtimeHealth = () => health;
     const shutdown = async () => {
       if (shutdownPromise) return shutdownPromise;
       health = "DRAINING";
       shutdownPromise = (async () => {
         await Promise.all([closeServer(appServer, drainTimeoutMs), closeServer(viewerServer, drainTimeoutMs)]);
+        // A closed socket is not proof that its async handler has finished its
+        // final Saga/SQLite work. Give aborted streams one more drain window;
+        // fail closed rather than closing the shared database under a handler.
+        if (!await activity.waitForIdle(drainTimeoutMs)) {
+          throw new Error("RUNTIME_DRAIN_TIMEOUT");
+        }
         await preparedNext?.close?.();
+        installDesktopReviewLibrary(undefined);
+        await owner.close();
       })();
       return shutdownPromise;
     };
@@ -435,6 +642,8 @@ export async function startDesktopRuntime(
         setImmediate(() => void shutdown().finally(() => options.onAdminShutdown?.()));
       },
       createUpdateBackup: options.createUpdateBackup ?? (() => createTracedUpdateBackup(init)),
+      reviewLibrary: library,
+      activity,
     }));
     const checkpointAvailable = await (options.checkpointProbe
       ? options.checkpointProbe().catch(() => false)
@@ -461,6 +670,8 @@ export async function startDesktopRuntime(
   } catch (error) {
     await Promise.all([closeServer(appServer, drainTimeoutMs), closeServer(viewerServer, drainTimeoutMs)]);
     await preparedNext?.close?.();
+    installDesktopReviewLibrary(undefined);
+    await databaseOwner?.close();
     if (error instanceof RuntimeStartupError) throw error;
     if (error instanceof DesktopOriginBindError) {
       throw new RuntimeStartupError(error.stage === "VIEWER"

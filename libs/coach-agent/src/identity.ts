@@ -33,10 +33,14 @@ export function stableInputHash(value: unknown): string {
   return fnv1a(stableSerialize(value));
 }
 
-export function threadIdForIdentity(identity: CoachAgentIdentity): string {
+export function checkpointThreadIdForSession(sessionId: string): string {
   // A session is the stable checkpoint owner. The checkpoint payload still
   // validates every run/content/player/route field before any resume.
-  return `coach-agent-v1-session-${fnv1a(identity.sessionId)}`;
+  return `coach-agent-v1-session-${fnv1a(sessionId)}`;
+}
+
+export function threadIdForIdentity(identity: CoachAgentIdentity): string {
+  return checkpointThreadIdForSession(identity.sessionId);
 }
 
 export function playbackCallId(

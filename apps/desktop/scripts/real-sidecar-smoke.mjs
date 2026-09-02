@@ -1,5 +1,6 @@
-import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { execFileSync, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, extname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,7 +8,12 @@ import { fileURLToPath } from "node:url";
 const READY_TIMEOUT_MS = 20_000;
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 const EXPORT_MAX_BYTES = 2 * 1024 * 1024;
+const MANAGED_DEMO_BYTES = Buffer.concat([Buffer.from("PBDEMS2\0", "binary"), Buffer.alloc(64, 0x2a)]);
+const MANAGED_DEMO_HASH = createHash("sha256").update(MANAGED_DEMO_BYTES).digest("hex");
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
+const realDemoPath = join(repoRoot, "demoTests/test_demo.dem");
+const realDemoHash = "84a1a4191302bdd2a3bbb5a727842093744b1fb1a228aeec630369e44b622cb2";
+const tsxCli = fileURLToPath(import.meta.resolve("tsx/cli"));
 const appPath = join(repoRoot, "apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/CS Agent Coach.app");
 const preparedMode = process.argv.includes("--prepared");
 const webkitMode = process.argv.includes("--webkit");
@@ -31,6 +37,7 @@ const resourceBase = preparedMode ? contents : join(contents, "Resources");
 const runtimeRoot = join(resourceBase, "resources", "runtime-root");
 const viewerRoot = join(resourceBase, "resources", "viewer-root");
 const temporaryRoot = await mkdtemp(join(tmpdir(), "cs-agent-real-sidecar-"));
+const historyCoordinationPath = join(temporaryRoot, "history-seed.status");
 const dataDir = join(temporaryRoot, "data");
 const cacheDir = join(temporaryRoot, "cache");
 const logDir = join(temporaryRoot, "log");
@@ -134,6 +141,71 @@ async function boundedJson(response, label, maxBytes = 64 * 1024) {
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 
+async function importManagedFixture(
+  run,
+  requestId,
+  originalFilename = "permission-model-smoke.dem",
+  expectedStoredFilename = originalFilename,
+) {
+  const capability = await sessionFetch(run, "/api/review-history/import-capability", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      requestId,
+      originalFilename,
+      byteSize: MANAGED_DEMO_BYTES.byteLength,
+    }),
+  });
+  if (capability.status !== 200) {
+    throw new Error(`managed Demo capability returned ${capability.status}`);
+  }
+  const capabilityBody = await boundedJson(capability, "managed Demo capability");
+  if (capabilityBody.requestId !== requestId
+    || typeof capabilityBody.capabilityToken !== "string"
+    || !/^[A-Za-z0-9_-]{43}$/u.test(capabilityBody.capabilityToken)) {
+    throw new Error("managed Demo capability schema invalid");
+  }
+  const imported = await fetch(`${run.message.viewerOrigin}/_desktop/library/import`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${capabilityBody.capabilityToken}`,
+      "content-type": "application/octet-stream",
+      "x-cs-agent-import-id": requestId,
+    },
+    body: MANAGED_DEMO_BYTES,
+  });
+  if (imported.status !== 201) {
+    const rejected = await imported.text();
+    throw new Error(`managed Demo import returned ${imported.status}:${rejected.slice(0, 120)}`);
+  }
+  const result = await boundedJson(imported, "managed Demo import");
+  if (result.schemaVersion !== "desktop-library-import.v1"
+    || result.originalFilename !== expectedStoredFilename
+    || result.byteSize !== MANAGED_DEMO_BYTES.byteLength
+    || result.contentHash !== MANAGED_DEMO_HASH
+    || typeof result.demoId !== "string") {
+    throw new Error("managed Demo import schema invalid");
+  }
+  if (result.validationToken !== undefined) {
+    if (!/^[A-Za-z0-9_-]{43}$/u.test(result.validationToken)) {
+      throw new Error("managed Demo validation token invalid");
+    }
+    const finalized = await fetch(`${run.message.viewerOrigin}/_desktop/library/import/finalize`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${result.validationToken}`,
+        "x-cs-agent-demo-id": result.demoId,
+        "x-cs-agent-parse-outcome": "READY",
+      },
+    });
+    const finalizedBody = await boundedJson(finalized, "managed Demo validation");
+    if (finalized.status !== 200 || finalizedBody.demoId !== result.demoId || finalizedBody.status !== "READY") {
+      throw new Error("managed Demo validation failed");
+    }
+  }
+  return result;
+}
+
 async function gracefulShutdown(run) {
   const shutdown = await fetch(`${run.message.appOrigin}/_desktop/shutdown`, {
     method: "POST",
@@ -145,7 +217,60 @@ async function gracefulShutdown(run) {
   if (active?.child === run.child) active = undefined;
 }
 
+async function seedReviewHistoryFixture(run) {
+  const scriptPath = join(repoRoot, "apps/web/scripts/seed-review-history-smoke.ts");
+  const child = spawn(process.execPath, [tsxCli, scriptPath], {
+    cwd: repoRoot,
+    env: {},
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => { stdout = `${stdout}${chunk}`.slice(-64 * 1024); });
+  child.stderr.on("data", (chunk) => { stderr = `${stderr}${chunk}`.slice(-8 * 1024); });
+  child.stdin.end(JSON.stringify({
+    appOrigin: run.message.appOrigin,
+    sessionToken: run.message.sessionToken,
+    demoContentHash: realDemoHash,
+  }));
+  const exited = new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", (code, signal) => resolve({ code, signal }));
+  });
+  let result;
+  try {
+    result = await Promise.race([
+      exited,
+      timeoutAfter(30_000, "history fixture seed timeout"),
+    ]);
+  } catch (error) {
+    child.kill("SIGKILL");
+    await exited.catch(() => undefined);
+    throw error;
+  }
+  if (result.code !== 0 || result.signal !== null) {
+    throw new Error(`history fixture seed failed: ${stderr.trim() || "UNKNOWN"}`);
+  }
+  const summary = JSON.parse(stdout);
+  if (summary.ok !== true
+    || typeof summary.reviewId !== "string"
+    || typeof summary.revisionId !== "string"
+    || !(summary.cueCount > 0)) {
+    throw new Error("history fixture seed summary invalid");
+  }
+  return summary;
+}
+
 async function runWebKitSmoke(run) {
+  if (webkitDemoMode) {
+    const observedHash = execFileSync("/usr/bin/shasum", ["-a", "256", realDemoPath], {
+      encoding: "utf8",
+      env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" },
+    }).trim().split(/\s+/u)[0];
+    if (observedHash !== realDemoHash) throw new Error("real Demo fixture hash changed");
+  }
   const wasmName = (await readdir(join(viewerRoot, "assets")))
     .find((name) => /^demo_parser_bg-[A-Za-z0-9_-]+\.wasm$/u.test(name));
   if (!wasmName) throw new Error("WKWebView smoke parser WASM missing");
@@ -154,19 +279,80 @@ async function runWebKitSmoke(run) {
     env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" },
     stdio: ["pipe", "pipe", "pipe"],
   });
+  const sidecarRssKiB = () => {
+    try {
+      const value = execFileSync("/bin/ps", ["-o", "rss=", "-p", String(run.child.pid)], {
+        encoding: "utf8",
+        env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" },
+      }).trim();
+      return Number(value) || 0;
+    } catch {
+      return 0;
+    }
+  };
+  let importBaselineSidecarRssKiB;
+  let importPeakSidecarRssKiB;
+  let importWindowOpen = false;
+  let importWindowClosed = false;
+  let historySeedPromise;
+  let historySeedFailure;
+  let historySeedSummary;
+  const sampleImportRss = () => {
+    if (!importWindowOpen || importWindowClosed) return;
+    importPeakSidecarRssKiB = Math.max(importPeakSidecarRssKiB ?? 0, sidecarRssKiB());
+  };
+  const rssSampler = webkitDemoMode ? setInterval(sampleImportRss, 20) : undefined;
   let stdout = "";
   let stderr = "";
   child.stdout.setEncoding("utf8");
   child.stderr.setEncoding("utf8");
   child.stdout.on("data", (chunk) => { stdout = `${stdout}${chunk}`.slice(-64 * 1024); });
-  child.stderr.on("data", (chunk) => { stderr = `${stderr}${chunk}`.slice(-4 * 1024); });
+  let stderrLines = "";
+  child.stderr.on("data", (chunk) => {
+    stderr = `${stderr}${chunk}`.slice(-4 * 1024);
+    stderrLines += chunk;
+    for (;;) {
+      const newline = stderrLines.indexOf("\n");
+      if (newline < 0) break;
+      const line = stderrLines.slice(0, newline);
+      stderrLines = stderrLines.slice(newline + 1);
+      if (line.startsWith("webkit:trace ")) {
+        process.stdout.write(`TRACE ${line.slice("webkit:trace ".length)}\n`);
+      }
+      if (line === "webkit:trace MANAGED_IMPORT_TRANSPORT_START") {
+        importBaselineSidecarRssKiB = sidecarRssKiB();
+        importPeakSidecarRssKiB = importBaselineSidecarRssKiB;
+        importWindowOpen = true;
+        importWindowClosed = false;
+      } else if (line === "webkit:trace MANAGED_IMPORT_TRANSPORT_END") {
+        sampleImportRss();
+        importWindowClosed = true;
+      } else if (line === "webkit:trace MANAGED_REVIEW_ROW") {
+        if (webkitDemoMode && !historySeedPromise) {
+          historySeedPromise = seedReviewHistoryFixture(run)
+            .then(async (summary) => {
+              historySeedSummary = summary;
+              await writeFile(historyCoordinationPath, "READY", { mode: 0o600 });
+            })
+            .catch(async (error) => {
+              historySeedFailure = error;
+              const code = (error instanceof Error ? error.message : "SEED_FAILED")
+                .replace(/[^A-Za-z0-9:._-]/gu, "_")
+                .slice(0, 160);
+              await writeFile(historyCoordinationPath, `ERROR:${code}`, { mode: 0o600 });
+            });
+        }
+      }
+    }
+  });
   child.stdin.end(JSON.stringify({
     appOrigin: run.message.appOrigin,
     viewerOrigin: run.message.viewerOrigin,
     sessionToken: run.message.sessionToken,
     wasmPath: `/cs2d/assets/${wasmName}`,
-    demoPath: webkitDemoMode ? join(repoRoot, "demoTests/test_demo.dem") : null,
+    demoPath: webkitDemoMode ? realDemoPath : null,
     snapshotPath: snapshotPath ?? null,
+    coordinationPath: webkitDemoMode ? historyCoordinationPath : null,
   }));
   const exited = new Promise((resolve, reject) => {
     child.once("error", reject);
@@ -174,16 +360,32 @@ async function runWebKitSmoke(run) {
   });
   let result;
   try {
-    result = await Promise.race([exited, timeoutAfter(60_000, "WKWebView smoke timeout")]);
+    result = await Promise.race([
+      exited,
+      timeoutAfter(webkitDemoMode ? 215_000 : 60_000, "WKWebView smoke timeout"),
+    ]);
   } catch (error) {
     child.kill("SIGKILL");
     await exited.catch(() => undefined);
     throw error;
+  } finally {
+    if (rssSampler) clearInterval(rssSampler);
+    sampleImportRss();
   }
+  if (historySeedPromise) await historySeedPromise;
+  if (historySeedFailure) throw historySeedFailure;
   if (result.code !== 0 || result.signal !== null) {
     throw new Error(`WKWebView smoke failed: ${stderr.trim() || "UNKNOWN"}`);
   }
-  const summary = JSON.parse(stdout);
+  if (!stdout.trim()) {
+    throw new Error(`WKWebView smoke produced no summary: ${stderr.trim() || "UNKNOWN"}`);
+  }
+  let summary;
+  try {
+    summary = JSON.parse(stdout);
+  } catch (error) {
+    throw new Error(`WKWebView smoke summary invalid: ${error instanceof Error ? error.message : "UNKNOWN"}; stderr=${stderr.trim() || "<empty>"}`);
+  }
   if (summary.ok !== true
     || summary.app?.origin !== run.message.appOrigin
     || summary.viewer?.origin !== run.message.viewerOrigin
@@ -196,12 +398,38 @@ async function runWebKitSmoke(run) {
     && (summary.demo?.parsed !== true
       || typeof summary.demo?.selectedPlayer !== "string"
       || summary.demo.selectedPlayer.length === 0
-      || !(summary.demo?.canvasCount > 0))) {
+      || !(summary.demo?.canvasCount > 0)
+      || summary.demo?.managedImport !== true
+      || summary.demo?.reviewPersisted !== true
+      || summary.demo?.seededHistoryFixture !== true
+      || summary.history?.restored !== true
+      || summary.history?.providerCallCount !== 0
+      || summary.history?.providerResourceCount !== 0
+      || summary.history?.positionVisible !== true
+      || historySeedSummary?.ok !== true)) {
     throw new Error("WKWebView Demo smoke returned an invalid summary");
   }
   process.stdout.write("PASS WKWebView IPv4 localhost, cookie isolation, assets, Worker and WASM\n");
+  process.stdout.write(`PASS runtime identity binary=${binary} pid=${run.child.pid} target=${run.message.targetTriple} node=${run.message.nodeVersion} build=smoke-${run.stage}\n`);
   if (snapshotPath) process.stdout.write(`PASS WKWebView app snapshot ${snapshotPath}\n`);
-  if (webkitDemoMode) process.stdout.write("PASS WKWebView real Demo parse, player selection and Canvas stage\n");
+  if (webkitDemoMode) {
+    process.stdout.write("PASS production /desktop managed Demo import, real parser, player selection, Review persistence and Canvas stage\n");
+    process.stdout.write(`PASS validator-backed deterministic history fixture review=${historySeedSummary.reviewId} revision=${historySeedSummary.revisionId} cues=${historySeedSummary.cueCount}\n`);
+    process.stdout.write(`PASS production history click restored ${summary.history.progress}; generation-provider fetch/resource calls=0; observed API calls=${JSON.stringify(summary.history.allApiFetch)}; audit=${summary.history.auditSource}\n`);
+  }
+  if (webkitDemoMode) {
+    const demoByteSize = (await stat(realDemoPath)).size;
+    if (!importWindowOpen || !importWindowClosed
+      || !Number.isInteger(importBaselineSidecarRssKiB)
+      || !Number.isInteger(importPeakSidecarRssKiB)) {
+      throw new Error("managed Demo import RSS window was not observed");
+    }
+    const rssDeltaBytes = Math.max(0, importPeakSidecarRssKiB - importBaselineSidecarRssKiB) * 1024;
+    if (rssDeltaBytes >= demoByteSize) {
+      throw new Error(`managed Demo import RSS delta ${rssDeltaBytes} exceeded streaming bound ${demoByteSize}`);
+    }
+    process.stdout.write(`PASS managed Demo import sidecar RSS delta ${rssDeltaBytes} bytes < ${demoByteSize}-byte file (XHR send→sidecar publish response)\n`);
+  }
 }
 
 async function stopActiveSidecar() {
@@ -312,6 +540,8 @@ try {
   if (webkitMode || webkitDemoMode) await runWebKitSmoke(first);
   const blockedDemo = await sessionFetch(first, "/api/local-demo", { method: "POST", body: "must-not-reach-next" });
   if (blockedDemo.status !== 404) throw new Error("desktop raw Demo route was not blocked");
+  const firstManagedImport = await importManagedFixture(first, "managed_import_first");
+  if (firstManagedImport.deduplicated !== false) throw new Error("first managed Demo import unexpectedly deduplicated");
   const initialStatus = await sessionFetch(first, "/api/memory/status");
   if (initialStatus.status !== 200) throw new Error(`initial memory status returned ${initialStatus.status}`);
   const initialMemory = await boundedJson(initialStatus, "initial memory status");
@@ -351,6 +581,17 @@ try {
     || persisted.consent !== "GRANTED" || !Number.isInteger(persisted.consentVersion)) {
     throw new Error("SQLite consent did not survive the sidecar restart");
   }
+  const secondManagedImport = await importManagedFixture(
+    second,
+    "managed_import_second",
+    "同内容不同文件名.dem",
+    firstManagedImport.originalFilename,
+  );
+  if (secondManagedImport.demoId !== firstManagedImport.demoId
+    || secondManagedImport.contentHash !== firstManagedImport.contentHash
+    || secondManagedImport.deduplicated !== true) {
+    throw new Error("managed Demo identity did not survive the sidecar restart");
+  }
   const deleted = await sessionFetch(second, "/api/memory", {
     method: "DELETE",
     headers: { "content-type": "application/json" },
@@ -362,7 +603,7 @@ try {
     throw new Error("memory delete-all did not return a successful bounded summary");
   }
   await gracefulShutdown(second);
-  process.stdout.write("PASS real sidecar two-start SQLite persistence, memory export/delete, UI/viewer/backup, route gate and graceful shutdown\n");
+  process.stdout.write("PASS real sidecar two-start SQLite persistence, managed Demo import/dedupe, memory export/delete, UI/viewer/backup, route gate and graceful shutdown\n");
 } finally {
   await stopActiveSidecar();
   await rm(temporaryRoot, { recursive: true, force: true });

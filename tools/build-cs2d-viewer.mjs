@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { sanitizeViewerHtml } from "./cs2d-host/sanitize-viewer-html.mjs";
@@ -38,6 +38,15 @@ const dist = resolve(upstream, "apps/app/dist");
 for (const required of ["index.html", "assets", "zstd.wasm"]) {
   if (!existsSync(resolve(dist, required))) {
     throw new Error(`cs2d viewer build is missing ${required}: ${dist}`);
+  }
+}
+const viewerJavaScript = readdirSync(resolve(dist, "assets"))
+  .filter((name) => name.endsWith(".js"))
+  .map((name) => readFileSync(resolve(dist, "assets", name), "utf8"))
+  .join("\n");
+for (const marker of ["DEMO_IMPORT_REQUESTED", "loadManagedDemo", "MANAGED_LIBRARY"]) {
+  if (!viewerJavaScript.includes(marker)) {
+    throw new Error(`cs2d viewer build is missing managed-library marker: ${marker}`);
   }
 }
 

@@ -1,0 +1,356 @@
+diff --git a/apps/app/src/viewer/player/hostBridge.ts b/apps/app/src/viewer/player/hostBridge.ts
+index 1d70c9e..5064a92 100644
+--- a/apps/app/src/viewer/player/hostBridge.ts
++++ b/apps/app/src/viewer/player/hostBridge.ts
+@@ -32,6 +32,7 @@ export interface ReplayReadyMessage {
+   freezeSkipped: true
+   demoContentHash?: string
+   hashLatencyMs?: number
++  requestId?: string
+   demoId?: string
+   sourceKind?: 'MANAGED_LIBRARY'
+ }
+@@ -488,7 +489,7 @@ export function replayReadyMessage(replay: {
+   rounds: { number: number; freezeStartTick?: number; startTick: number; postEndTick?: number; endTick: number }[]
+   demoContentHash?: string
+   hashLatencyMs?: number
+-  managedSource?: { demoId: string; contentHash: string }
++  managedSource?: { requestId: string; demoId: string; contentHash: string }
+ }): ReplayReadyMessage {
+   const rounds = replay.rounds.map((round, roundIndex) => ({
+     roundIndex,
+@@ -515,7 +516,7 @@ export function replayReadyMessage(replay: {
+       ? { demoContentHash: replay.demoContentHash, hashLatencyMs: replay.hashLatencyMs }
+       : {}),
+     ...(replay.managedSource && typeof replay.hashLatencyMs === 'number' && replay.demoContentHash === replay.managedSource.contentHash
+-      ? { demoId: replay.managedSource.demoId, sourceKind: 'MANAGED_LIBRARY' as const }
++      ? { requestId: replay.managedSource.requestId, demoId: replay.managedSource.demoId, sourceKind: 'MANAGED_LIBRARY' as const }
+       : {}),
+   }
+ }
+diff --git a/apps/app/src/viewer/DemoAnalyzerView.vue b/apps/app/src/viewer/DemoAnalyzerView.vue
+index f38a269..87dcdd5 100644
+--- a/apps/app/src/viewer/DemoAnalyzerView.vue
++++ b/apps/app/src/viewer/DemoAnalyzerView.vue
+@@ -64,7 +64,64 @@ interface ManagedSource {
+   mode: ManagedLoadMode
+ }
+ const managedSource = ref<ManagedSource | null>(null)
+-const pendingManagedImport = ref<{ requestId: string; file: File } | null>(null)
++const pendingManagedImport = ref<{ requestId: string; file: File; generation: number; signal: AbortSignal } | null>(null)
++let managedLoadGeneration = 0
++let managedReadyGeneration = -1
++let managedLoadAbort: AbortController | null = null
++let managedParseTail: Promise<void> = Promise.resolve()
++
++function beginManagedLoad() {
++  managedLoadGeneration += 1
++  managedReadyGeneration = -1
++  managedLoadAbort?.abort()
++  managedLoadAbort = new AbortController()
++  winRateWorker?.terminate()
++  winRateWorker = null
++  hostSelectedPlayerId.value = null
++  hostStageReady.value = false
++  return { generation: managedLoadGeneration, signal: managedLoadAbort.signal }
++}
++
++function isManagedLoadCurrent(generation: number): boolean {
++  return generation === managedLoadGeneration
++}
++
++function assertManagedLoadCurrent(generation: number) {
++  if (!isManagedLoadCurrent(generation)) throw new Error('STALE_MANAGED_LOAD')
++}
++
++async function parseManagedFile(file: File, source: ManagedSource, generation: number) {
++  const parse = managedParseTail.catch(() => undefined).then(async () => {
++    assertManagedLoadCurrent(generation)
++    managedSource.value = source
++    await parser.parse(file)
++    assertManagedLoadCurrent(generation)
++    if (parser.status.value !== 'done' || !parser.replay.value) throw new Error('MANAGED_DEMO_PARSE_FAILED')
++    if (parser.demoContentHash.value?.toLowerCase() !== source.contentHash) {
++      throw new Error('CONTENT_HASH_MISMATCH')
++    }
++  })
++  managedParseTail = parse.then(() => undefined, () => undefined)
++  await parse
++}
++
++function managedReplayReady(source: ManagedSource, generation: number) {
++  assertManagedLoadCurrent(generation)
++  const replay = parser.replay.value
++  if (!replay || parser.demoContentHash.value?.toLowerCase() !== source.contentHash) {
++    throw new Error('CONTENT_HASH_MISMATCH')
++  }
++  managedSource.value = source
++  managedReadyGeneration = generation
++  hostStageReady.value = false
++  hostSelectedPlayerId.value = null
++  return replayReadyMessage({
++    ...replay,
++    demoContentHash: parser.demoContentHash.value ?? undefined,
++    hashLatencyMs: parser.hashLatencyMs.value ?? undefined,
++    managedSource: source,
++  })
++}
+ 
+ type WinRateWorkerResponse =
+   | { type: 'progress'; requestId: number; phase: 'downloading' | 'inference' | 'ready'; completed: number; total: number; detail?: string }
+@@ -134,6 +191,9 @@ function inferWinRate(replay: Cs2dReplay, selectedPlayerId: string): Promise<Win
+ 
+ async function selectHostPlayer(playerId: string) {
+   if (!hostMode.value || hostSelectionLocked.value) return
++  const selectionGeneration = managedLoadGeneration
++  if (managedLibraryMode.value && managedReadyGeneration !== selectionGeneration) return
++  const selectionSource = managedSource.value
+   const replay = parser.replay.value
+   const selectionIndex = replay?.players.findIndex((player) => player.steamId === playerId) ?? -1
+   const player = replay?.players[selectionIndex]
+@@ -157,11 +217,12 @@ async function selectHostPlayer(playerId: string) {
+     while (!hostStageReady.value && performance.now() < deadline) {
+       await new Promise((resolve) => setTimeout(resolve, 25))
+     }
++    if (!isManagedLoadCurrent(selectionGeneration) || managedReadyGeneration !== selectionGeneration) return
+     if (!hostStageReady.value) {
+       emitPlaybackEvent({
+         type: 'DEMO_IMPORT_FAILED',
+         schemaVersion: 'cs2d-demo-import-failed.v1',
+-        requestId: managedSource.value.requestId,
++        requestId: selectionSource?.requestId ?? 'managed_replay',
+         code: 'MANAGED_DEMO_LOAD_FAILED',
+         message: 'Viewer 回放舞台未能就绪。',
+       })
+@@ -172,6 +233,7 @@ async function selectHostPlayer(playerId: string) {
+   }
+   emitSelected()
+   await nextTick()
++  if (managedLibraryMode.value && (!isManagedLoadCurrent(selectionGeneration) || managedReadyGeneration !== selectionGeneration)) return
+   try {
+       const routeId = Array.isArray(route.params.id) ? route.params.id[0] : route.params.id
+       let winProbabilityTimeline: WinProbabilityTimelineV1 | undefined
+@@ -186,6 +248,7 @@ async function selectHostPlayer(playerId: string) {
+           detail: '正在运行胜率模型',
+         })
+         winProbabilityTimeline = await inferWinRate(replay as unknown as Cs2dReplay, player.steamId)
++        if (managedLibraryMode.value && (!isManagedLoadCurrent(selectionGeneration) || managedReadyGeneration !== selectionGeneration)) return
+       } catch (modelError) {
+         emitPlaybackEvent({
+           type: 'ANALYSIS_PROGRESS',
+@@ -207,6 +270,7 @@ async function selectHostPlayer(playerId: string) {
+         demoContentHashLatencyMs: parser.hashLatencyMs.value ?? undefined,
+         ...(winProbabilityTimeline ? { winProbabilityTimeline } : {}),
+       })
++    if (managedLibraryMode.value && (!isManagedLoadCurrent(selectionGeneration) || managedReadyGeneration !== selectionGeneration)) return
+     emitPlaybackEvent({
+       type: 'ANALYSIS_READY',
+       schemaVersion: 'cs2d-analysis-ready.v1',
+@@ -227,20 +291,10 @@ watch(
+   () => parser.replay.value,
+   (replay, previous) => {
+     if (!hostMode.value || !replay || replay === previous) return
+-    if (managedLibraryMode.value && (!managedSource.value ||
+-      parser.demoContentHash.value?.toLowerCase() !== managedSource.value.contentHash)) {
+-      const requestId = managedSource.value?.requestId ?? 'managed_replay'
+-      managedSource.value = null
+-      emitPlaybackEvent({
+-        type: 'DEMO_IMPORT_FAILED',
+-        schemaVersion: 'cs2d-demo-import-failed.v1',
+-        requestId,
+-        code: 'CONTENT_HASH_MISMATCH',
+-        message: 'Demo 内容校验失败，请重新导入。',
+-      })
+-      parser.reset()
+-      return
+-    }
++    // Managed parses are exposed explicitly by their load generation only
++    // after validation. The watcher must never publish an intermediate or
++    // stale parser result.
++    if (managedLibraryMode.value) return
+     hostStageReady.value = false
+     hostSelectedPlayerId.value = null
+     emitPlaybackEvent(replayReadyMessage({
+@@ -494,6 +548,9 @@ async function onFiles(files: FileList | null | undefined) {
+   if (!file) return
+   if (managedLibraryMode.value) {
+     const requestId = crypto.randomUUID()
++    const load = beginManagedLoad()
++    managedSource.value = null
++    pendingManagedImport.value = null
+     if (!/\.dem$/i.test(file.name) || file.size <= 0) {
+       emitPlaybackEvent({
+         type: 'DEMO_IMPORT_FAILED',
+@@ -507,7 +564,7 @@ async function onFiles(files: FileList | null | undefined) {
+       parser.reset()
+       return
+     }
+-    pendingManagedImport.value = { requestId, file }
++    pendingManagedImport.value = { requestId, file, generation: load.generation, signal: load.signal }
+     emitPlaybackEvent({
+       type: 'DEMO_IMPORT_REQUESTED',
+       schemaVersion: 'cs2d-demo-import-requested.v1',
+@@ -566,9 +623,22 @@ async function finalizeManagedDemo(result: ManagedImportResponse, outcome: 'READ
+   }
+ }
+ 
+-function uploadManagedDemo(requestId: string, capabilityToken: string, file: File): Promise<ManagedImportResponse> {
++function uploadManagedDemo(requestId: string, capabilityToken: string, file: File, signal: AbortSignal): Promise<ManagedImportResponse> {
+   return new Promise((resolve, reject) => {
+     const request = new XMLHttpRequest()
++    let settled = false
++    const finish = (callback: () => void) => {
++      if (settled) return
++      settled = true
++      signal.removeEventListener('abort', abort)
++      callback()
++    }
++    const abort = () => request.abort()
++    if (signal.aborted) {
++      reject(new Error('IMPORT_CANCELLED'))
++      return
++    }
++    signal.addEventListener('abort', abort, { once: true })
+     request.open('POST', '/_desktop/library/import')
+     request.responseType = 'json'
+     request.setRequestHeader('Authorization', `Bearer ${capabilityToken}`)
+@@ -583,8 +653,8 @@ function uploadManagedDemo(requestId: string, capabilityToken: string, file: Fil
+         totalBytes: file.size,
+       })
+     }
+-    request.onerror = () => reject(new Error('IMPORT_TRANSPORT_FAILED'))
+-    request.onabort = () => reject(new Error('IMPORT_CANCELLED'))
++    request.onerror = () => finish(() => reject(new Error('IMPORT_TRANSPORT_FAILED')))
++    request.onabort = () => finish(() => reject(new Error('IMPORT_CANCELLED')))
+     request.onload = () => {
+       if (request.status !== 201 || !isManagedImportResponse(request.response, file)) {
+         const code = request.response && typeof request.response === 'object' &&
+@@ -592,10 +662,10 @@ function uploadManagedDemo(requestId: string, capabilityToken: string, file: Fil
+           /^[A-Z][A-Z0-9_]{0,63}$/.test((request.response as Record<string, unknown>).code as string)
+           ? (request.response as Record<string, unknown>).code as string
+           : 'IMPORT_REJECTED'
+-        reject(new Error(code))
++        finish(() => reject(new Error(code)))
+         return
+       }
+-      resolve(request.response)
++      finish(() => resolve(request.response))
+     }
+     emitPlaybackEvent({
+       type: 'DEMO_IMPORT_PROGRESS',
+@@ -617,7 +687,8 @@ async function persistSelectedDemo(command: { requestId: string; capabilityToken
+   pendingManagedImport.value = null
+   let result: ManagedImportResponse | null = null
+   try {
+-    result = await uploadManagedDemo(command.requestId, command.capabilityToken, pending.file)
++    result = await uploadManagedDemo(command.requestId, command.capabilityToken, pending.file, pending.signal)
++    assertManagedLoadCurrent(pending.generation)
+     emitPlaybackEvent({
+       type: 'DEMO_IMPORT_PROGRESS',
+       schemaVersion: 'cs2d-demo-import-progress.v1',
+@@ -625,7 +696,7 @@ async function persistSelectedDemo(command: { requestId: string; capabilityToken
+       completedBytes: pending.file.size,
+       totalBytes: pending.file.size,
+     })
+-    managedSource.value = {
++    const source: ManagedSource = {
+       requestId: command.requestId,
+       demoId: result.demoId,
+       contentHash: result.contentHash.toLowerCase(),
+@@ -635,9 +706,13 @@ async function persistSelectedDemo(command: { requestId: string; capabilityToken
+     }
+     // Persistence is a hard gate: parsing begins only after the sidecar has
+     // published and registered the Demo successfully.
+-    await parser.parse(pending.file)
+-    if (parser.status.value !== 'done') throw new Error('MANAGED_DEMO_PARSE_FAILED')
++    await parseManagedFile(pending.file, source, pending.generation)
++    assertManagedLoadCurrent(pending.generation)
+     await finalizeManagedDemo(result, 'READY')
++    assertManagedLoadCurrent(pending.generation)
++    const replayReady = managedReplayReady(source, pending.generation)
++    // The Host learns the exact request/demo/hash identity before REPLAY_READY,
++    // so it can reject an older Viewer load that completes later.
+     emitPlaybackEvent({
+       type: 'DEMO_IMPORT_SUCCEEDED',
+       schemaVersion: 'cs2d-demo-import-succeeded.v1',
+@@ -648,10 +723,14 @@ async function persistSelectedDemo(command: { requestId: string; capabilityToken
+       byteSize: result.byteSize,
+       deduplicated: result.deduplicated,
+     })
++    emitPlaybackEvent(replayReady)
+   } catch (error) {
+     if (result?.validationToken) {
+       await finalizeManagedDemo(result, 'CORRUPT').catch(() => undefined)
+     }
++    const stale = !isManagedLoadCurrent(pending.generation) || (error instanceof Error && error.message === 'STALE_MANAGED_LOAD')
++    if (stale) return
++    managedReadyGeneration = -1
+     managedSource.value = null
+     const code = error instanceof Error && /^[A-Z][A-Z0-9_]{0,63}$/.test(error.message)
+       ? error.message
+@@ -680,6 +759,7 @@ async function loadManagedDemo(command: {
+   mode: ManagedLoadMode
+ }) {
+   if (!managedLibraryMode.value) return
++  const load = beginManagedLoad()
+   routeLoading.value = true
+   pendingManagedImport.value = null
+   try {
+@@ -689,12 +769,15 @@ async function loadManagedDemo(command: {
+       credentials: 'omit',
+       cache: 'no-store',
+       redirect: 'error',
++      signal: load.signal,
+     })
++    assertManagedLoadCurrent(load.generation)
+     if (!response.ok || response.headers.get('content-type') !== 'application/octet-stream' ||
+       Number(response.headers.get('content-length')) !== command.byteSize) throw new Error('MANAGED_DEMO_READ_REJECTED')
+     const body = await response.blob()
++    assertManagedLoadCurrent(load.generation)
+     if (body.size !== command.byteSize) throw new Error('MANAGED_DEMO_SIZE_MISMATCH')
+-    managedSource.value = {
++    const source: ManagedSource = {
+       requestId: command.requestId,
+       demoId: command.demoId,
+       contentHash: command.contentHash.toLowerCase(),
+@@ -702,9 +785,15 @@ async function loadManagedDemo(command: {
+       byteSize: command.byteSize,
+       mode: command.mode,
+     }
+-    await parser.parse(new File([body], command.originalFilename, { type: 'application/octet-stream' }))
+-    if (parser.status.value !== 'done') throw new Error('MANAGED_DEMO_PARSE_FAILED')
+-  } catch {
++    await parseManagedFile(
++      new File([body], command.originalFilename, { type: 'application/octet-stream' }),
++      source,
++      load.generation,
++    )
++    emitPlaybackEvent(managedReplayReady(source, load.generation))
++  } catch (error) {
++    if (!isManagedLoadCurrent(load.generation) || (error instanceof Error && error.message === 'STALE_MANAGED_LOAD')) return
++    managedReadyGeneration = -1
+     managedSource.value = null
+     emitPlaybackEvent({
+       type: 'DEMO_IMPORT_FAILED',
+@@ -714,7 +803,10 @@ async function loadManagedDemo(command: {
+       message: '托管 Demo 读取失败，请检查资料库。',
+     })
+   } finally {
+-    routeLoading.value = false
++    if (isManagedLoadCurrent(load.generation)) {
++      routeLoading.value = false
++      managedLoadAbort = null
++    }
+   }
+ }
+ 
+@@ -907,6 +999,9 @@ onMounted(() => {
+   })
+ })
+ onUnmounted(() => {
++  managedLoadGeneration += 1
++  managedLoadAbort?.abort()
++  managedLoadAbort = null
+   stopHostSelectionBridge?.()
+   stopExtensionBridge?.()
+   winRateWorker?.terminate()

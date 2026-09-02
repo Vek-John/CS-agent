@@ -14,6 +14,11 @@ import {
   cs2dHostConfig,
   HOST_SPEED_OPTIONS,
   hostCoachingCueSurface,
+  isRecoveryPlaybackLanding,
+  managedReplayMatchesExpected,
+  managedReplayContextIsCurrent,
+  managedReplayContextRequired,
+  managedRequestMatchesExpected,
   nearestCoachingCue,
   playbackCommandMessage,
   playbackPositionLabel,
@@ -22,6 +27,7 @@ import {
   reviewSegmentTone,
   seekCanonicalBySeconds,
   teachingDiagnosticsEnabled,
+  persistTeachingBeforeRuntimeHead,
   timelinePercent,
   timelineRange
 } from "./cs2d-playback-host";
@@ -38,7 +44,43 @@ const event = {
   }
 } as const;
 
+function readyReplay() {
+  return {
+    type: "REPLAY_READY",
+    schemaVersion: "cs2d-replay-ready.v1",
+    map: "de_mirage",
+    tickRate: 64,
+    startCanonicalTick: 10,
+    endCanonicalTick: 1000,
+    roundCount: 1,
+    rounds: [{ roundIndex: 0, roundNumber: 1, startCanonicalTick: 10, endCanonicalTick: 1000 }],
+    players: [{ playerId: "p1", displayName: "Player", startSide: "T" }],
+    freezeSkipped: true,
+  } as const;
+}
+
 describe("cs2d localhost host boundary", () => {
+  it("persists default adaptive teaching artifacts before mirroring the RuntimeHead", async () => {
+    const order: string[] = [];
+    await expect(persistTeachingBeforeRuntimeHead({
+      interactionDurable: true,
+      persistDiagnosis: async () => { order.push("diagnosis-artifacts"); return true; },
+      mirror: async () => { order.push("recovery-artifact-and-head"); },
+    })).resolves.toBe("COMMITTED");
+    expect(order).toEqual(["diagnosis-artifacts", "recovery-artifact-and-head"]);
+
+    await expect(persistTeachingBeforeRuntimeHead({
+      interactionDurable: false,
+      persistDiagnosis: async () => true,
+      mirror: async () => { throw new Error("must not run"); },
+    })).resolves.toBe("ARTIFACTS_INCOMPLETE");
+    await expect(persistTeachingBeforeRuntimeHead({
+      interactionDurable: true,
+      persistDiagnosis: async () => true,
+      mirror: async () => { throw new Error("head failed"); },
+    })).resolves.toBe("MIRROR_FAILED");
+  });
+
   it("uses the full Coach Agent by default and keeps only Stage 2 as an explicit harness", () => {
     expect(coachAgentEntryMode("")).toBe("STAGE3");
     expect(coachAgentEntryMode("?coachAgent=stage3")).toBe("STAGE3");
@@ -57,6 +99,40 @@ describe("cs2d localhost host boundary", () => {
     expect(analysisEventMatchesSelectedPlayer("player-new", "player-old")).toBe(false);
     expect(analysisEventMatchesSelectedPlayer("player-new", "player-new")).toBe(true);
     expect(analysisEventMatchesSelectedPlayer(undefined, "player-new")).toBe(false);
+  });
+
+  it("accepts only the exact latest managed request, Demo id, and content hash", () => {
+    const expected = { requestId: "load-b", demoId: "demo-b", contentHash: "b".repeat(64) };
+    const replay = {
+      ...readyReplay(),
+      requestId: "load-b",
+      demoId: "demo-b",
+      demoContentHash: "b".repeat(64),
+      hashLatencyMs: 1,
+      sourceKind: "MANAGED_LIBRARY",
+    } as const;
+    expect(managedRequestMatchesExpected(expected, "load-b")).toBe(true);
+    expect(managedRequestMatchesExpected(expected, "load-a")).toBe(false);
+    expect(managedReplayMatchesExpected(expected, replay)).toBe(true);
+    expect(managedReplayMatchesExpected(expected, { ...replay, requestId: "load-a" })).toBe(false);
+    expect(managedReplayMatchesExpected(expected, { ...replay, demoId: "demo-a" })).toBe(false);
+    expect(managedReplayMatchesExpected(expected, { ...replay, demoContentHash: "a".repeat(64) })).toBe(false);
+    expect(managedReplayMatchesExpected(undefined, replay)).toBe(false);
+    expect(managedReplayContextRequired("PLAYER_SELECTED")).toBe(true);
+    expect(managedReplayContextRequired("ANALYSIS_READY")).toBe(true);
+    expect(managedReplayContextRequired("PLAYBACK_STATE")).toBe(false);
+    expect(managedReplayContextIsCurrent(true, expected, undefined)).toBe(false);
+    expect(managedReplayContextIsCurrent(true, expected, { ...replay, requestId: "load-a" })).toBe(false);
+    expect(managedReplayContextIsCurrent(true, expected, replay)).toBe(true);
+    expect(managedReplayContextIsCurrent(false, undefined, undefined)).toBe(true);
+  });
+
+  it("accepts an idempotent paused recovery seek but never a moving or stale position", () => {
+    expect(isRecoveryPlaybackLanding(event.payload, 640, 64)).toBe(true);
+    expect(isRecoveryPlaybackLanding({ ...event.payload, canonicalTick: 641 }, 640, 64)).toBe(true);
+    expect(isRecoveryPlaybackLanding({ ...event.payload, canonicalTick: 642 }, 640, 64)).toBe(false);
+    expect(isRecoveryPlaybackLanding({ ...event.payload, playing: true }, 640, 64)).toBe(false);
+    expect(isRecoveryPlaybackLanding(undefined, 640, 64)).toBe(false);
   });
 
   it("selects the nearest frozen cue with a stable ahead-first tie break", () => {

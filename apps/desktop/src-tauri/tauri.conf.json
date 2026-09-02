@@ -13,7 +13,7 @@
     "windows": [],
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-src 'none'",
-      "capabilities": ["bootstrap-local", "settings-local"]
+      "capabilities": ["bootstrap-local", "settings-local", "main-open-settings"]
     }
   },
   "plugins": {

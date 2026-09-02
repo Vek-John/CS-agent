@@ -30,7 +30,8 @@
 
 ```text
 WKWebView 原生 File chooser
-        │  .dem 只进入 Viewer 的 File → Worker/WASM
+        │  .dem 由 Viewer 以一次性 capability 流入 sidecar 托管库
+        │  同一 File 仅在 Viewer 内进入 Worker/WASM；READY 后才开放选人
         ▼
 Ground-truth Replay + 完整时间线
         │
@@ -56,18 +57,20 @@ Tauri 只监督一个直接 child：固定 Node `24.19.0` 运行的 desktop runt
 - Rust 在导航到 `/desktop` 前写入 `HttpOnly; SameSite=Strict; Path=/` 的 `cs_agent_runtime` cookie。cookie 进入 WKWebView cookie store，但 URL 和 JavaScript 都读不到它。
 - Protected sidecar 只有在精确 Host 和唯一 43 字符 cookie 都通过后，才覆盖注入可信 `x-cs-agent-app-origin`。所有 Desktop coaching 与 Memory 写路由共享同一 trusted-origin 校验；前端不能靠自报 header、Origin 或 deploy target 冒充桌面请求。
 - admin token 只存在于 Rust 与 sidecar 内存，用于 health、backup 和 shutdown；它不进入 WebView、URL、argv、environment、磁盘或日志。
-- remote coaching WebView 没有 Tauri capability。只有 bundle 内的 bootstrap/settings/update 窗口能调用 AppManifest 明列的窄命令。
-- Demo 路径、bytes、raw Replay 和 frames 不经过 Rust、Next Route Handler 或 Agent。
+- remote coaching WebView 只有 `open_settings` 这一项 Tauri 导航 capability；文件、Provider、资料库管理和通用 shell/fs/http/dialog/opener 权限均未开放。bundle 内的 bootstrap/settings/update 窗口也只能调用 AppManifest 明列的各自窄命令。
+- Demo 真实路径不离开 WKWebView；原始 bytes 只由 cs2d Viewer 使用短期、一次性、绑定对象的 header capability 流式写入/读取托管资料库。首次内容寻址发布保持 `IMPORTING`，同一 File 通过真实 Worker/WASM parser 后才以 VALIDATE capability 变为 `READY`，失败变为 `CORRUPT`。Rust command、Next Route Handler、Agent、LLM、Memory 与 checkpoint 都不读取 bytes；raw Replay 和 frames 始终留在 iframe/Worker。
 - Sidecar 使用精确 filesystem allow-list、`--jitless` 和 child permission deny；Node 不得创建 grandchildren。
 
 ## 本地数据、记忆与 Provider
 
-桌面 Memory 与 Agent checkpoint 的真相是 Application Support 下同一个 SQLite 文件中的独立表/adapter，不依赖 PostgreSQL 或 Durable Object。
+桌面 Memory、Agent checkpoint 与 Review metadata 共用 Application Support 下同一个 SQLite owner，但分属独立表/interface，不依赖 PostgreSQL 或 Durable Object。原始 `.dem` 与大型白名单 Artifact 位于数据库旁的托管 `library/`，不是 SQLite BLOB。
 
 - SQLite：WAL、foreign keys、`synchronous=FULL`、busy timeout、checksummed/atomic migration 和 single writer；敏感文件权限为 `0600`，目录为 `0700`。
 - 召回：结构化过滤优先；默认 `local-unicode-feature-hash/1.0.0` 把 Unicode 1–3 gram 哈希为 256 维 Float32 向量，只在有界候选集上做精确 cosine，未启用 `sqlite-vec`。它是确定性的词法相似度补充，不是神经语义模型。
 - 生命周期：单 cue 先形成候选；跨不同 Demo 重复或用户确认后才晋级；纠正产生不可变 revision，删除产生 tombstone，迟到事件不能复活记录。
-- 管理：设置/记忆页提供真实的导出、删除与 SQLite backup；Desktop 删除由 SQLite single-writer、tombstone/deletion marker 和本地 no-op invalidator 收敛，不依赖 Cloudflare Outbox。Web/Cloudflare 的严格通知/invalidation 规则不变。migration、update 和 restore 都先做 integrity/manifest 校验并失败关闭。
+- 复盘历史：同一 Demo 可以有多个玩家 Review，重新分析追加带真实 adapter/graph/prompt provenance 的 Revision。点击历史先经真实领域 schema 校验并按 Recovery Artifact ID/key/revision 恢复 Analysis、ReviewPlan、讲解、诊断、ToolResult 和精确 RuntimeHead，再后台恢复 Viewer；RESTORE 丢弃迟到分析事件，已存产物不再调用 Director、Narrator、Reflection、Embedding 或 Coach Policy。新 Revision 强制独立 CandidateSet Artifact；migration 006 只为迁移前 READY Revision 启用 checksummed AnalysisBundle 内 embedded CandidateSet 的兼容读取。
+- 行为幂等：历史打开、重播和回看不建立 MemoryProposal；机会由 Demo 内容哈希＋玩家＋稳定 cue＋taxonomy 去重，分析 Revision 只更新证据来源。
+- 管理：设置/记忆页提供真实的导出、选择性删除与 SQLite backup；Demo 删除先显示精确关联总数/有界明细，再用覆盖完整关联集的 impact token 防止确认竞态，并按内容哈希 tombstone evidence。Desktop 删除由 SQLite single-writer、tombstone/deletion marker 和本地 no-op invalidator 收敛，不依赖 Cloudflare Outbox。Web/Cloudflare 的严格通知/invalidation 规则不变。migration、update 和 restore 都先做 integrity/manifest 校验并失败关闭。
 - Provider：DeepSeek 或 OpenAI-compatible 的 API Key 存在 macOS Keychain generic password 中。WebView 只能查看“是否已保存”、设置或删除，永远不能读取密钥明文；非 secret base URL/model 写入 `0600` 本地配置。
 
 ## 数据位置与卸载
@@ -77,6 +80,7 @@ Tauri 只监督一个直接 child：固定 Node `24.19.0` 运行的 desktop runt
 | 内容 | 默认位置 |
 | --- | --- |
 | SQLite、provider 配置、备份、update receipt | `~/Library/Application Support/com.csagent.coach/` |
+| 托管 Demo、复盘 Artifact 和精确临时目录 | `~/Library/Application Support/com.csagent.coach/library/` |
 | 可重建缓存 | `~/Library/Caches/com.csagent.coach/` |
 | 有界脱敏日志 | `~/Library/Logs/com.csagent.coach/` |
 | Provider API Key | macOS Keychain service `com.csagent.coach.provider`，account `api-key` |
@@ -87,9 +91,9 @@ Tauri 只监督一个直接 child：固定 Node `24.19.0` 运行的 desktop runt
 
 ## 更新模型
 
-实现的目标流程是：HTTPS `latest.json` check → Tauri/minisign 下载验签 → 用户分别确认下载与安装 → coaching/SQLite busy gate → runtime 进入 `DRAINING` 并拒绝新 Next 请求 → 等待既有 handler 与 response 都完成、active count 归零 → pre-update SQLite backup 与 integrity → 同 volume staging → Developer ID/team/版本/权限校验 → `renamex_np(RENAME_SWAP)` 原子交换 → 新版本首次 sidecar/database health → 确认或回滚。
+实现的目标流程是：HTTPS `latest.json` check → Tauri/minisign 下载验签 → 用户分别确认下载与安装 → coaching/SQLite busy gate → runtime 进入 `DRAINING` 并拒绝新 Next 与 Viewer Library 请求 → 等待既有 handler 与 response 都完成、统一 active count 归零 → pre-update SQLite backup 与 integrity → 同 volume staging → Developer ID/team/版本/权限校验 → `renamex_np(RENAME_SWAP)` 原子交换 → 新版本首次 sidecar/database health → 确认或回滚。
 
-这个 activity counter 只覆盖 Next/API 工作；Viewer iframe 内 parser 是纯本地计算，不产生 server write。关闭主窗口只会隐藏窗口，当前复盘仍保持 busy；只有在 Settings 明确点击“结束当前复盘”，且应用成功切到 bundled maintenance page 后才允许安装。“稍后”或关闭 Settings 会恢复原复盘。
+这个 activity counter 覆盖 Next handler/response、Viewer Library 的 `IMPORT/VALIDATE/READ` 与 Settings/admin 资料库操作；response 必须真正 `finish/close`，仅调用 `end()` 不算完成。Viewer iframe 内纯 Worker/WASM parser 本身不计数，但 parser 触发的 VALIDATE 写入会计数；shutdown 也复用同一静默点。关闭主窗口只会隐藏窗口，当前复盘仍保持 busy；只有在 Settings 明确点击“结束当前复盘”，且应用成功切到 bundled maintenance page 后才允许安装。“稍后”或关闭 Settings 会恢复原复盘。
 
 不能安全交换时保持当前 app，并提供同版本 DMG fallback；fallback 按钮只会一键打开固定的 `desktop-v{version}/CS-Agent-Coach_{version}_aarch64.dmg` GitHub asset，不接受 manifest/前端任意 URL。应用不会调用缺少恢复保证的破坏性 updater install。当前公钥是阻断占位值，所以公开 update check/download/install 不可用。CI 先把已有 tag 固定到精确 commit，后续 job 只 checkout 并复核该 commit，同时执行 feature-gated verifier 的公钥与签名自验证；该工具不进入 App。本机已用随测试清理的临时 Tauri key 完成真实 0.1.0→0.1.1 App archive、HTTPS 流式下载、production Rust verifier、篡改拒绝、解包与原子安装/health-cleanup fixture；这不替代 rights、正式公钥、Developer ID 和 notarization 的公开 Release 证据。
 
@@ -136,6 +140,7 @@ pnpm dev
 apps/desktop/             Tauri 宿主、bootstrap/settings/update UI
 apps/desktop-runtime/     Node/Next sidecar、双 loopback host、admin transport
 apps/web/                 复用的 coaching UI 与 Route Handler
+libs/review-library/      托管 Demo、Review/Revision/Artifact、capability 和文件—SQLite Saga
 libs/memory-sqlite/       桌面 Memory/checkpoint、migration、backup/export/delete
 libs/                     Timeline、Observation、ReviewPlan、Session、Agent 等领域模块
 tools/desktop-release/    fail-closed distribution audit

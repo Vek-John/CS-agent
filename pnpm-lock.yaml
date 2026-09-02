@@ -38,6 +38,9 @@ importers:
       '@cs-coach/memory-sqlite':
         specifier: workspace:*
         version: link:../../libs/memory-sqlite
+      '@cs-coach/review-library':
+        specifier: workspace:*
+        version: link:../../libs/review-library
     devDependencies:
       esbuild:
         specifier: 0.28.2
@@ -75,6 +78,9 @@ importers:
       '@cs-coach/observation':
         specifier: workspace:*
         version: link:../../libs/observation
+      '@cs-coach/review-library':
+        specifier: workspace:*
+        version: link:../../libs/review-library
       '@cs-coach/review-planner':
         specifier: workspace:*
         version: link:../../libs/review-planner
@@ -216,6 +222,12 @@ importers:
       '@cs-coach/contracts':
         specifier: workspace:*
         version: link:../contracts
+
+  libs/review-library:
+    dependencies:
+      '@cs-coach/memory-sqlite':
+        specifier: workspace:*
+        version: link:../memory-sqlite
 
   libs/review-planner:
     dependencies:

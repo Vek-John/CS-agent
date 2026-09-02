@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { DESKTOP_MIGRATIONS } from "@cs-coach/memory-sqlite/server";
 import {
   createDesktopUpdateBackup,
   probeDesktopCheckpointBackend,
@@ -15,7 +16,7 @@ test("update backup uses the verified SQLite backup bridge and private files", a
 
   const summary = await createDesktopUpdateBackup({ dataDir, appVersion: "0.1.0" });
   assert.equal(summary.schemaVersion, "desktop-runtime-backup.v1");
-  assert.equal(summary.migrationCount, 2);
+  assert.equal(summary.migrationCount, DESKTOP_MIGRATIONS.length);
   assert.match(summary.databasePath, /cs-agent-pre-update-0\.1\.0-\d+-[a-f0-9]{12}\.sqlite3$/u);
   assert.equal((await stat(summary.databasePath)).mode & 0o777, 0o600);
   assert.equal((await stat(summary.manifestPath)).mode & 0o777, 0o600);

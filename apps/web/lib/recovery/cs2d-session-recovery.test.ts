@@ -5,8 +5,14 @@ import {
 } from "@cs-coach/cs2d-analysis-adapter";
 import { createCoachingSession } from "@cs-coach/session";
 import { buildInitialCoachingRouteState } from "../coaching/cs2d-route-integration";
-import type { CoachCue, NarrationBundle } from "@cs-coach/contracts";
 import {
+  buildCoachingPackage,
+  buildOutcomeImpactForCue,
+  buildOutcomePackage,
+  deterministicNarrationBundle,
+} from "@cs-coach/review-planner";
+import {
+  assertRecoveryMatchesActiveRevision,
   buildReconnectReplayEvent,
   buildSessionRecoveryRecord,
   checkpointForRecoveryBoundary,
@@ -14,9 +20,12 @@ import {
   normalizeRecoveryAnalysis,
   restoreRecoveryArtifacts,
   isPreAgentRouteStartRecovery,
+  mergePersistedToolResults,
   shouldReconnectRecoveryAgent,
   shouldPersistToolTransitionToRecovery,
+  validateStoredReviewArtifacts,
 } from "./cs2d-session-recovery";
+import { SessionRecoveryRecordSchema } from "@cs-coach/coach-agent/client";
 
 const HASH = "8".repeat(64);
 
@@ -85,21 +94,6 @@ function replay(): Cs2dReplay {
   };
 }
 
-function narration(cue: CoachCue): NarrationBundle {
-  const ref = cue.observable_fact_refs[0] ?? cue.advice[0]?.id ?? "fixture-ref";
-  const field = { text: "fixture narration", refs: [ref], limitations: [] };
-  return {
-    cueId: cue.id,
-    candidateId: cue.candidate_id!,
-    primaryFocusCode: cue.primary_focus_code!,
-    currentSituation: field,
-    playerAction: field,
-    coreIssue: field,
-    betterPlay: field,
-    outcomeImpact: field,
-  };
-}
-
 function fixture() {
   const analysis = buildCs2dAnalysisBundle({
     replay: replay(),
@@ -108,7 +102,20 @@ function fixture() {
     demoContentHash: HASH,
     demoContentHashLatencyMs: 1,
   });
-  const narrationByCue = Object.fromEntries(analysis.review_plan.cues.map((cue) => [cue.id, narration(cue)]));
+  const narrationByCue = Object.fromEntries(analysis.review_plan.cues.map((cue) => {
+    const coaching = buildCoachingPackage(cue, analysis.candidate_set, analysis.observation_evidence);
+    const impact = buildOutcomeImpactForCue(
+      cue,
+      analysis.candidate_set,
+      analysis.win_probability_timeline,
+      analysis.match_timeline,
+      analysis.selected_steam_id,
+    );
+    return [cue.id, deterministicNarrationBundle(
+      coaching,
+      buildOutcomePackage(cue, analysis.candidate_set, impact),
+    )];
+  }));
   const readiness = Object.fromEntries(analysis.review_plan.cues.map((cue) => [cue.id, "READY" as const]));
   const routeState = buildInitialCoachingRouteState(analysis.review_plan, { narrationByCue, readiness });
   const identity = createRecoverySessionIdentity(() => "00000000-0000-4000-8000-000000000001");
@@ -117,6 +124,58 @@ function fixture() {
 }
 
 describe("cs2d recovery Host Adapter", () => {
+  it("revalidates stored analysis, plan, narration, and cross-artifact identities", () => {
+    const input = fixture();
+    const validated = validateStoredReviewArtifacts({
+      analysis: input.analysis,
+      candidateSet: input.analysis.candidate_set,
+      plan: input.analysis.review_plan,
+      narrationByCue: input.narrationByCue,
+      cueCases: {},
+      learningThreads: [],
+      summary: null,
+      selectedPlayerId: "dog",
+      demoContentHash: HASH,
+      routeId: input.analysis.review_plan.id,
+      routeHash: input.routeState.routeFingerprint,
+    });
+    expect(validated.analysis.demo_id).toBe("cs2d-local-demo");
+    expect(validated.plan.id).toBe(input.analysis.review_plan.id);
+    expect(Object.keys(validated.narrationByCue)).toEqual(Object.keys(input.narrationByCue));
+
+    expect(() => validateStoredReviewArtifacts({
+      analysis: input.analysis,
+      candidateSet: input.analysis.candidate_set,
+      plan: input.analysis.review_plan,
+      narrationByCue: input.narrationByCue,
+      cueCases: {},
+      learningThreads: [],
+      summary: null,
+      selectedPlayerId: "opponent",
+      demoContentHash: HASH,
+      routeId: input.analysis.review_plan.id,
+      routeHash: input.routeState.routeFingerprint,
+    })).toThrow(/identity/u);
+
+    const cueId = input.analysis.review_plan.cues[0]!.id;
+    expect(() => validateStoredReviewArtifacts({
+      analysis: input.analysis,
+      candidateSet: input.analysis.candidate_set,
+      plan: input.analysis.review_plan,
+      narrationByCue: {
+        ...input.narrationByCue,
+        [cueId]: { ...input.narrationByCue[cueId]!, candidateId: "wrong-candidate" },
+      },
+      cueCases: {},
+      learningThreads: [],
+      summary: null,
+      selectedPlayerId: "dog",
+      demoContentHash: HASH,
+      routeId: input.analysis.review_plan.id,
+      routeHash: input.routeState.routeFingerprint,
+    })).toThrow(/NarrationBundle validation failed/u);
+  });
+
   it("keeps manual tool transitions out of the stable RecoveryBoundary store", () => {
     expect(shouldPersistToolTransitionToRecovery("MANUAL")).toBe(false);
     expect(shouldPersistToolTransitionToRecovery("DEFAULT")).toBe(true);
@@ -144,6 +203,28 @@ describe("cs2d recovery Host Adapter", () => {
     expect(restored.plan.id).toBe(input.analysis.review_plan.id);
     expect(restored.session).toMatchObject({ id: input.identity.sessionId, phase: "INTRO", current_segment_index: 0 });
     expect(Object.keys(restored.narrationByCue).length).toBeLessThanOrEqual(3);
+  });
+
+  it("refuses to pair a valid recovery record with a different active Revision identity", () => {
+    const input = fixture();
+    const record = buildSessionRecoveryRecord({
+      ...input,
+      plan: input.analysis.review_plan,
+      boundaryKind: "ROUTE_START",
+      demoContentHash: HASH,
+      selectedPlayerId: "dog",
+      agentCheckpointId: null,
+    });
+
+    expect(() => assertRecoveryMatchesActiveRevision(record, input.analysis.review_plan)).not.toThrow();
+    expect(() => assertRecoveryMatchesActiveRevision(
+      { ...record, routeId: "another-revision-route" },
+      input.analysis.review_plan,
+    )).toThrow("active Revision");
+    expect(() => assertRecoveryMatchesActiveRevision(
+      { ...record, routeHash: "another-revision-hash" },
+      input.analysis.review_plan,
+    )).toThrow("active Revision");
   });
 
   it("accepts the same structured analysis and rejects identity, hash, player, route, and tick drift", () => {
@@ -319,5 +400,45 @@ describe("cs2d recovery Host Adapter", () => {
       routeCursor: 8,
       sessionStatus: "COMPLETED",
     }, boundary)).toBeNull();
+  });
+
+  it("reuses a persisted ToolResult to close a POSTED recovery ledger without replaying the tool", () => {
+    const input = fixture();
+    const cue = input.analysis.review_plan.cues[0]!;
+    const base = buildSessionRecoveryRecord({
+      ...input,
+      plan: input.analysis.review_plan,
+      boundaryKind: "ROUTE_START",
+      demoContentHash: HASH,
+      selectedPlayerId: "dog",
+      agentCheckpointId: null,
+    });
+    const posted = SessionRecoveryRecordSchema.parse({
+      ...base,
+      toolLedger: [{
+        callId: "call-recovered",
+        cueId: cue.id,
+        capabilityId: "cap-focus-map",
+        status: "POSTED",
+        observationCode: null,
+        result: null,
+      }],
+    });
+    const result = {
+      callId: "call-recovered",
+      status: "SUCCEEDED",
+      observation: { code: "EVIDENCE_SHOWN", completed: true },
+      limitations: [],
+    } as const;
+
+    const merged = mergePersistedToolResults(posted, { "call-recovered": result });
+    expect(merged.toolLedger[0]).toMatchObject({
+      status: "RESULTED",
+      observationCode: "EVIDENCE_SHOWN",
+      result,
+    });
+    expect(() => mergePersistedToolResults(posted, {
+      "another-call": result,
+    })).toThrow(/key does not match callId/u);
   });
 });
