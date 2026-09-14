@@ -1,15 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { playerFacingFocusProblem } from "./coaching-language";
+import { playerFacingFocusProblem, playerFacingLimitation } from "./coaching-language";
 
 describe("player-facing coaching language", () => {
-  it("translates internal focus codes into concrete CS consequences", () => {
-    expect(playerFacingFocusProblem("OBJECTIVE_TIMING")).toContain("队友没到位");
-    expect(playerFacingFocusProblem("CONVERT_ADVANTAGE")).toContain("优势");
-    expect(playerFacingFocusProblem("SURVIVE_CONTACT")).toContain("补枪");
-    expect(playerFacingFocusProblem("OBJECTIVE_TIMING")).not.toContain("OBJECTIVE_TIMING");
+  it.each(["OBJECTIVE_TIMING", "CONVERT_ADVANTAGE", "SURVIVE_CONTACT", "UNKNOWN_INTERNAL_CODE"])("does not infer mistakes from focus %s", (focus) => {
+    expect(playerFacingFocusProblem(focus)).toContain("证据不足");
+    expect(playerFacingFocusProblem(focus)).not.toContain(focus);
+    expect(playerFacingFocusProblem(focus)).not.toMatch(/你没|队友没|风险太高/);
   });
-
-  it("uses a player-facing fallback for an unknown internal code", () => {
-    expect(playerFacingFocusProblem("UNKNOWN_INTERNAL_CODE")).toBe("这次处理没有留好退路和队友补枪条件，风险太高。");
+  it("projects internal limitations as understandable uncertainty", () => {
+    expect(playerFacingLimitation("ObservationState renderer lossless refId schema TRADE tick")).toBe("部分现场信息无法确认，因此暂不作确定判断。");
   });
 });

@@ -22,14 +22,15 @@ import type {
   ReviewSegment,
   TeachingCandidate
 } from "@cs-coach/contracts";
-import { DIRECTOR_FOCUS_CODES_BY_SIGNAL, MAX_DIRECTOR_PACKET_CANDIDATES, MAX_TEACHING_CUES } from "@cs-coach/contracts";
+import { MAX_DIRECTOR_PACKET_CANDIDATES, MAX_TEACHING_CUES } from "@cs-coach/contracts";
 import { assertValidReviewPlan } from "./index";
 import { buildDeterministicAdvice } from "./coaching-package-builder";
-import { playerFacingFocusProblem } from "./coaching-language";
+import { playerFacingFocusProblem, playerFacingLimitation, UNCERTAIN_ADVICE_TEXT } from "./coaching-language";
+import { assessCandidateTeaching, buildGatedAdviceOptions, allowedTeachingFocusCodes, verifiedHabitKey } from "./teaching-gates";
 
 const DEFAULT_MAX_CUES = MAX_TEACHING_CUES;
-const DEFAULT_COMPILER_VERSION = "review-planner/compiler/1.0.0";
-const DEFAULT_PROMPT_VERSION = "deterministic-template/1.0.0";
+const DEFAULT_COMPILER_VERSION = "review-planner/compiler/2.0.0";
+const DEFAULT_PROMPT_VERSION = "deterministic-template/2.0.0";
 
 function nonEmpty(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -117,7 +118,14 @@ export function assembleCandidateSet(input: CandidateSetAssemblyInput): Candidat
   const candidates = [...input.candidates].sort((left, right) =>
     left.decisionTick - right.decisionTick || left.candidateId.localeCompare(right.candidateId)
   );
-  const materials = [...input.materials].sort((left, right) => left.candidateId.localeCompare(right.candidateId));
+  const materials = [...input.materials].map((material) => {
+    const candidate = candidates.find((item) => item.candidateId === material.candidateId)!;
+    return { ...material, assessment: assessCandidateTeaching(candidate, material), adviceOptions: buildGatedAdviceOptions(candidate, material) };
+  }).sort((left, right) => left.candidateId.localeCompare(right.candidateId));
+  for (let index = 0; index < candidates.length; index += 1) {
+    const material = materials.find((item) => item.candidateId === candidates[index].candidateId)!;
+    candidates[index] = { ...candidates[index], assessment: material.assessment, adviceOptions: material.adviceOptions };
+  }
   const storedCandidates = status === "FAILED" ? [] : candidates;
   const storedMaterials = status === "FAILED" ? [] : materials;
   const limitations = unique([
@@ -174,7 +182,8 @@ function allCandidateRefs(candidate: TeachingCandidate): Set<string> {
 
 export function buildDirectorRequest(set: CandidateSet, maxSelected = DEFAULT_MAX_CUES): DirectorRequest {
   const valueOf = (candidate: TeachingCandidate): number => candidate.deterministicScore + (candidate.resultSummary.selectedPlayerDeath ? 100 : candidate.source.kind === "KILL" ? 80 : 0) + (candidate.winRateSignalRefs.length > 0 ? 80 : 0) + (candidate.actionRefs.length > 0 && candidate.factRefs.length > 0 ? 10 : 0) + Math.min(6, candidate.evidenceRefs.length);
-  const practicalCandidates = set.candidates.filter(isPracticalTeachingCandidate);
+  const materials = materialById(set);
+  const practicalCandidates = legalCandidates(set);
   const byRound = new Map<number, TeachingCandidate[]>();
   for (const candidate of practicalCandidates) byRound.set(candidate.roundNumber, [...(byRound.get(candidate.roundNumber) ?? []), candidate]);
   const representatives = [...byRound.values()].map((group) => [...group].sort((left, right) => valueOf(right) - valueOf(left) || left.decisionTick - right.decisionTick || left.candidateId.localeCompare(right.candidateId))[0]);
@@ -194,7 +203,15 @@ export function buildDirectorRequest(set: CandidateSet, maxSelected = DEFAULT_MA
       missingFields: compactTextList(candidate.resultSummary.missingFields, 8, 96),
       limitations: [...candidate.resultSummary.limitations].slice(0, 4).map((limitation) => limitation.slice(0, 160))
     },
-    allowedFocusCodes: [...DIRECTOR_FOCUS_CODES_BY_SIGNAL[candidate.source.kind]]
+    allowedFocusCodes: allowedTeachingFocusCodes(assessCandidateTeaching(candidate, materials.get(candidate.candidateId)!)),
+    assessment: assessCandidateTeaching(candidate, materials.get(candidate.candidateId)!),
+    behaviorHypotheses: [...(materials.get(candidate.candidateId)?.behaviorHypotheses ?? [])],
+    approvedAdvice: buildGatedAdviceOptions(candidate, materials.get(candidate.candidateId)!).filter((option) => option.applicability?.allowedIntoNarrator).map((option) => ({ id: option.id, code: option.code, text: option.text, status: "APPLICABLE" as const })),
+    decisionSummary: {
+      facts: materials.get(candidate.candidateId)!.decisionFacts.filter((fact) => fact.observed_by_player && fact.available_at_tick <= candidate.decisionTick).map((fact) => fact.text).slice(0, 8),
+      observableInformation: [],
+      missingFields: [...candidate.missingFields].slice(0, 8)
+    }
   }));
   return {
     candidateSetId: set.id,
@@ -205,21 +222,10 @@ export function buildDirectorRequest(set: CandidateSet, maxSelected = DEFAULT_MA
   };
 }
 
-/**
- * A successful kill is useful as a fact, but not automatically a coaching
- * stop. Keep it only when the selected side subsequently lost a meaningful
- * amount of win probability; positive/no-swing kills are practical playback
- * context, not mistakes to explain.
- */
-export function isPracticalTeachingCandidate(candidate: TeachingCandidate): boolean {
-  if (candidate.source.kind !== "KILL") return true;
-  // A KILL remains in the CandidateSet as a fact, but without a model curve it
-  // cannot prove a practical negative outcome and must not start AI teaching.
-  if (!candidateWinProbabilityIsAvailable(candidate)) return false;
-  const percentagePoints = candidate.resultSummary.winProbabilityPercentagePoints;
-  const delta = candidate.resultSummary.winProbabilityDelta;
-  if ((percentagePoints !== undefined && percentagePoints >= 0) || (delta !== undefined && delta >= 0)) return false;
-  return (percentagePoints !== undefined && percentagePoints <= -1) || (delta !== undefined && delta <= -0.01);
+/** Eligibility is established by the semantic gate, never by event kind alone. */
+export function isPracticalTeachingCandidate(candidate: TeachingCandidate, material?: CandidateMaterial): boolean {
+  const assessment = material ? assessCandidateTeaching(candidate, material) : candidate.assessment;
+  return Boolean(assessment && assessment.kind !== "NO_TEACHING_VALUE");
 }
 
 export function candidateWinProbabilityIsAvailable(candidate: TeachingCandidate): boolean {
@@ -227,14 +233,7 @@ export function candidateWinProbabilityIsAvailable(candidate: TeachingCandidate)
 }
 
 function focusFor(candidate: TeachingCandidate): string {
-  switch (candidate.source.kind) {
-    case "DEATH": return "SURVIVE_THE_NEXT_CONTACT";
-    case "KILL": return "CONVERT_ADVANTAGE";
-    case "BOMB": return "OBJECTIVE_TIMING";
-    case "UTILITY": return "UTILITY_PURPOSE_AND_TEMPO";
-    case "HP_CHANGE": return "SURVIVE_CONTACT";
-    case "WIN_RATE_DROP": return "WIN_PROBABILITY_SWING_RESPONSE";
-  }
+  return candidate.assessment ? allowedTeachingFocusCodes(candidate.assessment)[0] ?? "REVIEW_UNCERTAINTY" : "REVIEW_UNCERTAINTY";
 }
 
 function selectionReason(candidate: TeachingCandidate): string {
@@ -263,11 +262,11 @@ function legalCandidates(set: CandidateSet): TeachingCandidate[] {
     const hasDecisionFact = Boolean(material?.decisionFacts.some((fact) => candidate.factRefs.includes(fact.id) && fact.availability === "DECISION" && fact.observed_by_player));
     const hasPlayerAction = Boolean(material?.playerActionFacts.some((fact) => candidate.actionRefs.includes(fact.id) && Boolean(fact.actorPlayerId)));
     const hasOutcomeFact = Boolean(material?.outcomeFacts.some((fact) => candidate.outcomeRefs.includes(fact.id)));
-    return candidate.factRefs.length > 0 && candidate.actionRefs.length > 0 && (candidate.outcomeRefs.length > 0 || candidate.winRateSignalRefs.length > 0) && hasDecisionFact && hasPlayerAction && (hasOutcomeFact || candidate.winRateSignalRefs.length > 0);
+    return candidate.factRefs.length > 0 && (candidate.outcomeRefs.length > 0 || candidate.winRateSignalRefs.length > 0) && hasDecisionFact && (hasPlayerAction || Boolean(material && assessCandidateTeaching(candidate, material).kind === "INSUFFICIENT_EVIDENCE")) && (hasOutcomeFact || candidate.winRateSignalRefs.length > 0);
   };
   const rank = (candidate: TeachingCandidate): number => candidate.deterministicScore + (candidate.resultSummary.selectedPlayerDeath ? 100 : candidate.source.kind === "KILL" ? 80 : 0) + (candidate.winRateSignalRefs.length > 0 ? 80 : 0) + (candidate.factRefs.length > 0 && candidate.actionRefs.length > 0 ? 10 : 0) + Math.min(6, candidate.evidenceRefs.length);
   const byRound = new Map<number, TeachingCandidate[]>();
-  for (const candidate of set.candidates.filter((candidate) => isPracticalTeachingCandidate(candidate) && canCompile(candidate))) byRound.set(candidate.roundNumber, [...(byRound.get(candidate.roundNumber) ?? []), candidate]);
+  for (const candidate of set.candidates.filter((candidate) => isPracticalTeachingCandidate(candidate, materials.get(candidate.candidateId)) && canCompile(candidate))) byRound.set(candidate.roundNumber, [...(byRound.get(candidate.roundNumber) ?? []), candidate]);
   const accepted: TeachingCandidate[] = [];
   for (const group of byRound.values()) {
     const sorted = [...group].sort((left, right) => left.preRollStart - right.preRollStart || left.candidateId.localeCompare(right.candidateId));
@@ -279,7 +278,18 @@ function legalCandidates(set: CandidateSet): TeachingCandidate[] {
     }
     for (const cluster of clusters) accepted.push([...cluster].sort((left, right) => rank(right) - rank(left) || left.decisionTick - right.decisionTick || left.candidateId.localeCompare(right.candidateId))[0]);
   }
-  return accepted.sort((left, right) => left.decisionTick - right.decisionTick || left.candidateId.localeCompare(right.candidateId));
+  const uncertaintyKeys = new Set<string>();
+  const selected = accepted.sort((left, right) => rank(right) - rank(left) || left.decisionTick - right.decisionTick).filter((candidate) => {
+    const material = materials.get(candidate.candidateId)!;
+    const assessment = assessCandidateTeaching(candidate, material);
+    if (assessment.kind !== "INSUFFICIENT_EVIDENCE") return true;
+    const snapshot = material.decisionSnapshot ?? candidate.decisionSnapshot;
+    const key = `${candidate.source.kind}:${material.contextCode ?? "unknown"}:${snapshot?.aliveCounts.value?.allies === 1 ? "solo" : "team"}:${(candidate.resultSummary.winProbabilityDelta ?? 0) > 0 ? "counterevidence" : "unproven"}`;
+    if (uncertaintyKeys.has(key) || uncertaintyKeys.size >= 4) return false;
+    uncertaintyKeys.add(key);
+    return true;
+  });
+  return selected.sort((left, right) => left.decisionTick - right.decisionTick || left.candidateId.localeCompare(right.candidateId));
 }
 
 /** Provider-free Director used when a key, timeout, or schema is unavailable. */
@@ -329,7 +339,7 @@ export function deterministicDirectorFallback(
     candidateSetId: set.id,
     candidateSetVersion: set.version,
     candidateSetHash: set.hash,
-    selected: chosen.map((candidate, index) => makeDecision(candidate, index + 1)),
+    selected: chosen.map((candidate, index) => makeDecision({ ...candidate, assessment: assessCandidateTeaching(candidate, set.materials.find((material) => material.candidateId === candidate.candidateId)!) }, index + 1)),
     manifest: {
       status: "FALLBACK",
       provider: "DETERMINISTIC",
@@ -348,6 +358,7 @@ export function collectDirectorDecisionIssues(set: CandidateSet, decisions: Dire
   const candidates = candidateById(set);
   const materials = materialById(set);
   const selected = new Set<string>();
+  const eligibleIds = new Set(legalCandidates(set).map((candidate) => candidate.candidateId));
   for (const decision of decisions.selected) {
     if (!nonEmpty(decision.candidateId) || !candidates.has(decision.candidateId)) issues.push(`Director selected unknown candidate ${decision.candidateId}.`);
     if (selected.has(decision.candidateId)) issues.push(`Director selected candidate ${decision.candidateId} more than once.`);
@@ -358,15 +369,16 @@ export function collectDirectorDecisionIssues(set: CandidateSet, decisions: Dire
     if (!Number.isFinite(decision.confidence) || decision.confidence < 0 || decision.confidence > 1) issues.push(`Director candidate ${decision.candidateId} has invalid confidence.`);
     const candidate = candidates.get(decision.candidateId);
     if (!candidate) continue;
-    if (!isPracticalTeachingCandidate(candidate)) issues.push(`Director candidate ${decision.candidateId} has no practical negative outcome signal.`);
+    if (!eligibleIds.has(candidate.candidateId)) issues.push(`Director candidate ${decision.candidateId} violates utility or repetition gate.`);
     const material = materials.get(candidate.candidateId);
+    if (!material || !isPracticalTeachingCandidate(candidate, material)) issues.push(`Director candidate ${decision.candidateId} has no practical teaching value.`);
     const hasDecisionFact = Boolean(material?.decisionFacts.some((fact) => candidate.factRefs.includes(fact.id) && fact.availability === "DECISION" && fact.observed_by_player));
     const hasPlayerAction = Boolean(material?.playerActionFacts.some((fact) => candidate.actionRefs.includes(fact.id) && Boolean(fact.actorPlayerId)));
     const hasOutcomeFact = Boolean(material?.outcomeFacts.some((fact) => candidate.outcomeRefs.includes(fact.id)));
     if (candidate.factRefs.length === 0 || !hasDecisionFact) issues.push(`Director candidate ${decision.candidateId} has no decision fact.`);
-    if (candidate.actionRefs.length === 0 || !hasPlayerAction) issues.push(`Director candidate ${decision.candidateId} has no verified player action.`);
+    if ((candidate.actionRefs.length === 0 || !hasPlayerAction) && (!material || assessCandidateTeaching(candidate, material).kind !== "INSUFFICIENT_EVIDENCE")) issues.push(`Director candidate ${decision.candidateId} has no verified player action.`);
     if ((candidate.outcomeRefs.length === 0 && candidate.winRateSignalRefs.length === 0) || (candidate.outcomeRefs.length > 0 && !hasOutcomeFact && candidate.winRateSignalRefs.length === 0)) issues.push(`Director candidate ${decision.candidateId} has no outcome or measurement ref.`);
-    if (!DIRECTOR_FOCUS_CODES_BY_SIGNAL[candidate.source.kind].includes(decision.primaryFocusCode)) issues.push(`Director candidate ${decision.candidateId} uses an unallowlisted primaryFocusCode.`);
+    if (!material || !allowedTeachingFocusCodes(assessCandidateTeaching(candidate, material)).includes(decision.primaryFocusCode)) issues.push(`Director candidate ${decision.candidateId} uses an unallowlisted primaryFocusCode for its verified assessment.`);
     const refs = allCandidateRefs(candidate);
     for (const ref of [...decision.reasonRefs, ...decision.evidenceRefs]) {
       if (!refs.has(ref)) issues.push(`Director candidate ${decision.candidateId} references unknown ref ${ref}.`);
@@ -431,11 +443,18 @@ function buildCue(
   const actionRefs = actionFacts.map((fact) => fact.id);
   const outcomeRefs = outcomeFacts.map((fact) => fact.id);
   const { copy, advice } = buildDeterministicAdvice(candidate, decision, material, decisionFacts, repeated);
+  const assessment = assessCandidateTeaching(candidate, material);
   const inference: Inference = {
     id: `i${cueNumber}`,
     text: copy.explanation,
-    confidence: observableFactRefs.length > 0 ? 0.72 : 0.45,
-    fact_refs: [...observableFactRefs]
+    confidence: assessment.confidence,
+    fact_refs: [...observableFactRefs],
+    counter_evidence_refs: assessment.counterEvidenceRefs,
+    missing_fields: assessment.missingFields,
+    limitations: assessment.limitations,
+    hypothesis_refs: (material.behaviorHypotheses ?? []).filter((hypothesis) => hypothesis.allowedAsTeachingJudgment && !hypothesis.reflectionOnly).map((hypothesis) => hypothesis.hypothesisId),
+    allowed_as_teaching_judgment: assessment.hasEvaluableDecision,
+    reflection_only: !assessment.hasEvaluableDecision,
   };
   const evidence: import("@cs-coach/contracts").Evidence = {
     id: `e${cueNumber}`,
@@ -457,15 +476,19 @@ function buildCue(
     outcome_start_tick: candidate.decisionTick,
     outcome_end_tick: candidate.outcomeEnd,
     facts: [...decisionFacts, ...outcomeFacts.map(outcomeAsFact)],
-    inferences: [inference],
-    advice: [advice],
+    inferences: assessment.hasEvaluableDecision ? [inference] : [],
+    advice,
+    assessment: assessment,
+    adviceOptions: buildGatedAdviceOptions(candidate, material),
+    ...(material.observableContext ? { observableContext: material.observableContext } : {}),
+    behaviorHypotheses: [...(material.behaviorHypotheses ?? [])],
     evidence: [evidence, ...material.evidence],
     observable_fact_refs: [...observableFactRefs],
     ...(actionFacts.length > 0 ? { action_facts: actionFacts, action_fact_refs: actionRefs } : {}),
     ...(outcomeFacts.length > 0 ? { outcome_facts: outcomeFacts, outcome_fact_refs: outcomeRefs } : {}),
     ...(material.observableStateId ? { observable_state_id: material.observableStateId } : {}),
     annotations: [...(material.annotations ?? [])],
-    confidence: observableFactRefs.length > 0 ? 0.72 : 0.45,
+    confidence: assessment.confidence,
     limitations: unique([...candidate.limitations, ...material.limitations])
   };
   return cue;
@@ -526,6 +549,7 @@ function compileSegments(timeline: MatchTimeline, selected: readonly { candidate
   const cues: CoachCue[] = [];
   const materialByCandidate = new Map(selected.map((item) => [item.candidate.candidateId, item]));
   const occurrenceByFocus = new Map<string, number>();
+  const habitKeyByCue = new Map<string, string>();
   const selectedByRound = new Map<number, typeof selected[number][]>();
   for (const item of selected) selectedByRound.set(item.candidate.roundNumber, [...(selectedByRound.get(item.candidate.roundNumber) ?? []), item]);
 
@@ -539,12 +563,14 @@ function compileSegments(timeline: MatchTimeline, selected: readonly { candidate
     for (const item of roundCandidates) {
       const candidate = item.candidate;
       if (candidate.preRollStart < cursor || candidate.outcomeEnd <= candidate.decisionTick || candidate.outcomeEnd > round.end_tick) continue;
-      if (cursor < candidate.preRollStart) segments.push(ordinaryBriefSegment(`seg-r${round.round_number}-brief-${cursor}-${candidate.preRollStart}`, round.round_number, cursor, candidate.preRollStart, "CONTEXT_ONLY", "普通回合先用一句话带过；没有候选不等于没有事实。"));
-      const occurrence = (occurrenceByFocus.get(item.decision.primaryFocusCode) ?? 0) + 1;
-      occurrenceByFocus.set(item.decision.primaryFocusCode, occurrence);
+      if (cursor < candidate.preRollStart) segments.push(ordinaryBriefSegment(`seg-r${round.round_number}-brief-${cursor}-${candidate.preRollStart}`, round.round_number, cursor, candidate.preRollStart, "CONTEXT_ONLY", "这段没有足够证据作具体评价，快速带过，仍可随时回看。"));
+      const habitKey = verifiedHabitKey(candidate, item.material);
+      const occurrence = habitKey ? (occurrenceByFocus.get(habitKey) ?? 0) + 1 : 1;
+      if (habitKey) occurrenceByFocus.set(habitKey, occurrence);
       const segmentId = `seg-r${round.round_number}-cue-${candidate.candidateId}`;
       const cue = buildCue(candidate, item.decision, materialByCandidate.get(candidate.candidateId)!.material, segmentId, cues.length + 1, occurrence > 1);
       cues.push(cue);
+      if (habitKey) habitKeyByCue.set(cue.id, habitKey);
       segments.push({
         id: segmentId,
         round_number: round.round_number,
@@ -560,7 +586,7 @@ function compileSegments(timeline: MatchTimeline, selected: readonly { candidate
       cursor = candidate.outcomeEnd;
     }
     const decidedTick = round.decided_tick ?? round.end_tick;
-    if (cursor < decidedTick) segments.push(ordinaryBriefSegment(`seg-r${round.round_number}-brief-${cursor}-${decidedTick}`, round.round_number, cursor, decidedTick, "CONTEXT_ONLY", "普通回合用一句话带过；没有候选不等于没有事实。"));
+    if (cursor < decidedTick) segments.push(ordinaryBriefSegment(`seg-r${round.round_number}-brief-${cursor}-${decidedTick}`, round.round_number, cursor, decidedTick, "CONTEXT_ONLY", "这段没有足够证据作具体评价，快速带过，仍可随时回看。"));
     const postRoundStart = Math.max(cursor, decidedTick);
     if (postRoundStart < round.end_tick) segments.push(lowValueSegment(`seg-r${round.round_number}-post-${postRoundStart}-${round.end_tick}`, round.round_number, postRoundStart, round.end_tick, "POST_ROUND", "回合胜负判定后的反应与过渡时间显式跳过。"));
   }
@@ -570,12 +596,12 @@ function compileSegments(timeline: MatchTimeline, selected: readonly { candidate
     if (previous.end_tick < current.start_tick) segments.push(lowValueSegment(`seg-gap-${previous.round_number}-${current.round_number}`, 0, previous.end_tick, current.start_tick, "INTER_ROUND_GAP", "回合之间的非比赛区间显式跳过。"));
   }
   segments.sort((left, right) => left.start_tick - right.start_tick || left.end_tick - right.end_tick || left.id.localeCompare(right.id));
-  const habits = [...occurrenceByFocus.entries()].map(([focus, occurrenceCount], index) => {
-    const cueIds = cues.filter((cue) => cue.primary_focus_code === focus).map((cue) => cue.id);
+  const habits = [...occurrenceByFocus.entries()].filter(([, count]) => count >= 2).map(([focus, occurrenceCount], index) => {
+    const cueIds = cues.filter((cue) => habitKeyByCue.get(cue.id) === focus).map((cue) => cue.id);
     return {
       id: `habit-${index + 1}`,
-      title: cues.find((cue) => cue.primary_focus_code === focus)?.title ?? focus,
-      taxonomy_id: focus,
+      title: cues.find((cue) => habitKeyByCue.get(cue.id) === focus)?.title ?? focus,
+      taxonomy_id: cues.find((cue) => habitKeyByCue.get(cue.id) === focus)?.primary_focus_code ?? focus,
       cue_ids: cueIds,
       occurrence_count: occurrenceCount,
       opportunity_count: occurrenceCount
@@ -756,19 +782,19 @@ export function deterministicNarrationBundle(
   const adviceRefs = packageInput.advice.map((advice) => advice.id).filter((ref) => adviceNamespace.has(ref));
   const evidenceRefs = packageInput.evidence.map((evidence) => evidence.id).filter((ref) => evidenceNamespace.has(ref));
   const outcomeRefs = unique([...outcome.outcomeFacts.map((fact) => fact.id), ...outcome.deathKillHpRefs, ...outcome.measurementRefs]);
-  const first = packageInput.decisionContext.facts[0]?.text ?? "当前可用决策事实有限";
-  const action = packageInput.playerAction[0]?.text ?? "记录到的玩家动作信息有限";
-  const advice = packageInput.advice[0]?.text ?? "先保留可撤退路线，再根据新信息处理";
+  const first = packageInput.decisionContext.facts.slice(0, 3).map((fact) => fact.text).join(" ") || "当前可用决策事实有限";
+  const action = packageInput.playerAction[0]?.text ?? "当前记录不足以确认具体行动意图。";
+  const advice = packageInput.advice[0]?.text ?? UNCERTAIN_ADVICE_TEXT;
   const outcomeText = [outcome.outcomeFacts[0]?.text, outcome.winProbabilityImpact?.text].filter((text): text is string => Boolean(text)).join(" ") || "结果事实将在结果窗口完成后展示";
   return {
     cueId: packageInput.cueId,
     candidateId: packageInput.candidateId,
     primaryFocusCode: packageInput.primaryFocusCode,
-    currentSituation: { text: first, refs: decisionRefs, limitations: [...packageInput.limitations] },
-    playerAction: { text: action, refs: actionRefs, limitations: [...packageInput.limitations] },
-    coreIssue: { text: playerFacingFocusProblem(packageInput.primaryFocusCode), refs: unique([...decisionRefs, ...actionRefs]), limitations: [...packageInput.limitations] },
-    betterPlay: { text: advice, refs: unique([...adviceRefs, ...evidenceRefs, ...decisionRefs]), limitations: [...packageInput.limitations] },
-    outcomeImpact: { text: outcomeText, refs: outcomeRefs, limitations: [...outcome.limitations] }
+    currentSituation: { text: first, refs: decisionRefs, limitations: packageInput.limitations.length > 0 ? [playerFacingLimitation()] : [] },
+    playerAction: { text: action, refs: actionRefs, limitations: packageInput.limitations.length > 0 ? [playerFacingLimitation()] : [] },
+    coreIssue: { text: packageInput.assessment?.explanation ?? playerFacingFocusProblem(packageInput.primaryFocusCode), refs: unique([...decisionRefs, ...actionRefs]), limitations: packageInput.limitations.length > 0 ? [playerFacingLimitation()] : [] },
+    betterPlay: { text: advice, refs: unique([...adviceRefs, ...evidenceRefs, ...decisionRefs]), limitations: packageInput.limitations.length > 0 ? [playerFacingLimitation()] : [] },
+    outcomeImpact: { text: outcomeText, refs: outcomeRefs, limitations: outcome.limitations.length > 0 ? [playerFacingLimitation()] : [] }
   };
 }
 
@@ -785,7 +811,8 @@ function fieldRefs(value: unknown): value is { text: string; refs: readonly stri
   return typeof record.text === "string" && record.text.trim().length > 0 && Array.isArray(record.refs) && record.refs.every((ref) => typeof ref === "string" && ref.trim().length > 0) && (record.confidence === undefined || (typeof record.confidence === "number" && record.confidence >= 0 && record.confidence <= 1)) && (record.limitations === undefined || (Array.isArray(record.limitations) && record.limitations.every((item) => typeof item === "string")));
 }
 
-export function collectNarrationBundleIssues(
+/** Reference-only validation for explicitly controlled legacy restoration; never use for live generation. */
+export function collectNarrationBundleReferenceIssues(
   bundle: unknown,
   coaching: import("@cs-coach/contracts").CoachingPackage,
   outcome: import("@cs-coach/contracts").OutcomePackage
@@ -809,12 +836,34 @@ export function collectNarrationBundleIssues(
   ]);
   const refsOf = (field: keyof typeof value): string[] => [...((value[field] as { refs: readonly string[] }).refs)];
   if (refsOf("currentSituation").length === 0 || refsOf("currentSituation").some((ref) => !currentRefs.has(ref))) issues.push("currentSituation must cite at least one decision fact/claim only.");
-  if (refsOf("playerAction").length === 0 || refsOf("playerAction").some((ref) => !actionRefs.has(ref))) issues.push("playerAction must cite at least one action ref only.");
+  if ((actionRefs.size > 0 && refsOf("playerAction").length === 0) || refsOf("playerAction").some((ref) => !actionRefs.has(ref))) issues.push("playerAction must cite at least one action ref only.");
   if (refsOf("coreIssue").length === 0 || refsOf("coreIssue").some((ref) => !currentRefs.has(ref) && !actionRefs.has(ref))) issues.push("coreIssue must cite at least one decision/action ref.");
   if (refsOf("betterPlay").some((ref) => !currentRefs.has(ref) && !actionRefs.has(ref) && !adviceRefs.has(ref) && !evidenceRefs.has(ref))) issues.push("betterPlay cites an unknown or forbidden ref.");
-  if (!refsOf("betterPlay").some((ref) => adviceRefs.has(ref))) issues.push("betterPlay must cite at least one advice ref.");
+  if (adviceRefs.size > 0 && !refsOf("betterPlay").some((ref) => adviceRefs.has(ref))) issues.push("betterPlay must cite at least one advice ref.");
   if (refsOf("outcomeImpact").length === 0 || refsOf("outcomeImpact").some((ref) => !outcomeRefs.has(ref))) issues.push("outcomeImpact must cite outcome/measurement refs only.");
   if (refsOf("currentSituation").some((ref) => outcomeRefs.has(ref)) || refsOf("playerAction").some((ref) => outcomeRefs.has(ref)) || refsOf("betterPlay").some((ref) => outcomeRefs.has(ref))) issues.push("Outcome refs crossed into decision-side narration fields.");
+  return unique(issues);
+}
+
+export function collectNarrationBundleIssues(
+  bundle: unknown,
+  coaching: import("@cs-coach/contracts").CoachingPackage,
+  outcome: import("@cs-coach/contracts").OutcomePackage
+): string[] {
+  const issues = collectNarrationBundleReferenceIssues(bundle, coaching, outcome);
+  if (issues.length > 0) return issues;
+  const value = bundle as Record<string, unknown>;
+  const fields = ["currentSituation", "playerAction", "coreIssue", "betterPlay", "outcomeImpact"] as const;
+  // Valid references do not prove free-form tactical text. Until a semantic verifier exists,
+  // every field must be the deterministic projection of the sealed, gated package.
+  const expected = deterministicNarrationBundle(coaching, outcome);
+  for (const field of fields) {
+    const proposed = value[field] as import("@cs-coach/contracts").NarrationField;
+    if (proposed.confidence !== expected[field].confidence) issues.push(`Narration field ${field} changes verified confidence.`);
+    if (proposed.refs.length !== expected[field].refs.length || proposed.refs.some((ref, index) => ref !== expected[field].refs[index])) issues.push(`Narration field ${field} changes grounded evidence binding.`);
+    if (proposed.text !== expected[field].text) issues.push(`Narration field ${field} adds unverified semantic content.`);
+    if (proposed.limitations?.some((item) => !expected[field].limitations?.includes(item))) issues.push(`Narration field ${field} adds unverified limitation content.`);
+  }
   return unique(issues);
 }
 

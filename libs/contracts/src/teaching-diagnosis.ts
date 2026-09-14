@@ -307,6 +307,8 @@ export interface DecisionResources {
   money?: number;
   equipmentValue?: number;
   inventoryCount?: number;
+  /** Decision-time public roster count, excluding the selected player; absent means unknown. */
+  aliveTeammates?: number;
   evidenceRefs: readonly string[];
 }
 

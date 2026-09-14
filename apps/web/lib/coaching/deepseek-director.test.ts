@@ -17,10 +17,23 @@ const manifest = {
   candidateGeneratorVersion: "generator/1"
 } as const;
 
+function decisionSnapshot(decisionTick: number): import("@cs-coach/contracts").DecisionSnapshot {
+  const unknown = { value: null, boundary: "OBSERVABLE" as const, evidenceRefs: [], limitations: [] };
+  return {
+    version: "decision-snapshot.v1", snapshotId: "snapshot-test", roundNumber: 1,
+    selectedPlayerId: "p-user", decisionTick, sampledAtTick: decisionTick,
+    selectedPlayer: unknown,
+    aliveCounts: { ...unknown, value: { allies: 1, enemies: 3, includesSelectedPlayer: true } },
+    players: [], score: unknown, clock: unknown, bomb: unknown,
+    supportChecks: [], pressureChecks: [], spatialChecks: [], missingFields: [], limitations: [],
+  };
+}
+
 function candidate(index: number): TeachingCandidate {
   const id = `candidate-${index}`;
   return {
     candidateId: id,
+    decisionSnapshot: decisionSnapshot(index * 100 + 10),
     roundNumber: (index % 20) + 1,
     source: { kind: "DEATH", refs: [`source-${index}`] },
     preRollStart: index * 100,
@@ -118,10 +131,11 @@ describe("DeepSeek Director provider packet", () => {
     const set = candidateSet();
     const context = buildDirectorProviderRequestContext(set);
     expect(set.candidates).toHaveLength(100);
-    expect(context.request.candidates).toHaveLength(MAX_DIRECTOR_PACKET_CANDIDATES);
+    expect(context.request.candidates).not.toHaveLength(0)
+    expect(context.request.candidates.length).toBeLessThanOrEqual(MAX_DIRECTOR_PACKET_CANDIDATES);
     expect(new TextEncoder().encode(JSON.stringify(context.request)).byteLength).toBeLessThan(48 * 1024);
-    expect(context.request.candidates[0].result_summary).toMatchObject({ selectedPlayerDeath: true, winProbabilityPercentagePoints: -23 });
-    expect(context.request.candidates[0].allowed_focus_codes).toContain("SURVIVE_THE_NEXT_CONTACT");
+    expect(context.request.candidates[0].result_summary).toMatchObject({ selectedPlayerDeath: true, winProbabilityDelta: -0.23 });
+    expect(context.request.candidates[0].allowed_focus_codes).toContain("REVIEW_UNCERTAINTY");
   });
 
   it("keeps hostile missing-field text inside the 48KB provider packet budget", () => {
@@ -154,7 +168,7 @@ describe("DeepSeek Director provider packet", () => {
         selected: [{
           candidate_id: "c1",
           priority: 1,
-          primary_focus_code: "SURVIVE_THE_NEXT_CONTACT",
+          primary_focus_code: "REVIEW_UNCERTAINTY",
           selection_reason: "有明确的死亡结果和可验证证据。",
           reason_refs: ["r1"],
           evidence_refs: ["e1"],
@@ -209,4 +223,21 @@ describe("DeepSeek Director provider packet", () => {
     expect(result.manifest.reason).toBe("NO_PRACTICAL_CANDIDATES");
     expect(fetcher).not.toHaveBeenCalled();
   });
+});
+
+it("projects public decision state and rejects hidden-state additions to the Director wire", () => {
+  const set = candidateSet(1);
+  const snapshot = decisionSnapshot(10);
+  snapshot.players = [{ playerId: "hidden-enemy-identity", side: "CT", alive: true, health: 83, boundary: "APPLICABILITY_ONLY" }];
+  snapshot.clock = { value: { phase: "LIVE", elapsedSeconds: 70, remainingSeconds: 45 }, boundary: "OBSERVABLE", evidenceRefs: ["fact-0"], limitations: [] };
+  snapshot.bomb = { value: { state: "PLANTED", carriedBySelectedPlayer: false, remainingSeconds: 8 }, boundary: "GROUND_TRUTH", evidenceRefs: ["hidden-bomb"], limitations: [] };
+  const modified = assembleCandidateSet({ ...set, materials: [{ ...set.materials[0], decisionSnapshot: snapshot }] });
+  const context = buildDirectorProviderRequestContext(modified);
+  expect(context.request.candidates[0].decision_summary?.situation).toMatchObject({ allies: 1, enemies: 3, remainingSeconds: 45, objective: null });
+  const packet = JSON.stringify(context.request);
+  expect(packet).not.toMatch(/hidden-enemy-identity|hidden-bomb|decisionTick|sampledAtTick|GROUND_TRUTH|APPLICABILITY_ONLY|world_position/);
+  expect(context.request.candidates[0].decision_summary?.approved_advice).toEqual([]);
+  const malicious = structuredClone(context.request);
+  Object.assign(malicious.candidates[0].result_summary, { enemyPositions: [{ x: 1234, y: 5678 }] });
+  expect(() => parseDirectorRequest(malicious)).toThrow(/unapproved data/);
 });

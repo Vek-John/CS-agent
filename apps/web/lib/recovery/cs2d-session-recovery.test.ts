@@ -10,6 +10,7 @@ import {
   buildOutcomeImpactForCue,
   buildOutcomePackage,
   deterministicNarrationBundle,
+  stableFingerprint,
 } from "@cs-coach/review-planner";
 import {
   assertRecoveryMatchesActiveRevision,
@@ -71,7 +72,7 @@ function replay(): Cs2dReplay {
       frames: [
         { tick: 64, t: 1, players: [state("dog", 64, 100), state("opponent", 64, 100)] },
         { tick: 160, t: 2.5, players: [state("dog", 160, 100), state("opponent", 160, 100)] },
-        { tick: 256, t: 4, players: [state("dog", 256, 70), state("opponent", 256, 100)] },
+        { tick: 256, t: 4, players: [state("dog", 256, 30), state("opponent", 256, 100)] },
         { tick: 352, t: 5.5, players: [state("dog", 352, 0), state("opponent", 352, 100)] },
         { tick: 544, t: 8.5, players: [state("dog", 544, 0), state("opponent", 544, 100)] },
       ],
@@ -124,6 +125,33 @@ function fixture() {
 }
 
 describe("cs2d recovery Host Adapter", () => {
+  it("restores legacy wording as an artifact without weakening live narration or reference validation", () => {
+    const input = fixture();
+    const analysis = JSON.parse(JSON.stringify(input.analysis));
+    const strip = (value: Record<string, unknown>) => {
+      for (const key of ["decisionSnapshot", "observableContext", "assessment", "adviceOptions", "behaviorHypotheses"]) delete value[key];
+    };
+    analysis.candidate_set.candidates.forEach(strip);
+    analysis.candidate_set.materials.forEach(strip);
+    analysis.review_plan.cues.forEach(strip);
+    analysis.metadata.adapter_version = "cs2d-analysis-adapter/1.4.0";
+    const { hash: _hash, ...candidateContents } = analysis.candidate_set;
+    analysis.candidate_set.hash = stableFingerprint({ ...candidateContents, failureReason: undefined });
+    analysis.review_plan.candidate_set_hash = analysis.candidate_set.hash;
+    analysis.review_plan.director_decision_set.candidateSetHash = analysis.candidate_set.hash;
+    const cueId = analysis.review_plan.cues[0].id as string;
+    const narrationByCue = JSON.parse(JSON.stringify(input.narrationByCue));
+    narrationByCue[cueId].betterPlay.text = "让高血量队友先接触，你跟着补枪。";
+    const args = { analysis, candidateSet: analysis.candidate_set, plan: analysis.review_plan, narrationByCue,
+      cueCases: {}, learningThreads: [], summary: null, selectedPlayerId: "dog", demoContentHash: HASH };
+    const restored = validateStoredReviewArtifacts(args);
+    expect(restored.narrationByCue[cueId]?.betterPlay.text).toBe(narrationByCue[cueId].betterPlay.text);
+    expect(restored.analysis.candidate_set.hash).toBe(analysis.candidate_set.hash);
+    expect(() => validateStoredReviewArtifacts({ ...args, analysis: input.analysis, candidateSet: input.analysis.candidate_set, plan: input.analysis.review_plan })).toThrow(/NarrationBundle validation failed/);
+    narrationByCue[cueId].betterPlay.refs = ["unknown-future-ref"];
+    expect(() => validateStoredReviewArtifacts(args)).toThrow(/NarrationBundle validation failed/);
+  });
+
   it("revalidates stored analysis, plan, narration, and cross-artifact identities", () => {
     const input = fixture();
     const validated = validateStoredReviewArtifacts({
@@ -441,4 +469,59 @@ describe("cs2d recovery Host Adapter", () => {
       "another-call": result,
     })).toThrow(/key does not match callId/u);
   });
+});
+
+it("retains the last recoverable boundary while a rendered paused cue awaits its matching checkpoint", async () => {
+  const { buildCheckpointedRecoveryRecord } = await import("./cs2d-session-recovery");
+  const { reduceCoachingSession } = await import("@cs-coach/session");
+  const input = fixture();
+  const plan = input.analysis.review_plan;
+  const cue = plan.cues[0];
+  let session = reduceCoachingSession(plan, input.session, { type: "START" });
+  for (let step = 0; step < plan.segments.length + 2 && session.phase !== "PAUSED_FOR_COACHING"; step++) {
+    session = session.phase === "SKIPPING"
+      ? reduceCoachingSession(plan, session, { type: "ADVANCE_SEGMENT" })
+      : reduceCoachingSession(plan, session, { type: "TICK", tick: Math.max(plan.segments[session.current_segment_index].end_tick, cue.outcome_end_tick) });
+  }
+  expect(session.phase).toBe("PAUSED_FOR_COACHING");
+  const base = { ...input, plan, demoContentHash: HASH, selectedPlayerId: "dog", agentCheckpointId: null };
+  let durable = buildSessionRecoveryRecord({ ...base, boundaryKind: "ROUTE_START" });
+  const pausedInput = { ...base, session, boundaryKind: "CUE_PAUSED" as const };
+  let release!: () => void;
+  const checkpointPending = new Promise<void>((resolve) => { release = resolve; });
+  const completion = checkpointPending.then(() => {
+    durable = buildCheckpointedRecoveryRecord(pausedInput, { checkpointId: "checkpoint-paused", activeCueId: cue.id, currentSessionPhase: "PAUSED_FOR_COACHING", routeCursor: session.current_segment_index, sessionStatus: "ACTIVE" }) ?? durable;
+  });
+  durable = buildCheckpointedRecoveryRecord(pausedInput, undefined) ?? durable;
+  expect(durable.boundary.kind).toBe("ROUTE_START");
+  release();
+  await completion;
+  expect(durable.boundary.kind).toBe("CUE_PAUSED");
+  expect(durable.agentCheckpointId).toBe("checkpoint-paused");
+});
+
+it("restores only the checkpoint case matching the paused cue without advancing its gates", async () => {
+  const { restoreCheckpointTeachingCase } = await import("./cs2d-session-recovery");
+  const { reduceCoachingSession } = await import("@cs-coach/session");
+  const { diagnoseTeachingCue } = await import("@cs-coach/coach-agent/client");
+  const input = fixture();
+  const plan = input.analysis.review_plan;
+  const cue = plan.cues[0];
+  let session = reduceCoachingSession(plan, input.session, { type: "START" });
+  for (let step = 0; step < plan.segments.length + 2 && session.phase !== "PAUSED_FOR_COACHING"; step++) {
+    session = session.phase === "SKIPPING" ? reduceCoachingSession(plan, session, { type: "ADVANCE_SEGMENT" }) : reduceCoachingSession(plan, session, { type: "TICK", tick: Math.max(plan.segments[session.current_segment_index].end_tick, cue.outcome_end_tick) });
+  }
+  const saved = diagnoseTeachingCue({ cueId: cue.id, reflection: { cueId: cue.id, selectedGoal: "TRADE", source: "USER", response: "ANSWERED", limitations: [] }, decisionFacts: [], playerActionFacts: [], outcomeFacts: [], decisionResources: { health: 2, armor: 0, hasHelmet: false, aliveTeammates: 0, evidenceRefs: ["roster"] } });
+  const restored = restoreCheckpointTeachingCase(plan, session, saved.cueCase, saved.learningThread);
+  expect(restored.cue_cases?.[cue.id].reflection?.selectedGoal).toBe("TRADE");
+  const { createElement } = await import("react");
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { TeachingDiagnosisPanel } = await import("../../components/playback/teaching-diagnosis-panel");
+  const html = renderToStaticMarkup(createElement(TeachingDiagnosisPanel, { cue, decisionFacts: [], cueCase: restored.cue_cases?.[cue.id], hasTrustedDecisionContext: Boolean(cue.assessment && cue.observableContext), onSubmit() {}, onSkip() {}, onConfirm() {}, onDisagree() {} }));
+  expect(html).toContain("四名队友都已阵亡");
+  expect(html).not.toContain("先说说你的思路");
+  expect(restored.phase).toBe(session.phase);
+  expect(restored.outcome_completion).toEqual(session.outcome_completion);
+  expect(restored.consumed_cue_ids).toEqual(session.consumed_cue_ids);
+  expect(restoreCheckpointTeachingCase(plan, session, { ...saved.cueCase, cueId: "another-cue" })).toBe(session);
 });

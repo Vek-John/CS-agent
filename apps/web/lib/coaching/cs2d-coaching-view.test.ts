@@ -30,7 +30,7 @@ describe("cs2d paused coaching cue view", () => {
       "fact-r2-spacing"
     ]);
     expect(view.outcomeFacts).toEqual([]);
-    expect(view.question).toContain("当前是 4 打 3");
+    expect(view.question).toBe("你当时最想完成什么？");
   });
 
   it("reveals only typed outcome facts after the endpoint", () => {
@@ -59,7 +59,7 @@ describe("cs2d paused coaching cue view", () => {
 
     expect(view.outcomeFacts.map((fact) => fact.id)).toEqual(["fact-r2-outcome"]);
     expect(view.outcomeFacts[0].availability).toBe("OUTCOME");
-    expect(view.advice?.text).toContain("队友可补枪");
+    expect(view.advice).toBeUndefined();
   });
 
   it("keeps the five-field narration body hidden before completion and during replay", () => {
@@ -68,8 +68,8 @@ describe("cs2d paused coaching cue view", () => {
     expect(selectPresentableNarration(cue, "REPLAYING", { ...gate, status: "COMPLETE" }, preparedNarration)).toBeUndefined();
     expect(selectPresentableNarration(cue, "PAUSED_FOR_COACHING", { ...gate, status: "COMPLETE" })).toBeUndefined();
     const narration = selectPresentableNarration(cue, "PAUSED_FOR_COACHING", { ...gate, status: "COMPLETE" }, preparedNarration);
-    expect(narration).toEqual(preparedNarration);
-    expect(buildCoachingCueView(cue, { ...gate, status: "COMPLETE" }, preparedNarration).narration).toEqual(preparedNarration);
+    expect(narration?.coreIssue.text).toContain("历史记录尚未验证");
+    expect(buildCoachingCueView(cue, { ...gate, status: "COMPLETE" }, preparedNarration).narration).toEqual(narration);
   });
 
   it("projects the five evidence fields into three short player-facing sections", () => {
@@ -108,7 +108,7 @@ describe("cs2d paused coaching cue view", () => {
     });
 
     expect(view.currentState.chips.map((chip) => chip.text)).toEqual(["A 包点", "100 HP", "100 头甲", "C4", "无道具", "$400"]);
-    expect(view.problem.text).toContain("队友没到位");
+    expect(view.problem.text).toContain("现有证据不足");
     expect(view.problem.text).not.toContain("OBJECTIVE_TIMING");
     expect(view.problem.consequences).toEqual(["你随后完成下包。"]);
     expect(view.improvement.text).toBe("先让队友架住，再开始下包。");
@@ -123,4 +123,20 @@ describe("cs2d paused coaching cue view", () => {
     expect(hasMeaningfulWinRateImpact({ cueId: cue.id, beforeProbability: 0.7, afterProbability: 0.69, delta: -0.01, percentagePoints: -1, relativeChange: -0.01, attribution: "MODEL_SWING", confidence: "MEDIUM", text: "下降 1 个百分点。", limitations: [] })).toBe(true);
     expect(hasMeaningfulWinRateImpact({ cueId: cue.id, beforeProbability: 0.7, afterProbability: 0.699, delta: -0.001, percentagePoints: 0, relativeChange: -0.001, attribution: "ROUND_CONTEXT", confidence: "LOW", text: "下降 0 个百分点。", limitations: [] })).toBe(false);
   });
+});
+
+it("restores legacy cues through the same outcome gate without repeating unverified tactics or event-as-action prose", () => {
+  const legacy = {
+    ...cue,
+    action_facts: [{ id: "old-action", text: "你主动接了这波对枪。", actorPlayerId: "p-user", availableAtTick: cue.decision_tick, source: "DEMO" as const, evidenceRefs: [], limitations: [] }],
+    outcome_facts: [{ id: "old-outcome", text: "你继续留在枪线里，所以阵亡。", availableAtTick: cue.reveal_tick, source: "DEMO" as const, outcomeKind: "DEATH" as const, evidenceRefs: [], limitations: [] }],
+  };
+  const oldProse = { ...preparedNarration, betterPlay: { text: "让高血量队友先接触，你随后补枪。", refs: ["old-advice"] } };
+  const before = JSON.stringify({ legacy, oldProse });
+  expect(selectPresentableNarration(legacy, "PAUSED_FOR_COACHING", { cueId: cue.id, outcomeEndTick: cue.outcome_end_tick, status: "LOCKED" }, oldProse)).toBeUndefined();
+  const shown = selectPresentableNarration(legacy, "PAUSED_FOR_COACHING", { cueId: cue.id, outcomeEndTick: cue.outcome_end_tick, status: "COMPLETE" }, oldProse);
+  expect(shown?.betterPlay.text).toContain("不能确认");
+  expect(shown?.outcomeImpact.text).toBe("这段结果记录了你的阵亡。");
+  expect(JSON.stringify(shown)).not.toMatch(/高血量队友|主动接了|继续留在枪线/);
+  expect(JSON.stringify({ legacy, oldProse })).toBe(before);
 });

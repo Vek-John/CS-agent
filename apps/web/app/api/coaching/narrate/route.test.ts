@@ -2,16 +2,24 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
 
 const validBody = {
+  approvedNarration: {
+    cueId: "c1", candidateId: "k1", primaryFocusCode: "REVIEW_UNCERTAINTY",
+    currentSituation: { text: "决策时玩家有 65 HP。", refs: ["d1"] },
+    playerAction: { text: "你从掩体拉出。", refs: ["a1"] },
+    coreIssue: { text: "这段结果不足以判断当时的选择是否有问题。", refs: ["d1", "a1"] },
+    betterPlay: { text: "目前还不能确认哪种替代处理在当时可行。", refs: ["d1"] },
+    outcomeImpact: { text: "随后你被击杀。我方胜率下降。", refs: ["o1", "m1"] }
+  },
   coachingPackage: {
     cueId: "c1",
     candidateId: "k1",
-    primaryFocusCode: "SURVIVE_THE_NEXT_CONTACT",
+    primaryFocusCode: "REVIEW_UNCERTAINTY",
     decisionContext: { facts: [{ id: "d1", text: "决策时玩家有 65 HP。" }], claims: [] },
     playerAction: [{ id: "a1", text: "你从掩体拉出。" }],
     inferences: [],
-    advice: [{ id: "v1", text: "先预瞄，等队友补枪。", trigger: "进入枪线时", factRefs: ["d1"] }],
+    advice: [],
     evidence: [{ id: "e1", label: "决策事实", factRefs: ["d1"] }],
-    allowedRefs: { decision: ["d1"], action: ["a1"], advice: ["v1"], evidence: ["e1"] },
+    allowedRefs: { decision: ["d1"], action: ["a1"], advice: [], evidence: ["e1"] },
     limitations: []
   },
   outcomePackage: {
@@ -78,16 +86,7 @@ describe("POST /api/coaching/narrate", () => {
           finish_reason: "stop",
           message: {
             content: JSON.stringify({
-              bundle: {
-                cueId: "c1",
-                candidateId: "k1",
-                primaryFocusCode: "SURVIVE_THE_NEXT_CONTACT",
-                currentSituation: { text: "决策时玩家有 65 HP。", refs: ["d1"] },
-                playerAction: { text: "你从掩体拉出。", refs: ["a1"] },
-                coreIssue: { text: "先活过接触。", refs: ["d1", "a1"] },
-                betterPlay: { text: "先预瞄，等队友补枪。", refs: ["v1", "e1"] },
-                outcomeImpact: { text: "随后你被击杀。", refs: ["o1", "m1"] }
-              }
+              bundle: validBody.approvedNarration
             })
           }
         }]

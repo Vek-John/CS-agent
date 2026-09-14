@@ -103,7 +103,12 @@ export function buildTeachingDiagnosisInput(
   const outcomeFacts = outcomeFactsForCue(context.cue);
   const state = stateAtOrBefore(context.timeline?.player_state_tracks, context.selectedPlayerId, context.cue.decision_tick);
   const economyClass = context.material?.economy;
+  const snapshot = context.material?.decisionSnapshot ?? context.cue.decisionSnapshot;
+  const roster = snapshot?.decisionTick === context.cue.decision_tick && snapshot.selectedPlayerId === context.selectedPlayerId && snapshot.aliveCounts.boundary === "OBSERVABLE" && snapshot.selectedPlayer.boundary === "OBSERVABLE" && typeof snapshot.selectedPlayer.value?.alive === "boolean"
+    ? snapshot.aliveCounts.value : undefined;
+  const aliveTeammates = roster ? Math.max(0, roster.allies - (snapshot?.selectedPlayer.value?.alive ? 1 : 0)) : undefined;
   const decisionResources = state ? {
+    ...(aliveTeammates === undefined ? {} : { aliveTeammates }),
     health: state.health,
     armor: state.armor,
     hasHelmet: state.has_helmet,
@@ -111,6 +116,7 @@ export function buildTeachingDiagnosisInput(
     ...(state.equipment_value !== undefined ? { equipmentValue: state.equipment_value } : {}),
     inventoryCount: state.inventory.reduce((sum, item) => sum + Math.max(0, item.count), 0),
     evidenceRefs: unique([
+      ...(aliveTeammates === undefined ? [] : snapshot?.aliveCounts.evidenceRefs ?? []),
       ...(state.fact_refs ?? []),
       ...decisionFacts.map((fact) => fact.id),
       ...playerActionFacts.flatMap((fact) => fact.evidenceRefs),

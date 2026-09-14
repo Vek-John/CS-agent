@@ -1,3 +1,4 @@
+import type { TrustedDecisionSemantics, TeachingAssessment, BehaviorHypothesis } from "./decision-context";
 import type {
   Advice,
   Annotation,
@@ -31,12 +32,12 @@ export const MAX_TEACHING_CUES = 50;
 export const MAX_DIRECTOR_PACKET_CANDIDATES = 32;
 
 export const DIRECTOR_FOCUS_CODES_BY_SIGNAL: Record<CandidateSignalKind, readonly string[]> = {
-  DEATH: ["SURVIVE_THE_NEXT_CONTACT", "SURVIVE_CONTACT"],
-  KILL: ["CONVERT_ADVANTAGE"],
-  BOMB: ["OBJECTIVE_TIMING"],
-  UTILITY: ["UTILITY_PURPOSE_AND_TEMPO"],
-  HP_CHANGE: ["SURVIVE_CONTACT"],
-  WIN_RATE_DROP: ["WIN_PROBABILITY_SWING_RESPONSE"]
+  DEATH: ["SURVIVE_THE_NEXT_CONTACT", "SURVIVE_CONTACT", "REVIEW_UNCERTAINTY", "VERIFIED_DECISION_REVIEW", "POSITIVE_PROCESS", "EXECUTION_REVIEW", "FORCED_CHOICE"],
+  KILL: ["CONVERT_ADVANTAGE", "REVIEW_UNCERTAINTY", "VERIFIED_DECISION_REVIEW", "POSITIVE_PROCESS", "EXECUTION_REVIEW", "FORCED_CHOICE"],
+  BOMB: ["OBJECTIVE_TIMING", "REVIEW_UNCERTAINTY", "VERIFIED_DECISION_REVIEW", "POSITIVE_PROCESS", "EXECUTION_REVIEW", "FORCED_CHOICE"],
+  UTILITY: ["UTILITY_PURPOSE_AND_TEMPO", "REVIEW_UNCERTAINTY", "VERIFIED_DECISION_REVIEW", "POSITIVE_PROCESS", "EXECUTION_REVIEW", "FORCED_CHOICE"],
+  HP_CHANGE: ["SURVIVE_CONTACT", "REVIEW_UNCERTAINTY", "VERIFIED_DECISION_REVIEW", "POSITIVE_PROCESS", "EXECUTION_REVIEW", "FORCED_CHOICE"],
+  WIN_RATE_DROP: ["WIN_PROBABILITY_SWING_RESPONSE", "REVIEW_UNCERTAINTY", "VERIFIED_DECISION_REVIEW", "POSITIVE_PROCESS", "EXECUTION_REVIEW", "FORCED_CHOICE"]
 };
 
 export interface CandidateResultSummary {
@@ -81,7 +82,7 @@ export interface CanonicalPlayerContext {
 }
 
 /** Small parser-neutral signal/scene DTO consumed by CandidateGenerator. */
-export interface CanonicalSignal {
+export interface CanonicalSignal extends TrustedDecisionSemantics {
   signalId: string;
   kind: CandidateSignalKind;
   roundNumber: number;
@@ -113,6 +114,8 @@ export interface CandidateGeneratorVersionManifest {
 }
 
 export interface CandidateGeneratorInput {
+  /** The Replay owner already nominated and snapshotted every independent model window. */
+  independentSwingSignalsIncluded?: boolean;
   demoId: string;
   playerId: string;
   timeline: MatchTimeline;
@@ -128,7 +131,7 @@ export interface CandidateGeneratorInput {
  * The only object a Director may select. It deliberately contains references
  * and canonical windows, but no CoachCue, prose, or final teaching judgment.
  */
-export interface TeachingCandidate {
+export interface TeachingCandidate extends TrustedDecisionSemantics {
   candidateId: string;
   roundNumber: number;
   source: {
@@ -153,7 +156,7 @@ export interface TeachingCandidate {
 }
 
 /** Candidate material is still fact/evidence data; it is not a compiled cue. */
-export interface CandidateMaterial {
+export interface CandidateMaterial extends TrustedDecisionSemantics {
   candidateId: string;
   decisionFacts: readonly Fact[];
   playerActionFacts: readonly PlayerActionFact[];
@@ -240,6 +243,10 @@ export interface DirectorDecisionSet {
 }
 
 export interface DirectorCandidateSummary {
+  decisionSummary?: { facts: readonly string[]; observableInformation: readonly string[]; missingFields: readonly string[] };
+  assessment?: TeachingAssessment;
+  behaviorHypotheses?: readonly BehaviorHypothesis[];
+  approvedAdvice?: readonly { id: string; code: string; text: string; status: "APPLICABLE" }[];
   candidateId: string;
   sourceKind: CandidateSignalKind;
   deterministicScore: number;
@@ -259,7 +266,7 @@ export interface DirectorRequest {
   maxSelected: number;
 }
 
-export interface CoachingPackage {
+export interface CoachingPackage extends TrustedDecisionSemantics {
   cueId: string;
   candidateId: string;
   decisionContext: {

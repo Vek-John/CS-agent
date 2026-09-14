@@ -1,3 +1,4 @@
+import { playerFacingLimitation } from "./decision-presentation";
 import type { CoachingPackage, NarrationBundle, NarrationManifest, NarrationResult, ObservationClaim, OutcomePackage } from "@cs-coach/contracts";
 import {
   assertValidNarrationBundle,
@@ -18,10 +19,12 @@ export interface AnonymousNarrationField {
 }
 
 export interface AnonymousNarrationRequest {
+  approvedNarration?: NarrationBundle;
   coachingPackage: {
     cueId: string;
     candidateId: string;
     primaryFocusCode: string;
+    observableSummary?: string[];
     decisionContext: {
       facts: Array<{ id: string; text: string }>;
       claims: Array<{ id: string; claimType: string; confidence: number; limitations: string[] }>;
@@ -87,7 +90,7 @@ function safeClaim(claim: ObservationClaim): { id: string; claimType: string; co
     id: claim.id,
     claimType: claim.claim_type,
     confidence: claim.confidence,
-    limitations: [...claim.limitations]
+    limitations: claim.limitations.map(playerFacingLimitation)
   };
 }
 
@@ -115,12 +118,13 @@ export function buildNarratorRequestContext(
       cueId: "c1",
       candidateId: "k1",
       primaryFocusCode: coachingPackage.primaryFocusCode,
+      observableSummary: [...(coachingPackage.observableContext?.publicFacts ?? [])].slice(0, 12),
       decisionContext: {
         facts: coachingPackage.decisionContext.facts.map((fact) => ({ id: aliases.decision[fact.id], text: fact.text })),
         claims: coachingPackage.decisionContext.claims.map(safeClaim).map((claim) => ({ ...claim, id: aliases.decision[claim.id] ?? claim.id }))
       },
       playerAction: coachingPackage.playerAction.map((fact) => ({ id: aliases.action[fact.id], text: fact.text })),
-      inferences: coachingPackage.inferences.map((inference) => ({ id: `i${inference.id}`, text: inference.text, confidence: inference.confidence, factRefs: remap(inference.fact_refs, aliases.decision) })),
+      inferences: coachingPackage.inferences.map((inference, index) => ({ id: `i${index + 1}`, text: inference.text, confidence: inference.confidence, factRefs: remap(inference.fact_refs, aliases.decision) })),
       advice: coachingPackage.advice.map((advice) => ({ id: aliases.advice[advice.id], text: advice.text, trigger: advice.trigger, factRefs: remap(advice.fact_refs, aliases.decision) })),
       evidence: coachingPackage.evidence.map((evidence) => ({ id: aliases.evidence[evidence.id], label: evidence.label, factRefs: remap(evidence.fact_refs, aliases.decision) })),
       allowedRefs: {
@@ -129,7 +133,7 @@ export function buildNarratorRequestContext(
         advice: Object.values(aliases.advice),
         evidence: Object.values(aliases.evidence)
       },
-      limitations: [...coachingPackage.limitations]
+      limitations: coachingPackage.limitations.map(playerFacingLimitation)
     },
     outcomePackage: {
       cueId: "c1",
@@ -139,8 +143,20 @@ export function buildNarratorRequestContext(
       ...(outcomePackage.winProbabilityImpact ? { winProbabilityImpact: { text: outcomePackage.winProbabilityImpact.text, confidence: outcomePackage.winProbabilityImpact.confidence, limitations: [...outcomePackage.winProbabilityImpact.limitations] } } : {}),
       measurementRefs: remap(measurementIds, aliases.measurement),
       confounders: [...outcomePackage.confounders],
-      limitations: [...outcomePackage.limitations]
+      limitations: outcomePackage.limitations.map(playerFacingLimitation)
     }
+  };
+  const approved = deterministicNarrationBundle(coachingPackage, outcomePackage);
+  const allDecisionAliases = { ...aliases.decision, ...aliases.action, ...aliases.advice, ...aliases.evidence };
+  const allOutcomeAliases = { ...aliases.outcome, ...aliases.measurement };
+  const projectField = (field: NarrationBundle["currentSituation"], mapping: Record<string, string>) => ({ ...field, refs: remap(field.refs, mapping), ...(field.limitations ? { limitations: field.limitations.map(playerFacingLimitation) } : {}) });
+  request.approvedNarration = {
+    ...approved, cueId: "c1", candidateId: "k1",
+    currentSituation: projectField(approved.currentSituation, aliases.decision),
+    playerAction: projectField(approved.playerAction, aliases.action),
+    coreIssue: projectField(approved.coreIssue, allDecisionAliases),
+    betterPlay: projectField(approved.betterPlay, allDecisionAliases),
+    outcomeImpact: projectField(approved.outcomeImpact, allOutcomeAliases),
   };
   return { request, coachingPackage, outcomePackage, aliases };
 }
@@ -148,8 +164,6 @@ export function buildNarratorRequestContext(
 export function narrationJobIsEligible(context: NarratorRequestContext): boolean {
   const request = context.request;
   return request.coachingPackage.decisionContext.facts.length > 0 &&
-    request.coachingPackage.playerAction.length > 0 &&
-    request.coachingPackage.advice.length > 0 &&
     (request.outcomePackage.outcomeFacts.length > 0 || request.outcomePackage.measurementRefs.length > 0);
 }
 

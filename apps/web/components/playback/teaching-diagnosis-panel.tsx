@@ -13,6 +13,7 @@ import type {
   TransferRule,
   UserReflection,
 } from "@cs-coach/contracts";
+import { playerFacingLimitation } from "../../lib/coaching/decision-presentation";
 import styles from "./teaching-diagnosis-panel.module.css";
 
 const GOALS: readonly { value: ReflectionGoal; label: string }[] = [
@@ -40,6 +41,8 @@ export interface TeachingDiagnosisPanelProps {
   cue: Pick<CoachCue, "id" | "title" | "question">;
   decisionFacts: readonly Fact[];
   cueCase?: CueCase;
+  /** Old saved diagnoses stay readable as history but cannot supply unverified teaching. */
+  hasTrustedDecisionContext?: boolean;
   learningThread?: LearningThread;
   busy?: boolean;
   error?: string;
@@ -66,7 +69,7 @@ function resultLabel(status: DiagnosticResult["status"]): string {
     case "SUPPORTED": return "支持这个条件";
     case "PARTIALLY_SUPPORTED": return "部分支持";
     case "CONTRADICTED": return "不支持这个条件";
-    case "UNVERIFIABLE": return "数据无法验证";
+    case "UNVERIFIABLE": return "还缺少关键条件";
     case "UNTESTED": return "尚未验证";
   }
 }
@@ -100,7 +103,7 @@ function DecisionFacts({ facts }: { facts: readonly Fact[] }) {
 }
 
 function Limitations({ values }: { values: readonly string[] }) {
-  const shown = [...new Set(values.filter(Boolean))].slice(0, 4);
+  const shown = [...new Set(values.filter(Boolean).map(playerFacingLimitation))].slice(0, 4);
   if (shown.length === 0) return null;
   return <ul className={styles.limitations}>{shown.map((value) => <li key={value}>{value}</li>)}</ul>;
 }
@@ -109,6 +112,7 @@ export function TeachingDiagnosisPanel({
   cue,
   decisionFacts,
   cueCase,
+  hasTrustedDecisionContext = false,
   learningThread,
   busy = false,
   error,
@@ -123,6 +127,16 @@ export function TeachingDiagnosisPanel({
   const [disagreement, setDisagreement] = useState("");
   const [disagreementGoal, setDisagreementGoal] = useState<ReflectionGoal>();
   const question = useMemo(() => reflectionQuestion(cue), [cue]);
+
+  if (cueCase && !hasTrustedDecisionContext) {
+    return (
+      <section className={styles.panel} aria-live="polite">
+        <h3>已恢复你的思路记录</h3>
+        <p className={styles.lede}>这段历史复盘尚未核实当时的完整局面，因此暂不采用旧的判断和建议。你的记录与播放进度仍会保留。</p>
+        <button type="button" className={styles.primary} disabled={busy} onClick={onConfirm}>看完了，继续下一段</button>
+      </section>
+    );
+  }
 
   if (!cueCase || cueCase.status === "REFLECTION_PENDING") {
     return (
@@ -196,8 +210,8 @@ export function TeachingDiagnosisPanel({
       <h3 id={`${cue.id}-diagnosis-title`}>诊断完成</h3>
       <div className={styles.claimBox}>
         <span>你的思路</span>
-        <p>{cueCase.reflection?.rawText || cueCase.reflection?.selectedGoal || "你没有提供具体目标"}</p>
-        <small>这段内容保留为 USER claim，不会被当作 Demo 事实。</small>
+        <p>{cueCase.reflection?.rawText || GOALS.find((goal) => goal.value === cueCase.reflection?.selectedGoal)?.label || "你没有提供具体目标"}</p>
+        <small>这是你对当时思路的补充，我们会结合回放核实。</small>
       </div>
       <div className={styles.hingeBox}>
         <span>关键条件</span>
@@ -221,7 +235,7 @@ export function TeachingDiagnosisPanel({
         <p><b>做：</b>{transferRule.do}</p>
         {transferRule.unless ? <p><b>除非：</b>{transferRule.unless}</p> : null}
       </div>
-      <Limitations values={[...hinge.limitations, ...diagnosticResult.limitations, ...verdict.limitations, ...(learningThread?.status === "REPEATED" ? ["本场同类条件再次出现，已更新 Learning Thread。"] : [])]} />
+      <Limitations values={[...hinge.limitations, ...diagnosticResult.limitations, ...verdict.limitations, ...(learningThread?.status === "REPEATED" ? ["本场再次出现了相似条件，会结合前面的复盘一起看。"] : [])]} />
       {showDisagreement ? (
         <div className={styles.disagreementBox}>
           <span>补充一条信息（只会再检查一次）</span>

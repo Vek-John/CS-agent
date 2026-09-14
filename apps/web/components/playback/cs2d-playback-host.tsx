@@ -77,14 +77,15 @@ import {
 } from "@cs-coach/session";
 import {
   buildSessionRecoveryRecord,
+  buildCheckpointedRecoveryRecord,
   buildReconnectReplayEvent,
   createRecoverySessionIdentity,
   createRecoveryReviewPreparationDependencies,
-  checkpointForRecoveryBoundary,
   normalizeRecoveryAnalysis,
   reconciledRecoveryLedger,
   mergePersistedToolResults,
   restoreRecoveryArtifacts,
+  restoreCheckpointTeachingCase,
   shouldReconnectRecoveryAgent,
   shouldPersistToolTransitionToRecovery,
   isPreAgentRouteStartRecovery,
@@ -95,6 +96,7 @@ import {
 } from "../../lib/recovery/cs2d-session-recovery";
 import { createSessionRecoveryRuntime } from "../../lib/recovery/session-recovery-runtime";
 import {
+  activatePreparedCoachingSession,
   createReviewPreparationOrchestrator,
   createCs2dReviewPreparationDependencies,
   buildInitialCoachingRouteState,
@@ -490,11 +492,7 @@ export function Cs2dPlaybackHost({
       createdAt: current.createdAt,
       updatedAt: Date.now(),
     } as const;
-    const withoutCheckpoint = buildSessionRecoveryRecord(baseInput);
-    const checkpointId = checkpointForRecoveryBoundary(checkpoint, withoutCheckpoint.boundary);
-    return checkpointId
-      ? buildSessionRecoveryRecord({ ...baseInput, agentCheckpointId: checkpointId })
-      : withoutCheckpoint;
+    return buildCheckpointedRecoveryRecord(baseInput, checkpoint);
   }, []);
 
   useEffect(() => {
@@ -553,7 +551,7 @@ export function Cs2dPlaybackHost({
     // PLAYBACK_STATE ticks intentionally never enter this path.
     if (durable.boundary.kind === "CUE_PAUSED" || durable.boundary.kind === "WRAP_UP") {
       if (!durable.agentCheckpointId) {
-        setHistoryError("稳定恢复点缺少 Agent checkpoint；上一个恢复点仍然有效。");
+        setHistoryError("这次进度尚未完整保存，上一个恢复点仍然有效。");
         return;
       }
       const recoveryArtifactKey = `${durable.boundary.boundaryId}:${durable.agentCheckpointId}`;
@@ -783,7 +781,7 @@ export function Cs2dPlaybackHost({
     setAnalysisError(undefined);
     setAnalysisProgress(undefined);
     setAnalysisTelemetry(undefined);
-    setReviewPreparationStatus({ phase: "ROUTE", detail: "正在读取已保存的复盘控制面。" });
+    setReviewPreparationStatus({ phase: "ROUTE", detail: "正在读取已保存的讲解与进度。" });
     setHistoryActiveReviewId(reviewId); setHistoryError(undefined);
     historyRestoreModeRef.current = mode;
     historyPlaybackOnlyRef.current = mode === "RESTORE";
@@ -893,7 +891,7 @@ export function Cs2dPlaybackHost({
       }
       historyRestoreTickRef.current = mode === "RESTORE" ? initial.current_tick : undefined;
       setSession(recovered ? initial : reduceCoachingSession(restoredPlan, initial, { type: "START" }));
-      setReviewPreparationStatus({ phase: "READY", detail: "已恢复已保存的复盘产物；正在后台加载托管 Demo。" });
+      setReviewPreparationStatus({ phase: "READY", detail: "已恢复保存的讲解，正在后台加载比赛。" });
       if (record && recovered) {
         const runtime = recoveryRuntimeRef.current;
         if (!runtime) throw new Error("Recovery runtime is unavailable.");
@@ -928,8 +926,8 @@ export function Cs2dPlaybackHost({
         controller.activate(withViewer, "RESTORE");
       } catch (error) {
         if (error instanceof HistoryRestoreError && error.code === "STALE_REQUEST") throw error;
-        setReviewPreparationStatus({ phase: "READY", detail: "已恢复标题、讲解、回答与进度；Viewer 媒体暂不可用。" });
-        setHistoryError("已保留并显示复盘控制面，但托管 Demo 暂时无法加载；可重试或在设置中验证资料库。");
+        setReviewPreparationStatus({ phase: "READY", detail: "已恢复标题、讲解、回答与进度，回放暂时无法加载。" });
+        setHistoryError("已恢复讲解与进度，但保存的比赛暂时无法加载；可以重试或在设置中检查资料库。");
       }
     } catch (error) {
       if (historyOpenEpochRef.current !== openEpoch || (error instanceof HistoryRestoreError && error.code === "STALE_REQUEST")) return;
@@ -1297,7 +1295,7 @@ export function Cs2dPlaybackHost({
         type: "RECOVERY_HANDSHAKE_FAILED",
         eventId: recoveryEventId("recovery-hash-missing"),
         recoveryId: record.recoveryId,
-        reason: "当前 Demo 没有可验证内容哈希；基础回放仍可继续。",
+        reason: "暂时无法确认这份比赛记录，基础回放仍可继续。",
         degraded: false,
       }).then((result) => {
         if (isCurrent()) acceptRecoveryResult(result);
@@ -1358,7 +1356,7 @@ export function Cs2dPlaybackHost({
         return;
       }
       if (event.type === "NARRATION_REJECTED") {
-        setReviewPreparationStatus({ phase: "ERROR", detail: `后续讲解准备失败：${event.reason.slice(0, 200)}` });
+        setReviewPreparationStatus({ phase: "ERROR", detail: "后续讲解暂时未能准备好，可以重新尝试。" });
       }
     });
   }, []);
@@ -1370,6 +1368,7 @@ export function Cs2dPlaybackHost({
     const isCurrent = () => historyOpenEpochRef.current === openEpoch;
     try {
       let currentRecord = recoveryRecordRef.current ?? landing.record;
+      let restoredSession = landing.staged.session;
       if (!shouldReconnectRecoveryAgent(currentRecord) && !isPreAgentRouteStartRecovery(currentRecord)) {
         recoveryHandshakeReadyRef.current = false;
         setSession(landing.staged.session);
@@ -1377,12 +1376,12 @@ export function Cs2dPlaybackHost({
           type: "RECOVERY_HANDSHAKE_FAILED",
           eventId: recoveryEventId("recovery-agent-checkpoint-missing"),
           recoveryId: currentRecord.recoveryId,
-          reason: "Agent状态未协调；基础回放仍可继续。",
+          reason: "讲解进度暂时未能恢复，基础回放仍可继续。",
           degraded: true,
         });
         if (!isCurrent()) return;
         acceptRecoveryResult(failed);
-        setReviewPreparationStatus({ phase: "ERROR", detail: "Agent状态未协调；基础回放仍可继续。" });
+        setReviewPreparationStatus({ phase: "ERROR", detail: "讲解进度暂时未能恢复，基础回放仍可继续。" });
         return;
       }
       if (shouldReconnectRecoveryAgent(currentRecord)) {
@@ -1390,6 +1389,9 @@ export function Cs2dPlaybackHost({
         const agent = await stage3ControllerRef.current!.reconnect(reconnect);
         if (!isCurrent()) return;
         if (agent.status === "DORMANT" || agent.restored !== "MATCHED") throw new Error("Agent checkpoint 与恢复记录不匹配。");
+        const recoveredCase = restoredSession.current_cue_id ? agent.state.cueCases[restoredSession.current_cue_id] : undefined;
+        const recoveredThread = recoveredCase ? agent.state.learningThreads.find((thread) => thread.evidenceCueIds.includes(recoveredCase.cueId)) : undefined;
+        restoredSession = restoreCheckpointTeachingCase(landing.staged.plan, restoredSession, recoveredCase, recoveredThread);
         latestAgentCheckpointRef.current = {
           checkpointId: agent.checkpoint.checkpointId,
           activeCueId: agent.state.activeCueId,
@@ -1442,13 +1444,15 @@ export function Cs2dPlaybackHost({
           landing.record.boundary.segmentIndex,
         );
       }
+      setTeachingCases((current) => ({ ...current, ...(restoredSession.cue_cases ?? {}) }));
+      if (restoredSession.learning_threads) setTeachingThreads([...restoredSession.learning_threads]);
       setSession(landing.record.boundary.kind === "ROUTE_START"
-        ? reduceCoachingSession(landing.staged.plan, landing.staged.session, { type: "START" })
-        : landing.staged.session);
+        ? reduceCoachingSession(landing.staged.plan, restoredSession, { type: "START" })
+        : restoredSession);
       setReviewPreparationStatus({
         phase: "READY",
         detail: historyPlaybackOnlyRef.current
-          ? "已恢复到最近教学点；只使用保存的讲解产物。"
+          ? "已恢复到最近教学点，当前使用已保存的讲解。"
           : "已恢复到最近教学点，后续讲解在后台继续准备。",
       });
       if (!historyPlaybackOnlyRef.current) {
@@ -1468,7 +1472,7 @@ export function Cs2dPlaybackHost({
       });
       if (!isCurrent()) return;
       acceptRecoveryResult(failed);
-      setReviewPreparationStatus({ phase: "ERROR", detail: "Agent 状态未恢复；基础回放仍可继续。" });
+      setReviewPreparationStatus({ phase: "ERROR", detail: "讲解进度暂时未能恢复，基础回放仍可继续。" });
     }
   }, [acceptRecoveryResult, startRecoveryNarrationQueue]);
 
@@ -1501,7 +1505,7 @@ export function Cs2dPlaybackHost({
     setNarrationByCue(landing.staged.narrationByCue);
     setAnalysisError(undefined);
     setAnalysisProgress(undefined);
-    setReviewPreparationStatus({ phase: "NARRATION", detail: "冻结路线已验证，正在回到最近教学点。" });
+    setReviewPreparationStatus({ phase: "NARRATION", detail: "已确认保存的复盘进度，正在回到最近教学点。" });
     const currentPlayback = playbackRef.current;
     if (isRecoveryPlaybackLanding(currentPlayback, landing.targetTick, replay?.tickRate ?? 64)) {
       recoveryLandingRef.current = undefined;
@@ -1561,7 +1565,7 @@ export function Cs2dPlaybackHost({
       }).then((result) => {
         if (isCurrent()) acceptRecoveryResult(result);
       });
-      setAnalysisError(reason);
+      setAnalysisError("保存的分析暂时无法恢复，原有记录仍会保留。");
     }
     return true;
   }, [acceptRecoveryResult, beginRecoveryLanding]);
@@ -1573,7 +1577,7 @@ export function Cs2dPlaybackHost({
     const openEpoch = historyOpenEpochRef.current;
     storedHistoryRecoveryLandingRef.current = undefined;
     if (payload.playerId !== landing.record.selectedPlayerId) {
-      setHistoryError("保存的玩家身份与 Viewer 不一致；请明确选择重新分析。");
+      setHistoryError("保存的玩家与当前比赛不一致，请选择重新分析。");
       return true;
     }
     void runtime.dispatch({
@@ -1658,7 +1662,7 @@ export function Cs2dPlaybackHost({
           DEMO_VALIDATION_REJECTED: "Demo 已写入，但未能完成解析验证。",
           DEMO_IMPORT_AUTHORIZATION_REJECTED: "Demo 导入权限已失效，请重新选择文件。",
           MANAGED_DEMO_LOAD_FAILED: "托管 Demo 读取失败，请在设置中验证资料库。",
-        }[payload.code] ?? payload.message;
+        }[payload.code] ?? "这份比赛暂时无法导入，请重新选择文件。";
         setHistoryError(message);
         return;
       }
@@ -1762,7 +1766,7 @@ export function Cs2dPlaybackHost({
         if (!analysisEventMatchesSelectedPlayer(selectedPlayerIdRef.current, payload.selectedPlayerId)) return;
         invalidateGeneration();
         invalidateGuidedSeek();
-        setAnalysisError(payload.message);
+        setAnalysisError("比赛分析暂时未能完成，请重新选择比赛或玩家。");
         setAnalysisProgress(undefined);
         setBundle(undefined);
         setPlan(undefined);
@@ -1814,10 +1818,10 @@ export function Cs2dPlaybackHost({
           userTookOverRef.current = false;
           setUserTookOver(false);
           if (nextBundle.candidate_set.status === "FAILED") {
-            setAnalysisError(`候选索引未完成：${nextBundle.candidate_set.failureReason ?? "请重新选择 Demo 或玩家。"}`);
+            setAnalysisError("这场比赛的分析还不完整，请重新选择 Demo 或玩家。");
             setReviewPreparationStatus({
               phase: "ERROR",
-              detail: "基础回放仍可用；教学路线等待候选索引恢复。"
+              detail: "基础回放仍可用，讲解内容还需要重新整理。"
             });
             return;
           }
@@ -1828,7 +1832,7 @@ export function Cs2dPlaybackHost({
             winProbabilityTimeline: nextBundle.win_probability_timeline,
             selectedPlayerId: nextBundle.selected_steam_id
           });
-          setReviewPreparationStatus({ phase: "ROUTE", detail: "正在由 Director 和 PlanCompiler 冻结教学路线。" });
+          setReviewPreparationStatus({ phase: "ROUTE", detail: "正在整理整场比赛，选择有充分依据的讲解片段。" });
           const generationId = String(generationRef.current);
           const preparation = createReviewPreparationOrchestrator(
             generationId,
@@ -1874,7 +1878,7 @@ export function Cs2dPlaybackHost({
               const readyCount = Object.values(preparationEvent.routeState.readiness).filter((value) => value !== "PENDING").length;
               setReviewPreparationStatus({
                 phase: "NARRATION",
-                detail: `教学路线已冻结，已准备 ${readyCount}/${preparationEvent.routeState.selectedCueCount} 个讲解包。`
+                detail: `已确定整场复盘顺序，已准备 ${readyCount}/${preparationEvent.routeState.selectedCueCount} 段讲解。`
               });
               if (finalPlan) {
                 setSession((current) => current
@@ -1892,7 +1896,7 @@ export function Cs2dPlaybackHost({
               setRouteState(preparationEvent.routeState);
               setReviewPreparationStatus({
                 phase: "ERROR",
-                detail: `教学路线准备失败：${preparationEvent.reason.slice(0, 240)}`
+                detail: "整场讲解暂时未能准备好，可以重新尝试。"
               });
               void historyPersistenceControllerRef.current?.markFailed()
                 .then(refreshReviewHistory)
@@ -1930,23 +1934,22 @@ export function Cs2dPlaybackHost({
                 agentCheckpointId: null,
               });
               recoveryRecordRef.current = record;
-              const startSession = () => setSession(reduceCoachingSession(
-                preparationEvent.plan,
+              const activateSession = () => activatePreparedCoachingSession({
+                plan: preparationEvent.plan,
                 initialSession,
-                { type: "START" },
-              ));
-              const activateSession = async () => {
-                const runtime = recoveryRuntimeRef.current;
-                if (runtime) {
-                  const result = await runtime.dispatch({
+                isCurrent: () => preparationEvent.generationId === String(generationRef.current),
+                latestRouteState: () => routeStateRef.current,
+                persistStart: async () => {
+                  const runtime = recoveryRuntimeRef.current;
+                  return runtime ? runtime.dispatch({
                     type: "SESSION_STARTED",
                     eventId: recoveryEventId("recovery-session-started"),
                     record,
-                  });
-                  acceptRecoveryResult(result);
-                }
-                startSession();
-              };
+                  }) : undefined;
+                },
+                acceptPersistedStart: (result) => { if (result) acceptRecoveryResult(result); },
+                mountSession: setSession,
+              });
               const durabilityCommit = (async () => {
                 if (desktopLibraryEnabled) {
                   const history = historyPersistenceControllerRef.current!;
@@ -2012,7 +2015,7 @@ export function Cs2dPlaybackHost({
             }
           });
         } catch (error) {
-          setAnalysisError(error instanceof Error ? error.message : "分析结果校验失败。");
+          setAnalysisError("这次分析结果暂时无法使用，请重新选择比赛或玩家。");
           setReviewPreparationStatus({ phase: "ERROR", detail: "教学路线输入校验失败。" });
           if (desktopLibraryEnabled) {
             void historyPersistenceControllerRef.current?.markFailed()
@@ -2021,7 +2024,7 @@ export function Cs2dPlaybackHost({
           }
         }
         }).catch(() => {
-          setAnalysisError("分析生成门未能安全执行。");
+          setAnalysisError("这次分析未能完成，请重新选择比赛或玩家。");
         });
         return;
       }
@@ -2078,12 +2081,12 @@ export function Cs2dPlaybackHost({
           }).catch((error) => {
             if (generationRef.current !== pending.generation || !stage2AdapterRef.current.isCurrent(pending.generation)) return;
             setStage2Status("FAILED");
-            setStage2Error(error instanceof Error ? error.message.slice(0, 160) : "地图标注未完成；基础回放仍可继续。");
+            setStage2Error("这段地图证据暂时无法展示，基础回放仍可继续。");
           });
         } catch (error) {
           stage2PendingRef.current = undefined;
           setStage2Status("FAILED");
-          setStage2Error(error instanceof Error ? error.message.slice(0, 160) : "地图标注校验失败；基础回放仍可继续。");
+          setStage2Error("这段地图证据暂时无法展示，基础回放仍可继续。");
         }
         return;
       }
@@ -2199,6 +2202,7 @@ export function Cs2dPlaybackHost({
   const threeStageCoaching = presentableNarration && coachingView
     ? buildThreeStageCoachingView({
         narration: presentableNarration,
+        semantics: { ...candidateMaterial, ...cue },
         decisionState: decisionPlayerState,
         callout: candidateMaterial?.callout,
         outcomeFacts: coachingView.outcomeFacts,
@@ -2367,6 +2371,25 @@ export function Cs2dPlaybackHost({
     };
   }, [activePlan, bundle, cue, selected?.playerId]);
 
+  const synchronizeTeachingDiagnosis = useCallback(async (context: TeachingDiagnosisHostContext) => {
+    const liveSession = liveSessionRef.current;
+    const route = routeStateRef.current;
+    const identity = recoveryIdentityRef.current;
+    const analysis = bundleRef.current;
+    const replay = replayRef.current;
+    const narration = narrationByCueRef.current[context.cue.id];
+    if (!liveSession?.outcome_completion || !route || !identity || !analysis || !replay?.demoContentHash || !narration || !recoveryHandshakeReadyRef.current) throw new Error("Diagnosis lifecycle is not ready.");
+    const result = await stage3ControllerRef.current?.synchronizeDiagnosis({
+      plan: context.plan, routeState: route, cue: context.cue, narration,
+      outcomeGate: liveSession.outcome_completion, currentSessionPhase: "PAUSED_FOR_COACHING",
+      analysis: { demo_id: analysis.demo_id, selected_steam_id: analysis.selected_steam_id, metadata: analysis.metadata },
+      demoContentHash: replay.demoContentHash, selectedPlayerId: context.selectedPlayerId,
+      sessionId: identity.sessionId, runId: identity.runId, generation: generationRef.current, tickRate: replay.tickRate,
+      evidence: { candidate: analysis.candidate_set.candidates.find((candidate) => candidate.candidateId === context.cue.candidate_id), material: context.material },
+    }, liveSession.manual_cue_visit?.visit_id);
+    if (!result) throw new Error("Diagnosis lifecycle changed or was rejected.");
+  }, []);
+
   const submitTeachingReflection = useCallback(async (reflection: UserReflection) => {
     let interactionDurable = true;
     const history = historyPersistenceControllerRef.current;
@@ -2424,6 +2447,8 @@ export function Cs2dPlaybackHost({
       // is retained as the bounded fallback when the remote Agent is absent.
       if (stage3IdentityContext && routeState && replay?.demoContentHash) {
         try {
+          await synchronizeTeachingDiagnosis(context);
+          if (!requestIsLive()) return;
           const identity = buildStage3Identity(stage3IdentityContext);
           const event = SubmitReflectionEventSchema.parse(buildTeachingDiagnosisSubmissionEvent(
             context,
@@ -2442,7 +2467,7 @@ export function Cs2dPlaybackHost({
           const graphThread = result.state.learningThreads?.find((thread) => thread.evidenceCueIds.includes(reflection.cueId));
           if (graphCase && graphThread) output = { cueCase: graphCase, learningThread: graphThread };
         } catch (error) {
-          if (requestIsLive()) setDiagnosticError(error instanceof Error ? "Agent 暂不可用，已使用确定性诊断。" : "Agent 暂不可用，已使用确定性诊断。");
+          if (requestIsLive()) setDiagnosticError(error instanceof Error ? "智能讲解暂不可用，已根据现有证据继续检查。" : "智能讲解暂不可用，已根据现有证据继续检查。");
         }
       }
       if (!requestIsLive()) return;
@@ -2460,7 +2485,7 @@ export function Cs2dPlaybackHost({
       }
     } catch (error) {
       if (!requestIsLive()) return;
-      setDiagnosticError(error instanceof Error ? error.message.slice(0, 180) : "诊断失败，已保留基础讲解。");
+      setDiagnosticError("这次思路检查暂时未完成，已保留基础讲解。");
       // Keep the submitted USER reflection attached to the fallback case so a
       // provider/schema failure cannot silently erase what the player said.
       const fallback = {
@@ -2481,7 +2506,7 @@ export function Cs2dPlaybackHost({
     } finally {
       if (diagnosisRequestEpochRef.current === requestEpoch) setDiagnosticBusyCueId(undefined);
     }
-  }, [activePlan, applyTeachingDiagnosis, buildStage3Identity, cue, diagnosisContext, isTeachingDiagnosisRequestLive, mirrorAgentResult, replay?.demoContentHash, routeState, stage3IdentityContext]);
+  }, [activePlan, applyTeachingDiagnosis, buildStage3Identity, cue, diagnosisContext, isTeachingDiagnosisRequestLive, mirrorAgentResult, replay?.demoContentHash, routeState, stage3IdentityContext, synchronizeTeachingDiagnosis]);
 
   const skipTeachingReflection = useCallback(async () => {
     const currentCue = liveCueRef.current ?? cue;
@@ -2517,6 +2542,8 @@ export function Cs2dPlaybackHost({
     const context = diagnosisContext();
     if (context && stage3IdentityContext && routeState && replay?.demoContentHash) {
       try {
+        await synchronizeTeachingDiagnosis(context);
+        if (!requestIsLive()) return;
         const identity = buildStage3Identity(stage3IdentityContext);
         const event = SubmitReflectionEventSchema.parse(buildTeachingDiagnosisSubmissionEvent(
           context,
@@ -2534,7 +2561,7 @@ export function Cs2dPlaybackHost({
         agentResult = { event, result };
       } catch {
         agentUnavailable = true;
-        if (requestIsLive()) setDiagnosticError("Agent 未能记录跳过，已保留本地 Baseline 记录。");
+        if (requestIsLive()) setDiagnosticError("暂时未能同步跳过操作，已在本地保存。");
       }
     }
     if (!requestIsLive()) return;
@@ -2570,7 +2597,7 @@ export function Cs2dPlaybackHost({
     if (durability === "MIRROR_FAILED") {
       setHistoryError("跳过选择已记录，但新的恢复点未能提交；上一个恢复点仍然有效。");
     }
-  }, [activePlan, buildStage3Identity, cue, diagnosisContext, isTeachingDiagnosisRequestLive, mirrorAgentResult, replay?.demoContentHash, routeState, stage3IdentityContext]);
+  }, [activePlan, buildStage3Identity, cue, diagnosisContext, isTeachingDiagnosisRequestLive, mirrorAgentResult, replay?.demoContentHash, routeState, stage3IdentityContext, synchronizeTeachingDiagnosis]);
 
   const confirmTeachingDiagnosis = useCallback(() => {
     const currentCue = liveCueRef.current ?? cue;
@@ -2647,7 +2674,7 @@ export function Cs2dPlaybackHost({
           const graphThread = result.state.learningThreads?.find((thread) => thread.evidenceCueIds.includes(currentCue.id));
           if (graphCase && graphThread) output = { cueCase: graphCase, learningThread: graphThread };
         } catch {
-          if (requestIsLive()) setDiagnosticError("Agent 未能重新检查，已使用本地确定性规则。");
+          if (requestIsLive()) setDiagnosticError("智能讲解暂时未能重新检查，已根据本地证据继续。");
         }
       }
       if (!requestIsLive()) return;
@@ -2674,7 +2701,7 @@ export function Cs2dPlaybackHost({
       }
     } catch (error) {
       if (!requestIsLive()) return;
-      setDiagnosticError(error instanceof Error ? error.message.slice(0, 180) : "补充信息未能应用；将保持条件化结论。");
+      setDiagnosticError("补充信息暂时未能应用，当前结论会保留不确定性。");
     } finally {
       if (diagnosisRequestEpochRef.current === requestEpoch) setDiagnosticBusyCueId(undefined);
     }
@@ -2693,7 +2720,9 @@ export function Cs2dPlaybackHost({
   useEffect(() => {
     const runtime = recoveryRuntimeRef.current;
     const current = recoveryRecordRef.current;
-    if (!runtime || !current || !session || userTookOverRef.current) return;
+    // Rehydrated UI is not a newly verified stable boundary. Only the explicit
+    // reconnect path may update recovery until the handshake has completed.
+    if (!runtime || !current || !session || userTookOverRef.current || recoveryModeRef.current) return;
     if (session.phase === "COMPLETED") {
       if (completedRecoveryRef.current === current.recoveryId) return;
       completedRecoveryRef.current = current.recoveryId;
@@ -2754,7 +2783,7 @@ export function Cs2dPlaybackHost({
     const generation = generationRef.current;
     if (!replay?.demoContentHash) {
       setStage2Status("FAILED");
-      setStage2Error("当前 Demo 没有可验证内容哈希；基础回放仍可继续。");
+      setStage2Error("暂时无法确认这份比赛记录，基础回放仍可继续。");
       return;
     }
     const selectedIdentity = selected?.playerId ?? activePlan.player_id;
@@ -2791,7 +2820,7 @@ export function Cs2dPlaybackHost({
       });
       if (prepared.capabilities.length !== 1) {
         setStage2Status("FAILED");
-        setStage2Error("当前 cue 没有可绑定的地图证据；基础回放仍可继续。");
+        setStage2Error("这段处理没有可展示的地图证据；基础回放仍可继续。");
         return;
       }
       void dispatchCoachAgentEvent(prepared.event).then((result) => {
@@ -2844,16 +2873,16 @@ export function Cs2dPlaybackHost({
           send(command);
         } catch (error) {
           setStage2Status("FAILED");
-          setStage2Error(error instanceof Error ? error.message.slice(0, 160) : "地图标注校验失败；基础回放仍可继续。");
+          setStage2Error("这段地图证据暂时无法展示，基础回放仍可继续。");
         }
       }).catch((error) => {
         if (generationRef.current !== generation || userTookOverRef.current) return;
         setStage2Status("FAILED");
-        setStage2Error(error instanceof Error ? error.message.slice(0, 160) : "教练工具不可用；基础回放仍可继续。");
+        setStage2Error("这段地图证据暂时无法展示，基础回放仍可继续。");
       });
     } catch (error) {
       setStage2Status("FAILED");
-      setStage2Error(error instanceof Error ? error.message.slice(0, 160) : "当前 cue 校验失败；基础回放仍可继续。");
+      setStage2Error("这段地图证据暂时无法展示；基础回放仍可继续。");
     }
   }, [activePlan, bundle, cue, cueRevealed, diagnosticsEnabled, presentableNarration, replay?.demoContentHash, routeState, selected?.playerId, send, session, stage2Cue, stage2Mode]);
 
@@ -2884,7 +2913,7 @@ export function Cs2dPlaybackHost({
     if (!replay?.demoContentHash) {
       if (!stage3BlockedCueRef.current.has(cue.id)) {
         stage3BlockedCueRef.current.add(cue.id);
-        setStage3State({ status: "FAILED", cueId: cue.id, error: "当前 Demo 没有可验证内容哈希；基础回放仍可继续。" });
+        setStage3State({ status: "FAILED", cueId: cue.id, error: "暂时无法确认这份比赛记录，基础回放仍可继续。" });
       }
       return;
     }
@@ -3000,11 +3029,11 @@ export function Cs2dPlaybackHost({
       setStage3WrapUpRequest(fallbackRequest);
       setStage3WrapUpResult(deterministicSessionWrapUpResult(fallbackRequest, "MISSING_SESSION_SUMMARY"));
       setStage3WrapUpStatus("FALLBACK");
-      setStage3WrapUpError("Agent 没有返回可用的完成摘要；已保留基础复盘结果。");
+      setStage3WrapUpError("暂时没有完整的全场总结，已保留现有复盘结果。");
       return;
     }
     try {
-      const projection = buildStage3WrapUpInput(activePlan, summaryInput, narrationByCue);
+      const projection = buildStage3WrapUpInput(activePlan, summaryInput, narrationByCue, bundle?.candidate_set);
       const request = buildSessionWrapUpRequest(projection);
       setStage3WrapUpRequest(request);
       const result = await requestSessionWrapUp(projection);
@@ -3012,21 +3041,23 @@ export function Cs2dPlaybackHost({
       setStage3WrapUpResult(result);
       void historyPersistenceControllerRef.current?.artifact("SESSION_SUMMARY", "session-summary", result, "session-wrap-up.v1").catch(() => setHistoryError("全场总结保存失败。"));
       setStage3WrapUpStatus(result.status === "SUCCEEDED" ? "READY" : "FALLBACK");
-      if (result.status !== "SUCCEEDED") setStage3WrapUpError("模型总结不可用，已使用确定性主题摘要。");
+      setStage3WrapUpError(result.status === "SUCCEEDED" || result.manifest.reason === "NO_REPEATED_THEME"
+        ? undefined
+        : "智能总结暂不可用，下面保留已确认的复盘结论。");
     } catch (error) {
       if (generation !== generationRef.current) return;
       const fallbackRequest = SessionWrapUpRequestSchema.parse({
         schemaVersion: "coach-agent-session-wrap-up.v1",
         themes: [],
         completedCues: [],
-        limitations: ["已完成 cue 的可呈现资料不足，未强行生成主题。"],
+        limitations: ["已完成片段的可展示资料不足，未强行生成主题。"],
       });
       setStage3WrapUpRequest(fallbackRequest);
       setStage3WrapUpResult(deterministicSessionWrapUpResult(fallbackRequest, "INVALID_PRESENTABLE_INPUT"));
       setStage3WrapUpStatus("FALLBACK");
-      setStage3WrapUpError(error instanceof Error ? error.message.slice(0, 160) : "总结准备失败；基础复盘仍可完成。");
+      setStage3WrapUpError("全场总结暂时未能准备好，仍可完成这次复盘。");
     }
-  }, [activePlan, narrationByCue, stage3Mode]);
+  }, [activePlan, bundle?.candidate_set, narrationByCue, stage3Mode]);
 
   useEffect(() => {
     if (historyPlaybackOnlyRef.current || !stage3Mode || !stage3IdentityContext || !session || userTookOverRef.current) return;
@@ -3047,7 +3078,7 @@ export function Cs2dPlaybackHost({
       ? "请选择本地 Demo"
       : phase === "READY"
         ? `${replay?.map ?? "Demo"} 已就绪`
-        : "回放宿主异常";
+        : "回放暂不可用";
   const analysisPercent = analysisProgress && analysisProgress.total > 0
     ? Math.round((analysisProgress.completed / analysisProgress.total) * 100)
     : undefined;
@@ -3057,7 +3088,7 @@ export function Cs2dPlaybackHost({
       detail: replay
         ? `${replay.map} · ${replay.roundCount} 回合已进入本地时间线`
         : phase === "ERROR"
-          ? "本地 Viewer 没有正常响应，请重新打开应用"
+          ? "本地回放没有正常响应，请重新打开应用"
           : "在地图内选择 .dem，文件不会上传",
       state: phase === "ERROR" ? "error" : replay ? "complete" : "active",
     },
@@ -3193,7 +3224,7 @@ export function Cs2dPlaybackHost({
           {recoveryStatusKind ? (
             <SessionRecoveryStatus
               status={recoveryStatusKind}
-              detail={recoveryResult?.reason ?? undefined}
+              detail={recoveryResult?.reason ? "恢复过程暂未完成，请按下方操作继续。" : undefined}
               onChooseDemo={chooseRecoveryDemo}
               onDiscard={discardRecovery}
             />
@@ -3222,6 +3253,7 @@ export function Cs2dPlaybackHost({
               cue={cue}
               decisionFacts={diagnosisDecisionFacts}
               cueCase={activeTeachingCase}
+              hasTrustedDecisionContext={Boolean(cue.assessment && cue.observableContext)}
               learningThread={activeTeachingCase ? teachingThreads.find((thread) => thread.evidenceCueIds.includes(activeTeachingCase.cueId)) : undefined}
               busy={diagnosticBusyCueId === cue.id}
               error={diagnosticError}
@@ -3236,7 +3268,7 @@ export function Cs2dPlaybackHost({
             <section className="cs2d-coach-cue" aria-live="polite">
               <div className="cs2d-coach-cue-heading">
                 <small>第 {segment?.round_number ?? ""} 回合 · 处理看完了</small>
-                <h3>{cue.title}</h3>
+                <h3>{cue.assessment ? cue.title : "这段处理"}</h3>
               </div>
               <div className="cs2d-coaching-bands">
                 <section className="cs2d-coaching-band cs2d-coaching-band--situation">
@@ -3254,13 +3286,15 @@ export function Cs2dPlaybackHost({
                       ))}
                     </ul>
                   ) : <p>{threeStageCoaching.currentState.fallbackText}</p>}
+                  {threeStageCoaching.currentState.limitations.map((limitation) => <p key={limitation}>{limitation}</p>)}
                 </section>
                 <section className="cs2d-coaching-band cs2d-coaching-band--problem">
                   <div className="cs2d-coaching-band-heading">
                     <span className="cs2d-coaching-band-icon"><TriangleAlert aria-hidden="true" /></span>
-                    <strong>这样做的问题</strong>
+                    <strong>{threeStageCoaching.problem.title}</strong>
                   </div>
                   <p>{threeStageCoaching.problem.text}</p>
+                  {threeStageCoaching.problem.confidence !== undefined ? <small>判断把握 {Math.round(threeStageCoaching.problem.confidence * 100)}%</small> : null}
                   {threeStageCoaching.problem.consequences.length > 0 ? (
                     <div className="cs2d-coaching-consequence">
                       <TriangleAlert aria-hidden="true" />
@@ -3271,7 +3305,7 @@ export function Cs2dPlaybackHost({
                 <section className="cs2d-coaching-band cs2d-coaching-band--better">
                   <div className="cs2d-coaching-band-heading">
                     <span className="cs2d-coaching-band-icon"><Lightbulb aria-hidden="true" /></span>
-                    <strong>可以怎么改进</strong>
+                    <strong>可行的处理与待确认条件</strong>
                   </div>
                   <p>{threeStageCoaching.improvement.text}</p>
                 </section>
@@ -3302,7 +3336,7 @@ export function Cs2dPlaybackHost({
                               ? "教学工具暂不可用"
                               : "准备下一段"}
                   </small>
-                  <p>{stage3State.error ?? (stage3State.status === "COMPLETED" ? "证据已回到当前讲解卡；你可以继续下一段。" : "工具只绑定当前 cue 已验证的证据。")}</p>
+                  <p>{stage3State.error ? "这段证据暂时无法展示，你仍可以继续回放。" : (stage3State.status === "COMPLETED" ? "证据已回到当前讲解卡；你可以继续下一段。" : "这里仅展示已经确认的证据。")}</p>
                   {!stage3State.error && stage3State.presentation?.tool === "SHOW_WIN_RATE_IMPACT" ? (
                     <p>{Math.round(stage3State.presentation.beforeProbability * 100)}% → {Math.round(stage3State.presentation.afterProbability * 100)}% · {stage3State.presentation.percentagePoints.toFixed(1)} 个百分点 · {stage3State.presentation.economyClass} · 相关性不等于单一行为因果</p>
                   ) : null}
@@ -3345,13 +3379,13 @@ export function Cs2dPlaybackHost({
           {session && !userTookOver && cue && ["PLAYING", "REVEALING", "REPLAYING"].includes(session.phase) ? (
             <section className="cs2d-coach-card" aria-live="polite">
               <small>{session.phase === "PLAYING" ? "正在先看完整处理" : session.phase === "REPLAYING" ? "正在重播完整处理" : "正在播放完整处理"}</small>
-              <p>{session.phase === "PLAYING" ? "先看一秒上下文和完整处理，播放结束后再回到决策点讲解。" : "跟住这段完整处理，结束后会回到问题发生前。"}</p>
+              <p>{session.phase === "PLAYING" ? "先看一秒上下文和完整处理，播放结束后再回到决策点讲解。" : "跟住这段完整处理，结束后会回到这次处理之前。"}</p>
             </section>
           ) : null}
 
           {session && !userTookOver && stage3Mode && ["WRAP_UP", "COMPLETED"].includes(session.phase) ? (
             <section className="cs2d-coach-summary" aria-live="polite">
-              <small>全场总结 · {stage3WrapUpStatus === "LOADING" ? "准备中" : stage3WrapUpStatus === "ERROR" ? "需要恢复" : stage3WrapUpStatus === "FALLBACK" ? "确定性摘要" : "已就绪"}</small>
+              <small>本场复盘总结</small>
               {stage3WrapUpStatus === "LOADING" ? <p>正在整理已完成且可呈现的讲解点。</p> : null}
               {stage3WrapUpError ? <p>{stage3WrapUpError}</p> : null}
               {(stage3WrapUpResult?.bundle.themes.length ?? 0) > 0 ? (
@@ -3373,7 +3407,7 @@ export function Cs2dPlaybackHost({
                   })}
                 </div>
               ) : stage3WrapUpStatus !== "LOADING" ? (
-                <p>本场没有足够重复证据，不强行定义长期习惯。</p>
+                <p>本场没有足够重复且条件明确的证据，暂不归纳为习惯。</p>
               ) : null}
               {session.phase === "WRAP_UP" ? <button className="cs2d-coach-primary" type="button" onClick={() => transition({ type: "COMPLETE_SESSION" })}>完成本次复盘</button> : null}
             </section>

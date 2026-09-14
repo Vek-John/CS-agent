@@ -1,3 +1,4 @@
+import type { TrustedDecisionSemantics } from "./decision-context";
 import type { MatchEvent, PlayerStateSample } from "./match";
 import type { WorldPoint } from "./geometry";
 import type { CandidateSet, CueReadiness, DirectorDecisionSet, NarrationBundle, OutcomeCompletionState, OutcomeFact, PlayerActionFact } from "./coaching";
@@ -91,6 +92,13 @@ export interface Inference {
   text: string;
   confidence: number;
   fact_refs: string[];
+  /** Explicit judgment provenance; optional only for immutable legacy artifacts. */
+  counter_evidence_refs?: readonly string[];
+  missing_fields?: readonly string[];
+  limitations?: readonly string[];
+  hypothesis_refs?: readonly string[];
+  allowed_as_teaching_judgment?: boolean;
+  reflection_only?: boolean;
 }
 
 export interface Advice {
@@ -159,7 +167,7 @@ export type Annotation =
       label: string;
     };
 
-export interface CoachCue {
+export interface CoachCue extends TrustedDecisionSemantics {
   id: string;
   segment_id: string;
   cue_type: "DECISION" | "HABIT_RECHECK";
@@ -366,3 +374,5 @@ export * from "./observation";
 export * from "./win-probability";
 export * from "./coaching";
 export * from "./teaching-diagnosis";
+
+export * from "./decision-context";

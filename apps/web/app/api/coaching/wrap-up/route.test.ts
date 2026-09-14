@@ -34,9 +34,9 @@ function successBundle() {
   return {
     schemaVersion: "coach-agent-session-wrap-up.v1",
     themes: [
-      { focus: "f1", summary: { text: "主题一", refs: ["c1"] }, trainingAdvice: { text: "建议一", refs: ["v1"] } },
-      { focus: "f2", summary: { text: "主题二", refs: ["e2"] }, trainingAdvice: { text: "建议二", refs: ["v2"] } },
-      { focus: "f3", summary: { text: "主题三", refs: ["c3", "e3"] }, trainingAdvice: { text: "建议三", refs: ["v3"] } },
+      { focus: "f1", summary: { text: "问题一", refs: ["c1"] }, trainingAdvice: { text: "建议一", refs: ["v1"] } },
+      { focus: "f2", summary: { text: "问题二", refs: ["c2"] }, trainingAdvice: { text: "建议二", refs: ["v2"] } },
+      { focus: "f3", summary: { text: "问题三", refs: ["c3"] }, trainingAdvice: { text: "建议三", refs: ["v3"] } },
     ],
     limitations: [],
   };

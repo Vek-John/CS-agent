@@ -31,16 +31,7 @@ function context() {
 function providerResponse() {
   return {
     status: "SUCCEEDED",
-    bundle: {
-      cueId: "c1",
-      candidateId: "k1",
-      primaryFocusCode: "SURVIVE_THE_NEXT_CONTACT",
-      currentSituation: { text: "你在 B小。", refs: ["d1"] },
-      playerAction: { text: "你从掩体拉出。", refs: ["a1"] },
-      coreIssue: { text: "先活过接触。", refs: ["d1", "a1"] },
-      betterPlay: { text: "先预瞄，等队友补枪。", refs: ["v1"] },
-      outcomeImpact: { text: "你被击杀，我方胜率下降。", refs: ["o1", "m1"] }
-    },
+    bundle: context().request.approvedNarration,
     manifest: { status: "SUCCEEDED", provider: "DEEPSEEK", model: "deepseek-v4-flash", promptVersion: "provider/1", limitations: [] }
   };
 }
@@ -54,7 +45,7 @@ describe("client narrator alias seam", () => {
     expect(result.bundle.candidateId).toBe("candidate-final");
     expect(result.bundle.currentSituation.refs).toEqual(["decision-1"]);
     expect(result.bundle.playerAction.refs).toEqual(["action-1"]);
-    expect(result.bundle.betterPlay.refs).toEqual(["advice-1"]);
+    expect(result.bundle.betterPlay.refs).toEqual(context().request.approvedNarration?.betterPlay.refs.map((ref) => ref === "v1" ? "advice-1" : ref === "e1" ? "evidence-1" : "decision-1"));
     expect(result.bundle.outcomeImpact.refs).toEqual(["outcome-1", "measurement-cue-final"]);
   });
 

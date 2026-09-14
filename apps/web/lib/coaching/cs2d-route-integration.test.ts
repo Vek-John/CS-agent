@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createSyntheticMirageTimeline } from "@cs-coach/demo-domain";
-import { createFixtureReviewPlan } from "@cs-coach/review-planner";
+import { createFixtureReviewPlan, assembleCandidateSet, deterministicNarrationBundle } from "@cs-coach/review-planner";
+import { decisionSnapshotFixture } from "../../../../libs/review-planner/src/teaching-gate-fixtures";
 import type { CandidateSet, WinProbabilityTimelineV1 } from "@cs-coach/contracts";
 import {
   acceptNarrationUpdate,
@@ -97,6 +98,8 @@ function integrationAnalysis() {
   }));
   const materials = candidateData.map((item) => ({
     candidateId: item.id,
+    decisionSnapshot: decisionSnapshotFixture(item.decisionTick, `fact-${item.id}`),
+    contextCode: item.id,
     decisionFacts: [{
       id: `fact-${item.id}`,
       text: "决策前可确认的局面事实。",
@@ -138,7 +141,7 @@ function integrationAnalysis() {
     }],
     limitations: []
   }));
-  const candidateSet: CandidateSet = {
+  const rawCandidateSet: CandidateSet = {
     id: "candidate-set-integration",
     version: "candidate/fixture",
     hash: "candidate-hash-integration",
@@ -156,6 +159,7 @@ function integrationAnalysis() {
     materials,
     limitations: []
   };
+  const candidateSet = assembleCandidateSet(rawCandidateSet);
   const winProbabilityTimeline: WinProbabilityTimelineV1 = {
     version: "win-probability-timeline.v1",
     status: "AVAILABLE",
@@ -403,7 +407,7 @@ describe("Host frozen route integration", () => {
             {
               candidateId: "candidate-r3",
               priority: 1,
-              primaryFocusCode: "SURVIVE_THE_NEXT_CONTACT",
+              primaryFocusCode: "REVIEW_UNCERTAINTY",
               selectionReason: "第二个候选更值得先检查。",
               reasonRefs: ["fact-candidate-r3"],
               evidenceRefs: ["evidence-candidate-r3"],
@@ -412,7 +416,7 @@ describe("Host frozen route integration", () => {
             {
               candidateId: "candidate-r2",
               priority: 2,
-              primaryFocusCode: "SURVIVE_THE_NEXT_CONTACT",
+              primaryFocusCode: "REVIEW_UNCERTAINTY",
               selectionReason: "第一个候选保留为对照。",
               reasonRefs: ["fact-candidate-r2"],
               evidenceRefs: ["evidence-candidate-r2"],
@@ -429,22 +433,9 @@ describe("Host frozen route integration", () => {
       },
       narrator: async (context) => {
         narratorCalls.push(context.coachingPackage.cueId);
-        const decisionRef = context.coachingPackage.allowedRefs.decision[0] ?? "decision-ref";
-        const actionRef = context.coachingPackage.allowedRefs.action[0] ?? "action-ref";
-        const adviceRef = context.coachingPackage.allowedRefs.advice[0] ?? "advice-ref";
-        const outcomeRef = context.outcomePackage.outcomeFacts[0]?.id ?? context.outcomePackage.measurementRefs[0] ?? "outcome-ref";
         return {
           status: "FALLBACK" as const,
-          bundle: {
-            cueId: context.coachingPackage.cueId,
-            candidateId: context.coachingPackage.candidateId,
-            primaryFocusCode: context.coachingPackage.primaryFocusCode,
-            currentSituation: { text: "当前可确认的情况。", refs: [decisionRef] },
-            playerAction: { text: "你在这个窗口继续接触。", refs: [actionRef] },
-            coreIssue: { text: "核心问题是补枪关系没有保持。", refs: [decisionRef, actionRef] },
-            betterPlay: { text: "先停一下，再根据新信息决定。", refs: [adviceRef] },
-            outcomeImpact: { text: "结果窗口已经完整播放。", refs: [outcomeRef] }
-          },
+          bundle: deterministicNarrationBundle(context.coachingPackage, context.outcomePackage),
           manifest: {
             status: "FALLBACK" as const,
             provider: "DETERMINISTIC" as const,
@@ -597,4 +588,67 @@ describe("Host frozen route integration", () => {
     expect(events).not.toContain("READY_TO_START");
     expect(events).not.toContain("CANCELLED");
   });
+});
+
+it("retains a third cue's narration that completes while Session activation is awaiting durability", async () => {
+  const { createCoachingSession } = await import("@cs-coach/session");
+  const { activatePreparedCoachingSession } = await import("./cs2d-route-integration");
+  const plan = planWithThirdCue();
+  const third = plan.cues[2];
+  const initialRoute = buildInitialCoachingRouteState(plan, { readiness: { [plan.cues[0].id]: "READY", [plan.cues[1].id]: "READY", [third.id]: "PENDING" } });
+  let route = initialRoute;
+  let mounted: ReturnType<typeof createCoachingSession> | undefined;
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  const activation = activatePreparedCoachingSession({
+    plan, initialSession: createCoachingSession(plan, "delayed-start", initialRoute),
+    isCurrent: () => true, latestRouteState: () => route,
+    persistStart: () => pending, acceptPersistedStart() {}, mountSession: (session) => { mounted = session; },
+  });
+  // This is exactly the Host's NARRATION_UPDATE-before-mount window: only
+  // routeStateRef exists yet, so there is no Session reducer target to update.
+  route = { ...route, readiness: { ...route.readiness, [third.id]: "FALLBACK" } };
+  expect(mounted).toBeUndefined();
+  release();
+  await activation;
+  expect(mounted?.narration_readiness?.[third.id]).toBe("FALLBACK");
+  expect(mounted?.route_fingerprint).toBe(initialRoute.routeFingerprint);
+});
+
+it("does not accept recovery results or mount a Session after its generation is superseded", async () => {
+  const { createCoachingSession } = await import("@cs-coach/session");
+  const { activatePreparedCoachingSession } = await import("./cs2d-route-integration");
+  const plan = planWithThirdCue();
+  const route = buildInitialCoachingRouteState(plan);
+  let current = true;
+  let accepted = false;
+  let mounted = false;
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  const activation = activatePreparedCoachingSession({
+    plan, initialSession: createCoachingSession(plan, "old-session", route), isCurrent: () => current,
+    latestRouteState: () => route, persistStart: () => pending,
+    acceptPersistedStart: () => { accepted = true; }, mountSession: () => { mounted = true; },
+  });
+  current = false;
+  release();
+  expect(await activation).toBe(false);
+  expect(accepted).toBe(false);
+  expect(mounted).toBe(false);
+});
+
+it("does not merge readiness from a different frozen route during activation", async () => {
+  const { createCoachingSession } = await import("@cs-coach/session");
+  const { activatePreparedCoachingSession } = await import("./cs2d-route-integration");
+  const plan = planWithThirdCue();
+  const route = buildInitialCoachingRouteState(plan);
+  let accepted = false;
+  let mounted = false;
+  expect(await activatePreparedCoachingSession({
+    plan, initialSession: createCoachingSession(plan, "route-bound-session", route), isCurrent: () => true,
+    latestRouteState: () => ({ ...route, routeFingerprint: "another-route" }), persistStart: async () => undefined,
+    acceptPersistedStart: () => { accepted = true; }, mountSession: () => { mounted = true; },
+  })).toBe(false);
+  expect(accepted).toBe(false);
+  expect(mounted).toBe(false);
 });

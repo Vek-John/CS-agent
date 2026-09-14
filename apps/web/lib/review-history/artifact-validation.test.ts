@@ -57,7 +57,7 @@ function replay(): Cs2dReplay {
       scoreT: 0,
       frames: [
         { tick: 64, t: 1, players: [player("player-a", 64, 100), player("opponent", 64, 100)] },
-        { tick: 256, t: 4, players: [player("player-a", 256, 70), player("opponent", 256, 100)] },
+        { tick: 256, t: 4, players: [player("player-a", 256, 30), player("opponent", 256, 100)] },
         { tick: 352, t: 5.5, players: [player("player-a", 352, 0), player("opponent", 352, 100)] },
       ],
       events: [{

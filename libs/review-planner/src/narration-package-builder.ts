@@ -8,6 +8,7 @@ import type {
   OutcomePackage,
   WinProbabilityTimelineV1
 } from "@cs-coach/contracts";
+import { assessCandidateTeaching, buildGatedAdviceOptions } from "./teaching-gates";
 import { candidateWinProbabilityIsAvailable, isPracticalTeachingCandidate } from "./teaching-pipeline";
 
 function unique(values: readonly string[]): string[] {
@@ -35,10 +36,14 @@ export function buildCoachingPackage(cue: CoachCue, candidateSet: CandidateSet, 
   const stateClaimIds = new Set(stateClaims.map((claim) => claim.id));
   const missingClaims = [...candidateClaimIds].filter((claimId) => !stateClaimIds.has(claimId));
   if (missingClaims.length > 0) throw new Error(`Candidate ${candidate.candidateId} references claims outside its ObservableState: ${missingClaims.join(", ")}.`);
-  const claims = stateClaims.filter((claim) => candidateClaimIds.has(claim.id) && claim.available_from_tick <= cue.decision_tick && (claim.expires_at_tick === undefined || cue.decision_tick < claim.expires_at_tick));
+  const claims = stateClaims.filter((claim) => candidateClaimIds.has(claim.id) && claim.available_from_tick <= cue.decision_tick && claim.evidence_tick <= cue.decision_tick && (claim.expires_at_tick === undefined || cue.decision_tick < claim.expires_at_tick));
   const playerAction = material.playerActionFacts.filter((fact) => candidate.actionRefs.includes(fact.id) && fact.availableAtTick <= cue.reveal_tick);
-  const advice = [...cue.advice];
+  // Missing applicability is unverified, including restored legacy material.
+  const approved = buildGatedAdviceOptions(candidate, material).filter((option) => option.applicability?.status === "APPLICABLE" && option.applicability.allowedIntoNarrator);
+  const advice = approved.filter((option) => cue.advice.some((item) => item.id === option.id));
   const evidence = [...cue.evidence];
+  const assessment = assessCandidateTeaching(candidate, material);
+  const context = material.observableContext ?? candidate.observableContext;
   const allowedRefs = {
     decision: unique([...facts.map((fact) => fact.id), ...claims.map((claim) => claim.id)]),
     action: unique(playerAction.map((fact) => fact.id)),
@@ -52,8 +57,12 @@ export function buildCoachingPackage(cue: CoachCue, candidateSet: CandidateSet, 
     cueId: cue.id,
     candidateId: cue.candidate_id ?? cue.id,
     decisionContext: { facts, claims },
+    ...(context ? { observableContext: { ...context, state: { ...context.state, claims } } } : {}),
+    assessment,
+    behaviorHypotheses: [...(cue.behaviorHypotheses ?? material.behaviorHypotheses ?? [])],
+    adviceOptions: approved,
     playerAction,
-    inferences: [...cue.inferences],
+    inferences: assessment.hasEvaluableDecision ? [...material.inferences] : [],
     advice,
     evidence,
     primaryFocusCode: cue.primary_focus_code ?? "UNSPECIFIED_FOCUS",
@@ -64,7 +73,7 @@ export function buildCoachingPackage(cue: CoachCue, candidateSet: CandidateSet, 
       ...cue.limitations,
       ...additionalLimitations,
       ...(facts.length === 0 ? ["NARRATION_NOT_STARTABLE_MISSING_DECISION_FACTS"] : []),
-      ...(playerAction.length === 0 ? ["NARRATION_NOT_STARTABLE_MISSING_ACTION_FACTS"] : [])
+      ...(playerAction.length === 0 ? ["当前记录不足以确认具体行动意图。"] : [])
     ])
   };
 }
@@ -73,7 +82,7 @@ export function buildOutcomePackage(cue: CoachCue, candidateSet: CandidateSet, o
   const { candidate, material } = candidateMaterialFor(cue, candidateSet);
   if (outcomeImpact && outcomeImpact.cueId !== cue.id) throw new Error(`OutcomeImpact is bound to ${outcomeImpact.cueId}, not ${cue.id}.`);
   const effectiveImpact = outcomeImpact && candidateWinProbabilityIsAvailable(candidate) && isPracticalTeachingCandidate(candidate) ? outcomeImpact : undefined;
-  const outcomeFacts = material.outcomeFacts.filter((fact) => candidate.outcomeRefs.includes(fact.id));
+  const outcomeFacts = material.outcomeFacts.filter((fact) => candidate.outcomeRefs.includes(fact.id) && fact.availableAtTick >= cue.reveal_tick && fact.availableAtTick <= cue.outcome_end_tick);
   if (candidate.outcomeRefs.length > 0 && outcomeFacts.length === 0) throw new Error(`Candidate ${candidate.candidateId} is not startable: outcome facts are missing.`);
   if (candidate.outcomeRefs.length === 0 && !effectiveImpact) throw new Error(`Candidate ${candidate.candidateId} is not startable: outcome or measurement evidence is missing.`);
   const measurementRefs = effectiveImpact ? [`measurement-${cue.id}`] : [];
@@ -125,7 +134,7 @@ export function buildOutcomeImpactForCue(cue: CoachCue, candidateSet: CandidateS
   const side = selectedSideAtTick(matchTimeline, selectedPlayerId, cue.decision_tick);
   const round = timeline.rounds.find((item) => item.roundNumber === candidate.roundNumber);
   const swings = timeline.swings
-    .filter((swing) => swing.tick >= cue.reveal_tick && swing.tick <= cue.outcome_end_tick + timeline.tickRate)
+    .filter((swing) => swing.tick >= cue.reveal_tick && swing.tick <= cue.outcome_end_tick)
     .map((swing) => ({ swing, before: selectedProbability(side, swing.before), after: selectedProbability(side, swing.after) }))
     .sort((left, right) => Math.abs(right.after - right.before) - Math.abs(left.after - left.before) || left.swing.tick - right.swing.tick);
   const meaningful = swings.find((item) => item.swing.selectedPlayerDeath) ?? swings[0];
@@ -148,9 +157,9 @@ export function buildOutcomeImpactForCue(cue: CoachCue, candidateSet: CandidateS
   const concurrent = summary.concurrentEvents || deaths.length > 1 || deaths.some((death) => bombs.some((bomb) => Math.abs(death.tick - bomb.tick) <= timeline.tickRate));
   const selectedDeath = summary.selectedPlayerDeath || Boolean(meaningful?.swing.selectedPlayerDeath) || deaths.some((event) => event.target_player_id === selectedPlayerId);
   const attribution: OutcomeImpact["attribution"] = concurrent ? "CONCURRENT_EVENTS" : selectedDeath ? "SELECTED_PLAYER_DEATH" : meaningful ? "MODEL_SWING" : "ROUND_CONTEXT";
-  const confidence: OutcomeImpact["confidence"] = concurrent ? "LOW" : selectedDeath ? "HIGH" : meaningful ? "MEDIUM" : "LOW";
+  const confidence: OutcomeImpact["confidence"] = concurrent ? "LOW" : meaningful ? "MEDIUM" : "LOW";
   const text = selectedDeath && delta < 0
-    ? `你这次处理后，我方胜率从 ${Math.round(before * 100)}% 掉到 ${Math.round(after * 100)}%，少了 ${points} 个百分点。`
+    ? `这段结果窗口后，我方胜率从 ${Math.round(before * 100)}% 掉到 ${Math.round(after * 100)}%，少了 ${points} 个百分点。`
     : delta < 0
       ? `这段结果窗口后，我方胜率从 ${Math.round(before * 100)}% 到 ${Math.round(after * 100)}%，下降 ${points} 个百分点。`
       : delta > 0
@@ -166,6 +175,6 @@ export function buildOutcomeImpactForCue(cue: CoachCue, candidateSet: CandidateS
     attribution,
     confidence,
     text,
-    limitations: [...summary.limitations, ...(concurrent ? ["多个结果事件同时发生，不能把变化归因给单一动作。"] : ["胜率曲线是结果窗口分析信号，不等同于玩家当时可见信息。"])]
+    limitations: [...summary.limitations, ...(concurrent ? ["多个结果事件同时发生，不能把变化归因给单一动作。"] : ["胜率变化只描述这段结果，不能单独判断你的决策好坏，也不能把变化归因于你的一个动作。"])]
   };
 }

@@ -14,11 +14,12 @@ import type {
   TeachingCandidate,
   WinProbabilityEconomyClass,
   WinProbabilitySwing,
+  WinProbabilitySample,
   WinProbabilityTimelineV1
 } from "@cs-coach/contracts";
 import { assembleCandidateSet } from "./teaching-pipeline";
 
-export const CANDIDATE_GENERATOR_VERSION = "review-planner/candidate-generator/1.1.0";
+export const CANDIDATE_GENERATOR_VERSION = "review-planner/candidate-generator/2.1.0";
 const OUTCOME_WINDOW_SECONDS = 4;
 const PRE_ROLL_SECONDS = 1;
 const WIN_RATE_DROP_THRESHOLD = 0.12;
@@ -64,12 +65,11 @@ function swingForSignal(input: CandidateGeneratorInput, signal: CanonicalSignal)
   const candidates = timeline.swings
     .filter((swing) => Math.abs(swing.tick - signal.revealTick) <= Math.max(1, Math.round(input.timeline.tick_rate / 2)))
     .map((swing) => ({ swing, probability: selectedProbability(swing, signal.playerSide) }))
-    .filter((item) => item.probability.delta < 0)
     .sort((left, right) => Math.abs(right.probability.delta) - Math.abs(left.probability.delta) || left.swing.tick - right.swing.tick);
   const exact = signal.sourceRefs.map((ref) => timeline.swings.find((swing) => ref.includes(swing.id))).find(Boolean);
   if (exact) {
     const exactProbability = selectedProbability(exact, signal.playerSide);
-    if (exactProbability.delta < 0) return { swing: exact, probability: exactProbability, economy };
+    return { swing: exact, probability: exactProbability, economy };
   }
   const nearest = candidates[0];
   return nearest ? { swing: nearest.swing, probability: nearest.probability, economy } : { economy };
@@ -99,8 +99,30 @@ function contextCodeFor(signal: CanonicalSignal): string {
   return "contact-preparation";
 }
 
-function resultSummary(input: CandidateGeneratorInput, signal: CanonicalSignal, economy: WinProbabilityEconomyClass, swing?: WinProbabilitySwing): CandidateResultSummary {
-  const probability = swing ? selectedProbability(swing, signal.playerSide) : undefined;
+/** Result evidence uses this candidate's actual window, even when no discrete swing was nominated. */
+function windowProbability(input: CandidateGeneratorInput, signal: CanonicalSignal, outcomeEnd: number, swing?: WinProbabilitySwing): {
+  probability?: { before: number; after: number; delta: number }; measurementRefs: string[]
+} {
+  const timeline = input.winProbabilityTimeline;
+  if (timeline?.status !== "AVAILABLE") return { measurementRefs: [] };
+  const round = timeline.rounds.find((item) => item.roundNumber === signal.roundNumber);
+  let beforeSample: WinProbabilitySample | undefined;
+  let afterSample: WinProbabilitySample | undefined;
+  for (const sample of round?.samples ?? []) {
+    if (sample.roundNumber !== signal.roundNumber || sample.tick < round!.startTick || sample.tick > outcomeEnd || sample.tick > round!.endTick || !Number.isFinite(sample.probability) || sample.probability < 0 || sample.probability > 1) continue;
+    if (sample.tick <= signal.decisionTick && (!beforeSample || sample.tick > beforeSample.tick)) beforeSample = sample;
+    if (sample.tick >= signal.revealTick && (!afterSample || sample.tick > afterSample.tick)) afterSample = sample;
+  }
+  if (beforeSample && afterSample) {
+    const before = signal.playerSide === "T" ? 1 - beforeSample.probability : beforeSample.probability;
+    const after = signal.playerSide === "T" ? 1 - afterSample.probability : afterSample.probability;
+    return { probability: { before, after, delta: after - before }, measurementRefs: [`winrate-window-r${signal.roundNumber}-${beforeSample.tick}-${afterSample.tick}-${signal.playerSide}`] };
+  }
+  if (swing && swing.tick >= signal.decisionTick && swing.tick <= outcomeEnd) return { probability: selectedProbability(swing, signal.playerSide), measurementRefs: [`winrate-swing-${swing.id}`] };
+  return { measurementRefs: [] };
+}
+
+function resultSummary(input: CandidateGeneratorInput, signal: CanonicalSignal, economy: WinProbabilityEconomyClass, probability?: { before: number; after: number; delta: number }, swing?: WinProbabilitySwing): CandidateResultSummary {
   return {
     ...(probability ? { winProbabilityBefore: roundedProbability(probability.before), winProbabilityAfter: roundedProbability(probability.after), winProbabilityDelta: roundedProbability(probability.delta), winProbabilityPercentagePoints: Math.round(probability.delta * 100) } : {}),
     selectedPlayerDeath: signal.selectedPlayerDeath === true || signal.kind === "DEATH" || swing?.selectedPlayerDeath === true,
@@ -116,6 +138,7 @@ function candidateId(signal: CanonicalSignal): string {
 }
 
 function createIndependentSwingSignals(input: CandidateGeneratorInput): CanonicalSignal[] {
+  if (input.independentSwingSignalsIncluded) return [];
   const timeline = input.winProbabilityTimeline;
   if (!timeline || timeline.status !== "AVAILABLE") return [];
   const existing = input.signals;
@@ -129,7 +152,6 @@ function createIndependentSwingSignals(input: CandidateGeneratorInput): Canonica
     const closeExisting = existing.find((signal) => Math.abs(signal.revealTick - swing.tick) <= Math.max(1, Math.round(input.timeline.tick_rate / 2)) && signal.roundNumber === round.round_number);
     if (closeExisting) continue;
     const decisionFact = [...input.facts].filter((fact) => fact.kind === "DECISION_CONTEXT" && fact.roundNumber === round.round_number && fact.tick <= swing.tick).sort((left, right) => right.tick - left.tick)[0];
-    const nearbyAction = [...input.facts].filter((fact) => fact.kind === "PLAYER_ACTION" && fact.roundNumber === round.round_number && Math.abs(fact.tick - swing.tick) <= Math.max(1, input.timeline.tick_rate)).sort((left, right) => Math.abs(left.tick - swing.tick) - Math.abs(right.tick - swing.tick))[0];
     generated.push({
       signalId: `winrate-swing-${swing.id}`,
       kind: "WIN_RATE_DROP",
@@ -139,7 +161,7 @@ function createIndependentSwingSignals(input: CandidateGeneratorInput): Canonica
       revealTick: swing.tick,
       sourceRefs: [`winrate-swing-${swing.id}`],
       factRefs: decisionFact ? [decisionFact.id] : [],
-      actionRefs: nearbyAction ? [nearbyAction.id] : [],
+      actionRefs: [],
       outcomeRefs: [],
       observableClaimRefs: [],
       evidenceRefs: [swing.id],
@@ -191,9 +213,10 @@ function materializeSignal(input: CandidateGeneratorInput, signal: CanonicalSign
   const actionFacts: PlayerActionFact[] = actionSourceFacts.map((fact) => ({ id: fact.id, text: fact.text, actorPlayerId: input.playerId, availableAtTick: fact.tick, source: "DEMO", evidenceRefs: [...fact.sourceRefs], limitations: [...fact.limitations, ...fact.missingFields] }));
   const outcomeFacts: OutcomeFact[] = outcomeSourceFacts.map((fact) => ({ id: fact.id, text: fact.text, availableAtTick: fact.tick, source: "DEMO", outcomeKind: fact.outcomeKind ?? "OTHER", evidenceRefs: [...fact.sourceRefs], limitations: [...fact.limitations, ...fact.missingFields] }));
   const evidence: Evidence[] = [{ id: `evidence-${id}`, source: "DEMO", label: `结构化 ${signal.kind} 信号`, fact_refs: decisionFacts.map((fact) => fact.id) }];
-  const result = resultSummary(input, signal, economy, swing);
+  const measurement = windowProbability(input, signal, outcomeEnd, swing);
+  const result = resultSummary(input, signal, economy, measurement.probability, swing);
   const scoreBase: Record<CanonicalSignal["kind"], number> = { DEATH: 5, HP_CHANGE: 4, KILL: 3, BOMB: 2, UTILITY: 1, WIN_RATE_DROP: 4 };
-  const dropBonus = result.winProbabilityDelta !== undefined ? Math.min(6, Math.round(Math.abs(result.winProbabilityDelta) * 10)) : 0;
+  const dropBonus = result.winProbabilityDelta !== undefined && result.winProbabilityDelta < 0 ? Math.min(6, Math.round(-result.winProbabilityDelta * 10)) : 0;
   const candidate: TeachingCandidate = {
     candidateId: id,
     roundNumber: signal.roundNumber,
@@ -207,15 +230,19 @@ function materializeSignal(input: CandidateGeneratorInput, signal: CanonicalSign
     actionRefs: actionFacts.map((fact) => fact.id),
     outcomeRefs: outcomeFacts.map((fact) => fact.id),
     evidenceRefs: evidence.map((item) => item.id),
-    winRateSignalRefs: swing ? [`winrate-swing-${swing.id}`] : [],
+    winRateSignalRefs: measurement.measurementRefs,
     economySignalRefs: economy !== "UNKNOWN" ? [`economy-r${signal.roundNumber}-${economy}`] : [],
     missingFields: unique([...signal.missingFields, ...decisionSourceFacts.flatMap((fact) => fact.missingFields)]),
     limitations: unique([...signal.limitations, ...decisionSourceFacts.flatMap((fact) => fact.limitations)]),
     deterministicScore: scoreBase[signal.kind] + dropBonus,
-    resultSummary: result
+    resultSummary: result,
+    ...(signal.behaviorHypotheses ? { behaviorHypotheses: signal.behaviorHypotheses } : {})
   };
   const material: CandidateMaterial = {
     candidateId: id,
+    ...(signal.decisionSnapshot ? { decisionSnapshot: signal.decisionSnapshot } : {}),
+    ...(signal.observableContext ? { observableContext: signal.observableContext } : {}),
+    ...(signal.behaviorHypotheses ? { behaviorHypotheses: signal.behaviorHypotheses } : {}),
     decisionFacts,
     playerActionFacts: actionFacts,
     outcomeFacts,
@@ -226,7 +253,7 @@ function materializeSignal(input: CandidateGeneratorInput, signal: CanonicalSign
     ...(signal.playerContext?.callout ? { callout: signal.playerContext.callout } : {}),
     ...(signal.playerContext?.economyClass ? { economy: signal.playerContext.economyClass } : {}),
     ...(signal.annotations ? { annotations: [...signal.annotations] } : {}),
-    ...(signal.observableClaimRefs.length > 0 ? { observableStateId: input.observableStates?.find((state) => signal.observableClaimRefs.some((ref) => state.claims.some((claim) => claim.id === ref)))?.id } : {}),
+    ...(signal.observableContext ? { observableStateId: signal.observableContext.state.id } : signal.observableClaimRefs.length > 0 ? { observableStateId: input.observableStates?.find((state) => signal.observableClaimRefs.some((ref) => state.claims.some((claim) => claim.id === ref)))?.id } : {}),
     limitations: unique([...signal.limitations, ...result.limitations])
   };
   return { candidate, material };

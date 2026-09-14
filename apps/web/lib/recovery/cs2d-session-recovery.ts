@@ -30,6 +30,7 @@ import {
   type Cs2dAnalysisBundle,
 } from "@cs-coach/cs2d-analysis-adapter";
 import {
+  reduceCoachingSession,
   captureSessionRecovery,
   rehydrateSessionRecovery,
   SESSION_RECOVERY_SNAPSHOT_VERSION,
@@ -44,6 +45,7 @@ import {
 } from "../coaching/cs2d-route-integration";
 import {
   assertValidNarrationBundle,
+  collectNarrationBundleReferenceIssues,
   assertValidReviewPlan,
   buildCoachingPackage,
   buildOutcomeImpactForCue,
@@ -159,12 +161,28 @@ export function validateStoredReviewArtifacts(
       analysis.match_timeline,
       analysis.selected_steam_id,
     );
-    assertValidNarrationBundle(
-      value,
-      coaching,
-      buildOutcomePackage(cue, analysis.candidate_set, impact),
-    );
-    narrationByCue[cueId] = value;
+    const outcome = buildOutcomePackage(cue, analysis.candidate_set, impact);
+    const legacy = analysis.metadata.adapter_version === "cs2d-analysis-adapter/1.4.0"
+      && !cue.assessment && !cue.observableContext
+      && !analysis.candidate_set.materials.find((item) => item.candidateId === cue.candidate_id)?.decisionSnapshot;
+    if (legacy) {
+      // Historical wording is restored as an immutable artifact, never as approved
+      // teaching. The presenter substitutes conservative text for these v1 cues.
+      // Recheck its original namespaces without upgrading old advice to applicable.
+      const issues = collectNarrationBundleReferenceIssues(value, {
+        ...coaching,
+        advice: cue.advice,
+        allowedRefs: { ...coaching.allowedRefs, advice: cue.advice.map((item) => item.id) },
+      }, {
+        ...outcome,
+        measurementRefs: analysis.win_probability_timeline.status === "AVAILABLE"
+          ? [`measurement-${cue.id}`] : [],
+      });
+      if (issues.length) throw new Error(`NarrationBundle validation failed: ${issues.join(" ")}`);
+    } else {
+      assertValidNarrationBundle(value, coaching, outcome);
+    }
+    narrationByCue[cueId] = value as NarrationBundle;
   }
 
   const cueCases = Object.fromEntries(Object.entries(input.cueCases).map(([cueId, value]) => {
@@ -580,4 +598,30 @@ export function shouldReconnectRecoveryAgent(record: SessionRecoveryRecord): boo
 /** Only an untouched route start may legitimately predate the first Agent checkpoint. */
 export function isPreAgentRouteStartRecovery(record: SessionRecoveryRecord): boolean {
   return record.boundary.kind === "ROUTE_START" && record.agentCheckpointId === null;
+}
+
+/** Host-only promotion: draft UI boundaries must not replace recoverable checkpoints. */
+export function buildCheckpointedRecoveryRecord(
+  input: RecoveryRecordInput,
+  checkpoint: RecoveryAgentCheckpointMeta | undefined,
+): SessionRecoveryRecord | undefined {
+  const draft = buildSessionRecoveryRecord({ ...input, agentCheckpointId: null });
+  const checkpointId = checkpointForRecoveryBoundary(checkpoint, draft.boundary);
+  if (draft.boundary.kind === "ROUTE_START") return draft;
+  return checkpointId ? buildSessionRecoveryRecord({ ...input, agentCheckpointId: checkpointId }) : undefined;
+}
+
+/** Restore only the matched paused cue's existing diagnosis; the Session still owns every gate. */
+export function restoreCheckpointTeachingCase(
+  plan: ReviewPlan,
+  session: CoachingSessionState,
+  cueCase: import("@cs-coach/contracts").CueCase | undefined,
+  learningThread?: import("@cs-coach/contracts").LearningThread,
+): CoachingSessionState {
+  const cue = plan.cues.find((item) => item.id === cueCase?.cueId);
+  if (!cueCase || !cue || cueCase.cueId !== session.current_cue_id || (cueCase.candidateId !== undefined && cueCase.candidateId !== cue.candidate_id) || (cueCase.reflection && cueCase.reflection.cueId !== cue.id) || (cueCase.diagnosticResult && cueCase.diagnosticResult.cueId !== cue.id) || session.phase !== "PAUSED_FOR_COACHING" || session.outcome_completion?.cueId !== cueCase.cueId || session.outcome_completion.status !== "COMPLETE") return session;
+  return reduceCoachingSession(plan, session, {
+    type: "RECORD_TEACHING_CASE", cueCase,
+    ...(learningThread?.evidenceCueIds.includes(cueCase.cueId) ? { learningThread } : {}),
+  });
 }

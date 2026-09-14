@@ -691,6 +691,27 @@ export class CoachAgentStage3Controller {
     }
   }
 
+  /** Bind the frozen cue for reflection without executing visual or playback effects. */
+  async synchronizeDiagnosis(input: Stage3HostAdapterInput, manualVisitId?: string): Promise<CoachAgentResult | undefined> {
+    const token = this.token;
+    const prepared = manualVisitId ? this.adapter.prepareManualStart(input, manualVisitId) : this.adapter.prepareStart(input);
+    const segmentIndex = input.plan.segments.findIndex((segment) => segment.id === input.cue.segment_id);
+    if (segmentIndex < 0 || !this.isCurrent(input, token)) return undefined;
+    if (!manualVisitId && !await this.queueObserversUntil(input, segmentIndex, false, "PAUSED_FOR_COACHING")) return undefined;
+    if (!this.isCurrent(input, token)) return undefined;
+    const event = { ...prepared.event, eventId: `${prepared.event.eventId}-diagnosis`.slice(0, 160), capabilities: [] };
+    // This is a lifecycle binding only. Do not execute the returned continuation
+    // or mirror its checkpoint before the user's diagnosis has been persisted.
+    const result = await this.dispatchSerial(event, { notifyAgentResult: false });
+    if (!this.isCurrent(input, token)) return undefined;
+    const matchingLocation = manualVisitId
+      ? result.state.activeManualVisitId === manualVisitId && result.state.activeTargetSegmentIndex === segmentIndex
+      : result.state.routeCursor === segmentIndex;
+    if (result.status === "DORMANT" || !matchingLocation || result.state.activeSegmentId !== input.cue.segment_id || result.state.activeCueId !== input.cue.id || result.state.currentSessionPhase !== "PAUSED_FOR_COACHING" || result.state.outcomeGateStatus !== "COMPLETE" || result.state.pendingToolCall !== null) return undefined;
+    if (!manualVisitId) this.adapter.markLifecycleSynced(segmentIndex);
+    return result;
+  }
+
   /** Recovery uses the same serialized dispatch/result seam as live cues. */
   reconnect(event: Extract<CoachAgentEvent, { type: "RECONNECT_REPLAY" }>): Promise<CoachAgentResult> {
     return this.dispatchSerial(event);

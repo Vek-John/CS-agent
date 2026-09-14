@@ -15,7 +15,7 @@ const DEFAULT_MODEL = "deepseek-v4-flash";
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_REQUEST_BYTES = 32 * 1024;
 const ALLOWED_MODELS = new Set(["deepseek-v4-flash", "deepseek-v4-pro"]);
-export const DEEPSEEK_WRAP_UP_PROMPT_VERSION = "deepseek-session-wrap-up/1.0.0";
+export const DEEPSEEK_WRAP_UP_PROMPT_VERSION = "deepseek-session-wrap-up/2.0.0";
 
 export interface DeepSeekWrapUpEnv {
   DEEPSEEK_API_KEY?: string;
@@ -170,6 +170,17 @@ export function parseSessionWrapUpRequest(value: unknown, byteLength = 0): Sessi
   return assertAnonymousPacket(parsed.data);
 }
 
+function assertClosedWrapUpBundle(rawBundle: unknown, request: SessionWrapUpRequest) {
+  const bundle = assertValidSessionWrapUpBundle(rawBundle, request);
+  const expected = deterministicSessionWrapUpResult(request, "SEMANTIC_PROJECTION").bundle;
+  for (const theme of bundle.themes) {
+    const approved = expected.themes.find((item) => item.focus === theme.focus);
+    if (!approved || theme.summary.text !== approved.summary.text || theme.trainingAdvice.text !== approved.trainingAdvice.text) throw new SessionWrapUpProviderValidationError("Wrap-up introduces unapproved teaching meaning.");
+  }
+  if (bundle.limitations.some((limitation) => !expected.limitations.includes(limitation))) throw new SessionWrapUpProviderValidationError("Wrap-up introduces unapproved limitations.");
+  return bundle;
+}
+
 function mapBundleToReal(rawBundle: unknown, packet: AnonymousWrapUpPacket, realRequest: SessionWrapUpRequest) {
   const anonymousBundle = SessionWrapUpBundleSchema.parse(rawBundle);
   const mapped = {
@@ -187,7 +198,7 @@ function mapBundleToReal(rawBundle: unknown, packet: AnonymousWrapUpPacket, real
     })),
     limitations: [...anonymousBundle.limitations],
   };
-  return assertValidSessionWrapUpBundle(mapped, realRequest);
+  return assertClosedWrapUpBundle(mapped, realRequest);
 }
 
 function mapClientResult(rawResult: unknown, packet: AnonymousWrapUpPacket, realRequest: SessionWrapUpRequest): SessionWrapUpResult {
@@ -224,7 +235,7 @@ function systemPrompt(): string {
     "Return exactly the supplied repeated themes; never add, remove, rename, or merge a theme.",
     "Each theme must contain exactly focus, summary, and trainingAdvice.",
     "Echo focus exactly and cite only supplied anonymous cue/evidence refs in summary and advice refs in trainingAdvice.",
-    "Reuse the supplied coreIssue, betterPlay, and advice meaning; do not invent facts, events, teammates, player identity, ticks, routes, replay, frames, prompts, or chain of thought.",
+    "Copy summary.text from the first completed cue coreIssue for that theme and trainingAdvice.text from its first allowed advice exactly. No new paraphrases or tactics are permitted. Reuse the supplied coreIssue, betterPlay, and advice meaning; do not invent facts, events, teammates, player identity, ticks, routes, replay, frames, prompts, or chain of thought.",
     "A singleton is not a habit. Keep the tone concise and practical for a Chinese CS2 player.",
   ].join(" ");
 }
@@ -286,7 +297,7 @@ export async function directSessionWrapUp(
     }
     try {
       if (!isRecord(parsed) || !exactKeys(parsed, ["bundle"])) return deterministicSessionWrapUpResult(request, "UPSTREAM_SCHEMA");
-      const bundle = assertValidSessionWrapUpBundle(parsed.bundle, request);
+      const bundle = assertClosedWrapUpBundle(parsed.bundle, request);
       return {
         status: "SUCCEEDED",
         bundle,

@@ -1,8 +1,8 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：5.5.2
-> 最后更新：2026-09-03
+> 版本：5.6.0
+> 最后更新：2026-09-14
 > 适用范围：Web 2D 到桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
 > 当前产品范围：[MVP_SCOPE.md](./MVP_SCOPE.md)
@@ -91,7 +91,7 @@ Demo
 
 ### 2.4 完整处理先播放，结果结束后讲解
 
-讲解点区分 `decision_tick`、`reveal_tick` 和 `outcome_range`，并满足 `decision_tick <= outcome_start_tick < reveal_tick <= outcome_end_tick`。播放器从决策点前约 1 秒进入片段，不在决策前暂停，也不要求用户先猜；它连续播放用户的真实选择与结果，到达 `outcome_end_tick` 后自动暂停并回到 `decision_tick`，再一次性展示三段式复盘：`当前状态`、`这样做的问题（动作、风险与结果）`、`可以怎么改进`。内部仍保留可验证动作、核心问题、替代处理和结果影响的独立引用字段，不因 UI 合并而串线。在结果窗口完成前，任何用户可见讲解与问答都不得泄漏结果；决策侧判断始终只能读取 `decision_tick` 之前的 `ObservableState`。前置上下文和自动回看不得改变这些事实时间边界。
+讲解点区分 `decision_tick`、`reveal_tick` 和 `outcome_range`，并满足 `decision_tick <= outcome_start_tick < reveal_tick <= outcome_end_tick`。播放器从决策点前约 1 秒进入片段，不在决策前暂停，也不要求用户先猜；它连续播放用户的真实选择与结果，到达 `outcome_end_tick` 后自动暂停并回到 `decision_tick`，再一次性展示三段式复盘：`当前状态`、`处理与判断（事实、判断与结果）`、`建议与待确认信息`。内部仍保留可验证动作、核心问题、替代处理和结果影响的独立引用字段，不因 UI 合并而串线。在结果窗口完成前，任何用户可见讲解与问答都不得泄漏结果；决策侧判断始终只能读取 `decision_tick` 之前的 `ObservableState`。前置上下文和自动回看不得改变这些事实时间边界。
 
 `OutcomeCompletionGate` 是**呈现授权**，不是后台计算授权。最终 Narrator 可以在用户播放前读取严格分离、已校验的 `CoachingPackage` 与 `OutcomePackage`，提前生成密封的 `NarrationBundle`；该 bundle 在 gate 完成前只能处于 `PREPARED`，Host、问答、总结和可见事件不得读取其正文。播放器确认到达 `outcome_end_tick` 后，Session 才把对应 bundle 标记为 `PRESENTABLE`。字段级引用防火墙仍保证当前情况和建议不以结果倒推玩家当时的认知。
 
@@ -490,7 +490,7 @@ PlanCompiler 把 CandidateSet、DirectorDecisionSet、GroundTruth、ObservableSt
 - 每个 cue 的 facts、claims、advice 和 evidence 引用有效；
 - 深讲预算、同类去重、回合分布和用户配置满足约束；
 - Director 只能引用 CandidateSet 内的候选和 refs，重复/未知候选、多重点或额外字段必须拒绝；
-- 成功击杀只有在胜率模型可用且结果窗口明确显示所选方至少下降 1 个百分点时才可作为教学候选；胜率上升、无负向摆动或仅有成功击杀事实的 KILL 只保留在时间轴，不进入 Director/PlanCompiler 路线；
+- 所有信号均通过 Candidate Utility Gate：结果事件本身不构成可评价决策；有独立过程证据可评价正向或负向过程，证据不足仅在明确反思价值时保留观察，其余显式跳过；
 - `MAX_TEACHING_CUES=50` 是 Director、PlanCompiler、回退和 Host 共享的最大深讲数，超过后确定性截断并保留完整时间轴覆盖；
 - Director 超时、拒答或输出无效时使用带 reason、版本和 manifest 的确定性回退；
 - 编译后的 route fingerprint、segment/cue 顺序、tick、candidate 绑定和主要重点在会话启动前冻结。
@@ -579,11 +579,11 @@ Coaching 分析使用三类不可互换的契约：
 
 Teaching Director 负责从 CandidateSet 中选择 `candidateId`、唯一主要重点、优先级和引用；它不生成最终播放器命令或教练文案。PlanCompiler 锁定路线和重点后，Narrator 才能根据两份包构建 `NarrationBundle`，至少包含 `currentSituation`、`playerAction`、`coreIssue`、`betterPlay` 和 `outcomeImpact`。Narrator 不能新增事实、引用、建议语义、候选或重点，也不能修改顺序、segment 或任何 tick。
 
-字段级引用规则是强制接口：`currentSituation` 只引用 decision facts/claims；`playerAction` 只引用 action refs；`coreIssue` 必须回显 Director 的 `primary_focus_code`，只引用 decision/action 证据，不能只靠结果倒推；`betterPlay` 至少引用一个已有 Advice，不能引用 OutcomePackage；`outcomeImpact` 至少引用一个 outcome fact 或 WinProbabilityImpact，并且只能引用 OutcomePackage。缺失材料以 limitation 表达，不能让模型补造。
+字段级引用规则是强制接口：`currentSituation` 只引用 decision facts/claims；`playerAction` 只引用 action refs；纯结果事件缺少行为证据时允许空 refs，但只允许明确说明无法确认具体行动；`coreIssue` 必须回显 Director 的 `primary_focus_code`，只引用 decision/action 证据，不能只靠结果倒推；`betterPlay` 有具体建议时至少引用一个已通过适用性门的 Advice；没有可执行建议时只允许确定性不确定说明，不能引用 OutcomePackage；`outcomeImpact` 至少引用一个 outcome fact 或 WinProbabilityImpact，并且只能引用 OutcomePackage。缺失材料以 limitation 表达，不能让模型补造。
 
 Narrator 可以在后台提前读取两份包并返回 `PREPARED` 的密封 bundle；OutcomeCompletionGate 只负责把它从 `PREPARED` 转为 `PRESENTABLE`。这个门控不裁剪全场常显胜率曲线，也不阻止后台计算；它只禁止应用在用户看完结果前展示、问答引用或总结消费完整讲解。模型失败时返回带 reason/manifest 的确定性五字段 bundle，不得无痕保留旧文案。
 
-用户可见教练卡不逐项展示五个内部字段。Presenter 将 `currentSituation` 投影为带位置、生命、护甲、手持、道具、C4 和经济图标的 `当前状态`；将 `playerAction + coreIssue + outcomeImpact` 合并为 `这样做的问题`；将 `betterPlay` 投影为 `可以怎么改进`。内部 `primary_focus_code`、Schema 名和大写 taxonomy token 永不进入玩家文案。胜率曲线仍完整常显，但 cue 级胜率变化四舍五入后不足 1 个百分点时不生成或展示影响文案，禁止出现“上升/下降 0 个百分点”。
+用户可见教练卡不逐项展示五个内部字段。Presenter 将 `currentSituation` 投影为带位置、生命、护甲、手持、道具、C4 和经济图标的 `当前状态`；将 `playerAction + coreIssue + outcomeImpact` 合并为 `处理与判断`；将 `betterPlay` 投影为 `建议与待确认信息`。内部 `primary_focus_code`、Schema 名和大写 taxonomy token 永不进入玩家文案。胜率曲线仍完整常显，但 cue 级胜率变化四舍五入后不足 1 个百分点时不生成或展示影响文案，禁止出现“上升/下降 0 个百分点”。
 
 问答和总结可以复用 Narrator Adapter，但必须分别构建当前 cue 或已消费内容的最小输入包。模型供应商只属于实现层；每次调用都使用版本化 JSON Schema、Prompt、模型标识和输出校验。
 
@@ -797,6 +797,24 @@ DirectorDecisionSet
 ```
 
 `candidate_id` 是 Director 能选择的最小寻址单位。Director 可以拒绝候选或选择多个候选，但不能凭空创造 candidate、ref、tick、事实、重点、样本比例或播放器命令；DecisionSet 不携带执行顺序，PlanCompiler 按 canonical tick 编译。任何未知/重复 candidate、越界 ref、额外字段或多重点都使模型结果整体无效，并进入带原因的确定性回退。
+
+### 7.4.1 可信决策上下文与建议适用性（5.6）
+
+本节取代旧版“结果信号直接决定教学问题”和固定负面标题的语义；不改变全时间线、Outcome/Reflection Gate、route freeze 或恢复身份。死亡、掉血、击杀和道具事件只提名事实窗口，不能证明主动接战、停留枪线、站位错误或道具使用错误。正负胜率变化均是独立 Outcome Evidence，不能独自证明过程对错。
+
+契约复用 `CanonicalSignal → TeachingCandidate/CandidateMaterial → CoachCue → CoachingPackage`，由 `libs/contracts` 统一拥有类型，不另建平行计划。新增可信语义以版本化字段附加；历史缺少字段不推定适用，保持恢复能力并降级旧教学文本。
+
+- `DecisionSnapshot`：每个候选窗口最多一个决策时刻快照，绑定 round、selected player、decision time 和来源。保留所选玩家装备/资源、当回合阵营/比分、双方存活、最多十名玩家摘要、时钟/阶段、C4、支援/交火/伤害/空间关系与缺失字段。每个信息分区标注 `GROUND_TRUTH`、`OBSERVABLE`、`OUTCOME` 或 `APPLICABILITY_ONLY`；没有用途声明不得进入模型。全知位置/装备只在 Replay 所有者内用于确定性否决，跨 Host 只输出有界事实及检查结果。
+- `ObservableDecisionContext`：复用既有 `ObservableState/ObservationClaim`，仅纳入决策前、来源可靠且未过期的信息。直接视觉、可验证声音、最后观察敌情、队友及公共目标信息保留来源、时间、新鲜度、置信度、限制。全图帧不是观察证明，缺乏 LOS/声学/语音时显式未知。
+- `BehaviorHypothesis`：推断种类、支持/反向证据、置信度、缺失项，以及允许正式判断或仅反思提问的标记。事件结果不能机械创建可责备的行为假设。
+- `AdviceOption`：复用 Advice，增加 code、必要前提、否决项、必要证据、适用时间、置信度与安全降级。`AdviceApplicabilityResult` 逐项记录 `APPLICABLE/INAPPLICABLE/UNVERIFIABLE`、证据、拒绝原因和缺失项。任一必要条件为假即否决，未知或部分满足不能成为确定建议。全知只能把建议从可能转为拒绝，不能独自批准建议或制造玩家知识。
+- `TeachingAssessment`：区分 `DECISION_ERROR/EXECUTION_ISSUE/POSITIVE_PROCESS/FORCED_CHOICE/INSUFFICIENT_EVIDENCE/NO_TEACHING_VALUE`。正式判断必须有独立过程证据；正向结果是负面归因的反证。Candidate Utility Gate 综合可评价选择、前置信息、适用建议、反证、重复和结果事件性质；不为数量保留泛化纠错。不确定但有明确反思价值的窗口可保留少量观察，其他区间显式跳过/简述。习惯聚合要求同一经验证行为及前提，不能只按 focus code。
+
+Advice Gate 属于 `review-planner` 的确定性内核：CandidateGenerator 构建语义，Director 前完成筛选，Compiler 再检查，NarrationPackageBuilder 只允许已批准 Advice 或不包含战术替代方案的自然语言不确定说明。Director 只能选择既有候选、分类和已批准 focus；Narrator 只能表达既有语义，不能凭合法 refs 新造建议。自由生成文本的引用校验不构成语义验证；未经机器证明的具体改写必须被拒绝或确定性投影。Reflection 同样不能从低血量或用户意图直接推出战术建议。
+
+体积上限：单个紧凑 DecisionSnapshot 的 UTF-8 JSON 不超过 16 KiB，最多十名玩家摘要；每候选最多一个快照，候选上限 512，整场跨界 AnalysisBundle 不超过 16 MiB；Director 仍最多 32 个候选且使用无身份、无坐标、无原始时间的摘要。LLM 不接收 Ground Truth、原始 Replay、逐帧轨迹或没有信息边界的字段。超限显式失败/降级，不能以切断时间覆盖掩盖问题。
+
+用户三阶段仍是当前局面、处理与判断、建议/待确认信息；第二栏不默认称“处理与判断”。展示人数、目标、时间、判断类型和限制时只使用允许的事实。内部代码、引用和工程术语保留在诊断，不进入教练讲解、Reflection 或追问。
 
 ### 7.5 ReviewPlan
 
@@ -1223,7 +1241,7 @@ priority = proximity_to_playhead
 
 客户端加载轻量 session package；Replay 和逐帧数据继续留在 cs2d iframe。`CoachingSession` reducer 先按冻结路线从 cue 前置上下文连续播放到结果结束，确认 gate 后回到决策点并呈现 Narrator 的三段式讲解。随后 Host 才向 Coach Agent dispatch 当前 cue 的白名单摘要；Graph 选择 `FINISH_CUE` 或至多一个合法 `TeachingCapability`，以 interrupt 返回 `AgentEffect`，等待 Host 执行和 `Command resume`。Graph checkpoint 和业务会话事件分别持久化，Agent/Provider/tool 任一失败都不能阻塞播放器基本控制。
 
-地图在所有会话状态都显示当前 tick 的 cs2d 全知 Replay，不提供显式视角切换。信息授权发生在包引用和呈现 gate，而非 renderer：自动播放结果窗口时侧栏不显示密封 NarrationBundle 的任何分析字段；只有播放器确认到达 `outcome_end_tick` 后，Session 才把该 bundle 标记为 PRESENTABLE，并把五字段证据投影为“当前状态 / 这样做的问题 / 可以怎么改进”三段。进入下一个 cue 时重新绑定下一份内部 ObservableState 与密封 bundle；全场胜率曲线仍可始终显示，不受该文字 gate 裁剪。
+地图在所有会话状态都显示当前 tick 的 cs2d 全知 Replay，不提供显式视角切换。信息授权发生在包引用和呈现 gate，而非 renderer：自动播放结果窗口时侧栏不显示密封 NarrationBundle 的任何分析字段；只有播放器确认到达 `outcome_end_tick` 后，Session 才把该 bundle 标记为 PRESENTABLE，并把五字段证据投影为“当前状态 / 处理与判断 / 建议与待确认信息”三段。进入下一个 cue 时重新绑定下一份内部 ObservableState 与密封 bundle；全场胜率曲线仍可始终显示，不受该文字 gate 裁剪。
 
 自动路线继续主持完整 Demo；用户主动操作时仅暂时交出播放头，不丢弃会话。自由查看侧栏显示实际回合与覆盖该位置的 segment，地图/HUD/事件均由同一播放头更新。用户可随时返回离当前播放位置最近的教练节点并从约 1 秒前置上下文重看；未接管时冻结时间直接自动消费、低价值段显式快进、关键 cue 连续播放完整处理并在结束后回到决策点讲解，结果播放、重播和结束暂停维持同一聚焦镜头。
 
@@ -1503,13 +1521,13 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 |---|---|---|
 | 会话而非报告为核心产物 | Accepted | ReviewPlan + CoachingSession 是主对象 |
 | Web 2D 播放入口 | Accepted | 在线 2D，完整时间轴与显式跳过 |
-| 关键片段教学时序 | Accepted | 从 decision 前约 1 秒连续播放至 outcome end，不在决策前打断；完成后自动回到 decision，以“当前状态 / 这样做的问题 / 可以怎么改进”三段式讲解 |
+| 关键片段教学时序 | Accepted | 从 decision 前约 1 秒连续播放至 outcome end，不在决策前打断；完成后自动回到 decision，以“当前状态 / 处理与判断 / 建议与待确认信息”三段式讲解 |
 | Web 2D 地图 | Accepted | 固定版本 cs2d renderer；当前 tick 全知显示；紧凑 5+5 HUD；地图是教练证据画布而非独立产品 |
 | 浏览器 cs2d Replay | Accepted | localhost 使用 `:5174`、Cloudflare 使用同源 `/cs2d/`；浏览器 Worker/WASM 单次解析，raw Replay 留在 iframe；白名单 AnalysisBundle 进入教练壳 |
 | 全知比赛状态 | Accepted | 每 tick/变化点保留位置、朝向、生命护甲、当前手持、库存道具、经济和 C4 等解析器可得事实 |
 | 内部观察证据 | Accepted | `ObservationClaim` 仅约束规则/LLM 决策证据；不作为用户可见 renderer 模式，不用布尔可见性 |
 | 单次解析与分析派生 | Accepted | `.dem` 只生成一份 GroundTruth ReplayBundle；Adapter 从同一 Replay 派生 MatchTimeline/SceneIndex/Observation，整场胜率只推理一次，不二次解析或向控制面复制 raw Replay |
-| CandidateGenerator 与候选寻址 | Accepted | 确定性深模块从事实/Observation/信号产生完整、稳定排序的 CandidateSet；只提名可验证窗口，不替 Director 判断教学价值；成功 KILL 的实用性硬门槛在 Director/Compiler seam 生效 |
+| CandidateGenerator 与候选寻址 | Accepted | 确定性深模块从事实/Observation/信号产生完整、稳定排序的 CandidateSet；只提名可验证窗口，不替 Director 判断教学价值；所有信号的过程证据与实用性门在 Director/Compiler seam 生效 |
 | Teaching Director | Accepted | 结构化 LLM 只从匿名 CandidateSet 摘要选择已有 candidate、唯一主要重点和优先级，不输出 tick、事实、文案或播放器命令 |
 | PlanCompiler | Accepted | 确定性校验 Candidate/Decision 引用、完整覆盖、时间边界、50 cue 预算和去重；会话前冻结 route，非法或不实用的 Director 输出走可追溯回退 |
 | Narrator 与证据防火墙 | Accepted | Narrator 可提前读取严格分离的 CoachingPackage＋OutcomePackage，输出带字段级 refs 的五字段密封 NarrationBundle；不能改 route/focus/Advice |
@@ -1608,3 +1626,5 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 | 5.5.0 | 2026-09-03 | 收紧 Demo parser readiness 为 `IMPORTING→VALIDATE→READY/CORRUPT`，禁止 verify 晋升；RuntimeHead 精确绑定 Recovery Artifact ID/key/revision；历史恢复增加迟到分析事件门与 ViewerStage mount ack；main remote origin 仅增加 `open_settings` 窄导航 capability；Demo ingress 改为有界 backpressure pipeline，并保留 Node Permission Model 下的异步耐久性屏障。 |
 | 5.5.1 | 2026-09-03 | 将 backup/shutdown 静默点扩展为 Next、Viewer Library 与 admin 资料库操作的统一 handler＋response 计数；补齐 final-only PUBLISHING import reconcile；首次导入只在 VALIDATE READY 后暴露 Replay/选人；历史连续点击增加 Host open epoch、Viewer abort＋串行 parse generation 与 requestId/demoId/hash 双层 latest-wins 校验。 |
 | 5.5.2 | 2026-09-03 | 增加 Review Revision artifact contract 版本与 migration 006：新 v2 Revision 继续强制独立 CandidateSet Artifact；迁移前 v1 READY Revision 可从 checksummed AnalysisBundle 内的同一 CandidateSet 兼容恢复，避免永久历史因后加的存储投影门失效。 |
+
+| 5.6.0 | 2026-09-14 | 增加可信决策快照、可观察摘要、行为假设与建议适用性门；事件/结果不自动等于错误，模型受限于可验证语义，用户呈现明确不确定性，保持完整路线与恢复边界。 |

@@ -30,3 +30,27 @@ describe("teaching diagnosis evidence boundary", () => {
     expect(decisionFactsForCue(cue).map((fact) => fact.id)).toEqual(["fact-observed"]);
   });
 });
+
+it("projects teammate count only from the same decision's observable public roster", async () => {
+  const { buildTeachingDiagnosisInput } = await import("./teaching-diagnosis-host");
+  const { createSyntheticMirageTimeline } = await import("@cs-coach/demo-domain");
+  const { createFixtureReviewPlan } = await import("@cs-coach/review-planner");
+  const { decisionSnapshotFixture } = await import("../../../../libs/review-planner/src/teaching-gate-fixtures");
+  const timeline = createSyntheticMirageTimeline();
+  const plan = createFixtureReviewPlan(timeline);
+  const cue = plan.cues[0];
+  const snapshot = decisionSnapshotFixture(cue.decision_tick, cue.observable_fact_refs[0]);
+  snapshot.selectedPlayerId = timeline.selected_player_id;
+  const material = {
+    candidateId: "candidate", decisionSnapshot: snapshot, decisionFacts: cue.facts.filter((fact) => fact.availability === "DECISION"), playerActionFacts: [], outcomeFacts: [], inferences: [], advice: [], evidence: [], limitations: [],
+  };
+  const state = { player_id: timeline.selected_player_id, tick: cue.decision_tick, side: "T" as const, world_position: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0, alive: true, health: 2, armor: 0, has_helmet: false, inventory: [], fact_refs: cue.observable_fact_refs, missing_fields: [] };
+  const context = { plan, cue, material, timeline: { ...timeline, player_state_tracks: [state] }, selectedPlayerId: timeline.selected_player_id };
+  const reflection = { cueId: cue.id, selectedGoal: "TRADE" as const, response: "ANSWERED" as const, source: "USER" as const, limitations: [] };
+  expect(buildTeachingDiagnosisInput(context, reflection).decisionResources?.aliveTeammates).toBe(0);
+  snapshot.aliveCounts = { ...snapshot.aliveCounts, boundary: "GROUND_TRUTH" };
+  expect(buildTeachingDiagnosisInput(context, reflection).decisionResources?.aliveTeammates).toBeUndefined();
+  snapshot.aliveCounts = { ...snapshot.aliveCounts, boundary: "OBSERVABLE" };
+  snapshot.decisionTick += 1;
+  expect(buildTeachingDiagnosisInput(context, reflection).decisionResources?.aliveTeammates).toBeUndefined();
+});

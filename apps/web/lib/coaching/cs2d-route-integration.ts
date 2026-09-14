@@ -1,6 +1,7 @@
 import type {
   CandidateSet,
   CoachingRouteState,
+  CoachingSessionState,
   CueReadiness,
   DirectorDecisionSet,
   MatchTimeline,
@@ -10,6 +11,7 @@ import type {
   ReviewPlan,
   WinProbabilityTimelineV1
 } from "@cs-coach/contracts";
+import { reduceCoachingSession } from "@cs-coach/session";
 import { MAX_TEACHING_CUES } from "@cs-coach/contracts";
 import {
   buildCoachingRouteState,
@@ -391,4 +393,33 @@ export function createReviewPreparationOrchestrator(
       }
     }
   };
+}
+
+/** Coordinates the awaited durable start with the Host's current route generation. */
+export async function activatePreparedCoachingSession<T>(input: {
+  plan: ReviewPlan;
+  initialSession: CoachingSessionState;
+  isCurrent: () => boolean;
+  latestRouteState: () => CoachingRouteState | undefined;
+  persistStart: () => Promise<T>;
+  acceptPersistedStart: (result: T) => void;
+  mountSession: (session: CoachingSessionState) => void;
+}): Promise<boolean> {
+  if (!input.isCurrent() || input.initialSession.review_plan_id !== input.plan.id) return false;
+  const result = await input.persistStart();
+  // Persistence yields to incoming narration and to new Demo/player generations.
+  // Read the live route only after that boundary, before accepting any old result.
+  if (!input.isCurrent()) return false;
+  const route = input.latestRouteState();
+  if (!route || route.routeFingerprint !== input.initialSession.route_fingerprint) return false;
+  input.acceptPersistedStart(result);
+  let session = input.initialSession;
+  for (const cue of input.plan.cues) {
+    const readiness = route.readiness[cue.id];
+    if (readiness === "READY" || readiness === "FALLBACK") {
+      session = reduceCoachingSession(input.plan, session, { type: "NARRATION_READY", cueId: cue.id, readiness });
+    }
+  }
+  input.mountSession(reduceCoachingSession(input.plan, session, { type: "START" }));
+  return true;
 }

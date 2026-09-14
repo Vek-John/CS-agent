@@ -114,7 +114,7 @@ describe("teaching diagnosis trust and evidence boundaries", () => {
       capabilityId: "VERIFY_TRADE_ASSUMPTION",
       status: "UNVERIFIABLE",
     });
-    expect(output.cueCase.limitations.join(" ")).toMatch(/跳过了反思/);
+    expect(output.cueCase.limitations.join(" ")).toMatch(/跳过了思路补充/);
   });
 
   it("turns free-text teammate expectations into a bounded USER claim", () => {
@@ -156,10 +156,10 @@ describe("teaching diagnosis trust and evidence boundaries", () => {
 
     expect(output.cueCase.diagnosticResult?.status).toBe("SUPPORTED");
     expect(output.cueCase.verdict).toMatchObject({
-      type: "GOAL_AND_ACTION_ALIGNED",
-      confidence: 0.84,
+      type: "INCONCLUSIVE",
+      confidence: 0.38,
     });
-    expect(output.learningThread.diagnosis.type).toBe("RISK_MODEL");
+    expect(output.learningThread.diagnosis.type).toBe("UNVERIFIABLE");
   });
 
   it("turns an authorized Memory Brief hint into an explicit bounded pedagogy mode", () => {
@@ -176,14 +176,14 @@ describe("teaching diagnosis trust and evidence boundaries", () => {
     expect(reinforce.cueCase.pedagogyMode).toBe("REINFORCE");
   });
 
-  it("marks a low-resource risk condition as failed after a negative outcome", () => {
+  it("keeps constrained resources separate from a decision verdict after a negative outcome", () => {
     const output = diagnoseCue(input({
       decisionState: decisionState({ health: 30, armor: 0, has_helmet: false }),
       outcomeFacts: [outcomeFact("outcome-death", "DEATH")],
     }));
 
-    expect(output.cueCase.diagnosticResult?.status).toBe("CONTRADICTED");
-    expect(output.cueCase.verdict).toMatchObject({ type: "GOAL_VALID_CONDITION_FAILED" });
+    expect(output.cueCase.diagnosticResult?.status).toBe("PARTIALLY_SUPPORTED");
+    expect(output.cueCase.verdict).toMatchObject({ type: "INCONCLUSIVE" });
     expect(output.learningThread.conflictingCueIds).toEqual(["cue-risk"]);
   });
 
@@ -203,7 +203,7 @@ describe("teaching diagnosis trust and evidence boundaries", () => {
       decisionResources: projected,
       outcomeFacts: [outcomeFact("projected-death", "DEATH")],
     }));
-    expect(output.cueCase.diagnosticResult?.status).toBe("CONTRADICTED");
+    expect(output.cueCase.diagnosticResult?.status).toBe("PARTIALLY_SUPPORTED");
     expect(output.cueCase.diagnosticResult?.measurements.map((item) => item.id)).toContain("measurement-cue-risk-health");
     expect(() => TeachingDiagnosisInputSchema.parse(input({
       decisionResources: { ...projected, tick: 100 } as unknown as TeachingDiagnosisInput["decisionResources"],
@@ -262,7 +262,7 @@ describe("teaching diagnosis trust and evidence boundaries", () => {
 
     expect(output.cueCase.diagnosticResult).toMatchObject({ status: "PARTIALLY_SUPPORTED" });
     expect(output.cueCase.hinge?.verification).toBe("PARTIALLY_SUPPORTED");
-    expect(output.cueCase.diagnosticResult?.explanation).toContain("空间/时机部分可由 Demo 支持，但逐玩家 LOS、阻挡、语音仍未知");
+    expect(output.cueCase.diagnosticResult?.explanation).toContain("还需确认你和队友能否在相近时间看到同一个对手");
     expect(teammateClaim).toMatchObject({ source: "USER", verification: "PARTIALLY_SUPPORTED" });
     expect(teammateClaim?.supportingRefs).toEqual(expect.arrayContaining([...evidenceRefs]));
     expect(output.learningThread.userModel.expectedTeammateAction).toContain("队友会跟我一起补枪");
@@ -303,7 +303,7 @@ describe("teaching diagnosis trust and evidence boundaries", () => {
     expect(revised.cueCase.hinge).toMatchObject({ kind: "SYNC", conditionCode: "TEAM_SYNC" });
     expect(revised.cueCase.selectedCapabilityId).toBe("VERIFY_SYNC_ASSUMPTION");
     expect(revised.cueCase.diagnosticResult).toMatchObject({ status: "UNVERIFIABLE" });
-    expect(revised.cueCase.verdict?.type).toBe("TEAM_EXECUTION");
+    expect(revised.cueCase.verdict?.type).toBe("INCONCLUSIVE");
     expect(revised.cueCase.attemptBudget).toMatchObject({ disagreement: 1, alternateDiagnostic: 1 });
     expect(revised.cueCase.diagnosticResult?.explanation).toMatch(/可能改变判断.*无法验证.*若.*成立.*合理解释/);
     expect(revised.cueCase.transferRule?.unless).toMatch(/保持条件化/);
@@ -353,8 +353,47 @@ describe("teaching diagnosis trust and evidence boundaries", () => {
     expect(second.learningThread.hingeCode).toBe(first.learningThread.hingeCode);
     expect(second.learningThread.status).toBe("REPEATED");
     expect(second.learningThread.evidenceCueIds).toEqual(["cue-thread-1", "cue-thread-2"]);
-    expect(second.learningThread.successfulCueIds).toEqual(["cue-thread-1"]);
-    expect(second.learningThread.conflictingCueIds).toEqual(["cue-thread-2"]);
+    expect(second.learningThread.successfulCueIds).toEqual([]);
+    expect(second.learningThread.conflictingCueIds).toEqual(["cue-thread-1", "cue-thread-2"]);
     expect(second.learningThread.userModel.belief).toContain("我以为这个风险可以承受");
   });
+});
+
+it("understands the trade intent and asks for concrete missing conditions without internal jargon", () => {
+  const output = diagnoseCue(input({
+    reflection: reflection({ selectedGoal: undefined, rawText: "给队友补枪" }),
+    limitations: ["ObservationState visibility missing", "renderer lossless ticks unavailable"],
+  }));
+  expect(output.cueCase.hinge?.kind).toBe("TRADE");
+  expect(output.cueCase.diagnosticResult?.explanation).toContain("你想在队友交火后及时补上");
+  expect(output.cueCase.diagnosticResult?.explanation).toMatch(/队友是否存活.*同一个对手.*及时接上/);
+  const prose = [output.cueCase.hinge?.statement, output.cueCase.diagnosticResult?.explanation, output.cueCase.verdict?.explanation, output.cueCase.transferRule?.do].join(" ");
+  expect(prose).not.toMatch(/ObservationState|renderer|ticks?|lossless|TRADE|refId|schema|focus|pipeline|fallback|candidate/);
+});
+
+it("does not prescribe a teammate or escape route from low health and death alone", () => {
+  const output = diagnoseCue(input({
+    decisionState: decisionState({ health: 2, armor: 0 }),
+    outcomeFacts: [outcomeFact("death", "DEATH")],
+  }));
+  expect(output.cueCase.verdict?.type).toBe("INCONCLUSIVE");
+  expect(output.cueCase.transferRule?.do).not.toMatch(/队友接|补枪|撤退路线|退回|闪光/);
+});
+
+it("uses a known zero teammate count to reject trade feasibility without judging the earlier choice", () => {
+  const known = diagnoseCue(input({
+    reflection: reflection({ selectedGoal: "TRADE", rawText: undefined }),
+    decisionResources: { health: 2, armor: 0, hasHelmet: false, aliveTeammates: 0, evidenceRefs: ["decision-1"] },
+  }));
+  expect(known.cueCase.diagnosticResult?.status).toBe("CONTRADICTED");
+  expect(known.cueCase.diagnosticResult?.explanation).toContain("四名队友都已阵亡");
+  expect(known.cueCase.verdict?.type).toBe("INCONCLUSIVE");
+  expect(known.cueCase.transferRule?.do).toContain("缺少确认其他可行处理");
+  expect(known.cueCase.transferRule?.do).not.toMatch(/让.*队友|退回|闪光|换.*路线/);
+  const unknown = diagnoseCue(input({
+    reflection: reflection({ selectedGoal: "TRADE", rawText: undefined }),
+    decisionResources: { health: 2, armor: 0, hasHelmet: false, evidenceRefs: ["decision-1"] },
+  }));
+  expect(unknown.cueCase.diagnosticResult?.status).toBe("UNVERIFIABLE");
+  expect(unknown.cueCase.diagnosticResult?.explanation).toContain("队友是否存活");
 });

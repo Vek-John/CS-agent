@@ -125,6 +125,7 @@ export const DecisionResourcesSchema = z.object({
   money: z.number().finite().nonnegative().max(10_000_000).optional(),
   equipmentValue: z.number().finite().nonnegative().max(10_000_000).optional(),
   inventoryCount: z.number().finite().nonnegative().max(64).optional(),
+  aliveTeammates: z.number().int().min(0).max(4).optional(),
   evidenceRefs: z.array(IdSchema).max(32),
 }).strict();
 
@@ -615,6 +616,16 @@ export function executeDiagnostic(
     });
   }
   if (capability.kind === "VERIFY_TRADE_ASSUMPTION") {
+    if (input.decisionResources?.aliveTeammates === 0) {
+      return DiagnosticResultSchema.parse({
+        resultId: `diagnostic-${input.cueId}-${capability.kind.toLowerCase()}`, capabilityId: capability.id,
+        cueId: input.cueId, hingeId: hinge.hingeId, status: "CONTRADICTED",
+        evidenceRefs: [...input.decisionResources.evidenceRefs],
+        measurements: [{ id: `measurement-${input.cueId}-alive-teammates`, label: "当时存活队友", value: 0, unit: "人", evidenceRefs: [...input.decisionResources.evidenceRefs] }],
+        explanation: "你想接上队友的交火，这个意图我理解。但当时四名队友都已阵亡，已经无法和存活队友形成补枪配合。这个条件不成立，并不单独说明你之前的选择有错。",
+        limitations: ["还需要当时的敌人信息、时间和目标要求，才能评价其他处理是否可行。"],
+      });
+    }
     const explicitCoverageGap = [...input.decisionFacts.filter((fact) => fact.availability === "DECISION"), ...input.playerActionFacts]
       .filter((fact) => /队友(?:尚未|未|没(?:有)?|无法|不能|不在)|(?:无法|不能|未能|没(?:有)?)覆盖|(?:无法|不能|未能|没(?:有)?)同步|(?:不在|未在|没有在)同一(?:条)?枪线|(?:teammate|ally).*(?:not|cannot|can't|unable).*(?:position|cover|sync|trade|angle|line of sight)/i.test(fact.text.replace(/\s+/g, "")))
       .map((fact) => fact.id);
@@ -628,8 +639,8 @@ export function executeDiagnostic(
       evidenceRefs: refs,
       measurements: [],
       explanation: partiallySupported
-        ? "Demo 的 DECISION/action 事实明确记录了队友未到位或无法形成覆盖；空间/时机部分可由 Demo 支持，但逐玩家 LOS、阻挡、语音仍未知。仍不能仅据此确认完整补枪。"
-        : "你表示目标是补枪；当前 Demo 证据没有逐玩家同目标视线、阻挡或语音同步数据，不能把空间接近直接判成可补枪。",
+        ? "回放记录了队友未到位或无法覆盖这次接触；还需确认你和队友能否在相近时间看到同一个对手，不能仅凭站得近就认定可以补枪。"
+        : "你想在队友交火后及时补上，这个意图我理解。要判断当时能不能做到，还缺少队友是否存活、双方能否看到同一个对手，以及你能否及时接上这次交火的信息。",
       limitations: unique([...commonLimitations, "缺少队友视线、阻挡、精确接触时间和语音数据。"]),
     });
   }
@@ -663,7 +674,7 @@ export function executeDiagnostic(
   }
   const constrained = economy === "ECO" || economy === "FORCE" || Boolean(resources && (resources.health <= 45 || resources.armor <= 0 || !resources.hasHelmet));
   const negative = outcomeIsNegative(input.outcomeFacts);
-  const status: ClaimVerificationStatus = constrained && negative ? "CONTRADICTED" : constrained ? "PARTIALLY_SUPPORTED" : "SUPPORTED";
+  const status: ClaimVerificationStatus = constrained ? "PARTIALLY_SUPPORTED" : "SUPPORTED";
   const resourceText = resources
     ? `${resources.health} HP、${resources.armor <= 0 ? "无护甲" : resources.hasHelmet ? `${resources.armor} 甲且有头盔` : `${resources.armor} 甲但没头盔`}`
     : `${economy} 经济语境`;
@@ -714,7 +725,7 @@ function updateClaimVerification(claims: readonly UserClaim[], result: Diagnosti
       verification: result.status,
       supportingRefs: supporting ? unique([...item.supportingRefs, ...evidenceRefs]).slice(0, 32) : item.supportingRefs,
       contradictingRefs: contradicting ? unique([...item.contradictingRefs, ...evidenceRefs]).slice(0, 32) : item.contradictingRefs,
-      limitations: unique([...item.limitations, "用户补充信息仍属于 USER claim，Demo 未将其升级为事实。"]),
+      limitations: unique([...item.limitations, "这是你补充的经历，回放尚未证实。"]),
     };
   });
 }
@@ -740,8 +751,11 @@ export function synthesizeCoachVerdict(
   else if (result.status === "CONTRADICTED") type = goal === "MECHANICAL_ATTEMPT" ? "EXECUTION_ONLY" : "GOAL_VALID_CONDITION_FAILED";
   else if (result.status === "SUPPORTED") type = outcomeIsNegative(input.outcomeFacts) ? "EXECUTION_ONLY" : "GOAL_AND_ACTION_ALIGNED";
   else if (result.status === "PARTIALLY_SUPPORTED") type = "GOAL_VALID_CONDITION_FAILED";
-  if (hinge.kind === "SYNC" && result.status === "UNVERIFIABLE") type = "TEAM_EXECUTION";
-  const confidenceBase = result.status === "SUPPORTED" ? 0.84 : result.status === "CONTRADICTED" ? 0.82 : result.status === "PARTIALLY_SUPPORTED" ? 0.62 : 0.38;
+  // A resource check measures the situation, not the quality of a decision.
+  // Likewise, missing coordination evidence cannot establish team error.
+  if (hinge.kind === "RISK" || result.status === "UNVERIFIABLE" || result.status === "PARTIALLY_SUPPORTED") type = "INCONCLUSIVE";
+  if (hinge.kind === "TRADE" && input.decisionResources?.aliveTeammates === 0) type = "INCONCLUSIVE";
+  const confidenceBase = type === "INCONCLUSIVE" ? 0.38 : result.status === "SUPPORTED" ? 0.84 : result.status === "CONTRADICTED" ? 0.82 : result.status === "PARTIALLY_SUPPORTED" ? 0.62 : 0.38;
   const confidence = Math.max(0.15, Math.min(0.95, confidenceBase - (revision > 0 ? 0.14 : 0)));
   const limitations = unique([
     ...result.limitations,
@@ -749,7 +763,9 @@ export function synthesizeCoachVerdict(
   ]).slice(0, MAX_DIAGNOSIS_LIMITATIONS);
   const syncUnverifiable = hinge.kind === "SYNC" && result.status === "UNVERIFIABLE";
   const informationUnverifiable = hinge.kind === "INFORMATION" && result.status === "UNVERIFIABLE";
-  const explanation = syncUnverifiable
+  const explanation = hinge.kind === "TRADE" && input.decisionResources?.aliveTeammates === 0
+    ? "你想补枪，但当时已没有存活队友，那个时刻无法执行这项配合；还不能据此评价你之前的选择。"
+    : syncUnverifiable
     ? "你补充的信息可能改变判断；Demo 无法验证这条语音、固定战术或听觉信息。若它成立，这次行为可以被合理解释为团队同步/执行条件问题，而不是直接归因于个人决策错误。"
     : informationUnverifiable
       ? "你补充的信息可能改变判断；Demo 无法验证你是否实际听到或理解了这条声音信息。若它成立，这次行为可以被合理解释为基于信息判断的选择，但当前不能把它当作 Demo 事实。"
@@ -763,9 +779,7 @@ export function synthesizeCoachVerdict(
           ? "Demo 的可观察事实明确否定了你当时的敌人/信息判断；这是信息模型问题，不把你的语音感受当作 Demo 事实。"
           : type === "ACTION_GOAL_MISMATCH"
             ? "你描述的目标需要保留空间或信息，但 Demo 记录的是不可回撤的主动接触；这次行动没有服务于你说的目标。"
-        : type === "TEAM_EXECUTION"
-          ? "这更像团队同步或执行条件问题；Demo 无法把用户补充的队友信息当作事实。"
-          : "当前证据不足以确定这是决策错误、执行问题还是团队同步问题。";
+          : hinge.kind === "TRADE" ? "你想给队友补枪，但还不能确认当时是否有人能与你接上同一次交火。缺少这个条件，不能认定你的选择有错。" : "当前证据不足以确定这是决策错误、执行问题还是团队同步问题。";
   return VerdictSchema.parse({
     type,
     confidence,
@@ -790,16 +804,18 @@ export function createTransferRule(input: TeachingDiagnosisInput, hinge: HingeCo
     : isInformation ? "准备依据听到、看到或报点的信息进入接触前"
       : isTiming ? "准备继续拖延、等待信息或等待队友动作前"
         : isTrade ? "准备和队友一起进入同一条枪线前" : "准备在资源受限或未知枪线中主动接触前";
-  const doText = isSync
-    ? "先把这条补充信息保留为 USER claim；若它成立，再确认队友的可执行位置和接触窗口，否则保留退路。"
+  const doText = isTrade && input.decisionResources?.aliveTeammates === 0
+    ? "当时已无法再与队友配合；目前还缺少确认其他可行处理所需的现场信息。"
+    : isSync
+    ? "这条补充信息可能改变判断；还需要确认当时队友是否能及时参与同一次交火。"
     : isInformation
-      ? "先把这条听觉或信息判断保留为 USER claim；若它成立，再确认信息是否足以支持前压，否则保留验证和撤退空间。"
+      ? "你描述的声音可能是判断依据；还需确认它来自哪里、发生多久，以及你当时如何理解。"
     : isTiming
       ? "先确认剩余时间、撤退窗口和等待的替代方案；当前没有可靠时机比较证据时，不把结果倒推成时机判断。"
     : isTrade
       ? "先确认队友能在相近接触窗口看到同一目标；只靠空间距离不够。"
     : result.status === "CONTRADICTED"
-      ? "低血量、没头甲或 ECO/强起时，先让高资源队友接首枪，自己留第二身位和撤退路线。"
+      ? "血量和装备只能说明风险背景；还需确认当时的时间、目标要求和可执行选项，才能评价这个选择。"
       : "先扫一眼自己的血量、护甲和经济，再决定是否把这次接触升级成不可回撤的动作。";
   return TransferRuleSchema.parse({
     ruleId: `rule-${input.cueId}-${hinge.conditionCode.toLowerCase()}`.slice(0, 160),
@@ -897,7 +913,7 @@ export function diagnoseCue(rawInput: TeachingDiagnosisInput): TeachingDiagnosis
     ...(input.limitations ?? []),
     ...reflection.limitations,
     ...result.limitations,
-    ...(reflection.response === "SKIPPED" ? ["用户跳过了反思；本次不应把 Baseline 讲解升级为用户主张。"] : []),
+    ...(reflection.response === "SKIPPED" ? ["你跳过了思路补充，这次讲解不代表你的实际想法。"] : []),
   ]).slice(0, MAX_DIAGNOSIS_LIMITATIONS);
   const cueCase = CueCaseSchema.parse({
     schemaVersion: CUE_CASE_VERSION,
@@ -950,7 +966,7 @@ export function reviseDiagnosis(raw: ReviseTeachingDiagnosisInput): TeachingDiag
     questionType: disagreementQuestionType(disagreement) ?? input.reflection.questionType,
     source: "USER",
     response: "ANSWERED",
-    limitations: unique([...input.reflection.limitations, ...disagreement.limitations, "这是用户补充的异议信息，仍属于 USER claim。"]),
+    limitations: unique([...input.reflection.limitations, ...disagreement.limitations, "这是你补充的不同看法，仍需结合回放确认。"]),
   });
   const revised = diagnoseCue({ ...input, reflection: mergedReflection, existingThreads: [raw.previous.learningThread, ...(input.existingThreads ?? [])] });
   if (!revised.cueCase.verdict) return previous;

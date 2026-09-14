@@ -1,4 +1,4 @@
-import type { Cs2dReplay } from "./index";
+import type { Cs2dReplay, Cs2dAnalysisBundle } from "./index";
 import { describe, expect, it } from "vitest";
 import {
   CS2D_SOURCE,
@@ -43,7 +43,7 @@ function replayFixture(): Cs2dReplay {
     player(index < 5 ? `p-t${index + 1}` : `p-ct${index - 4}`, index < 5 ? "T" : "CT", index)
   );
   const selected = "p-t1";
-  return {
+  const replay: Cs2dReplay = {
     map: "de_mirage",
     demoTickRate: 64,
     frameRate: 8,
@@ -146,6 +146,14 @@ function replayFixture(): Cs2dReplay {
       }
     ]
   };
+  // A complete ten-player decision scene: the selected player is the only survivor
+  // on their side. This supplies real reflection value without inventing a mistake.
+  return { ...replay, rounds: replay.rounds.map((round) => ({ ...round,
+    frames: round.frames.map((frame) => ({ ...frame, players: [
+      ...frame.players,
+      ...players.filter((player) => player.steamId !== selected).map((player) => state(player.steamId, frame.tick, player.startSide === "T" ? 0 : 100))
+    ] }))
+  })) };
 }
 
 function negativeSelectedSideTimeline(tick: number, roundNumber = 1): WinProbabilityTimelineV1 {
@@ -191,6 +199,15 @@ function negativeSelectedSideTimeline(tick: number, roundNumber = 1): WinProbabi
   };
 }
 
+function rehashBoundaryFixture(bundle: Cs2dAnalysisBundle): Cs2dAnalysisBundle {
+  const set = bundle.candidate_set;
+  const hash = stableFingerprint({ id: set.id, version: set.version, demoId: set.demoId, playerId: set.playerId,
+    status: set.status, failureReason: set.failureReason, generationManifest: set.generationManifest,
+    candidates: set.candidates, materials: set.materials, limitations: set.limitations });
+  return { ...bundle, candidate_set: { ...set, hash }, review_plan: { ...bundle.review_plan, candidate_set_hash: hash,
+    ...(bundle.review_plan.director_decision_set ? { director_decision_set: { ...bundle.review_plan.director_decision_set, candidateSetHash: hash } } : {}) } };
+}
+
 describe("cs2d analysis adapter", () => {
   it("records the pinned structured-input boundary and supports every player selection", () => {
     const replay = replayFixture();
@@ -207,7 +224,7 @@ describe("cs2d analysis adapter", () => {
   it("keeps OutcomeImpact signed and gated to the parsed cue window", () => {
     const replay = replayFixture();
     const baseline = buildCs2dAnalysisBundle({ replay, selectedSteamId: "p-t1", demoId: "impact-fixture" });
-    const cue = baseline.review_plan.cues[0];
+    const cue = baseline.review_plan.cues.find((cue) => cue.decision_tick >= 800)!;
     const timeline: WinProbabilityTimelineV1 = {
       version: "win-probability-timeline.v1",
       status: "AVAILABLE",
@@ -224,14 +241,14 @@ describe("cs2d analysis adapter", () => {
       },
       tickRate: 64,
       rounds: [{
-        roundNumber: 1,
-        startTick: 0,
-        endTick: 760,
+        roundNumber: 2,
+        startTick: 800,
+        endTick: 1620,
         winner: "T",
         economy: { ct: "FULL", t: "FORCE", ctValue: 20_000, tValue: 12_500 },
         samples: [
-          { tick: cue.decision_tick, probability: 0.31, roundNumber: 1, side: "CT", source: "CS_NET" },
-          { tick: cue.reveal_tick, probability: 0.62, roundNumber: 1, side: "CT", source: "CS_NET" }
+          { tick: cue.decision_tick, probability: 0.31, roundNumber: 2, side: "CT", source: "CS_NET" },
+          { tick: cue.reveal_tick, probability: 0.62, roundNumber: 2, side: "CT", source: "CS_NET" }
         ]
       }],
       swings: [{
@@ -261,10 +278,11 @@ describe("cs2d analysis adapter", () => {
       delta: -0.31,
       percentagePoints: -31,
       attribution: "SELECTED_PLAYER_DEATH",
-      confidence: "HIGH"
+      confidence: "MEDIUM"
     });
     expect(impact?.text).toContain("少了 31 个百分点");
-    expect(impact?.text).toContain("你这次处理后");
+    expect(impact?.text).toContain("这段结果窗口后");
+    expect(impact?.limitations.join(" ")).toContain("不能单独判断");
     expect(impact?.relativeChange).toBeCloseTo(-0.31 / 0.69);
   });
 
@@ -297,7 +315,7 @@ describe("cs2d analysis adapter", () => {
   it("clamps one second of pre-roll to the live boundary without moving decision evidence", () => {
     const replay = replayFixture();
     const events = replay.rounds[0].events.map((event, index) =>
-      index === 0 ? { ...event, tick: 80, t: 1.25 } : event
+      index === 0 ? { ...event, tick: 80, t: 1.25, attackerSteamId: "p-ct1", victimSteamId: "p-t1" } : event
     );
     const bundle = buildCs2dAnalysisBundle({
       replay: { ...replay, rounds: [{ ...replay.rounds[0], events }, replay.rounds[1]] },
@@ -342,17 +360,20 @@ describe("cs2d analysis adapter", () => {
       selectedSteamId: "p-t1",
       demoId: "paced-full-match"
     });
-    expect(bundle.review_plan.cues).toHaveLength(50);
+    expect(bundle.review_plan.cues.length).toBeGreaterThan(0);
+    expect(bundle.review_plan.cues.length).toBeLessThanOrEqual(50);
+    expect(bundle.review_plan.segments.some((segment) => segment.mode === "SKIP")).toBe(true);
     expect(bundle.review_plan.cues[0].decision_tick).toBeLessThan(1_000);
-    expect(bundle.review_plan.cues.at(-1)?.decision_tick).toBeGreaterThan(59_000);
-    expect(bundle.metadata.warnings.some((warning) => warning.includes("maximum 50"))).toBe(true);
+    expect(bundle.review_plan.segments.at(-1)?.end_tick).toBe(59_760);
+    expect(bundle.review_plan.segments.some((segment) => segment.start_tick >= 59_000)).toBe(true);
+    expect(bundle.review_plan.cues.every((cue) => cue.assessment?.kind === "INSUFFICIENT_EVIDENCE")).toBe(true);
   });
 
   it("derives actionable coaching context only from the decision-time player state", () => {
     const replay = replayFixture();
     const frames = replay.rounds[0].frames.map((frame) => ({
       ...frame,
-      players: frame.players.map((current) => frame.tick <= 160
+      players: frame.players.map((current) => frame.tick <= 448
         ? { ...current, weapon: "Smoke", grenades: ["Smoke", "Flash"] }
         : current)
     }));
@@ -361,20 +382,18 @@ describe("cs2d analysis adapter", () => {
       selectedSteamId: "p-t1",
       demoId: "decision-context"
     });
-    expect(bundle.review_plan.cues[0]).toMatchObject({
-      title: "连接：道具先封枪线，队友跟上再拉出去"
-    });
-    expect(bundle.review_plan.cues[0].question).toContain("你现在在连接，手里有道具");
+    expect(bundle.review_plan.cues[0].assessment?.kind).toBe("INSUFFICIENT_EVIDENCE");
+    expect(bundle.review_plan.cues[0].advice).toEqual([]);
     expect(bundle.review_plan.cues[0].facts[0].text).toContain("你在连接");
     expect(bundle.review_plan.cues[0].facts[0].text).toContain("有 2 颗道具");
-    expect(bundle.review_plan.cues[0].question).not.toMatch(/击杀|死亡|结果|随后|最终/);
+    expect(bundle.review_plan.cues[0].question).not.toMatch(/被击杀|随后|最终/);
   });
 
   it("uses concrete Mirage callouts and player-facing CS actions", () => {
     const replay = replayFixture();
     const frames = replay.rounds[0].frames.map((frame) => ({
       ...frame,
-      players: frame.players.map((current) => frame.tick <= 160
+      players: frame.players.map((current) => frame.tick <= 448
         ? {
             ...current,
             lastPlaceName: "Catwalk",
@@ -395,14 +414,10 @@ describe("cs2d analysis adapter", () => {
     const cue = bundle.review_plan.cues[0];
     const copy = JSON.stringify({ title: cue.title, question: cue.question, facts: cue.facts, advice: cue.advice });
     expect(copy).toMatch(/B小/);
-    expect(copy).toMatch(/架住/);
-    expect(copy).toMatch(/预瞄/);
-    expect(copy).toMatch(/拉出去/);
-    expect(copy).toMatch(/补枪/);
-    expect(copy).toMatch(/头甲/);
-    expect(copy).toMatch(/eco/);
-    expect(copy).toMatch(/磕枪/);
-    expect(copy).toMatch(/换位/);
+    expect(copy).toMatch(/没甲/);
+    expect(copy).toMatch(/证据不足|无法确认/);
+    expect(cue.advice).toEqual([]);
+    expect(copy).not.toMatch(/让.*队友.*先|跟.*补枪|贪枪|主动接战|留在.*枪线/);
     expect(copy).not.toMatch(/空间控制|资源关系|风险暴露|决策窗口|接空间/);
   });
 
@@ -436,7 +451,7 @@ describe("cs2d analysis adapter", () => {
           expect(fact.available_at_tick).toBeLessThanOrEqual(cue.decision_tick);
         }
       }
-      expect(cue.question).not.toMatch(/被击杀|死亡|结果|随后|最终/);
+      expect(cue.question).not.toMatch(/被击杀|死亡|随后|最终/);
       expect(JSON.stringify({
         title: cue.title,
         question: cue.question,
@@ -471,9 +486,7 @@ describe("cs2d analysis adapter", () => {
         demoId: "outcome-fact-kind",
         winProbabilityTimeline
       });
-      return bundle.review_plan.cues[0].facts.find(
-        (fact) => fact.availability === "OUTCOME"
-      );
+      return bundle.candidate_set.materials.flatMap((material) => material.outcomeFacts)[0];
     };
 
     const sourceKill = sourceRound.events.find((event) => event.type === "kill");
@@ -504,9 +517,9 @@ describe("cs2d analysis adapter", () => {
       }))
     });
 
-    expect(deathFact?.text).toBe("你随后继续这次接触，并在这次对枪中被击杀。");
-    expect(killFact?.text).toBe("你随后在这次接触中完成击杀。");
-    expect(hpFact?.text).toBe("你随后在这次接触中掉血。");
+    expect(deathFact?.text).toBe("你随后被击杀。");
+    expect(killFact?.text).toBe("你随后完成击杀。");
+    expect(hpFact?.text).toBe("你的血量随后下降，伤害来源尚不能确认。");
     expect(utilityFact?.text).toBe("你随后投出了这颗烟雾弹。");
     expect(bombFact?.text).toBe("你随后完成下包。");
   });
@@ -603,21 +616,21 @@ describe("cs2d analysis adapter", () => {
     expect(bundle.review_plan.cues.some((cue) => cue.reveal_tick === 720)).toBe(false);
     expect(bundle.match_timeline.match_events?.some((event) => event.tick === 720)).toBe(false);
     expect(bundle.review_plan.segments).toContainEqual(expect.objectContaining({
-      start_tick: 640,
+      start_tick: 736,
       end_tick: 760,
       reason_code: "POST_ROUND",
       mode: "SKIP"
     }));
   });
 
-  it("keeps one second of legal post-event context for a round-ending kill", () => {
+  it("keeps one second of legal post-event context for a round-ending death", () => {
     const replay = replayFixture();
     const endingKill = {
       type: "kill" as const,
       tick: 640,
       t: 10,
-      attackerSteamId: "p-t1",
-      victimSteamId: "p-ct2",
+      attackerSteamId: "p-ct2",
+      victimSteamId: "p-t1",
       assisterSteamId: null,
       assistedFlash: false,
       weapon: "AK-47",
@@ -628,7 +641,7 @@ describe("cs2d analysis adapter", () => {
     };
     const quietFrames = replay.rounds[0].frames.map((frame) => ({
       ...frame,
-      players: frame.players.map((current) => ({ ...current, health: 100, alive: true }))
+      players: frame.players.map((current) => ({ ...current, health: current.steamId === "p-t1" ? 2 : current.health, alive: current.alive }))
     }));
     const bundle = buildCs2dAnalysisBundle({
       replay: {
@@ -683,7 +696,7 @@ describe("cs2d analysis adapter", () => {
     });
     expect(bundle.review_plan.cues.some((cue) => cue.reveal_tick === 660)).toBe(false);
     expect(bundle.review_plan.segments).toContainEqual(expect.objectContaining({
-      start_tick: 640,
+      start_tick: 736,
       end_tick: 760,
       reason_code: "POST_ROUND"
     }));
@@ -788,4 +801,80 @@ describe("cs2d analysis adapter", () => {
     };
     expect(() => deserializeCs2dAnalysisBundle(JSON.stringify({ ...bundle, candidate_set: candidateSet, review_plan: reviewPlan }))).toThrow(/not bound to its CandidateSet material/);
   });
+  it("nominates independent model windows with exactly one compact preceding snapshot and no fabricated Demo action", () => {
+    const source = replayFixture();
+    const current = { ...source.rounds[0], events: [], grenadePaths: [], frames: source.rounds[0].frames.map((frame) => ({ ...frame, players: frame.players.map((player) => ({ ...player, health: player.steamId === "p-t1" ? 2 : player.health })) })) };
+    const bundle = buildCs2dAnalysisBundle({ replay: { ...source, rounds: [current] }, selectedSteamId: "p-t1", demoId: "independent-snapshot", winProbabilityTimeline: negativeSelectedSideTimeline(400) });
+    expect(bundle.candidate_set.candidates).toHaveLength(1);
+    expect(bundle.candidate_set.candidates[0].source.kind).toBe("WIN_RATE_DROP");
+    const material = bundle.candidate_set.materials[0];
+    expect(material.decisionSnapshot?.decisionTick).toBe(352);
+    expect(material.decisionSnapshot?.sampledAtTick).toBe(352);
+    expect(material.playerActionFacts).toEqual([]);
+    expect(material.outcomeFacts).toEqual([]);
+    expect(deserializeCs2dAnalysisBundle(serializeCs2dAnalysisBundle(bundle))).toEqual(bundle);
+  });
+
+  it("fails explicitly above 512 candidate windows instead of truncating the match", () => {
+    const source = replayFixture();
+    const event = source.rounds[0].events.find((event) => event.type === "kill")!;
+    const current = { ...source.rounds[0], events: Array.from({ length: 513 }, () => event), grenadePaths: [] };
+    expect(() => buildCs2dAnalysisBundle({ replay: { ...source, rounds: [current] }, selectedSteamId: "p-t1", demoId: "too-many-windows" })).toThrow(/exceed 512.*without truncating/);
+  });
+
+  it("enforces the 16 MiB AnalysisBundle boundary on both export and import", () => {
+    const bundle = buildCs2dAnalysisBundle({ replay: replayFixture(), selectedSteamId: "p-t1", demoId: "bounded-bundle" });
+    const oversized = "x".repeat(16 * 1024 * 1024 + 1);
+    expect(() => serializeCs2dAnalysisBundle({ ...bundle, metadata: { ...bundle.metadata, limitations: [oversized] } })).toThrow(/16 MiB/);
+    expect(() => deserializeCs2dAnalysisBundle(oversized)).toThrow(/16 MiB/);
+    expect(bundle.match_timeline.tracks).toHaveLength(1);
+    expect(bundle.match_timeline.player_state_tracks?.every((state) => state.player_id === "p-t1")).toBe(true);
+  });
+
+  it("rejects partial trusted context in both new and legacy bundles even with a valid recomputed hash", () => {
+    const bundle = buildCs2dAnalysisBundle({ replay: replayFixture(), selectedSteamId: "p-t1", demoId: "partial-context" });
+    for (const adapterVersion of ["cs2d-analysis-adapter/1.5.0", "cs2d-analysis-adapter/1.4.0"] as const) {
+      for (const missing of ["decisionSnapshot", "observableContext"] as const) {
+        const materials = bundle.candidate_set.materials.map((material, index) => {
+          if (index > 0) return material;
+          const { [missing]: omitted, ...partial } = material;
+          return partial;
+        });
+        const partial = rehashBoundaryFixture({ ...bundle, metadata: { ...bundle.metadata, adapter_version: adapterVersion }, candidate_set: { ...bundle.candidate_set, materials } });
+        expect(() => deserializeCs2dAnalysisBundle(JSON.stringify(partial))).toThrow(/context is incomplete/);
+      }
+    }
+  });
+
+  it("only permits wholly absent context on legacy artifacts and preserves their immutable hash", () => {
+    const bundle = buildCs2dAnalysisBundle({ replay: replayFixture(), selectedSteamId: "p-t1", demoId: "legacy-context" });
+    const materials = bundle.candidate_set.materials.map(({ decisionSnapshot, observableContext, ...material }) => material);
+    const cues = bundle.review_plan.cues.map(({ decisionSnapshot, observableContext, ...cue }) => cue);
+    const withoutContext = rehashBoundaryFixture({ ...bundle, candidate_set: { ...bundle.candidate_set, materials }, review_plan: { ...bundle.review_plan, cues } });
+    expect(() => deserializeCs2dAnalysisBundle(JSON.stringify(withoutContext))).toThrow(/context is incomplete/);
+    const legacy = { ...withoutContext, metadata: { ...withoutContext.metadata, adapter_version: "cs2d-analysis-adapter/1.4.0" as const } };
+    expect(deserializeCs2dAnalysisBundle(JSON.stringify(legacy))).toEqual(legacy);
+  });
+
+  it("revalidates cue-only public context even though the full snapshot lives in candidate material", () => {
+    const bundle = buildCs2dAnalysisBundle({ replay: replayFixture(), selectedSteamId: "p-t1", demoId: "cue-context" });
+    const cues = bundle.review_plan.cues.map((cue, index) => index === 0 ? { ...cue,
+      observableContext: { ...cue.observableContext!, publicFacts: ["未来隐藏敌人将从 B 区出现。"] } } : cue);
+    expect(cues[0].decisionSnapshot).toBeUndefined();
+    expect(() => deserializeCs2dAnalysisBundle(JSON.stringify({ ...bundle, review_plan: { ...bundle.review_plan, cues } }))).toThrow(/Cue observable context differs/);
+  });
+
+  it("binds an explicit empty observable context when decision player samples are unavailable", () => {
+    const replay = replayFixture();
+    const sparse = { ...replay, rounds: [{ ...replay.rounds[1], frames: [] }] };
+    const bundle = buildCs2dAnalysisBundle({ replay: sparse, selectedSteamId: "p-t1", demoId: "empty-observer-context" });
+    expect(bundle.candidate_set.materials.length).toBeGreaterThan(0);
+    for (const material of bundle.candidate_set.materials) {
+      expect(material.decisionSnapshot?.selectedPlayer.value).toBeNull();
+      expect(material.observableContext?.state.claims).toEqual([]);
+      expect(material.observableStateId).toBe(material.observableContext?.state.id);
+    }
+    expect(deserializeCs2dAnalysisBundle(serializeCs2dAnalysisBundle(bundle))).toEqual(bundle);
+  });
+
 });

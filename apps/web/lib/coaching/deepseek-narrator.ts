@@ -1,5 +1,5 @@
 import type { NarrationBundle, NarrationResult } from "@cs-coach/contracts";
-import { playerFacingFocusProblem } from "@cs-coach/review-planner";
+
 import type { AnonymousNarrationRequest } from "./narrator-contract";
 
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
@@ -8,7 +8,7 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_REQUEST_BYTES = 48 * 1024;
 const MAX_TEXT_LENGTH = 1600;
 const ALLOWED_MODELS = new Set(["deepseek-v4-flash", "deepseek-v4-pro"]);
-export const DEEPSEEK_NARRATOR_PROMPT_VERSION = "deepseek-narration-bundle/1.1.1";
+export const DEEPSEEK_NARRATOR_PROMPT_VERSION = "deepseek-narration-bundle/2.0.0";
 
 export interface DeepSeekNarratorEnv {
   DEEPSEEK_API_KEY?: string;
@@ -51,7 +51,7 @@ function safeText(value: unknown, maxLength = MAX_TEXT_LENGTH): value is string 
 }
 
 function safeOutputText(value: unknown): value is string {
-  return safeText(value) && !/\b(?:tick|frame|segment|order|route)\b/i.test(value) && !/[\u5750\u6807]/.test(value);
+  return safeText(value) && !/\b(?:ticks?|frame|segment|order|route|ObservationState|renderer|lossless|TRADE|refId|schema|focus|pipeline|fallback|candidate)\b/i.test(value) && !/坐标/.test(value);
 }
 
 function arrayOfStrings(value: unknown): value is string[] {
@@ -101,7 +101,7 @@ function parseEvidence(value: unknown): { id: string; label: string; factRefs: s
 }
 
 function parseCoachingPackage(value: unknown): AnonymousNarrationRequest["coachingPackage"] {
-  if (!isRecord(value) || !exactKeys(value, ["cueId", "candidateId", "primaryFocusCode", "decisionContext", "playerAction", "inferences", "advice", "evidence", "allowedRefs", "limitations"])) throw new NarratorValidationError("Anonymous CoachingPackage shape is invalid.");
+  if (!isRecord(value) || !exactKeys(value, ["cueId", "candidateId", "primaryFocusCode", "decisionContext", "playerAction", "inferences", "advice", "evidence", "allowedRefs", "limitations", ...(value.observableSummary === undefined ? [] : ["observableSummary"])])) throw new NarratorValidationError("Anonymous CoachingPackage shape is invalid.");
   if (value.cueId !== "c1" || value.candidateId !== "k1" || !safeText(value.primaryFocusCode, 120) || !arrayOfStrings(value.limitations) || !isRecord(value.decisionContext) || !exactKeys(value.decisionContext, ["facts", "claims"]) || !Array.isArray(value.decisionContext.facts) || !Array.isArray(value.decisionContext.claims) || !Array.isArray(value.playerAction) || !Array.isArray(value.inferences) || !Array.isArray(value.advice) || !Array.isArray(value.evidence) || !isRecord(value.allowedRefs) || !exactKeys(value.allowedRefs, ["decision", "action", "advice", "evidence"])) throw new NarratorValidationError("Anonymous CoachingPackage fields are invalid.");
   const allowedRefs = {
     decision: assertAliasList(value.allowedRefs.decision, "d", "decision refs"),
@@ -127,6 +127,7 @@ function parseCoachingPackage(value: unknown): AnonymousNarrationRequest["coachi
     cueId: "c1",
     candidateId: "k1",
     primaryFocusCode: value.primaryFocusCode,
+    ...(value.observableSummary === undefined ? {} : { observableSummary: arrayOfStrings(value.observableSummary) && value.observableSummary.length <= 12 ? [...value.observableSummary] : (() => { throw new NarratorValidationError("Observable summary is invalid."); })() }),
     decisionContext: { facts, claims },
     playerAction,
     inferences,
@@ -160,11 +161,19 @@ function parseOutcomePackage(value: unknown): AnonymousNarrationRequest["outcome
 
 export function parseNarrationRequest(value: unknown, byteLength = 0): AnonymousNarrationRequest {
   if (byteLength > MAX_REQUEST_BYTES) throw new NarratorValidationError("Narration request is too large.");
-  if (!isRecord(value) || !exactKeys(value, ["coachingPackage", "outcomePackage"])) throw new NarratorValidationError("Narration request must contain exactly CoachingPackage and OutcomePackage.");
+  if (!isRecord(value) || !exactKeys(value, ["coachingPackage", "outcomePackage", ...(value.approvedNarration === undefined ? [] : ["approvedNarration"])])) throw new NarratorValidationError("Narration request must contain exactly CoachingPackage and OutcomePackage.");
   const coachingPackage = parseCoachingPackage(value.coachingPackage);
   const outcomePackage = parseOutcomePackage(value.outcomePackage);
-  if (coachingPackage.decisionContext.facts.length === 0 || coachingPackage.playerAction.length === 0 || coachingPackage.advice.length === 0) throw new NarratorValidationError("Narration request is not eligible without decision, action, and advice refs.");
-  return { coachingPackage, outcomePackage };
+  if (coachingPackage.decisionContext.facts.length === 0) throw new NarratorValidationError("Narration request is not eligible without decision, action, and advice refs.");
+  const request: AnonymousNarrationRequest = { coachingPackage, outcomePackage };
+  if (value.approvedNarration !== undefined) request.approvedNarration = parseProviderBundle(value.approvedNarration, request, false);
+  else {
+    // Legacy packets do not contain proof of applicability. Preserve the job,
+    // but remove their concrete tactical suggestions from the provider input.
+    request.coachingPackage.advice = [];
+    request.coachingPackage.allowedRefs.advice = [];
+  }
+  return request;
 }
 
 interface NarrationFieldWire {
@@ -174,17 +183,17 @@ interface NarrationFieldWire {
   limitations?: string[];
 }
 
-function parseField(value: unknown, allowed: ReadonlySet<string>, name: string): NarrationFieldWire {
+function parseField(value: unknown, allowed: ReadonlySet<string>, name: string, allowEmpty = false): NarrationFieldWire {
   if (!isRecord(value)) throw new NarratorValidationError(`${name} is not an object.`);
   const keys = ["text", "refs", ...(value.confidence === undefined ? [] : ["confidence"]), ...(value.limitations === undefined ? [] : ["limitations"])] as string[];
   const confidence = value.confidence;
   if (!exactKeys(value, keys) || !safeOutputText(value.text) || !Array.isArray(value.refs) || !value.refs.every((ref) => typeof ref === "string") || (confidence !== undefined && (!finite(confidence) || confidence < 0 || confidence > 1)) || (value.limitations !== undefined && !arrayOfStrings(value.limitations))) throw new NarratorValidationError(`${name} has an invalid shape.`);
   const refs = [...value.refs] as string[];
-  if (refs.length === 0 || new Set(refs).size !== refs.length || refs.some((ref) => !allowed.has(ref))) throw new NarratorValidationError(`${name} contains an invalid ref.`);
+  if ((!allowEmpty && refs.length === 0) || new Set(refs).size !== refs.length || refs.some((ref) => !allowed.has(ref))) throw new NarratorValidationError(`${name} contains an invalid ref.`);
   return { text: value.text, refs, ...(confidence === undefined ? {} : { confidence }), ...(value.limitations === undefined ? {} : { limitations: [...value.limitations] }) };
 }
 
-function parseProviderBundle(value: unknown, request: AnonymousNarrationRequest): NarrationBundle {
+function parseProviderBundle(value: unknown, request: AnonymousNarrationRequest, checkSemantics = true): NarrationBundle {
   if (!isRecord(value) || !exactKeys(value, ["cueId", "candidateId", "primaryFocusCode", "currentSituation", "playerAction", "coreIssue", "betterPlay", "outcomeImpact"]) || value.cueId !== "c1" || value.candidateId !== "k1" || value.primaryFocusCode !== request.coachingPackage.primaryFocusCode) throw new NarratorValidationError("Narration provider changed identity or primaryFocusCode.");
   const decision = new Set(request.coachingPackage.allowedRefs.decision);
   const action = new Set(request.coachingPackage.allowedRefs.action);
@@ -192,24 +201,34 @@ function parseProviderBundle(value: unknown, request: AnonymousNarrationRequest)
   const evidence = new Set(request.coachingPackage.allowedRefs.evidence);
   const outcome = new Set([...request.outcomePackage.outcomeFacts.map((fact) => fact.id), ...request.outcomePackage.measurementRefs]);
   const currentSituation = parseField(value.currentSituation, decision, "currentSituation");
-  const playerAction = parseField(value.playerAction, action, "playerAction");
+  const playerAction = parseField(value.playerAction, action, "playerAction", action.size === 0);
   const coreIssue = parseField(value.coreIssue, new Set([...decision, ...action]), "coreIssue");
   const betterPlay = parseField(value.betterPlay, new Set([...decision, ...action, ...advice, ...evidence]), "betterPlay");
   const outcomeImpact = parseField(value.outcomeImpact, outcome, "outcomeImpact");
-  if (!betterPlay.refs.some((ref) => advice.has(ref))) throw new NarratorValidationError("betterPlay requires an advice ref.");
+  if (advice.size > 0 && !betterPlay.refs.some((ref) => advice.has(ref))) throw new NarratorValidationError("betterPlay requires an advice ref.");
   if (currentSituation.refs.some((ref) => outcome.has(ref)) || playerAction.refs.some((ref) => outcome.has(ref)) || betterPlay.refs.some((ref) => outcome.has(ref))) throw new NarratorValidationError("Outcome refs crossed into decision-side fields.");
-  return { cueId: "c1", candidateId: "k1", primaryFocusCode: request.coachingPackage.primaryFocusCode, currentSituation, playerAction, coreIssue, betterPlay, outcomeImpact };
+  const bundle = { cueId: "c1", candidateId: "k1", primaryFocusCode: request.coachingPackage.primaryFocusCode, currentSituation, playerAction, coreIssue, betterPlay, outcomeImpact };
+  if (checkSemantics) {
+    // References alone do not prove a sentence. Keep the deterministic semantic
+    // projection closed until a provable paraphrase representation is available.
+    const approved = fallbackBundle(request);
+    for (const key of ["currentSituation", "playerAction", "coreIssue", "betterPlay", "outcomeImpact"] as const) {
+      if (bundle[key].text !== approved[key].text || JSON.stringify([...bundle[key].refs].sort()) !== JSON.stringify([...approved[key].refs].sort()) || bundle[key].confidence !== approved[key].confidence || JSON.stringify(bundle[key].limitations ?? []) !== JSON.stringify(approved[key].limitations ?? [])) throw new NarratorValidationError(`${key} introduces unapproved meaning.`);
+    }
+  }
+  return bundle;
 }
 
 function fallbackBundle(request: AnonymousNarrationRequest): NarrationBundle {
+  if (request.approvedNarration) return request.approvedNarration;
   const decision = request.coachingPackage.allowedRefs.decision;
   const action = request.coachingPackage.allowedRefs.action;
   const advice = request.coachingPackage.allowedRefs.advice;
   const evidence = request.coachingPackage.allowedRefs.evidence;
   const outcomes = [...request.outcomePackage.outcomeFacts.map((fact) => fact.id), ...request.outcomePackage.measurementRefs];
   const situation = request.coachingPackage.decisionContext.facts[0]?.text ?? "当前决策事实有限。";
-  const actionText = request.coachingPackage.playerAction[0]?.text ?? "当前动作事实有限。";
-  const adviceText = request.coachingPackage.advice[0]?.text ?? "根据已验证事实保留可撤退路线。";
+  const actionText = request.coachingPackage.playerAction[0]?.text ?? "当前记录不足以确认具体行动意图。";
+  const adviceText = "目前还不能确认哪种替代处理在当时可行。";
   const outcomeFactText = request.outcomePackage.outcomeFacts[0]?.text;
   const outcomeImpactText = request.outcomePackage.winProbabilityImpact?.text;
   const outcomeText = [outcomeFactText, outcomeImpactText].filter((text): text is string => Boolean(text)).join(" ") || "结果测量已完成。";
@@ -218,9 +237,9 @@ function fallbackBundle(request: AnonymousNarrationRequest): NarrationBundle {
     candidateId: "k1",
     primaryFocusCode: request.coachingPackage.primaryFocusCode,
     currentSituation: { text: situation, refs: [decision[0]] },
-    playerAction: { text: actionText, refs: [action[0]] },
-    coreIssue: { text: playerFacingFocusProblem(request.coachingPackage.primaryFocusCode), refs: [...decision.slice(0, 1), ...action.slice(0, 1)] },
-    betterPlay: { text: adviceText, refs: [...advice.slice(0, 1), ...evidence.slice(0, 1)] },
+    playerAction: { text: actionText, refs: action.slice(0, 1) },
+    coreIssue: { text: "这段结果不足以判断当时的选择是否有问题。", refs: [...decision.slice(0, 1), ...action.slice(0, 1)] },
+    betterPlay: { text: adviceText, refs: decision.slice(0, 1) },
     outcomeImpact: { text: outcomeText, refs: [...outcomes] }
   };
 }
@@ -250,7 +269,7 @@ function systemPrompt(): string {
     "Shape example: currentSituation={text:'...',refs:['d1']}, playerAction={text:'...',refs:['a1']}, coreIssue={text:'...',refs:['d1','a1']}, betterPlay={text:'...',refs:['v1','e1']}, outcomeImpact={text:'...',refs:['o1','m1']}.",
     "currentSituation cites decision refs only; playerAction cites action refs only; coreIssue cites decision/action refs; betterPlay must cite an advice ref and may cite decision/action/advice/evidence refs; outcomeImpact cites outcome/measurement refs only.",
     "Every field is one short sentence. Use concise, direct Simplified Chinese CS player language; prefer架枪、预瞄、小身位 peek、补枪、eco、强起 and similar concrete terms.",
-    "Never print primaryFocusCode or any uppercase taxonomy token in prose. coreIssue must say what the action risks or causes; betterPlay must give one immediately executable adjustment.",
+    "Never print primaryFocusCode or any uppercase taxonomy token in prose. Copy approvedNarration exactly when supplied. Each sentence is a closed, verified semantic projection; new wording or additional tactics will be rejected. When advice is unavailable, preserve uncertainty. Death and damage alone never establish decision error.",
     "Do not mention a win-rate percentage when the supplied impact is absent or rounds to zero percentage points.",
     "Do not invent a crosshair placement, callout, teammate intent, enemy position, or setup that was not supplied.",
     "Do not emit segment, order, route, tick, frame, player identity, raw replay, or new refs. Do not introduce a new coaching taxonomy or advice semantic."

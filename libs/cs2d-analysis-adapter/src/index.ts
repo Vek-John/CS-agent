@@ -1,3 +1,5 @@
+import { buildDecisionSnapshot, buildObservableDecisionContext, assertDecisionSnapshot } from "./decision-context";
+export { buildDecisionSnapshot, buildObservableDecisionContext, assertDecisionSnapshot } from "./decision-context";
 import type {
   Advice,
   Annotation,
@@ -24,7 +26,7 @@ import type {
   CandidateGeneratorInput,
   CandidateSet
 } from "@cs-coach/contracts";
-import { MAX_TEACHING_CUES } from "@cs-coach/contracts";
+import { MAX_TEACHING_CUES, MAX_ANALYSIS_CANDIDATES, MAX_ANALYSIS_BUNDLE_BYTES } from "@cs-coach/contracts";
 import type {
   ObservableState,
   WorldPoint
@@ -64,11 +66,11 @@ export const CS2D_SOURCE = {
   input_boundary: "WASM_WORKER_STRUCTURED_REPLAY_ONLY"
 } as const;
 
-export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.4.0" as const;
+export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.5.0" as const;
 export const CS2D_TIMELINE_VERSION = "zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec/timeline/1.0.0" as const;
 export const CS2D_OBSERVATION_VERSION = "cs2d-analysis-adapter/1.0.0/internal-observation" as const;
-export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.4.0/signals" as const;
-export const CS2D_PLANNER_VERSION = "cs2d-analysis-adapter/1.4.0/planner" as const;
+export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.5.0/signals" as const;
+export const CS2D_PLANNER_VERSION = "cs2d-analysis-adapter/1.5.0/planner" as const;
 
 /** MVP pacing target: a full match should feel coached, not interrupted. */
 const OUTCOME_WINDOW_SECONDS = 4;
@@ -193,6 +195,7 @@ export interface Cs2dRound {
   readonly scoreCt: number;
   readonly scoreT: number;
   readonly damage?: Readonly<Record<string, number>>;
+  readonly bomb?: readonly { readonly t: number; readonly state: "carried" | "ground" | "planted" | "gone"; readonly carrierSteamId?: string }[];
   readonly frames: readonly Cs2dFrame[];
   readonly events: readonly Cs2dGameEvent[];
   readonly grenadePaths: readonly Cs2dGrenadePath[];
@@ -242,7 +245,7 @@ export interface Cs2dExcludedRound {
 }
 
 export interface Cs2dAnalysisMetadata {
-  readonly adapter_version: typeof CS2D_ADAPTER_VERSION;
+  readonly adapter_version: typeof CS2D_ADAPTER_VERSION | "cs2d-analysis-adapter/1.4.0";
   readonly source: Cs2dReplaySourceMetadata;
   readonly input_map: string;
   readonly selected_steam_id: string;
@@ -299,7 +302,7 @@ interface NormalizedState {
   readonly source: Cs2dPlayerState;
 }
 
-type SignalKind = "DEATH" | "KILL" | "BOMB" | "UTILITY" | "HP_CHANGE";
+type SignalKind = "DEATH" | "KILL" | "BOMB" | "UTILITY" | "HP_CHANGE" | "WIN_RATE_DROP";
 
 interface RawSignalCandidate {
   readonly round: NormalizedRound;
@@ -521,7 +524,12 @@ function normalizeStateSample(
     issue(warnings, `Frame state for ${state.steamId} at tick ${tick} has incomplete numeric position/health fields.`);
     return undefined;
   }
+  if ((state.side !== "T" && state.side !== "CT") || typeof state.alive !== "boolean") {
+    issue(warnings, `Frame state for ${state.steamId} at tick ${tick} has unknown current side/alive state.`);
+    return undefined;
+  }
   const missingFields: string[] = ["pitch", "velocity"];
+  if (typeof state.helmet !== "boolean") missingFields.push("helmet");
   const weapon = safeText(state.weapon, "UNKNOWN_ITEM");
   if (weapon === "UNKNOWN_ITEM") missingFields.push("active_item");
   if (!finiteNumber(state.money)) missingFields.push("money");
@@ -753,7 +761,7 @@ function collectCandidates(
   if (sawAggregateDamage) issue(warnings, CS2D_LIMITATIONS.hurtEvents);
   issue(warnings, CS2D_LIMITATIONS.parserExtension);
 
-  const priority: Record<SignalKind, number> = { DEATH: 0, HP_CHANGE: 1, KILL: 2, BOMB: 3, UTILITY: 4 };
+  const priority: Record<SignalKind, number> = { DEATH: 0, HP_CHANGE: 1, KILL: 2, BOMB: 3, UTILITY: 4, WIN_RATE_DROP: 5 };
   candidates.sort((left, right) =>
     left.decisionTick - right.decisionTick ||
     priority[left.kind] - priority[right.kind] ||
@@ -859,22 +867,21 @@ function actionFactText(candidate: RawSignalCandidate): string {
   const callout = stateCallout(candidate.state);
   const place = callout ? `在${callout}` : "在这里";
   switch (candidate.kind) {
-    case "DEATH": return `你${place}继续接了这波对枪。`;
-    case "KILL": return `你${place}主动接了这波对枪。`;
     case "BOMB":
-      if (candidate.bombEventType === "bomb_planted") return `你${place}直接开始下包。`;
-      if (candidate.bombEventType === "bomb_defused") return `你${place}直接开始拆包。`;
-      return `你${place}继续处理 C4。`;
+      if (candidate.bombEventType === "bomb_planted") return `你完成了下包。`;
+      if (candidate.bombEventType === "bomb_defused") return `你完成了拆包。`;
+      return `C4 发生了状态变化。`;
     case "UTILITY": return `你${place}使用了${candidate.utilityKind ?? "道具"}。`;
-    case "HP_CHANGE": return `你${place}继续留在这条枪线里。`;
+    default: throw new Error("Outcome-only signals cannot be promoted to player action facts.");
   }
 }
 
 function outcomeFactText(candidate: RawSignalCandidate): string {
   switch (candidate.kind) {
-    case "DEATH": return "你随后继续这次接触，并在这次对枪中被击杀。";
-    case "KILL": return "你随后在这次接触中完成击杀。";
-    case "HP_CHANGE": return "你随后在这次接触中掉血。";
+    case "DEATH": return "你随后被击杀。";
+    case "KILL": return "你随后完成击杀。";
+    case "HP_CHANGE": return "你的血量随后下降，伤害来源尚不能确认。";
+    case "WIN_RATE_DROP": return "这段结果窗口内，我方的胜率估计下降；变化不能单独说明你的决策有误。";
     case "UTILITY": {
       const utilityNames: Record<string, string> = { smoke: "烟雾弹", fire: "燃烧弹", he: "手雷", flash: "闪光弹", decoy: "诱饵弹" };
       return `你随后投出了这颗${utilityNames[candidate.utilityKind ?? ""] ?? "道具"}。`;
@@ -906,16 +913,23 @@ function buildCanonicalGeneratorInput(
   selectedSteamId: string,
   tickRate: number,
   winProbabilityTimeline: WinProbabilityTimelineV1,
-  warnings: string[]
+  warnings: string[],
+  rosterIds: readonly string[]
 ): CandidateGeneratorInput {
   const facts: CanonicalAnalysisFact[] = [];
   const signals: CanonicalSignal[] = [];
   const observations: ObservableState[] = [];
   for (const raw of rawCandidates) {
+    const sourceSnapshot = buildDecisionSnapshot({ round: raw.round.source, selectedPlayerId: selectedSteamId, decisionTick: raw.decisionTick, tickRate, snapshotId: `snapshot-${raw.sourceRef}`, rosterIds });
     const stateFactId = `fact-${raw.sourceRef}-state`;
+    const decisionSnapshot = { ...sourceSnapshot, supportChecks: sourceSnapshot.supportChecks.map((check) =>
+      check.status === "APPLICABLE" && check.boundary === "OBSERVABLE"
+        ? { ...check, evidenceRefs: [check.code === "teammateAlive" ? `fact-${raw.sourceRef}-alive-counts` : stateFactId] }
+        : check
+    ) };
     const actionFactId = `fact-${raw.sourceRef}-action`;
     const outcomeFactId = `fact-${raw.sourceRef}-outcome`;
-    const state = raw.state;
+    const state = decisionSnapshot.selectedPlayer.value ? raw.state : undefined;
     if (state) {
       facts.push({
         id: stateFactId,
@@ -923,24 +937,40 @@ function buildCanonicalGeneratorInput(
         roundNumber: raw.round.number,
         tick: state.sample.tick,
         text: stateFactText(state),
-        sourceRefs: [raw.sourceRef],
+        sourceRefs: [...state.sample.fact_refs],
         observedByPlayer: true,
         missingFields: [...state.sample.missing_fields],
         limitations: [CS2D_LIMITATIONS.frameSampling]
       });
     }
-    facts.push({
+    const publicFactIds: string[] = [];
+    const addPublicFact = (suffix: string, text: string, sourceRefs: readonly string[], tick: number, missingFields: readonly string[] = []) => {
+      const id = `fact-${raw.sourceRef}-${suffix}`;
+      publicFactIds.push(id);
+      facts.push({ id, kind: "DECISION_CONTEXT", roundNumber: raw.round.number, tick, text, sourceRefs, observedByPlayer: true, missingFields, limitations: [] });
+    };
+    const sampledAt = decisionSnapshot.sampledAtTick ?? raw.decisionTick;
+    const counts = decisionSnapshot.aliveCounts.value;
+    if (counts) addPublicFact("alive-counts", `当时己方 ${counts.allies} 人存活${decisionSnapshot.selectedPlayer.value?.alive ? "（包括你）" : ""}，对方 ${counts.enemies} 人存活。`, decisionSnapshot.aliveCounts.evidenceRefs, sampledAt);
+    if (decisionSnapshot.score.value) addPublicFact("score", `当时比分：进攻方 ${decisionSnapshot.score.value.t}，防守方 ${decisionSnapshot.score.value.ct}。`, [`round-${raw.round.number}-score-before`], raw.round.startTick);
+    addPublicFact("clock", "当前回合的剩余时间无法从记录确认。", [`round-${raw.round.number}-clock`], raw.decisionTick, ["round_timer"]);
+    if (decisionSnapshot.bomb.boundary === "OBSERVABLE" && decisionSnapshot.bomb.value) {
+      const bombNames = { NOT_CARRIED: "未携带", CARRIED: "携带中", DROPPED: "掉落", PLANTED: "已安放", DEFUSED: "已拆除", EXPLODED: "已爆炸", UNKNOWN: "未知" };
+      addPublicFact("bomb", `C4 状态：${bombNames[decisionSnapshot.bomb.value.state]}。`, decisionSnapshot.bomb.evidenceRefs, raw.decisionTick);
+    }
+    const hasVerifiedAction = raw.kind === "UTILITY" || (raw.kind === "BOMB" && raw.bombEventType !== "bomb_exploded");
+    if (hasVerifiedAction) facts.push({
       id: actionFactId,
       kind: "PLAYER_ACTION",
       roundNumber: raw.round.number,
-      tick: raw.decisionTick,
+      tick: raw.revealTick,
       text: actionFactText(raw),
       sourceRefs: [raw.sourceRef],
       observedByPlayer: true,
-      missingFields: raw.kind === "HP_CHANGE" ? ["HurtEvent", "exact_action_boundary"] : [],
-      limitations: raw.kind === "HP_CHANGE" ? ["cs2d 没有逐次 HurtEvent；动作窗口由相邻 Frame 保守界定。"] : []
+      missingFields: ["exact_action_start"],
+      limitations: ["只能确认动作发生或完成，不能推定其起始时刻和战术目的。"]
     });
-    facts.push({
+    if (raw.kind !== "WIN_RATE_DROP") facts.push({
       id: outcomeFactId,
       kind: "OUTCOME",
       roundNumber: raw.round.number,
@@ -952,25 +982,22 @@ function buildCanonicalGeneratorInput(
       limitations: raw.timingLimitation ? [raw.timingLimitation] : [],
       outcomeKind: raw.kind
     });
-    let observableState: ObservableState | undefined;
-    if (state) {
-      const visionFact = directVisionFactFromSample(stateFactId, state.sample.player_id, {
-        player_id: raw.state.sample.player_id,
-        tick: state.sample.tick,
-        world_position: state.sample.world_position
-      });
-      observableState = buildObservableState({
-        id: `obs-${raw.sourceRef}`,
-        demo_id: demoId,
-        timeline_version: timeline.timeline_version,
-        observer_player_id: selectedSteamId,
-        at_tick: raw.decisionTick,
-        observation_version: CS2D_OBSERVATION_VERSION,
-        facts: [visionFact],
-        limitations: [CS2D_LIMITATIONS.observationBoundary, CS2D_LIMITATIONS.frameSampling]
-      });
-      observations.push(observableState);
-    }
+    const observerFacts = state ? [directVisionFactFromSample(stateFactId, state.sample.player_id, {
+      player_id: state.sample.player_id,
+      tick: state.sample.tick,
+      world_position: state.sample.world_position
+    })] : [];
+    const observableState = buildObservableState({
+      id: `obs-${raw.sourceRef}`,
+      demo_id: demoId,
+      timeline_version: timeline.timeline_version,
+      observer_player_id: selectedSteamId,
+      at_tick: raw.decisionTick,
+      observation_version: CS2D_OBSERVATION_VERSION,
+      facts: observerFacts,
+      limitations: [CS2D_LIMITATIONS.observationBoundary, CS2D_LIMITATIONS.frameSampling, ...(!state ? ["决策前缺少可靠的选手状态，不能补造其可见信息。"] : [])]
+    });
+    observations.push(observableState);
     const economyRound = winProbabilityTimeline.rounds.find((round) => round.roundNumber === raw.round.number);
     const side = state?.sample.side ?? "T";
     const economy = side === "CT" ? economyRound?.economy.ct : economyRound?.economy.t;
@@ -989,6 +1016,9 @@ function buildCanonicalGeneratorInput(
       economyClass: economy ?? economyTerm(state)
     };
     signals.push({
+      decisionSnapshot,
+      ...(observableState ? { observableContext: buildObservableDecisionContext(decisionSnapshot, observableState) } : {}),
+      behaviorHypotheses: [],
       signalId: raw.sourceRef,
       kind: raw.kind,
       roundNumber: raw.round.number,
@@ -996,9 +1026,9 @@ function buildCanonicalGeneratorInput(
       decisionTick: raw.decisionTick,
       revealTick: raw.revealTick,
       sourceRefs: [raw.sourceRef],
-      factRefs: state ? [stateFactId] : [],
-      actionRefs: [actionFactId],
-      outcomeRefs: [outcomeFactId],
+      factRefs: [...(state ? [stateFactId] : []), ...publicFactIds],
+      actionRefs: hasVerifiedAction ? [actionFactId] : [],
+      outcomeRefs: raw.kind === "WIN_RATE_DROP" ? [] : [outcomeFactId],
       observableClaimRefs: observableState?.claims.map((claim) => claim.id) ?? [],
       evidenceRefs: [raw.sourceRef],
       playerSide: side,
@@ -1014,6 +1044,7 @@ function buildCanonicalGeneratorInput(
   return {
     demoId,
     playerId: selectedSteamId,
+    independentSwingSignalsIncluded: true,
     timeline,
     facts,
     signals,
@@ -1291,10 +1322,26 @@ export function buildCs2dAnalysisBundle(input: Cs2dAnalysisInput): Cs2dAnalysisB
   const tickRate = finiteNumber(replay.demoTickRate) && replay.demoTickRate > 0 ? replay.demoTickRate : 64;
   const states = collectStates(replay, rounds, input.selectedSteamId, warnings);
   const candidates = collectCandidates(replay, rounds, states, input.selectedSteamId, tickRate, warnings);
-  const winProbabilityTimeline = input.winProbabilityTimeline ?? unavailableWinProbabilityTimeline(tickRate, "模型尚未在 cs2d Worker 中完成推理。");
+  const winProbabilityTimeline = input.winProbabilityTimeline ?? unavailableWinProbabilityTimeline(tickRate, "胜率估计暂不可用，仍可继续查看比赛事实。");
+  // Nominate independent model windows while Replay still lives here, so even these
+  // receive a preceding compact snapshot instead of borrowing a distant decision.
+  if (winProbabilityTimeline.status === "AVAILABLE") for (const swing of winProbabilityTimeline.swings) {
+    const round = rounds.find((item) => swing.tick >= item.freezeEndTick && swing.tick <= item.decidedTick);
+    if (!round || candidates.some((candidate) => candidate.round.number === round.number && Math.abs(candidate.revealTick - swing.tick) <= Math.max(1, Math.round(tickRate / 2)))) continue;
+    const roundStates = statesForRound(states, round);
+    const decisionTick = precedingDecisionTick(roundStates, round, swing.tick);
+    if (decisionTick === undefined) continue;
+    const state = stateAtOrBefore(roundStates, decisionTick);
+    const currentSide = state?.source.side;
+    if (currentSide !== "T" && currentSide !== "CT") continue;
+    const selectedDelta = currentSide === "CT" ? swing.after - swing.before : swing.before - swing.after;
+    if (selectedDelta > -0.12) continue;
+    candidates.push({ round, kind: "WIN_RATE_DROP", sourceTick: swing.tick, decisionTick, revealTick: swing.tick, state, sourceRef: `winrate-swing-${swing.id}` });
+  }
+  if (candidates.length > MAX_ANALYSIS_CANDIDATES) throw new Error("Analysis candidate windows exceed 512; analysis stopped without truncating timeline coverage.");
   const provisionalTimeline = buildTimeline(replay, rounds, input.selectedSteamId, states, warnings);
   const timeline: MatchTimeline = { ...provisionalTimeline, demo_id: input.demoId };
-  const generatorInput = buildCanonicalGeneratorInput(candidates, timeline, input.demoId, input.selectedSteamId, tickRate, winProbabilityTimeline, warnings);
+  const generatorInput = buildCanonicalGeneratorInput(candidates, timeline, input.demoId, input.selectedSteamId, tickRate, winProbabilityTimeline, warnings, players.map((player) => player.steamId));
   const candidateSet = generateCandidateSet(generatorInput);
   const director = deterministicDirectorFallback(candidateSet, "DIRECTOR_DISABLED_PROVIDER_NEUTRAL_BASELINE");
   const compiled = compileReviewPlan({
@@ -1375,6 +1422,19 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
   }
 
   const bundle = value as unknown as Cs2dAnalysisBundle;
+  if (bundle.candidate_set.candidates.length > MAX_ANALYSIS_CANDIDATES) throw new Error("Analysis candidate windows exceed 512.");
+  for (const material of bundle.candidate_set.materials) {
+    if (!material.decisionSnapshot || !material.observableContext) {
+      if (material.decisionSnapshot || material.observableContext || bundle.metadata.adapter_version !== "cs2d-analysis-adapter/1.4.0") throw new Error("Candidate trusted decision context is incomplete.");
+      continue;
+    }
+    assertDecisionSnapshot(material.decisionSnapshot);
+    const candidate = bundle.candidate_set.candidates.find((item) => item.candidateId === material.candidateId);
+    if (!candidate || material.decisionSnapshot.decisionTick !== candidate.decisionTick || material.decisionSnapshot.roundNumber !== candidate.roundNumber || material.decisionSnapshot.selectedPlayerId !== bundle.selected_steam_id) throw new Error("DecisionSnapshot candidate binding is invalid.");
+    const context = material.observableContext;
+    if (context && (!hasExactKeys(context as unknown as Record<string, unknown>, ["version", "boundary", "state", "snapshotId", "source", "publicFacts", "freshness", "confidence", "missingFields", "limitations"]) || context.version !== "observable-decision-context.v1" || context.source !== "DEMO_OBSERVER_EVIDENCE" || JSON.stringify(context.publicFacts) !== JSON.stringify(buildObservableDecisionContext(material.decisionSnapshot, context.state).publicFacts))) throw new Error("ObservableDecisionContext public projection is invalid.");
+    if (context && (context.boundary !== "OBSERVABLE" || context.snapshotId !== material.decisionSnapshot.snapshotId || context.state.at_tick > candidate.decisionTick || context.state.claims.some((claim) => claim.evidence_tick > candidate.decisionTick || claim.available_from_tick > candidate.decisionTick || (claim.expires_at_tick !== undefined && claim.expires_at_tick <= candidate.decisionTick)))) throw new Error("ObservableDecisionContext contains future or expired evidence.");
+  }
   if (
     bundle.demo_id !== bundle.match_timeline.demo_id ||
     bundle.demo_id !== bundle.review_plan.demo_id ||
@@ -1425,7 +1485,7 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
     throw new Error("cs2d win-probability contract is invalid.");
   }
   if (
-    bundle.metadata.adapter_version !== CS2D_ADAPTER_VERSION ||
+    ![CS2D_ADAPTER_VERSION, "cs2d-analysis-adapter/1.4.0"].includes(bundle.metadata.adapter_version) ||
     bundle.metadata.source.repository !== CS2D_SOURCE.repository ||
     bundle.metadata.source.commit !== CS2D_SOURCE.commit ||
     bundle.metadata.renderer_input !== false ||
@@ -1478,8 +1538,17 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
   }
   for (const material of bundle.candidate_set.materials) {
     if (material.observableStateId && !stateById.has(material.observableStateId)) throw new Error(`Candidate material observable_state_id ${material.observableStateId} is missing from observation_evidence.`);
+    if (material.observableContext && (!material.observableStateId || JSON.stringify(material.observableContext.state) !== JSON.stringify(stateById.get(material.observableStateId)))) throw new Error("ObservableDecisionContext is not bound to the candidate observation evidence.");
   }
   for (const cue of bundle.review_plan.cues) {
+    const sourceMaterial = bundle.candidate_set.materials.find((material) => material.candidateId === cue.candidate_id);
+    // New cues project the observable context only; their full snapshot stays in
+    // candidate material. Validate the projection even when cue.snapshot is absent.
+    if ((cue.observableContext || sourceMaterial?.observableContext) && JSON.stringify(cue.observableContext) !== JSON.stringify(sourceMaterial?.observableContext)) throw new Error("Cue observable context differs from its candidate material.");
+    if (cue.decisionSnapshot) {
+      assertDecisionSnapshot(cue.decisionSnapshot);
+      if (!sourceMaterial || JSON.stringify(cue.decisionSnapshot) !== JSON.stringify(sourceMaterial.decisionSnapshot)) throw new Error("Cue decision context differs from its candidate material.");
+    }
     if (!cue.observable_state_id) continue;
     if (!cue.candidate_id) throw new Error(`Cue ${cue.id} has an ObservableState without candidate binding.`);
     const material = bundle.candidate_set.materials.find((item) => item.candidateId === cue.candidate_id);
@@ -1502,10 +1571,13 @@ export function serializeCs2dAnalysisBundle(bundle: Cs2dAnalysisBundle): string 
     metadata: bundle.metadata
   };
   assertValidBundle(whitelisted);
-  return JSON.stringify(whitelisted);
+  const serialized = JSON.stringify(whitelisted);
+  if (new TextEncoder().encode(serialized).byteLength > MAX_ANALYSIS_BUNDLE_BYTES) throw new Error("AnalysisBundle exceeds 16 MiB.");
+  return serialized;
 }
 
 export function deserializeCs2dAnalysisBundle(serialized: string): Cs2dAnalysisBundle {
+  if (new TextEncoder().encode(serialized).byteLength > MAX_ANALYSIS_BUNDLE_BYTES) throw new Error("AnalysisBundle exceeds 16 MiB.");
   let parsed: unknown;
   try {
     parsed = JSON.parse(serialized);

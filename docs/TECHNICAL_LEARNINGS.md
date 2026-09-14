@@ -6,7 +6,7 @@
 > - 产品目标与范围以 [PRD.md](../PRD.md) 和 [MVP_SCOPE.md](../MVP_SCOPE.md) 为准。
 > - 本文记录「为什么做这个选择」「实际踩到了什么问题」「如何验证」；它可以解释架构，但不能覆盖架构契约。
 >
-> 最后更新：2026-08-31
+> 最后更新：2026-09-14
 
 ## 1. 维护规则
 
@@ -1388,6 +1388,46 @@ Migration 006 为 Revision 增加 `artifact_contract_version`：既有行默认 
 **限制 / 下一步**
 
 当前 Viewer WASM parser 仍把完整 Blob 转为 ArrayBuffer；上述 RSS 只测 sidecar raw transport/publish，不代表 WebView parser 增量内存，也不证明更大文件的 RSS 常量界。无头历史测试的 Artifact 是 validator-backed deterministic fixture，不等于本轮重新跑完真实 CS-Net/Director/Narrator；真实用户数据库中的 20-cue v1 Review 与数据仍保留。修复 migration 006 并重启最新 App 后 macOS 再次锁屏，因此该真实 v1 Review 的最终可见 re-click 未完成；不能绕过锁屏，但相同兼容路径已有真实领域 fixture、实际数据库 migration/integrity 与新 v2 WebKit 纵向链路证据。没有在真实用户库点击任何删除或重新分析操作。更深 CUE_PAUSED/WRAP_UP 由状态机、SQLite 和 Artifact 测试覆盖，而非本轮手工看完整场。
+
+### 4.58 2026-09-14：合法引用不等于可信判断，具体建议必须先验证适用条件
+
+**触发 / 根因**
+
+真实 `test_demo.dem` 的旧确定性链路在十名玩家175个教学点中出现8条依赖已阵亡队友的建议。`povergo` 第1回合只剩2 HP、四名队友已阵亡，仍被建议让高血量队友先接触；同一真实模型窗口的胜率由11%升到24%，旧候选层却未把它纳入反证。原先仅采集所选玩家，死亡/掉血直接转成行为文字，再按局部资源套战术模板；合法引用验证只能证明ID存在，无法证明文案含义或建议前提。
+
+**决定**
+
+在原 contracts、adapter 与 review-planner 中增加可信上下文和适用性门，不增加Parser或基础设施。每个候选在Replay所有者内读取必要十人局面，输出一个有界快照；隐藏位置不跨界，全知信息只作否决。观察主张保持决策前、来源、有效期和置信度。事件只证明事件；正式行为判断必须有独立过程证据，结果变化仅作影响和反证。具体建议来自固定目录，逐项前提检查决定适用、拒绝或不可验证；未获批准时不用另一个通用战术替代。
+
+Director只选已经通过门的候选和重点，Compiler重验。Narrator与总结采用封闭的已验证语义投影，未经证明的自由改写被拒绝。没有可靠过程证据的真实窗口保留少量明确的反思或显式带过，不为数量或习惯标签编造错误。Reflection使用有来源的存活队友计数，区分零与未知；用户意图仍是用户补充，不因条件失败自动判其决策错误。
+
+**集成中新增发现**
+
+- 新增观察上下文带入可选undefined字段会改变序列化形状；不能通过修改全局哈希算法解决，否则旧历史失效。只规范化新增紧凑上下文，保留历史哈希语义。
+- 1.5缺快照但保留publicFacts的包可以绕过检查，即使哈希有效；新版本必须完整绑定，1.4只允许旧字段全部缺失的兼容形状。
+- 旧Narration/CueCase须作为不可变历史恢复，但呈现必须安全降级，不能把旧战术文案当作新门已经批准的建议。
+- 没有离散swing的正向结果必须从严格结果窗口采样生成测量引用，不能等到OutcomeImpact才发现反证。
+- 实际组件仍能把TRADE直接输出给用户；新增真实React渲染测试，而非只测文案辅助函数。Vitest只增加自动JSX变换支持该回归。
+- 快速降级讲解在异步保存恢复记录期间就绪，可能被旧initialSession覆盖，导致第三点永久BUFFERING。激活前经Session reducer合并最新同路线就绪状态，并再次检查generation，拒绝迟到旧会话启动。
+- 真实刷新恢复暴露独立握手漏洞：诊断面板跳过视觉START_CUE，但此前普通段已写入Agent，因此反思无法走fresh bootstrap，只有本地诊断而无匹配检查点。反思前通过现有串行控制器发送零工具能力的START_CUE，仅同步身份和路线；不执行播放效果、不改Graph规则。非起点恢复记录必须匹配检查点才可覆盖上一个稳定边界，握手期间禁止普通稳定写入覆盖恢复状态。匹配重连后经Session reducer恢复已有诊断，不能让用户重新回答已完成反思。
+
+**落点**
+
+长期契约为ARCHITECTURE5.6；实现落在decision-context contracts、adapter snapshot/validator、teaching-gates、candidate-generator、Narration双包/严格语义校验、Director、Reflection、最小呈现、历史安全投影和Session激活seam。PRD/MVP_SCOPE及用户原有docs/prompts保持不变。详细证据见[可信决策验收](./validation/TRUSTED_DECISIONS_2026-09-14.md)。
+
+**验证**
+
+最终 `pnpm check`：127文件通过、2文件跳过，938测试通过、4测试跳过；TypeScript与Next生产构建通过。最后纯文案调整另跑 `pnpm build`；Viewer的 `pnpm cs2d:typecheck`、`pnpm cs2d:build` 通过。新增自动化覆盖请求的十个场景和上述集成漏洞，未减少旧门控/恢复断言。
+
+真实WASM单次解析后遍历十个分析主体，2,694条断言验证每人9回合、快照/候选一一对应、字节上限、全文案与引用。真实Edge使用生产Next和既有桌面Viewer资源处理器，从File解析、选povergo、本地WebGPU FP16的7,239样本到4/4讲解与第9回合结束均通过；四个结果窗口均实际播放，反思、跳过与Next通过，11%→24%已进入候选反证。实际两份1.4历史（11点和20点）的31份讲解只读校验保持路线/哈希不变。
+
+额外真实刷新恢复通过：保存非空且匹配的c1检查点，刷新后DORMANT不触发模型请求，同Demo重解析后RECONNECT_REPLAY返回MATCHED、routeCursor 2、c1诊断。前后均为povergo、canonical 8969、路线fnv1a-4d4ca391；已完成反思原样显示，不再次追问。没有重跑Director，恢复后仅续跑1条待处理Narrator。此证据限同一服务生命周期的localhost MEMORY检查点，不等于桌面服务冷重启验收。
+
+通用预览服务器两次在构建base/绝对资源路径边界失败后停止叠加补丁，改用生产资源处理器并先验证地图/模型/WASM；一个控制器始终拥有浏览器和服务并清理。没有把仅通过前两条讲解的中途结果当作全场验收。
+
+**限制 / 下一步**
+
+当前解析结果仍缺少可靠LOS/声学/语音、伤害来源、补枪时机、道具用途、可达掩体和剩余计时，具体建议因此保持不可验证；正式正向/执行/被迫分类已有过程证据门，但不能称此Demo已经具备这些确定判断。模型自由改写目前受封闭语义限制；未使用真实DeepSeek凭据，本地HTTP降级和模拟Provider输出均经过验证。真实PostgreSQL三项与旧Pixi Falcons一项保持原有opt-in跳过。本轮不发布或替换用户安装包；生产策略拒绝旧PWA注册的404及ORT的CPU shape节点提示保持诊断记录，不称纯GPU或零控制台诊断。
 
 ## 5. 常用问题排查表
 

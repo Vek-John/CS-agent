@@ -13,9 +13,22 @@ const manifest = {
   candidateGeneratorVersion: "fixture-generator/1"
 } as const;
 
+function decisionSnapshot(decisionTick: number): import("@cs-coach/contracts").DecisionSnapshot {
+  const unknown = { value: null, boundary: "OBSERVABLE" as const, evidenceRefs: [], limitations: [] };
+  return {
+    version: "decision-snapshot.v1", snapshotId: "snapshot-test", roundNumber: 1,
+    selectedPlayerId: "p-user", decisionTick, sampledAtTick: decisionTick,
+    selectedPlayer: unknown,
+    aliveCounts: { ...unknown, value: { allies: 1, enemies: 3, includesSelectedPlayer: true } },
+    players: [], score: unknown, clock: unknown, bomb: unknown,
+    supportChecks: [], pressureChecks: [], spatialChecks: [], missingFields: [], limitations: [],
+  };
+}
+
 function candidate(): TeachingCandidate {
   return {
     candidateId: "candidate-final",
+    decisionSnapshot: decisionSnapshot(900),
     roundNumber: 1,
     source: { kind: "DEATH", refs: ["source-death"] },
     preRollStart: 800,
@@ -110,8 +123,8 @@ function impactMaterial(candidate: TeachingCandidate): CandidateSet["materials"]
   return {
     candidateId,
     decisionFacts: [{ id: decisionId, text: "决策事实", availability: "DECISION", available_at_tick: 100, source: "DEMO", observed_by_player: true }],
-    playerActionFacts: [{ id: actionId, text: "玩家动作", actorPlayerId: timeline.selected_player_id, availableAtTick: 100, source: "DEMO", evidenceRefs: [`source-${candidateId}`], limitations: [] }],
-    outcomeFacts: [{ id: outcomeId, text: "结果事实", availableAtTick: 200, source: "DEMO", outcomeKind: "DEATH", evidenceRefs: [`source-${candidateId}`], limitations: [] }],
+    playerActionFacts: [{ id: actionId, text: "玩家动作", actorPlayerId: timeline.selected_player_id, availableAtTick: candidate.decisionTick, source: "DEMO", evidenceRefs: [`source-${candidateId}`], limitations: [] }],
+    outcomeFacts: [{ id: outcomeId, text: "结果事实", availableAtTick: candidate.revealTick, source: "DEMO", outcomeKind: "DEATH", evidenceRefs: [`source-${candidateId}`], limitations: [] }],
     inferences: [],
     advice: [],
     evidence: [{ id: evidenceId, source: "DEMO", label: "证据", fact_refs: [decisionId] }],
@@ -134,7 +147,7 @@ describe("CandidateSet-backed narration package builder", () => {
     const cue = compiledCue(set);
     expect(() => buildCoachingPackage(cue, set, [{ ...observableState, id: "observable-wrong" }])).toThrow(/missing ObservableState/);
     expect(() => buildCoachingPackage({ ...cue, observable_state_id: "observable-wrong" }, set, [observableState])).toThrow(/wrong ObservableState/);
-    expect(() => buildCoachingPackage({ ...cue, advice: [{ ...cue.advice[0], id: "decision-fact" }] }, set, [observableState])).toThrow(/overlaps/);
+    expect(buildCoachingPackage({ ...cue, advice: [{ id: "decision-fact", text: "让队友先接触", trigger: "现在", fact_refs: ["decision-fact"] }] }, set, [observableState]).advice).toEqual([]);
   });
 
   it("keeps outcome package identity bound to the final cue candidate", () => {
@@ -170,7 +183,7 @@ describe("CandidateSet-backed narration package builder", () => {
       demoId: timeline.demo_id,
       playerId: timeline.selected_player_id,
       candidates: [first, second],
-      materials: [impactMaterial(first), impactMaterial(second)],
+      materials: [impactMaterial(first), { ...impactMaterial(second), contextCode: "DISTINCT_OBJECTIVE_CONTEXT" }],
       generationManifest: manifest
     });
     const plan = compileReviewPlan({ timeline, candidateSet: set, directorDecisionSet: deterministicDirectorFallback(set), planId: "impact-order-plan", observationVersion: manifest.observationVersion, signalVersion: manifest.signalVersion, plannerVersion: "fixture-planner/1" }).plan;
@@ -211,7 +224,7 @@ describe("CandidateSet-backed narration package builder", () => {
       materials: [impactMaterial(flat)],
       generationManifest: manifest
     });
-    const cue = compiledCue(set);
+    const cue = compiledCue(set) ?? { ...compiledCue(setWithState().set), candidate_id: set.candidates[0].candidateId };
     const winTimeline: WinProbabilityTimelineV1 = {
       version: "win-probability-timeline.v1",
       status: "AVAILABLE",
@@ -291,4 +304,26 @@ describe("CandidateSet-backed narration package builder", () => {
     };
     expect(buildOutcomeImpactForCue(cue, set, unavailable, timeline, timeline.selected_player_id)).toBeUndefined();
   });
+});
+
+it("does not trust stamped applicability or stored assessment prose when packaging a cue", () => {
+  const { set, observableState } = setWithState();
+  const original = compiledCue(set);
+  const malicious = {
+    ...original,
+    assessment: { ...original.assessment!, kind: "DECISION_ERROR" as const, explanation: "你应该让高血量队友先接触。", hasEvaluableDecision: true },
+    advice: [{ id: "forged-advice", text: "让高血量队友先接触。", trigger: "现在", fact_refs: ["decision-fact"] }],
+  };
+  const pack = buildCoachingPackage(malicious, set, [observableState]);
+  expect(pack.advice).toEqual([]);
+  expect(pack.assessment?.kind).toBe("INSUFFICIENT_EVIDENCE");
+  expect(pack.assessment?.explanation).not.toContain("高血量队友");
+  expect(pack.decisionSnapshot).toBeUndefined();
+});
+
+it("excludes claims whose evidence arrives after the decision even if their availability was forged earlier", () => {
+  const { set, observableState } = setWithState();
+  const cue = compiledCue(set);
+  const poisoned = { ...observableState, claims: observableState.claims.map((claim) => ({ ...claim, evidence_tick: cue.decision_tick + 1 })) };
+  expect(buildCoachingPackage(cue, set, [poisoned]).decisionContext.claims).toEqual([]);
 });

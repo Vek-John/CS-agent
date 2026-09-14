@@ -51,11 +51,11 @@ function successContent() {
       cueId: "c1",
       candidateId: "k1",
       primaryFocusCode: FOCUS,
-      currentSituation: { text: "你在 B小，手持步枪。", refs: ["d1"] },
+      currentSituation: { text: "决策时你在 B小，手持步枪。", refs: ["d1"] },
       playerAction: { text: "你先从掩体拉出。", refs: ["a1"] },
-      coreIssue: { text: "重点是先活过这次接触。", refs: ["d1", "a1"] },
+      coreIssue: { text: "这段结果不足以判断当时的选择是否有问题。", refs: ["d1", "a1"] },
       betterPlay: { text: "先预瞄，等队友补枪再拉。", refs: ["v1", "e1"] },
-      outcomeImpact: { text: "这次接触后你被击杀，我方胜率下降。", refs: ["o1", "m1"] }
+      outcomeImpact: { text: "这次接触后你被击杀。 我方胜率下降 31 个百分点。", refs: ["o1", "m1"] }
     }
   });
 }
@@ -63,7 +63,7 @@ function successContent() {
 describe("DeepSeek five-field narrator provider", () => {
   it("accepts a single anonymous CoachingPackage+OutcomePackage and returns strict five fields", async () => {
     let seenInit: RequestInit | undefined;
-    const result = await narrateWithDeepSeek(sampleRequest(), { DEEPSEEK_API_KEY: SECRET }, async (_input, init) => {
+    const result = await narrateWithDeepSeek({ ...sampleRequest(), approvedNarration: JSON.parse(successContent()).bundle }, { DEEPSEEK_API_KEY: SECRET }, async (_input, init) => {
       seenInit = init;
       return completion(successContent());
     });
@@ -119,4 +119,40 @@ describe("DeepSeek five-field narrator provider", () => {
     expect(result.manifest.reason).toBe("UPSTREAM_SCHEMA");
     expect(() => parseNarrationRequest(sampleRequest())).not.toThrow();
   });
+});
+
+it.each([
+  ["betterPlay", "让高血量队友先接触，你跟着补枪。"],
+  ["betterPlay", "把手里的闪光丢出去再推进。"],
+  ["currentSituation", "你当时已经知道敌人在隐藏通道。"],
+  ["coreIssue", "你死了，所以这肯定是错误决策。"],
+  ["outcomeImpact", "胜率上升也说明你不该这样打。"],
+] as const)("rejects invented %s meaning even when every reference is valid", async (field, text) => {
+  const proposed = JSON.parse(successContent());
+  proposed.bundle[field].text = text;
+  const result = await narrateWithDeepSeek({ ...sampleRequest(), approvedNarration: JSON.parse(successContent()).bundle }, { DEEPSEEK_API_KEY: SECRET }, async () => completion(JSON.stringify(proposed)));
+  expect(result.status).toBe("FALLBACK");
+  expect(result.manifest.reason).toBe("UPSTREAM_SCHEMA");
+  expect(result.bundle[field].text).not.toBe(text);
+});
+
+it("allows uncertainty with no approved advice and no verified action", async () => {
+  const request = sampleRequest();
+  request.coachingPackage.playerAction = [];
+  request.coachingPackage.advice = [];
+  request.coachingPackage.allowedRefs.action = [];
+  request.coachingPackage.allowedRefs.advice = [];
+  expect(() => parseNarrationRequest(request)).not.toThrow();
+  const result = await narrateWithDeepSeek(request, {}, vi.fn());
+  expect(result.bundle.playerAction).toEqual({ text: "当前记录不足以确认具体行动意图。", refs: [] });
+  expect(result.bundle.betterPlay.text).toContain("不能确认");
+  expect(result.bundle.betterPlay.text).not.toMatch(/队友|撤退|掩体|闪光/);
+});
+
+it.each(["ObservationState", "renderer", "tick", "lossless", "TRADE", "refId", "schema", "focus", "pipeline", "fallback", "candidate"])("does not display internal term %s in model narration", async (term) => {
+  const proposed = JSON.parse(successContent());
+  proposed.bundle.coreIssue.text = `当前 ${term} 不能说明判断。`;
+  const result = await narrateWithDeepSeek({ ...sampleRequest(), approvedNarration: JSON.parse(successContent()).bundle }, { DEEPSEEK_API_KEY: SECRET }, async () => completion(JSON.stringify(proposed)));
+  expect(result.status).toBe("FALLBACK");
+  expect([result.bundle.currentSituation.text, result.bundle.playerAction.text, result.bundle.coreIssue.text, result.bundle.betterPlay.text, result.bundle.outcomeImpact.text].join(" ")).not.toContain(term);
 });

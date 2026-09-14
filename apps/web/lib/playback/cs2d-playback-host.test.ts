@@ -179,7 +179,8 @@ describe("cs2d localhost host boundary", () => {
       betterPlay: { text: "建议", refs: ["advice-r2-reset"] },
       outcomeImpact: { text: "结果", refs: ["fact-r2-outcome"] }
     } as const;
-    expect(hostCoachingCueSurface(cue, "PAUSED_FOR_COACHING", gate, prepared)?.narration).toEqual(prepared);
+    expect(hostCoachingCueSurface(cue, "PAUSED_FOR_COACHING", gate, prepared)?.narration?.coreIssue.text).toContain("历史记录尚未验证");
+    expect(hostCoachingCueSurface(cue, "REPLAYING", gate, prepared)).toBeUndefined();
   });
 
   it("normalizes the host flag and origin", () => {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { decisionSnapshotFixture } from "./teaching-gate-fixtures";
 import { createSyntheticMirageTimeline } from "@cs-coach/demo-domain";
 import type {
   CandidateMaterial,
@@ -102,7 +103,7 @@ function setOf(...items: TeachingCandidate[]): CandidateSet {
     demoId: "demo-fixture-mirage-v1",
     playerId: "p-user",
     candidates: items,
-    materials: items.map((item) => material(item.candidateId)),
+    materials: items.map((item) => ({ ...material(item.candidateId), decisionSnapshot: decisionSnapshotFixture(item.decisionTick, `fact-${item.candidateId}`) })),
     generationManifest: manifest
   });
 }
@@ -145,7 +146,7 @@ describe("CandidateGenerator → Director → PlanCompiler seam", () => {
     expect(deterministicDirectorFallback(first)).toEqual(deterministicDirectorFallback(second));
   });
 
-  it("keeps UNKNOWN/missing-field candidates selectable instead of treating them as low value", () => {
+  it("keeps a meaningful solo low-health reflection uncertain even when optional fields are missing", () => {
     const item = { ...candidate("unknown", 900, 1, 0), missingFields: ["economy", "action_precision"] };
     const set = setOf(item);
     const decision = deterministicDirectorFallback(set);

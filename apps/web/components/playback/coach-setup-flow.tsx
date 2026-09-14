@@ -62,7 +62,7 @@ export function CoachSetupFlow({ steps }: { steps: readonly CoachSetupStep[] }) 
           </li>
         ))}
       </ol>
-      <p className={styles.privacy}><ShieldCheck aria-hidden="true" />Demo 与逐帧回放只留在本机 Viewer</p>
+      <p className={styles.privacy}><ShieldCheck aria-hidden="true" />Demo 文件和比赛回放只保存在本机</p>
     </section>
   );
 }

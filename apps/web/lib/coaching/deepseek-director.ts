@@ -1,3 +1,4 @@
+import { type ObservableSituation, observableSituation, playerFacingLimitation } from "./decision-presentation";
 import type {
   CandidateSet,
   DirectorDecision,
@@ -9,6 +10,7 @@ import type {
 import { MAX_DIRECTOR_PACKET_CANDIDATES, MAX_TEACHING_CUES } from "@cs-coach/contracts";
 import {
   buildDirectorRequest,
+  buildGatedAdviceOptions,
   deterministicDirectorFallback
 } from "@cs-coach/review-planner";
 
@@ -18,7 +20,29 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_CANDIDATES = MAX_DIRECTOR_PACKET_CANDIDATES;
 const MAX_REQUEST_BYTES = 48 * 1024;
 const ALLOWED_MODELS = new Set(["deepseek-v4-flash", "deepseek-v4-pro"]);
-export const DEEPSEEK_DIRECTOR_PROMPT_VERSION = "deepseek-teaching-director/1.0.2";
+export const DEEPSEEK_DIRECTOR_PROMPT_VERSION = "deepseek-teaching-director/2.0.0";
+
+interface DecisionSummary {
+  situation: ObservableSituation;
+  observable_facts: string[];
+  hypotheses: Array<{ kind: string; confidence: number; supporting_refs: string[]; counter_evidence_count: number; limitations: string[]; permitted_judgment: boolean; reflection_only: boolean }>;
+  assessment: { kind: string; confidence: number; explanation: string; counter_evidence_count: number };
+  approved_advice: Array<{ code: string; text: string; status: "APPLICABLE"; confidence: number }>;
+}
+
+function parseDecisionSummary(value: unknown): DecisionSummary {
+  if (!isRecord(value) || !exactKeys(value, ["situation", "observable_facts", "hypotheses", "assessment", "approved_advice"])) throw new DirectorValidationError("Decision summary shape is invalid.");
+  const situation = value.situation;
+  const strings = (items: unknown, max = 24): items is string[] => Array.isArray(items) && items.length <= max && items.every((item) => safeText(item, 800));
+  const confidence = (item: unknown): item is number => finite(item) && item >= 0 && item <= 1;
+  const count = (item: unknown) => finite(item) && Number.isInteger(item) && item >= 0;
+  if (!isRecord(situation) || !exactKeys(situation, ["allies", "enemies", "health", "armor", "money", "phase", "remainingSeconds", "objective", "confidence", "limitations"]) || !["allies", "enemies", "health", "armor", "money", "remainingSeconds"].every((key) => situation[key] === null || finite(situation[key])) || ![null, "FREEZE", "LIVE", "POST_ROUND", "UNKNOWN"].includes(situation.phase as null) || ![null, "NOT_CARRIED", "CARRIED", "DROPPED", "PLANTED", "DEFUSED", "EXPLODED", "UNKNOWN"].includes(situation.objective as null) || !confidence(situation.confidence) || !strings(situation.limitations)) throw new DirectorValidationError("Observable situation is invalid.");
+  if (!strings(value.observable_facts) || !Array.isArray(value.hypotheses) || value.hypotheses.length > 12 || !value.hypotheses.every((item) => isRecord(item) && exactKeys(item, ["kind", "confidence", "supporting_refs", "counter_evidence_count", "limitations", "permitted_judgment", "reflection_only"]) && safeText(item.kind, 120) && confidence(item.confidence) && strings(item.supporting_refs) && item.supporting_refs.every((ref) => /^[re]\d+$/.test(ref)) && count(item.counter_evidence_count) && strings(item.limitations) && typeof item.permitted_judgment === "boolean" && typeof item.reflection_only === "boolean")) throw new DirectorValidationError("Decision hypotheses are invalid.");
+  const assessment = value.assessment;
+  if (!isRecord(assessment) || !exactKeys(assessment, ["kind", "confidence", "explanation", "counter_evidence_count"]) || !["DECISION_ERROR", "EXECUTION_ISSUE", "POSITIVE_PROCESS", "FORCED_CHOICE", "INSUFFICIENT_EVIDENCE", "NO_TEACHING_VALUE"].includes(String(assessment.kind)) || !confidence(assessment.confidence) || !safeText(assessment.explanation, 800) || !count(assessment.counter_evidence_count)) throw new DirectorValidationError("Assessment is invalid.");
+  if (!Array.isArray(value.approved_advice) || value.approved_advice.length > 16 || !value.approved_advice.every((item) => isRecord(item) && exactKeys(item, ["code", "text", "status", "confidence"]) && safeText(item.code, 120) && safeText(item.text, 800) && item.status === "APPLICABLE" && confidence(item.confidence))) throw new DirectorValidationError("Approved advice is invalid.");
+  return value as unknown as DecisionSummary;
+}
 
 export interface DirectorProviderCandidate {
   candidate_id: string;
@@ -30,6 +54,7 @@ export interface DirectorProviderCandidate {
   evidence_refs: string[];
   result_summary: CandidateResultSummary;
   allowed_focus_codes: string[];
+  decision_summary?: DecisionSummary;
 }
 
 export interface DirectorProviderRequest {
@@ -121,10 +146,12 @@ function safeText(value: unknown, max = 500): value is string {
 }
 
 function parseProviderCandidate(value: unknown): DirectorProviderCandidate {
-  if (!isRecord(value) || !exactKeys(value, ["candidate_id", "source_kind", "deterministic_score", "missing_fields", "limitations", "reason_refs", "evidence_refs", "result_summary", "allowed_focus_codes"])) throw new DirectorValidationError("Director candidate summary shape is invalid.");
+  if (!isRecord(value) || !exactKeys(value, ["candidate_id", "source_kind", "deterministic_score", "missing_fields", "limitations", "reason_refs", "evidence_refs", "result_summary", "allowed_focus_codes", ...(value.decision_summary === undefined ? [] : ["decision_summary"])])) throw new DirectorValidationError("Director candidate summary shape is invalid.");
   if (!alias(value.candidate_id, "c") || !["DEATH", "KILL", "BOMB", "UTILITY", "HP_CHANGE", "WIN_RATE_DROP"].includes(String(value.source_kind)) || !finite(value.deterministic_score) || !Array.isArray(value.missing_fields) || !Array.isArray(value.limitations) || !Array.isArray(value.reason_refs) || !Array.isArray(value.evidence_refs) || !isRecord(value.result_summary) || !Array.isArray(value.allowed_focus_codes)) throw new DirectorValidationError("Director candidate summary contains invalid fields.");
   if (!value.missing_fields.every((item) => typeof item === "string") || !value.limitations.every((item) => typeof item === "string") || !value.reason_refs.every((item) => alias(item, "r")) || !value.evidence_refs.every((item) => alias(item, "e")) || !value.allowed_focus_codes.every((item) => typeof item === "string" && item.length <= 120)) throw new DirectorValidationError("Director candidate summary contains invalid refs or focus codes.");
   const summary = value.result_summary;
+  const summaryKeys = ["selectedPlayerDeath", "economyClass", "concurrentEvents", "missingFields", "limitations", ...["winProbabilityBefore", "winProbabilityAfter", "winProbabilityDelta", "winProbabilityPercentagePoints"].filter((key) => summary[key] !== undefined)];
+  if (!exactKeys(summary, summaryKeys) || !["winProbabilityBefore", "winProbabilityAfter", "winProbabilityDelta", "winProbabilityPercentagePoints"].every((key) => summary[key] === undefined || finite(summary[key]))) throw new DirectorValidationError("Director result summary has unapproved data.");
   if (typeof summary.selectedPlayerDeath !== "boolean" || !["PISTOL", "ECO", "FORCE", "FULL", "UNKNOWN"].includes(String(summary.economyClass)) || typeof summary.concurrentEvents !== "boolean" || !Array.isArray(summary.missingFields) || !Array.isArray(summary.limitations)) throw new DirectorValidationError("Director result summary is invalid.");
   return {
     candidate_id: value.candidate_id,
@@ -135,7 +162,8 @@ function parseProviderCandidate(value: unknown): DirectorProviderCandidate {
     reason_refs: [...value.reason_refs],
     evidence_refs: [...value.evidence_refs],
     result_summary: summary as unknown as CandidateResultSummary,
-    allowed_focus_codes: [...value.allowed_focus_codes]
+    allowed_focus_codes: [...value.allowed_focus_codes],
+    ...(value.decision_summary === undefined ? {} : { decision_summary: parseDecisionSummary(value.decision_summary) })
   };
 }
 
@@ -216,18 +244,40 @@ export function buildDirectorProviderRequestContext(set: CandidateSet, maxSelect
     summary.reasonRefs.forEach((ref, refIndex) => { reasonByAlias[`r${refIndex + 1}`] = ref; });
     summary.evidenceRefs.forEach((ref, refIndex) => { evidenceByAlias[`e${refIndex + 1}`] = ref; });
     candidateByAlias[candidateAlias] = { candidateId: summary.candidateId, reasonByAlias, evidenceByAlias };
+    const material = set.materials.find((item) => item.candidateId === summary.candidateId);
+    const candidate = set.candidates.find((item) => item.candidateId === summary.candidateId)!;
+    const semantics = { ...candidate, ...material };
+    const refAliases = Object.fromEntries([...Object.entries(reasonByAlias), ...Object.entries(evidenceByAlias)].map(([alias, real]) => [real, alias]));
+    const assessment = summary.assessment;
     return {
       candidate_id: candidateAlias,
       source_kind: summary.sourceKind,
       deterministic_score: summary.deterministicScore,
-      missing_fields: [...summary.missingFields],
-      limitations: [...summary.limitations],
+      missing_fields: [...new Set(summary.missingFields.map(playerFacingLimitation))],
+      limitations: [...new Set(summary.limitations.map(playerFacingLimitation))],
       reason_refs: Object.keys(reasonByAlias),
       evidence_refs: Object.keys(evidenceByAlias),
-      result_summary: summary.resultSummary,
+      result_summary: {
+        selectedPlayerDeath: summary.resultSummary.selectedPlayerDeath,
+        economyClass: summary.resultSummary.economyClass,
+        concurrentEvents: summary.resultSummary.concurrentEvents,
+        ...(summary.resultSummary.winProbabilityBefore === undefined ? {} : { winProbabilityBefore: summary.resultSummary.winProbabilityBefore }),
+        ...(summary.resultSummary.winProbabilityAfter === undefined ? {} : { winProbabilityAfter: summary.resultSummary.winProbabilityAfter }),
+        ...(summary.resultSummary.winProbabilityDelta === undefined ? {} : { winProbabilityDelta: summary.resultSummary.winProbabilityDelta }),
+        missingFields: summary.resultSummary.missingFields.map(playerFacingLimitation),
+        limitations: summary.resultSummary.limitations.map(playerFacingLimitation),
+      },
+      decision_summary: {
+        situation: observableSituation(semantics),
+        observable_facts: [...(semantics.observableContext?.publicFacts ?? []), ...(material?.decisionFacts ?? []).filter((fact) => fact.observed_by_player && fact.availability === "DECISION" && fact.available_at_tick <= candidate.decisionTick && candidate.factRefs.includes(fact.id)).slice(0, 12).map((fact) => fact.text)].slice(0, 24),
+        hypotheses: (semantics.behaviorHypotheses ?? []).slice(0, 12).map((hypothesis) => ({ kind: hypothesis.kind, confidence: hypothesis.confidence, supporting_refs: hypothesis.supportingEvidenceRefs.map((ref) => refAliases[ref]).filter(Boolean).slice(0, 24), counter_evidence_count: hypothesis.counterEvidenceRefs.length, limitations: hypothesis.limitations.map(playerFacingLimitation).slice(0, 24), permitted_judgment: hypothesis.allowedAsTeachingJudgment, reflection_only: hypothesis.reflectionOnly })),
+        assessment: { kind: assessment?.kind ?? "INSUFFICIENT_EVIDENCE", confidence: assessment?.confidence ?? 0, explanation: assessment?.explanation ?? "证据不足，无法评价这次选择。", counter_evidence_count: assessment?.counterEvidenceRefs.length ?? 0 },
+        approved_advice: (material ? buildGatedAdviceOptions(candidate, material) : []).filter((option) => option.applicability?.status === "APPLICABLE" && option.applicability.allowedIntoNarrator).slice(0, 16).map((option) => ({ code: option.code, text: option.text, status: "APPLICABLE" as const, confidence: option.confidence })),
+      },
       allowed_focus_codes: [...summary.allowedFocusCodes]
     } satisfies DirectorProviderCandidate;
   });
+  while (candidates.length > 0 && new TextEncoder().encode(JSON.stringify(candidates)).byteLength > MAX_REQUEST_BYTES - 1024) candidates.pop();
   return {
     request: {
       candidate_set_id: "candidate-set-anonymous",
@@ -244,7 +294,7 @@ function fallbackProviderResult(request: DirectorProviderRequest, reason: string
   const selected = [...request.candidates].sort((left, right) => right.deterministic_score - left.deterministic_score || left.candidate_id.localeCompare(right.candidate_id)).slice(0, request.max_selected).map((candidate, index) => ({
     candidate_id: candidate.candidate_id,
     priority: index + 1,
-    primary_focus_code: focusFor(candidate.source_kind),
+    primary_focus_code: candidate.allowed_focus_codes[0] ?? "INSUFFICIENT_EVIDENCE",
     selection_reason: "模型不可用，按确定性候选分数回退。",
     reason_refs: candidate.reason_refs.slice(0, 3),
     evidence_refs: candidate.evidence_refs.slice(0, 3),
@@ -273,7 +323,7 @@ function systemPrompt(): string {
     "Each selection has exactly one primary_focus_code.",
     "Do not emit ticks, frames, segments, order, route, player identity, or final coaching prose.",
     "Keep selection_reason concise and grounded in supplied refs.",
-    "Do not select a KILL candidate unless its supplied result summary shows a meaningful negative selected-side win-probability swing; a successful kill with a rising or absent swing is playback context, not a coaching stop."
+    "Decision summaries are bounded by player-observable evidence. Select only allowed_focus_codes and approved_advice; never invent tactics or treat death, damage, utility use, or a bad result as proof of bad decisions. Result summaries are outcome-only counterevidence, never player knowledge. Respect uncertainty and positive or forced-choice assessments. An empty selection is valid."
   ].join(" ");
 }
 

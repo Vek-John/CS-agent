@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { deterministicSessionWrapUpResult } from "@cs-coach/coach-agent/client";
 import type { SessionWrapUpBuildInput, SessionWrapUpRequest } from "@cs-coach/coach-agent";
 import {
   directSessionWrapUp,
@@ -103,7 +104,7 @@ describe("DeepSeek Session Wrap-Up adapter", () => {
         requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
         return new Response(JSON.stringify({
           status: "SUCCEEDED",
-          bundle: successBundle(),
+          bundle: deterministicSessionWrapUpResult(requestBody as unknown as SessionWrapUpRequest, "TEST").bundle,
           manifest: { status: "SUCCEEDED", provider: "DEEPSEEK", model: "deepseek-v4-flash", limitations: [] },
         }), { status: 200, headers: { "content-type": "application/json" } });
       },
@@ -152,6 +153,16 @@ describe("DeepSeek Session Wrap-Up adapter", () => {
     await expect(directSessionWrapUp(anonymousRequest(), {})).resolves.toMatchObject({ status: "FALLBACK", manifest: { reason: "MISSING_API_KEY" } });
     await expect(directSessionWrapUp(anonymousRequest(), { DEEPSEEK_API_KEY: "secret" }, async () => { throw new DOMException("timeout", "AbortError"); })).resolves.toMatchObject({ status: "FALLBACK", manifest: { reason: "TIMEOUT" } });
     await expect(directSessionWrapUp(anonymousRequest(), { DEEPSEEK_API_KEY: "secret" }, async () => completion({}, "stop"))).resolves.toMatchObject({ status: "FALLBACK", manifest: { reason: "UPSTREAM_SCHEMA" } });
-    await expect(directSessionWrapUp(anonymousRequest(), { DEEPSEEK_API_KEY: "secret" }, async () => completion(successBundle("c2")))).resolves.toMatchObject({ status: "SUCCEEDED", manifest: { provider: "DEEPSEEK" } });
+    await expect(directSessionWrapUp(anonymousRequest(), { DEEPSEEK_API_KEY: "secret" }, async () => completion(deterministicSessionWrapUpResult(anonymousRequest(), "TEST").bundle))).resolves.toMatchObject({ status: "SUCCEEDED", manifest: { provider: "DEEPSEEK" } });
   });
+});
+
+it.each(["summary", "trainingAdvice"] as const)("rejects newly invented %s even with valid wrap-up refs", async (field) => {
+  const request = anonymousRequest();
+  const malicious = structuredClone(deterministicSessionWrapUpResult(request, "TEST").bundle);
+  malicious.themes[0][field].text = "每次低血量都让高血量队友先接触，你跟着补枪。";
+  const result = await directSessionWrapUp(request, { DEEPSEEK_API_KEY: "secret" }, async () => completion(malicious));
+  expect(result.status).toBe("FALLBACK");
+  expect(result.manifest.reason).toBe("UPSTREAM_SCHEMA");
+  expect(result.bundle.themes[0][field].text).not.toContain("高血量队友");
 });

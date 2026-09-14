@@ -6,6 +6,7 @@ import {
   type CoachAgentResult,
 } from "@cs-coach/coach-agent/client";
 import type {
+  PlaybackCommand,
   CandidateMaterial,
   CoachingRouteState,
   OutcomeImpact,
@@ -483,4 +484,67 @@ describe("CoachAgentStage3HostAdapter", () => {
     expect(first.capabilities.map((capability) => capability.capabilityId)).toEqual(second.capabilities.map((capability) => capability.capabilityId));
     expect(adapter.lifecycleCursor).toBe(-1);
   });
+});
+
+it("binds a reflected cue after ordinary route observers without visual Policy, tools, or Session advancement", async () => {
+  const { createCoachAgentRuntime, FakePolicyAdapter } = await import("@cs-coach/coach-agent");
+  const { buildTeachingDiagnosisSubmissionEvent } = await import("./teaching-diagnosis-host");
+  const { checkpointForRecoveryBoundary } = await import("../recovery/cs2d-session-recovery");
+  const fixture = fixtureInput();
+  fixture.narration.playerAction = { text: "当前记录不足以确认具体行动意图。", refs: [] };
+  const policy = new FakePolicyAdapter({ failure: new Error("reflection must not call visual Policy") });
+  const runtime = createCoachAgentRuntime({ policy });
+  const adapter = new CoachAgentStage3HostAdapter();
+  const posted: PlaybackCommand[] = [];
+  const dispatched: CoachAgentEvent[] = [];
+  const controller = new CoachAgentStage3Controller({
+    adapter, dispatch: async (event) => { dispatched.push(event); return runtime.dispatch(event); },
+    post: (command) => { posted.push(command); return true; }, bridgeAvailable: () => true, isLive: () => true,
+  });
+  controller.observeSegment(fixture, fixture.plan.segments[0].id, 0, "SKIP", "SKIPPING");
+  await controller.synchronizeDiagnosis(fixture);
+  const identity = buildStage3StartCue(fixture).event.identity;
+  const reflected = await runtime.dispatch(buildTeachingDiagnosisSubmissionEvent({
+    plan: fixture.plan, cue: fixture.cue, selectedPlayerId: fixture.selectedPlayerId,
+  }, { cueId: fixture.cue.id, selectedGoal: "TRADE", source: "USER", response: "ANSWERED", limitations: [] }, {
+    eventType: "SUBMIT_REFLECTION", eventId: "reflection-after-observers", identity,
+  }));
+  expect(reflected.state.cueCases[fixture.cue.id]).toBeDefined();
+  const segmentIndex = fixture.plan.segments.findIndex((segment) => segment.id === fixture.cue.segment_id);
+  expect(checkpointForRecoveryBoundary({ checkpointId: reflected.checkpoint.checkpointId, activeCueId: reflected.state.activeCueId, currentSessionPhase: reflected.state.currentSessionPhase, routeCursor: reflected.state.routeCursor, sessionStatus: reflected.state.sessionStatus }, {
+    kind: "CUE_PAUSED", boundaryId: "paused-boundary", segmentId: fixture.cue.segment_id, segmentIndex, cueId: fixture.cue.id, sessionPhase: "PAUSED_FOR_COACHING", outcomeGateStatus: "COMPLETE",
+  })).toBe(reflected.checkpoint.checkpointId);
+  expect(dispatched.find((event) => event.type === "START_CUE")).toMatchObject({ capabilities: [] });
+  expect(posted).toEqual([]);
+  expect(policy.calls).toEqual([]);
+  expect(reflected.state.outcomeGateStatus).toBe("COMPLETE");
+  expect(reflected.state.currentSessionPhase).toBe("PAUSED_FOR_COACHING");
+  expect(reflected.state.fallbackReasons).not.toContain("DIAGNOSIS_GATE_LOCKED");
+});
+
+it("abandons delayed diagnosis binding after the generation is invalidated without posting effects", async () => {
+  const { createCoachAgentRuntime, FakePolicyAdapter } = await import("@cs-coach/coach-agent");
+  const fixture = fixtureInput();
+  const runtime = createCoachAgentRuntime({ policy: new FakePolicyAdapter({ failure: new Error("no policy") }) });
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => { release = resolve; });
+  let startRequested!: () => void;
+  const started = new Promise<void>((resolve) => { startRequested = resolve; });
+  let live = true;
+  const posted: PlaybackCommand[] = [];
+  const controller = new CoachAgentStage3Controller({
+    adapter: new CoachAgentStage3HostAdapter(),
+    dispatch: async (event) => {
+      if (event.type === "START_CUE") { startRequested(); await wait; }
+      return runtime.dispatch(event);
+    },
+    post: (command) => { posted.push(command); return true; }, bridgeAvailable: () => true, isLive: () => live,
+  });
+  const result = controller.synchronizeDiagnosis(fixture);
+  await started;
+  live = false;
+  controller.reset();
+  release();
+  expect(await result).toBeUndefined();
+  expect(posted).toEqual([]);
 });
