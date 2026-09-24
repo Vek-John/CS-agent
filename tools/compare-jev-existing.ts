@@ -64,8 +64,8 @@ export function parseHistory(input: unknown): History {
     assert.equal(row.requestedModel, V.model); assert.equal(row.returnedModel, V.model); assert.equal(row.status, "SUCCEEDED");
     assert.equal(row.whitelistPassed, true);
     for (const name of ["bodySha256", "stateSha256"]) assert(typeof row[name] === "string" && /^[0-9a-f]{64}$/.test(row[name]));
-    assert([V.questions, V.questionsReturnAndFire].includes(row.questionVersion));
-    assert([V.projection, V.projectionWithUserContext, V.projectionWithReturnAndFire].includes(row.projectionVersion));
+    assert([V.questions, V.questionsReturnAndFire, V.questionsWithWitnesses].includes(row.questionVersion));
+    assert([V.projection, V.projectionWithUserContext, V.projectionWithReturnAndFire, V.projectionWithObservationSemantics].includes(row.projectionVersion));
     assert(["WARRANTED", "UNWARRANTED", "UNKNOWN"].includes(row.choices?.riskWarranted));
     assert(["PREFERABLE", "NOT_ESTABLISHED", "UNKNOWN"].includes(row.choices?.alternativePreferable));
     assert(["SUFFICIENT", "INSUFFICIENT"].includes(row.choices?.contextSufficient));
@@ -142,10 +142,15 @@ async function matchInChild(options: Options) {
       assertValidReviewPlan(bundle.match_timeline, bundle.review_plan);
       for (const candidate of bundle.candidate_set.candidates) {
         candidates++; const material = bundle.candidate_set.materials.find(m => m.candidateId === candidate.candidateId)!;
-        const built = buildDecisionAssessmentPacket(candidate, material, { mapName: replay.map, tickRate: bundle.match_timeline.tick_rate, playerId: player.steamId });
-        if (!built.packet) continue; eligible++;
-        const bodySha256 = hash(JSON.stringify(buildJevHttpBody(built.packet)));
-        if (wanted.has(bodySha256) && !found.has(bodySha256)) found.set(bodySha256, { bodySha256, packet: parseDecisionAssessmentPacket(built.packet), baselineAssessmentKind: assessCandidateTeaching(candidate, material).kind });
+        let isEligible = false;
+        for (const projectionVersion of new Set(history.rows.map(row => row.projectionVersion as DecisionAssessmentPacket["projectionVersion"]))) {
+          // Historical comparisons must retain their measured projection when the preparation default evolves.
+          const built = buildDecisionAssessmentPacket(candidate, material, { mapName: replay.map, tickRate: bundle.match_timeline.tick_rate, playerId: player.steamId, projectionVersion });
+          if (!built.packet) continue; isEligible = true;
+          const bodySha256 = hash(JSON.stringify(buildJevHttpBody(built.packet)));
+          if (wanted.has(bodySha256) && !found.has(bodySha256)) found.set(bodySha256, { bodySha256, packet: parseDecisionAssessmentPacket(built.packet), baselineAssessmentKind: assessCandidateTeaching(candidate, material).kind });
+        }
+        if (isEligible) eligible++;
       }
     }
     const matches = validateMatches(history, [...found.values()]);

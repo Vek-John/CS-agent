@@ -1,0 +1,321 @@
+{
+  "schemaVersion": "jev-real-smoke.v1",
+  "status": "PASS",
+  "generatedAt": "2026-09-24T06:45:32.037Z",
+  "source": "CANONICAL_DEMO",
+  "demoSha256": "84a1a4191302bdd2a3bbb5a727842093744b1fb1a228aeec630369e44b622cb2",
+  "inputBytes": 60601900,
+  "map": "de_mirage",
+  "parserWasmSha256": "5ba3c62319d2f24cb6bc60e031ed0e9e39f0d11bd6e5b641c19bf804e16b7242",
+  "parserJsSha256": "1d43484106b25a25d82a986525427f904d045125c730deaf51758559541ffbda",
+  "samplingHz": 8,
+  "parseInvocations": 1,
+  "parseMs": 5924,
+  "elapsedMs": 8029,
+  "heapLimitMiB": 1536,
+  "peakRssBytes": 558448640,
+  "deadlineMs": 600000,
+  "decisionAssessmentVersions": {
+    "projection": "decision-assessment-projection.v1",
+    "projectionWithUserContext": "decision-assessment-projection.v2",
+    "projectionWithReturnAndFire": "decision-assessment-projection.v3",
+    "questionsReturnAndFire": "return-and-fire-questions.v1",
+    "questions": "recontact-questions.v1",
+    "projectionWithObservationSemantics": "decision-assessment-projection.v4",
+    "questionsWithWitnesses": "decision-evidence-questions.v2",
+    "acceptance": "recontact-acceptance.v1",
+    "artifact": "decision-assessment.v1",
+    "model": "jev-1.13.0"
+  },
+  "players": 10,
+  "rounds": 9,
+  "playerRoundObservations": 90,
+  "candidates": 535,
+  "eligible": 8,
+  "rejected": 527,
+  "supportRate": 0.014953271028037384,
+  "rejectionReasons": {
+    "UNSUPPORTED_SCENARIO": 364,
+    "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 163
+  },
+  "signalCounts": {
+    "KILL": 62,
+    "HP_CHANGE": 234,
+    "DEATH": 62,
+    "UTILITY": 150,
+    "BOMB": 9,
+    "RETURN_AND_FIRE": 18
+  },
+  "actionPatternCounts": {
+    "RETURN_AND_FIRE": 18
+  },
+  "playerSummaries": [
+    {
+      "playerIndex": 1,
+      "rounds": 9,
+      "candidates": 58,
+      "cues": 2,
+      "segments": 31,
+      "explicitSkips": 18,
+      "bundleBytes": 5872113,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 29,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 29
+      },
+      "signalCounts": {
+        "KILL": 11,
+        "HP_CHANGE": 21,
+        "DEATH": 5,
+        "UTILITY": 19,
+        "BOMB": 2
+      },
+      "actionPatternCounts": {},
+      "buildMs": 253
+    },
+    {
+      "playerIndex": 2,
+      "rounds": 9,
+      "candidates": 63,
+      "cues": 2,
+      "segments": 31,
+      "explicitSkips": 18,
+      "bundleBytes": 6240686,
+      "eligible": 1,
+      "supportRate": 0.015873015873015872,
+      "rejectionReasons": {
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 21,
+        "UNSUPPORTED_SCENARIO": 41
+      },
+      "signalCounts": {
+        "HP_CHANGE": 23,
+        "DEATH": 4,
+        "UTILITY": 25,
+        "KILL": 9,
+        "RETURN_AND_FIRE": 2
+      },
+      "actionPatternCounts": {
+        "RETURN_AND_FIRE": 2
+      },
+      "buildMs": 239
+    },
+    {
+      "playerIndex": 3,
+      "rounds": 9,
+      "candidates": 66,
+      "cues": 1,
+      "segments": 29,
+      "explicitSkips": 18,
+      "bundleBytes": 6123796,
+      "eligible": 4,
+      "supportRate": 0.06060606060606061,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 28,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 34
+      },
+      "signalCounts": {
+        "RETURN_AND_FIRE": 5,
+        "HP_CHANGE": 30,
+        "KILL": 5,
+        "DEATH": 7,
+        "UTILITY": 19
+      },
+      "actionPatternCounts": {
+        "RETURN_AND_FIRE": 5
+      },
+      "buildMs": 224
+    },
+    {
+      "playerIndex": 4,
+      "rounds": 9,
+      "candidates": 67,
+      "cues": 3,
+      "segments": 33,
+      "explicitSkips": 18,
+      "bundleBytes": 6288816,
+      "eligible": 1,
+      "supportRate": 0.014925373134328358,
+      "rejectionReasons": {
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 26,
+        "UNSUPPORTED_SCENARIO": 40
+      },
+      "signalCounts": {
+        "HP_CHANGE": 22,
+        "KILL": 11,
+        "UTILITY": 29,
+        "DEATH": 4,
+        "RETURN_AND_FIRE": 1
+      },
+      "actionPatternCounts": {
+        "RETURN_AND_FIRE": 1
+      },
+      "buildMs": 240
+    },
+    {
+      "playerIndex": 5,
+      "rounds": 9,
+      "candidates": 58,
+      "cues": 3,
+      "segments": 31,
+      "explicitSkips": 18,
+      "bundleBytes": 6112921,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 32,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 26
+      },
+      "signalCounts": {
+        "UTILITY": 25,
+        "KILL": 4,
+        "BOMB": 6,
+        "HP_CHANGE": 14,
+        "DEATH": 2,
+        "RETURN_AND_FIRE": 7
+      },
+      "actionPatternCounts": {
+        "RETURN_AND_FIRE": 7
+      },
+      "buildMs": 210
+    },
+    {
+      "playerIndex": 6,
+      "rounds": 9,
+      "candidates": 36,
+      "cues": 1,
+      "segments": 29,
+      "explicitSkips": 18,
+      "bundleBytes": 4737045,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 28,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 8
+      },
+      "signalCounts": {
+        "DEATH": 9,
+        "HP_CHANGE": 22,
+        "KILL": 2,
+        "UTILITY": 3
+      },
+      "actionPatternCounts": {},
+      "buildMs": 147
+    },
+    {
+      "playerIndex": 7,
+      "rounds": 9,
+      "candidates": 51,
+      "cues": 2,
+      "segments": 30,
+      "explicitSkips": 18,
+      "bundleBytes": 5318134,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 44,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 7
+      },
+      "signalCounts": {
+        "KILL": 4,
+        "HP_CHANGE": 27,
+        "DEATH": 9,
+        "UTILITY": 11
+      },
+      "actionPatternCounts": {},
+      "buildMs": 179
+    },
+    {
+      "playerIndex": 8,
+      "rounds": 9,
+      "candidates": 44,
+      "cues": 4,
+      "segments": 33,
+      "explicitSkips": 18,
+      "bundleBytes": 5269034,
+      "eligible": 2,
+      "supportRate": 0.045454545454545456,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 38,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 4
+      },
+      "signalCounts": {
+        "UTILITY": 5,
+        "KILL": 6,
+        "HP_CHANGE": 24,
+        "DEATH": 7,
+        "RETURN_AND_FIRE": 2
+      },
+      "actionPatternCounts": {
+        "RETURN_AND_FIRE": 2
+      },
+      "buildMs": 185
+    },
+    {
+      "playerIndex": 9,
+      "rounds": 9,
+      "candidates": 39,
+      "cues": 4,
+      "segments": 33,
+      "explicitSkips": 18,
+      "bundleBytes": 5169836,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 36,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 3
+      },
+      "signalCounts": {
+        "DEATH": 7,
+        "HP_CHANGE": 22,
+        "UTILITY": 7,
+        "KILL": 2,
+        "RETURN_AND_FIRE": 1
+      },
+      "actionPatternCounts": {
+        "RETURN_AND_FIRE": 1
+      },
+      "buildMs": 170
+    },
+    {
+      "playerIndex": 10,
+      "rounds": 9,
+      "candidates": 53,
+      "cues": 4,
+      "segments": 34,
+      "explicitSkips": 18,
+      "bundleBytes": 5681961,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 48,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 5
+      },
+      "signalCounts": {
+        "DEATH": 8,
+        "HP_CHANGE": 29,
+        "KILL": 8,
+        "BOMB": 1,
+        "UTILITY": 7
+      },
+      "actionPatternCounts": {},
+      "buildMs": 185
+    }
+  ],
+  "assertions": 1999,
+  "fullTimelineCoverage": "PASS",
+  "explicitSkipReasons": "PASS",
+  "serializationRoundTrip": "PASS",
+  "remoteModelCalls": 0,
+  "execution": "OFFLINE",
+  "live": null,
+  "modelQuality": "NOT_EXPERT_EVALUATED",
+  "expertLabels": 0,
+  "limitations": [
+    "SINGLE_DEMO_TEN_CORRELATED_PLAYER_PERSPECTIVES",
+    "EIGHT_HZ_STATE_SAMPLING_NOT_EXACT_PER_TICK_STATE",
+    "NO_REMOTE_MODEL_CALLS",
+    "NO_EXPERT_LABELS",
+    "STRUCTURAL_COVERAGE_NOT_TACTICAL_ACCURACY"
+  ]
+}

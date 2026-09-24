@@ -2,7 +2,7 @@ import {
   DECISION_ASSESSMENT_VERSIONS as V,
   type DecisionAssessmentPacket, type DecisionAssessmentResult
 } from "@cs-coach/contracts";
-import { parseDecisionAssessmentPacket, validateDecisionAssessmentResult } from "@cs-coach/review-planner";
+import { parseDecisionAssessmentPacket, validateDecisionAssessmentResult, buildDecisionWitnessCatalog, DECISION_WITNESS_ATOMS } from "@cs-coach/review-planner";
 
 export interface DecisionProviderAttempt {
   status: "SUCCEEDED" | "FALLBACK";
@@ -51,11 +51,43 @@ const RETURN_AND_FIRE_ATOMS = {
   }
 } as const;
 
+const OBSERVATION_SEMANTIC_INSTRUCTIONS = "Observation semantic fields preserve coarse, player-known evidence rather than omniscient geometry. G0..G63 are row-major cells of the fixed Mirage 8x8 radar grid, north to south and west to east; they are not tactical callouts. Bearings use world +X as E and world +Y as N, not the player's front/back/left/right. Horizontal distance is straight-line separation, not reachability, travel time, line of sight or trade capability. An OTHER_KNOWN_SUBJECT is not automatically an enemy. Preserve source, uncertainty, expiry and all possible cells/directions; never treat uncertain centers as exact positions. These fields do not automatically approve any applicability check.";
+
+const WITNESS_ATOMS = {
+  riskWarranted: {
+    instructions: "Assess this actual recontact using the joint player-known facts. Check YES and NO are already verified applicability facts; UNKNOWN is missing evidence, not NO. Public counts and the actual action are background premises in a joint argument, not independent proofs of reasonableness. A verified trade window or objective urgency can justify action despite numerical advantage. Available delay, no trade window and safe reachable cover can jointly support avoiding unnecessary recontact. Missing information alone never proves a mistake. Only require information material to this bounded judgment; do not reject merely because unrelated details are absent. The tactical principles are unvalidated hypotheses.",
+    criteria: ATOMS.riskWarranted.criteria
+  },
+  alternativePreferable: {
+    instructions: "Compare the actual action with the supplied alternatives using joint checked facts. Known availability does not itself make an alternative superior. Delay and safe cover may support a preferable retreat; delay and a verified trade window may support coordination or multiple reasonable actions. If objective timing disallows delay, the supplied delay-dependent alternatives have no established superiority; that does not prove forced choice. UNKNOWN checks are missing, never evidence that alternatives are impossible. Require evidence material to this comparison rather than every conceivable tactical detail.",
+    criteria: { PREFERABLE: "Joint verified facts support a specific applicable alternative as preferable.", NOT_ESTABLISHED: "Verified facts support multiple reasonable actions or fail to establish superiority of the supplied delay-dependent alternatives when delay is disallowed; this does not imply forced choice.", UNKNOWN: "Missing material information prevents a supported comparison." }
+  },
+  contextSufficient: {
+    instructions: "Assess whether the available joint evidence is sufficient for the two bounded tactical judgments. The three applicability checks are verified facts when YES or NO, not model suggestions; UNKNOWN is missing. Sufficiency is for this rubric, not exhaustive knowledge of every game detail. Do not demand unrelated missing details. A specific unresolved conflict, unverified contact, or uncertain user assertion that could reverse the judgments warrants INSUFFICIENT. RETURN_AND_FIRE never proves recontact, visibility or enemy exposure.",
+    criteria: ATOMS.contextSufficient.criteria
+  }
+} as const;
+
 /** Every question shares exactly this outcome-free state. Evidence choices are
  * separate semantic support judgments; their membership alone is never support. */
 export function buildJevHttpBody(input: DecisionAssessmentPacket) {
   const packet = parseDecisionAssessmentPacket(input);
   const questions: Record<string, unknown> = {};
+  if (packet.questionVersion === V.questionsWithWitnesses) {
+    const catalog = buildDecisionWitnessCatalog(packet);
+    const atoms = packet.action.kind === "RETURN_AND_FIRE" ? RETURN_AND_FIRE_ATOMS : WITNESS_ATOMS;
+    for (const name of DECISION_WITNESS_ATOMS) {
+      const original = atoms[name];
+      const atom = { ...original, instructions: `${original.instructions} ${OBSERVATION_SEMANTIC_INSTRUCTIONS}` };
+      questions[name] = { type: "choice", ...atom };
+      questions[`${name}Witness`] = {
+        type: "choice",
+        instructions: `Independently assess the following proposition from the same supplied state: ${atom.instructions} Choose the joint argument whose premises support its stated conclusion. No other question's answer is available or required. Each listed alias is a premise in the entire bundle; it need not prove the conclusion alone. Do not select a bundle just because its aliases exist. Check the actual values and causal relevance; choose the uncertainty option if no offered argument supports a conclusion.`,
+        criteria: Object.fromEntries(Object.entries(catalog[name]).map(([id, option]) => [id, `Conclusion ${option.choice}. Exact premise aliases ${JSON.stringify(option.refs)}. ${option.description}`]))
+      };
+    }
+    return { model: V.model, state: packet, questions };
+  }
   for (const [name, atom] of Object.entries(packet.action.kind === "RETURN_AND_FIRE" ? RETURN_AND_FIRE_ATOMS : ATOMS)) {
     questions[name] = { type: "choice", ...atom };
     const relevant = packet.evidence.filter((e) => name === "alternativePreferable"
@@ -92,6 +124,21 @@ export function parseJevResponse(packet: DecisionAssessmentPacket, payload: unkn
   const body = buildJevHttpBody(packet);
   if (!record(payload) || payload.model !== expectedModel || !record(payload.answers) || Object.keys(payload.answers).length !== Object.keys(body.questions).length) throw new Error("UPSTREAM_MODEL_OR_SCHEMA");
   const atoms: Record<string, unknown> = {};
+  if (packet.questionVersion === V.questionsWithWitnesses) {
+    const catalog = buildDecisionWitnessCatalog(packet);
+    const witnesses: Record<string, unknown> = {};
+    for (const name of DECISION_WITNESS_ATOMS) {
+      const main = choice(payload.answers[name], (body.questions[name] as { criteria: Record<string, string> }).criteria);
+      const witness = choice(payload.answers[`${name}Witness`], (body.questions[`${name}Witness`] as { criteria: Record<string, string> }).criteria);
+      // Preserve conflicting judgments and witness choices for validation/diagnostics, never silently reconcile them.
+      atoms[name] = { ...main, refs: [...catalog[name][witness.choice]!.refs] };
+      witnesses[name] = witness;
+    }
+    const rawContext = atoms.contextSufficient as { choice: string };
+    const rawAlternativeWitness = witnesses.alternativePreferable as { choice: string };
+    const limitationCodes = ["PRINCIPLE_UNVALIDATED", ...(rawContext.choice === "INSUFFICIENT" ? ["MISSING_CONTEXT"] : []), ...(rawAlternativeWitness.choice === "MULTIPLE_SUPPORTED_OPTIONS" ? ["MULTIPLE_REASONABLE_ACTIONS"] : []), ...(packet.state.observations.some(o => o.source === "USER_PROVIDED") ? ["USER_CONTEXT_UNVERIFIED"] : [])];
+    return { model: expectedModel, questionVersion: packet.questionVersion, ...atoms, witnesses, limitationCodes } as unknown as DecisionAssessmentResult;
+  }
   for (const name of Object.keys(ATOMS)) {
     const question = body.questions[name] as { criteria: Record<string, string> };
     const atom = choice(payload.answers[name], question.criteria);

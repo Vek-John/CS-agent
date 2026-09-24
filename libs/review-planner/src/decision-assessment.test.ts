@@ -14,7 +14,7 @@ function pair() {
   const material: CandidateMaterial = { candidateId: "candidate-a", decisionFacts: [{ id: "fact-a", text: "DO NOT SEND: player name, path, outcome and baseline answer", availability: "DECISION", available_at_tick: 900, source: "DEMO", observed_by_player: true }], playerActionFacts: [{ id: "action-a", text: "DO NOT SEND death/kill", actorPlayerId: "p-user", availableAtTick: 932, source: "DEMO", evidenceRefs: [], limitations: [], decisionAction: { version: "decision-action.v1", kind: "REPEEK", startTick: 900, endTick: 932, priorContactTick: 850, source: "SYNTHETIC_REGRESSION" } }], outcomeFacts: [], inferences: [], advice: [], evidence: [], decisionSnapshot: snapshot, limitations: [], observableContext: { version: "observable-decision-context.v1", boundary: "OBSERVABLE", snapshotId: snapshot.snapshotId, source: "DEMO_OBSERVER_EVIDENCE", state: { id: "state-a", demo_id: "demo-a", timeline_version: "synthetic", observer_player_id: "p-user", at_tick: 900, observation_version: "v1", claims: [], limitations: [] }, publicFacts: [], freshness: { sampledAtTick: 900, ageTicks: 0 }, confidence: 1, missingFields: [], limitations: [] } };
   return { candidate, material };
 }
-const options = { mapName: "de_mirage", tickRate: 64, playerId: "p-user" };
+const options = { mapName: "de_mirage", tickRate: 64, playerId: "p-user", projectionVersion: "LEGACY" as const };
 function build(p = pair()) { return buildDecisionAssessmentPacket(p.candidate, p.material, options); }
 function claim(): ObservationClaim { return { id: "claim-a", claim_type: "USER_CONTEXT", source_type: "USER_CONTEXT", knowledge_kind: "USER_ASSERTED", subject_resolution: "UNKNOWN_ACTOR", available_from_tick: 880, evidence_tick: 880, expires_at_tick: 960, spatial_estimate: { type: "NONE" }, confidence: 0.6, sharing_scope: "USER_CONTEXT_ONLY", evidence_refs: [], derived_by: "user", limitations: ["uncertain"] }; }
 function artifact(p = pair()): DecisionAssessmentArtifact {
@@ -235,5 +235,44 @@ describe("factual return and fire projection, without inferred enemy contact", (
       expect(parseDecisionAssessmentPacket(packet)).toEqual(packet);
       expect(validateDecisionAssessmentResult(packet, ruleDecisionAssessment(packet)).valid).toBe(true);
     }
+  });
+});
+
+/** Function-level regressions for new preparation versus frozen legacy consumption. */
+describe("semantic observation projection in candidate preparation", () => {
+  const currentOptions = { mapName: "de_mirage", tickRate: 64, playerId: "p-user" };
+  const selfClaim = (): ObservationClaim => ({ id: "self-claim", claim_type: "PLAYER_POSITION", source_type: "DIRECT_VISION", knowledge_kind: "OBSERVED", subject_ref: "p-user", subject_resolution: "EXACT_PLAYER", available_from_tick: 900, evidence_tick: 900, expires_at_tick: 964, spatial_estimate: { type: "EXACT_POINT", point: { x: 100, y: 100, z: 0 } }, confidence: 1, sharing_scope: "SELF", evidence_refs: ["private-source"], derived_by: "private-source-name", limitations: [] });
+  it("repairs equal-metadata position loss and keeps unrelated or future outcome content out", () => {
+    const p = pair(), c = selfClaim(); p.candidate.observableClaimRefs = [c.id]; p.material.observableContext!.state.claims = [c];
+    const old = build(p), first = buildDecisionAssessmentPacket(p.candidate, p.material, currentOptions);
+    expect(first.packet?.projectionVersion).toBe(V.projectionWithObservationSemantics);
+    expect(first.packet?.state.observations[0]?.semantic).toMatchObject({ knowledge: "OBSERVED", modality: "DIRECT_VISION", subject: { role: "SELF", alias: null }, expiresInSeconds: 1, spatial: { sourceType: "EXACT_POINT", representation: "COARSE_GRID_AND_BOUNDED_RELATION" } });
+    c.spatial_estimate = { type: "EXACT_POINT", point: { x: 2000, y: 2000, z: 0 } };
+    expect(build(p).packet).toEqual(old.packet); // Precise reproduction of the old information loss.
+    const second = buildDecisionAssessmentPacket(p.candidate, p.material, currentOptions);
+    expect(second.packet?.state.observations[0]?.semantic?.spatial).not.toEqual(first.packet?.state.observations[0]?.semantic?.spatial);
+    p.material.observableContext!.state.claims = [c, { ...selfClaim(), id: "unbound-future", evidence_tick: 1000, available_from_tick: 1000 }];
+    p.candidate.resultSummary.selectedPlayerDeath = false;
+    expect(buildDecisionAssessmentPacket(p.candidate, p.material, currentOptions).packet).toEqual(second.packet);
+    expect(JSON.stringify(second.packet)).not.toMatch(/private-source|p-user|self-claim|"point"|"x"|"y"|"z"/);
+  });
+  it("reconstructs saved legacy artifacts with their original projection and new artifacts with v4", () => {
+    const p = pair(), c = selfClaim(); p.candidate.observableClaimRefs = [c.id]; p.material.observableContext!.state.claims = [c];
+    p.material.decisionAssessment = artifact(p);
+    expect(p.material.decisionAssessment.binding.projectionVersion).toBeUndefined();
+    const expected = resolveDecisionAssessment(p.candidate, p.material);
+    expect(expected?.kind).toBe("DECISION_ERROR");
+    const originalArtifact = JSON.stringify(p.material.decisionAssessment);
+    expect(buildDecisionAssessmentPacket(p.candidate, p.material, currentOptions).binding?.packetFingerprint).not.toBe(p.material.decisionAssessment.binding.packetFingerprint);
+    const restored = JSON.parse(JSON.stringify(p)) as ReturnType<typeof pair>;
+    expect(resolveDecisionAssessment(restored.candidate, restored.material)).toEqual(expected);
+    expect(JSON.stringify(restored.material.decisionAssessment)).toBe(originalArtifact);
+    const next = buildDecisionAssessmentPacket(p.candidate, p.material, currentOptions);
+    const result = { ...ruleDecisionAssessment(next.packet!), model: V.model };
+    const checked = validateDecisionAssessmentResult(next.packet!, result);
+    expect(checked.valid).toBe(true);
+    p.material.decisionAssessment = { ...p.material.decisionAssessment, binding: next.binding!, result, modelConfidence: checked.modelConfidence, evidenceConfidence: checked.evidenceConfidence };
+    expect(p.material.decisionAssessment.binding.projectionVersion).toBe(V.projectionWithObservationSemantics);
+    expect(resolveDecisionAssessment(p.candidate, p.material)?.kind).toBe("DECISION_ERROR");
   });
 });

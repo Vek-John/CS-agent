@@ -2,6 +2,9 @@
 
 本轮是默认关闭正式自动接受的研究实现。已有Demo可提名“本人移动离开后返回原开枪位置并再次开枪”的事实模式，进入真实Jev试点；该模式不能证明再次接敌或重复peek。v3把接触状态固定为UNVERIFIED，只能接受信息不足的结论，不提供专业对错判定。长期契约以 [ARCHITECTURE.md](../ARCHITECTURE.md) 6.6.1 为准。
 
+
+当前新准备默认使用v4匿名观察投影与6题联合证据协议：可区分来源/知识、本人或匿名已知主体、精确点与区域/方向/最后已知位置；给出粗地图格和代码计算的有界相对关系。网格不是战术点位，距离不证明补枪或视线。判断必须与模型显式选择的最小证据组合一致，否则拒绝。旧冻结v1–v3记录仍按原投影本地恢复，不重新调用。准备仍并发2、配置后总6秒；未知接触的返回开枪分支仍只允许拒判。
+
 ## localhost
 
 默认不设置任何新变量，或设 `CS_DECISION_ASSESSMENT_MODE=RULE_BASELINE`，保留现有规则。启用旁路时，在启动服务的同一个终端使用隐藏输入设置 `JEV_API_KEY`（不要写进文件、公开变量或命令参数）：
@@ -108,3 +111,7 @@ pnpm eval:decision-assessment --live --case-prefix=structured-report- --max-call
 重建新增射手字段需要 `pnpm cs2d:patch`（包含 `--build-parser`），随后 `pnpm cs2d:build`；该脚本使用已存在的 `~/.cargo/bin` 工具链。仅打包旧WASM不会凭空得到射手字段，旧Replay缺字段仍按未知处理。
 
 真实输入live复验在上述命令追加 `--live --key-stdin --max-calls 5`。使用本任务带射手归属补丁的parser；旧parser缺actor时诚实无候选。密钥从唯一子进程stdin读取一行，父进程不读取、不传argv/env；调用方负责不回显输入。单次完整运行10分钟期限、1536MiB heap，全局最多5次远端请求，重复请求在本次运行内复用。报告明确区分真实Jev和确定性Director/Narrator；本次5次均UNKNOWN/UNKNOWN/INSUFFICIENT，不代表战术准确率。
+
+## v4语义与六题对照
+
+`pnpm exec tsx tools/eval-decision-semantics.ts --split=development` 默认只列离线计划。显式live使用不回显stdin及已有具名生成配置；开发最多9次，冻结代理测试18次。本轮已经执行27次并停止：Jev有效明确判断仍0，生成模型仅在相似开发家族上出现代理成功，不能启用正式自动判断。详见 [阶段验收与实测](validation/JEV_SEMANTIC_ACCEPTANCE.md)。

@@ -234,6 +234,9 @@ importers:
       '@cs-coach/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@cs-coach/map-semantics':
+        specifier: workspace:*
+        version: link:../map-semantics
     devDependencies:
       '@cs-coach/demo-domain':
         specifier: workspace:*

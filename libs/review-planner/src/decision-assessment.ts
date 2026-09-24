@@ -4,6 +4,8 @@ import {
   type DecisionAssessmentPacket, type DecisionAssessmentBinding, type DecisionAssessmentResult,
   type DecisionAssessmentCheckCode, type DecisionAssessmentAtom
 } from "@cs-coach/contracts";
+import { buildDecisionObservationSemantics, parseDecisionObservationSemantics } from "./decision-observation";
+import { buildDecisionWitnessCatalog, validateDecisionWitnesses } from "./decision-witness";
 
 const CHECKS: readonly DecisionAssessmentCheckCode[] = ["objectiveAllowsDelay", "tradeWindow", "safeReachableCover"];
 const unique = (items: readonly string[]) => [...new Set(items)];
@@ -32,8 +34,9 @@ export function parseDecisionAssessmentPacket(value: unknown): DecisionAssessmen
   const integer = (v: unknown, min: number, max: number): number => { if (!finite(v) || !Number.isInteger(v) || v < min || v > max) return fail(); return v; };
   const number = (v: unknown, min: number, max: number): number => { if (!finite(v) || v < min || v > max) return fail(); return v; };
   const root = keys(value, ["projectionVersion", "questionVersion", "scenario", "map", "state", "action", "evidence"]);
-  const returnAndFire = root.projectionVersion === V.projectionWithReturnAndFire;
-  if (![V.projection, V.projectionWithUserContext, V.projectionWithReturnAndFire].includes(root.projectionVersion as typeof V.projection) || root.questionVersion !== (returnAndFire ? V.questionsReturnAndFire : V.questions) || root.scenario !== (returnAndFire ? "RETURN_AND_FIRE_AFTER_ADVANTAGE" : "RECONTACT_AFTER_ADVANTAGE") || root.map !== "de_mirage") return fail();
+  const semanticProjection = root.projectionVersion === V.projectionWithObservationSemantics;
+  const returnAndFire = root.projectionVersion === V.projectionWithReturnAndFire || semanticProjection && record(root.action) && root.action.kind === "RETURN_AND_FIRE";
+  if (![V.projection, V.projectionWithUserContext, V.projectionWithReturnAndFire, V.projectionWithObservationSemantics].includes(root.projectionVersion as typeof V.projection) || root.questionVersion !== (semanticProjection ? V.questionsWithWitnesses : returnAndFire ? V.questionsReturnAndFire : V.questions) || root.scenario !== (returnAndFire ? "RETURN_AND_FIRE_AFTER_ADVANTAGE" : "RECONTACT_AFTER_ADVANTAGE") || root.map !== "de_mirage") return fail();
   const state = keys(root.state, ["allies", "enemies", "advantage", "checks", "observations"]);
   const allies = integer(state.allies, 1, 5), enemies = integer(state.enemies, 1, 5), advantage = integer(state.advantage, 1, 4);
   if (allies - enemies !== advantage) return fail();
@@ -47,10 +50,12 @@ export function parseDecisionAssessmentPacket(value: unknown): DecisionAssessmen
   if (checks.length !== 3 || new Set(checks.map(c => c.code)).size !== 3) return fail();
   const kinds = ["PLAYER_POSITION", "PLAYER_PRESENCE", "SOUND_SOURCE", "DAMAGE_DIRECTION", "UTILITY_STATE", "BOMB_STATE", "LAST_KNOWN_POSITION", "TEAM_REPORT", "USER_CONTEXT"];
   const observations = arr(state.observations, 24).map(v => {
-    const o = keys(v, ["alias", "kind", "source", "confidence", "ageSeconds", "shared", ...(record(v) && v.reportedContext !== undefined ? ["reportedContext"] : [])]);
-    if (o.reportedContext !== undefined && (o.source !== "USER_PROVIDED" || root.projectionVersion !== V.projectionWithUserContext && !returnAndFire)) return fail();
+    const o = keys(v, ["alias", "kind", "source", "confidence", "ageSeconds", "shared", ...(record(v) && v.reportedContext !== undefined ? ["reportedContext"] : []), ...(semanticProjection ? ["semantic"] : [])]);
+    if (o.reportedContext !== undefined && (o.source !== "USER_PROVIDED" || root.projectionVersion !== V.projectionWithUserContext && !returnAndFire && !semanticProjection)) return fail();
     if (!kinds.includes(o.kind as string) || !["DEMO_OBSERVER", "USER_PROVIDED"].includes(o.source as string) || typeof o.shared !== "boolean" || o.source === "USER_PROVIDED" && (o.kind !== "USER_CONTEXT" || o.shared)) return fail();
-    return { alias: alias(o.alias), kind: o.kind as DecisionAssessmentPacket["state"]["observations"][number]["kind"], source: o.source as "DEMO_OBSERVER" | "USER_PROVIDED", confidence: number(o.confidence, 0, 1), ageSeconds: number(o.ageSeconds, 0, 10), shared: o.shared, ...(o.reportedContext !== undefined ? { reportedContext: parseUserTacticalContext(o.reportedContext) } : {}) };
+    const semantic = semanticProjection ? parseDecisionObservationSemantics(o.semantic) : undefined;
+    if (semantic && ((semantic.modality === "USER_CONTEXT") !== (o.source === "USER_PROVIDED") || (semantic.sharingScope === "VERIFIED_TEAM_SHARED") !== o.shared || semantic.availableAgeSeconds > number(o.ageSeconds, 0, 10))) return fail();
+    return { alias: alias(o.alias), kind: o.kind as DecisionAssessmentPacket["state"]["observations"][number]["kind"], source: o.source as "DEMO_OBSERVER" | "USER_PROVIDED", confidence: number(o.confidence, 0, 1), ageSeconds: number(o.ageSeconds, 0, 10), shared: o.shared, ...(o.reportedContext !== undefined ? { reportedContext: parseUserTacticalContext(o.reportedContext) } : {}), ...(semantic ? { semantic } : {}) };
   });
   const a = keys(root.action, returnAndFire ? ["kind", "durationSeconds", "sincePriorShotSeconds", "contactStatus", "refs"] : ["kind", "durationSeconds", "sincePriorContactSeconds", "refs"]);
   let action: DecisionAssessmentPacket["action"];
@@ -87,7 +92,7 @@ export interface DecisionAssessmentBuildResult {
 /** Reconstruct the entire outgoing whitelist. Never spread trusted-domain objects into the request. */
 export function buildDecisionAssessmentPacket(
   candidate: TeachingCandidate, material: CandidateMaterial,
-  options: { mapName: string; tickRate: number; playerId: string }
+  options: { mapName: string; tickRate: number; playerId: string; projectionVersion?: DecisionAssessmentPacket["projectionVersion"] | "LEGACY" }
 ): DecisionAssessmentBuildResult {
   const rejectionReasons: string[] = [];
   const reject = (reason: string): DecisionAssessmentBuildResult => ({ rejectionReasons: unique([...rejectionReasons, reason]) });
@@ -151,16 +156,24 @@ export function buildDecisionAssessmentPacket(
     return { code, value: match.status === "APPLICABLE" ? "YES" as const : "NO" as const, refs: [add(code, match.evidenceRefs, confidence)] };
   });
   if (rejectionReasons.length) return { rejectionReasons: unique(rejectionReasons) };
-  const observations = claims.map(c => ({ alias: add("OBSERVATION", [c.id], c.confidence), kind: c.claim_type,
+  const legacyVersion = returnAndFire ? V.projectionWithReturnAndFire : claims.some(c => c.user_tactical_context) ? V.projectionWithUserContext : V.projection;
+  const projectionVersion = options.projectionVersion === "LEGACY" ? legacyVersion : options.projectionVersion ?? V.projectionWithObservationSemantics;
+  const semanticProjection = projectionVersion === V.projectionWithObservationSemantics;
+  let semantics: ReturnType<typeof buildDecisionObservationSemantics> = [];
+  if (semanticProjection) {
+    try { semantics = buildDecisionObservationSemantics(claims, { playerId: options.playerId, decisionTick: t, tickRate: options.tickRate }); }
+    catch { return reject("INVALID_OBSERVATION_SEMANTICS"); }
+  }
+  const observations = claims.map((c, index) => ({ alias: add("OBSERVATION", [c.id], c.confidence), kind: c.claim_type,
     source: c.source_type === "USER_CONTEXT" ? "USER_PROVIDED" as const : "DEMO_OBSERVER" as const,
-    confidence: c.confidence, ageSeconds: (t - c.evidence_tick) / options.tickRate, shared: c.sharing_scope === "VERIFIED_TEAM_SHARED", ...(c.user_tactical_context ? { reportedContext: parseUserTacticalContext(c.user_tactical_context) } : {}) }));
+    confidence: c.confidence, ageSeconds: (t - c.evidence_tick) / options.tickRate, shared: c.sharing_scope === "VERIFIED_TEAM_SHARED", ...(c.user_tactical_context ? { reportedContext: parseUserTacticalContext(c.user_tactical_context) } : {}), ...(semanticProjection ? { semantic: semantics[index]! } : {}) }));
   const packet: DecisionAssessmentPacket = {
-    projectionVersion: returnAndFire ? V.projectionWithReturnAndFire : observations.some(o => o.reportedContext) ? V.projectionWithUserContext : V.projection, questionVersion: returnAndFire ? V.questionsReturnAndFire : V.questions, scenario: returnAndFire ? "RETURN_AND_FIRE_AFTER_ADVANTAGE" : "RECONTACT_AFTER_ADVANTAGE", map: "de_mirage",
+    projectionVersion, questionVersion: semanticProjection ? V.questionsWithWitnesses : returnAndFire ? V.questionsReturnAndFire : V.questions, scenario: returnAndFire ? "RETURN_AND_FIRE_AFTER_ADVANTAGE" : "RECONTACT_AFTER_ADVANTAGE", map: "de_mirage",
     state: { allies: counts.value.allies, enemies: counts.value.enemies, advantage: counts.value.allies - counts.value.enemies, checks: projectedChecks, observations },
     action: returnAndFire ? { kind: "RETURN_AND_FIRE", durationSeconds: (detail.endTick - detail.startTick) / options.tickRate, sincePriorShotSeconds: (detail.startTick - priorTick) / options.tickRate, contactStatus: "UNVERIFIED", refs: [actionAlias] } : { kind: detail.kind, durationSeconds: (detail.endTick - detail.startTick) / options.tickRate, sincePriorContactSeconds: (detail.startTick - priorTick) / options.tickRate, refs: [actionAlias] }, evidence
   };
   try { parseDecisionAssessmentPacket(packet); } catch { return reject("INVALID_PROJECTION"); }
-  return { packet, binding: { candidateId: candidate.candidateId, playerId: options.playerId, mapName: options.mapName, tickRate: options.tickRate, packetFingerprint: decisionAssessmentFingerprint(packet), aliases, inputProvenance: detail.source }, rejectionReasons: [] };
+  return { packet, binding: { ...(semanticProjection ? { projectionVersion } : {}), candidateId: candidate.candidateId, playerId: options.playerId, mapName: options.mapName, tickRate: options.tickRate, packetFingerprint: decisionAssessmentFingerprint(packet), aliases, inputProvenance: detail.source }, rejectionReasons: [] };
 }
 
 const choices = {
@@ -177,8 +190,9 @@ export function validateDecisionAssessmentResult(packet: DecisionAssessmentPacke
   if (typeof value.model !== "string" || ![V.model, "RULE_BASELINE", ...(options.allowedModel ? [options.allowedModel] : [])].includes(value.model)) reasons.push("UNKNOWN_MODEL_VERSION");
   if (value.questionVersion !== packet.questionVersion) reasons.push("VERSION_MISMATCH");
   if (packet.action.kind === "RETURN_AND_FIRE" && (!record(value.riskWarranted) || value.riskWarranted.choice !== "UNKNOWN" || !record(value.alternativePreferable) || value.alternativePreferable.choice !== "UNKNOWN" || !record(value.contextSufficient) || value.contextSufficient.choice !== "INSUFFICIENT")) reasons.push("CONTACT_UNVERIFIED");
-  const topKeys = ["model", "questionVersion", "riskWarranted", "alternativePreferable", "contextSufficient", "limitationCodes"];
+  const topKeys = ["model", "questionVersion", "riskWarranted", "alternativePreferable", "contextSufficient", "limitationCodes", ...(packet.questionVersion === V.questionsWithWitnesses ? ["witnesses"] : [])];
   if (Object.keys(value).length !== topKeys.length || Object.keys(value).some(k => !topKeys.includes(k))) reasons.push("INVALID_SCHEMA");
+  if (packet.questionVersion === V.questionsWithWitnesses) reasons.push(...validateDecisionWitnesses(packet, value as unknown as DecisionAssessmentResult));
   const evidence = new Map(packet.evidence.map(e => [e.alias, e]));
   const selectedConfidence: number[] = [], citedConfidence: number[] = [];
   for (const key of Object.keys(choices) as (keyof typeof choices)[]) {
@@ -210,14 +224,16 @@ export function validateDecisionAssessmentResult(packet: DecisionAssessmentPacke
   if (record(value.alternativePreferable) && value.alternativePreferable.choice === "PREFERABLE" && !(checks.get("objectiveAllowsDelay") === "YES" && (checks.get("safeReachableCover") === "YES" || checks.get("tradeWindow") === "YES"))) reasons.push("INAPPLICABLE_ALTERNATIVE");
   if (record(value.riskWarranted) && value.riskWarranted.choice === "UNWARRANTED" && !(checks.get("objectiveAllowsDelay") === "YES" && checks.get("safeReachableCover") === "YES" && checks.get("tradeWindow") === "NO")) reasons.push("UNSUPPORTED_RISK_JUDGMENT");
   if (record(value.riskWarranted) && value.riskWarranted.choice === "WARRANTED" && !(checks.get("tradeWindow") === "YES" || checks.get("objectiveAllowsDelay") === "NO")) reasons.push("UNSUPPORTED_RISK_JUDGMENT");
-  return { valid: reasons.length === 0, rejectionReasons: unique(reasons), modelConfidence: selectedConfidence.length === 3 ? Math.min(...selectedConfidence) : null, evidenceConfidence: packet.action.kind === "RETURN_AND_FIRE" ? 0 : citedConfidence.length ? Math.min(...citedConfidence) : 0 };
+  const witnessConfidences = packet.questionVersion === V.questionsWithWitnesses && record(value.witnesses)
+    ? Object.values(value.witnesses).map(w => record(w) && probability(w.confidence) ? w.confidence : 0) : [];
+  return { valid: reasons.length === 0, rejectionReasons: unique(reasons), modelConfidence: selectedConfidence.length === 3 ? Math.min(...selectedConfidence, ...witnessConfidences) : null, evidenceConfidence: packet.action.kind === "RETURN_AND_FIRE" ? 0 : citedConfidence.length ? Math.min(...citedConfidence) : 0 };
 }
 
 function atom<C extends string>(all: readonly C[], choice: C, refs: readonly string[]): DecisionAssessmentAtom<C> {
   return { choice, confidence: 1, probabilities: Object.fromEntries(all.map(c => [c, c === choice ? 1 : 0])) as Record<C, number>, refs };
 }
 /** Proxy rule baseline, deliberately restricted. Its probability is deterministic output, not measured correctness. */
-export function ruleDecisionAssessment(packet: DecisionAssessmentPacket): DecisionAssessmentResult {
+function legacyRuleDecisionAssessment(packet: DecisionAssessmentPacket): DecisionAssessmentResult {
   if (packet.action.kind === "RETURN_AND_FIRE") return {
     model: "RULE_BASELINE", questionVersion: packet.questionVersion,
     riskWarranted: atom(choices.riskWarranted, "UNKNOWN", []),
@@ -237,11 +253,37 @@ export function ruleDecisionAssessment(packet: DecisionAssessmentPacket): Decisi
     limitationCodes: sufficient ? ["PRINCIPLE_UNVALIDATED", "MULTIPLE_REASONABLE_ACTIONS"] : ["PRINCIPLE_UNVALIDATED", "MISSING_CONTEXT"] };
 }
 
+/** This deterministic comparator is never supplied to either remote model as an answer. */
+export function ruleDecisionAssessment(packet: DecisionAssessmentPacket): DecisionAssessmentResult {
+  const result = legacyRuleDecisionAssessment(packet);
+  if (packet.questionVersion !== V.questionsWithWitnesses) return result;
+  result.questionVersion = packet.questionVersion;
+  const catalog = buildDecisionWitnessCatalog(packet);
+  const names = ["riskWarranted", "alternativePreferable", "contextSufficient"] as const;
+  const witnesses = {} as NonNullable<DecisionAssessmentResult["witnesses"]>;
+  for (const name of names) {
+    const entries = Object.entries(catalog[name]);
+    const found = entries.find(([, option]) => option.applicable && option.choice === result[name].choice);
+    const fallbackKey = name === "contextSufficient" ? packet.action.kind === "RETURN_AND_FIRE" ? "UNVERIFIED_CONTACT" : "UNRESOLVED_CONTEXT" : "NONE";
+    const [selected, option] = found ?? [fallbackKey, catalog[name][fallbackKey]!];
+    // Only the proxy rule may derive its answer this way; live answers are never repaired.
+    Object.assign(result[name], atom(choices[name], option.choice, option.refs));
+    witnesses[name] = { choice: selected, confidence: 1, probabilities: Object.fromEntries(entries.map(([key]) => [key, key === selected ? 1 : 0])) };
+  }
+  if (result.contextSufficient.choice === "SUFFICIENT" && (result.riskWarranted.choice === "UNKNOWN" || result.alternativePreferable.choice === "UNKNOWN")) {
+    result.contextSufficient = atom(choices.contextSufficient, "INSUFFICIENT", []);
+    witnesses.contextSufficient = { choice: "UNRESOLVED_CONTEXT", confidence: 1, probabilities: Object.fromEntries(Object.keys(catalog.contextSufficient).map(key => [key, key === "UNRESOLVED_CONTEXT" ? 1 : 0])) };
+  }
+  // Missing context on the position/fire branch has an explicit, non-tactical reason.
+  if (packet.action.kind === "RETURN_AND_FIRE") witnesses.contextSufficient = { choice: "UNVERIFIED_CONTACT", confidence: 1, probabilities: Object.fromEntries(Object.keys(catalog.contextSufficient).map(key => [key, key === "UNVERIFIED_CONTACT" ? 1 : 0])) };
+  return { ...result, witnesses };
+}
+
 /** No model call and no mutation: safe during repeated consumption and legacy history reads. */
 export function resolveDecisionAssessment(candidate: TeachingCandidate, material: CandidateMaterial): TeachingAssessment | undefined {
   const artifact = material.decisionAssessment ?? candidate.decisionAssessment;
   if (!artifact || !record(artifact.binding) || !record(artifact.result) || artifact.version !== V.artifact || artifact.mode !== "JEV_EXPERIMENT" || artifact.provider !== "JEV" || artifact.status !== "ACCEPTED" || artifact.acceptance !== "TEST_ONLY" || artifact.acceptancePolicyVersion !== V.acceptance || !artifact.result || artifact.result.model !== V.model || artifact.binding.candidateId !== candidate.candidateId) return undefined;
-  const built = buildDecisionAssessmentPacket(candidate, material, artifact.binding);
+  const built = buildDecisionAssessmentPacket(candidate, material, { ...artifact.binding, projectionVersion: artifact.binding.projectionVersion ?? "LEGACY" });
   if (!built.packet || !built.binding || built.binding.packetFingerprint !== artifact.binding.packetFingerprint || JSON.stringify(built.binding.aliases) !== JSON.stringify(artifact.binding.aliases) || built.binding.inputProvenance !== artifact.binding.inputProvenance) return undefined;
   const validation = validateDecisionAssessmentResult(built.packet, artifact.result);
   if (!validation.valid || artifact.evidenceConfidence !== validation.evidenceConfidence || artifact.modelConfidence !== validation.modelConfidence) return undefined;

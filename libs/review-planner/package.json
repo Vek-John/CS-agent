@@ -7,7 +7,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@cs-coach/contracts": "workspace:*"
+    "@cs-coach/contracts": "workspace:*",
+    "@cs-coach/map-semantics": "workspace:*"
   },
   "devDependencies": {
     "@cs-coach/demo-domain": "workspace:*"

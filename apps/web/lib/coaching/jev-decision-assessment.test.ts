@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { UserTacticalContext, CandidateMaterial, CandidateSet, DecisionAssessmentPacket, DecisionAssessmentResult, DecisionCheck, TeachingCandidate } from "@cs-coach/contracts";
 import { DECISION_ASSESSMENT_VERSIONS as V } from "@cs-coach/contracts";
-import { assembleCandidateSet, buildCoachingPackage, buildDecisionAssessmentPacket, buildDirectorRequest, buildOutcomePackage, createFixtureReviewPlan, deterministicDirectorFallback, deterministicNarrationBundle, ruleDecisionAssessment, verifiedHabitKey } from "@cs-coach/review-planner";
+import { assembleCandidateSet, buildCoachingPackage, buildDecisionAssessmentPacket, buildDirectorRequest, buildOutcomePackage, createFixtureReviewPlan, deterministicDirectorFallback, deterministicNarrationBundle, ruleDecisionAssessment, verifiedHabitKey, buildDecisionWitnessCatalog, parseDecisionAssessmentPacket } from "@cs-coach/review-planner";
 import { createSyntheticMirageTimeline } from "@cs-coach/demo-domain";
 import { decisionSnapshotFixture } from "../../../../libs/review-planner/src/teaching-gate-fixtures";
 import { decisionAssessmentEvalCases } from "../../../../libs/review-planner/src/decision-assessment-fixtures";
@@ -30,6 +30,12 @@ function responseFor(packet: DecisionAssessmentPacket, transform?: (result: Deci
     let chosen: string;
     let confidence = 0.91;
     if (key === "limitation") chosen = "PRINCIPLE_UNVALIDATED";
+    else if (key.endsWith("Witness")) {
+      const name = key.slice(0, -"Witness".length) as "riskWarranted" | "alternativePreferable" | "contextSufficient";
+      const catalog = buildDecisionWitnessCatalog(packet)[name];
+      chosen = result.witnesses?.[name]?.choice ?? (packet.action.kind === "RETURN_AND_FIRE" && name === "contextSufficient" ? "UNVERIFIED_CONTACT" : Object.entries(catalog).find(([, option]) => option.applicable && option.choice === result[name].choice)?.[0] ?? "NONE");
+      confidence = result.witnesses?.[name]?.confidence ?? 0.91;
+    }
     else if (key.includes("Evidence_")) { const [atom, suffix] = key.split("Evidence_"); const alias = suffix.slice(suffix.lastIndexOf("_") + 1); const category = suffix.slice(0, suffix.lastIndexOf("_")); chosen = result[atom as "riskWarranted"].choice === category && result[atom as "riskWarranted"].refs.includes(alias) ? "SUPPORTED" : "UNSUPPORTED"; }
     else { const atom = result[key as "riskWarranted"]; chosen = atom.choice; confidence = atom.confidence; }
     return [key, { type: "choice", choice: chosen, confidence, probabilities: Object.fromEntries(Object.keys(criteria).map((c) => [c, c === chosen ? 1 : 0])) }];
@@ -192,7 +198,7 @@ describe("RETURN_AND_FIRE real-request boundary and conservative teaching consum
     const set = syntheticReturnAndFireSet(), c = set.candidates[0]!, m = set.materials[0]!;
     const first = buildDecisionAssessmentPacket(c, m, { mapName: "de_mirage", tickRate: 64, playerId: set.playerId });
     const remote = fakeRemote();
-    expect((await assessWithJev(first.packet!, env, { fetcher: remote })).result).toMatchObject({ questionVersion: V.questionsReturnAndFire, riskWarranted: { choice: "UNKNOWN" }, alternativePreferable: { choice: "UNKNOWN" }, contextSufficient: { choice: "INSUFFICIENT" } });
+    expect((await assessWithJev(first.packet!, env, { fetcher: remote })).result).toMatchObject({ questionVersion: V.questionsWithWitnesses, riskWarranted: { choice: "UNKNOWN" }, alternativePreferable: { choice: "UNKNOWN" }, contextSufficient: { choice: "INSUFFICIENT" } });
     c.resultSummary = { ...c.resultSummary, selectedPlayerDeath: false, winProbabilityAfter: 1 };
     c.revealTick += 16; c.outcomeEnd += 100;
     m.outcomeFacts = [{ ...m.outcomeFacts[0]!, outcomeKind: "KILL", text: "RAW-SECRET win kill" }];
@@ -258,5 +264,116 @@ describe("RETURN_AND_FIRE real-request boundary and conservative teaching consum
     expect(restored.assessment?.confidence).toBe(0);
     expect(transport.remote).toHaveBeenCalledTimes(1);
     expect(directorConsumed && narratorConsumed).toBe(true);
+  });
+});
+
+function witnessPacket(caseId = "bad-choice-good-result"): DecisionAssessmentPacket {
+  return { ...structuredClone(decisionAssessmentEvalCases.find(c => c.id === caseId)!.packet), projectionVersion: V.projectionWithObservationSemantics, questionVersion: V.questionsWithWitnesses };
+}
+function chooseRaw(answer: { choice: string; probabilities: Record<string, number> }, selected: string) {
+  answer.choice = selected;
+  answer.probabilities = Object.fromEntries(Object.keys(answer.probabilities).map(key => [key, key === selected ? 1 : 0]));
+}
+
+describe("six-question joint judgment and explicit witness protocol", () => {
+  it("sends six independent questions without per-alias voting or a baseline answer", async () => {
+    const p = witnessPacket(), remote = fakeRemote();
+    const attempt = await assessWithJev(p, env, { fetcher: remote });
+    expect(attempt.status).toBe("SUCCEEDED");
+    const body = JSON.parse(String(remote.mock.calls[0]![1]?.body));
+    expect(Object.keys(body.questions)).toEqual(["riskWarranted", "riskWarrantedWitness", "alternativePreferable", "alternativePreferableWitness", "contextSufficient", "contextSufficientWitness"]);
+    expect(body.questions.riskWarrantedWitness.instructions).toContain("No other question's answer is available");
+    expect(body.questions.riskWarrantedWitness.instructions).toContain("need not prove the conclusion alone");
+    expect(body.questions.riskWarrantedWitness.criteria.AVOIDABLE_RECONTACT).toContain('["e1","e2","e3","e4","e5"]');
+    expect(JSON.stringify(body)).not.toMatch(/"applicable"|"assessment"|"expectedLabel"|"witnesses"|Evidence_/);
+    expect(body.questions.limitation).toBeUndefined();
+    expect(attempt.result).toMatchObject({ riskWarranted: { choice: "UNWARRANTED", refs: ["e1", "e2", "e3", "e4", "e5"] }, alternativePreferable: { choice: "PREFERABLE", refs: ["e3", "e5"] }, contextSufficient: { choice: "SUFFICIENT", refs: ["e3", "e4", "e5"] }, witnesses: { riskWarranted: { choice: "AVOIDABLE_RECONTACT" }, alternativePreferable: { choice: "COVER_WITH_DELAY" }, contextSufficient: { choice: "COMPLETE" } } });
+  });
+  it.each([
+    ["reasonable-active-contest", "WARRANTED", "NOT_ESTABLISHED", "SUFFICIENT", "TRADE_SUPPORT", "MULTIPLE_SUPPORTED_OPTIONS", "COMPLETE"],
+    ["good-choice-bad-result", "WARRANTED", "NOT_ESTABLISHED", "SUFFICIENT", "TRADE_SUPPORT", "NO_APPLICABLE_ALTERNATIVE", "COMPLETE"],
+    ["missing-context", "UNKNOWN", "UNKNOWN", "INSUFFICIENT", "NONE", "NONE", "MISSING_TIMING"]
+  ])("consumes independent joint selections for %s", async (id, risk, alternative, context, riskWitness, alternativeWitness, contextWitness) => {
+    const attempt = await assessWithJev(witnessPacket(id), env, { fetcher: fakeRemote() });
+    expect(attempt.status).toBe("SUCCEEDED");
+    expect(attempt.result).toMatchObject({ riskWarranted: { choice: risk }, alternativePreferable: { choice: alternative }, contextSufficient: { choice: context }, witnesses: { riskWarranted: { choice: riskWitness }, alternativePreferable: { choice: alternativeWitness }, contextSufficient: { choice: contextWitness } } });
+  });
+  it("does not append an unrelated observed fact to any selected witness", async () => {
+    const p = witnessPacket();
+    p.evidence = [...p.evidence, { alias: "e6", role: "OBSERVATION", confidence: 0.5 }];
+    p.state.observations = [{ alias: "e6", kind: "UTILITY_STATE", source: "DEMO_OBSERVER", confidence: 0.5, ageSeconds: 1, shared: false, semantic: { knowledge: "INFERRED", modality: "UTILITY", sharingScope: "SELF", subject: { resolution: "UNKNOWN_ACTOR", role: "UNKNOWN", alias: null }, availableAgeSeconds: 1, expiresInSeconds: 2, spatial: { sourceType: "NONE", representation: "COARSE_GRID_AND_BOUNDED_RELATION", mapCells: [], includesOutsideMap: null, radiusWorldUnits: null, lastKnownAgeSeconds: null, relativeToSelf: null, direction: null } } }];
+    expect(parseDecisionAssessmentPacket(p)).toEqual(p);
+    const remote = fakeRemote(), attempt = await assessWithJev(p, env, { fetcher: remote });
+    expect(attempt.status).toBe("SUCCEEDED");
+    for (const name of ["riskWarranted", "alternativePreferable", "contextSufficient"] as const) expect(attempt.result?.[name].refs).not.toContain("e6");
+    const body = JSON.parse(String(remote.mock.calls[0]![1]?.body));
+    expect(body.state.state.observations[0].alias).toBe("e6");
+    expect(JSON.stringify(body.questions)).not.toContain("e6");
+  });
+  it("rejects a witness confused with its main label while keeping both raw choices", async () => {
+    const p = witnessPacket(), raw = responseFor(p);
+    chooseRaw(raw.answers.riskWarrantedWitness, "TRADE_SUPPORT");
+    const attempt = await assessWithJev(p, env, { fetcher: async () => Response.json(raw) });
+    expect(attempt.status).toBe("FALLBACK");
+    expect(attempt.reason).toBe("VALIDATION_REJECTED");
+    expect(attempt.rejectionReasons).toContain("WITNESS_LABEL_MISMATCH");
+    expect(attempt.rejectionReasons).toContain("INAPPLICABLE_WITNESS");
+    expect(attempt.diagnosticResult).toMatchObject({ riskWarranted: { choice: "UNWARRANTED" }, witnesses: { riskWarranted: { choice: "TRADE_SUPPORT" } } });
+  });
+  it("rejects malformed witness distributions and missing selections without repairing them", async () => {
+    const p = witnessPacket(), raw = responseFor(p);
+    raw.answers.riskWarrantedWitness.probabilities.NONE = -1;
+    expect((await assessWithJev(p, env, { fetcher: async () => Response.json(raw) })).reason).toBe("UPSTREAM_PROBABILITY");
+    const missing = responseFor(p); delete missing.answers.contextSufficientWitness;
+    expect((await assessWithJev(p, env, { fetcher: async () => Response.json(missing) })).reason).toBe("UPSTREAM_MODEL_OR_SCHEMA");
+  });
+  it("continues to parse the original v1/v2/v3 protocol without invented witness records", async () => {
+    const v1 = structuredClone(decisionAssessmentEvalCases[2]!.packet);
+    const v2 = structuredClone(decisionAssessmentEvalCases.find(c => c.id === "structured-report-a")!.packet);
+    const set = syntheticReturnAndFireSet();
+    const v3 = buildDecisionAssessmentPacket(set.candidates[0]!, set.materials[0]!, { mapName: "de_mirage", tickRate: 64, playerId: set.playerId, projectionVersion: "LEGACY" }).packet!;
+    for (const p of [v1, v2, v3]) {
+      expect(buildJevHttpBody(p).questions.limitation).toBeDefined();
+      expect(Object.keys(buildJevHttpBody(p).questions)).not.toContain("riskWarrantedWitness");
+      const attempt = await assessWithJev(p, env, { fetcher: fakeRemote() });
+      expect(attempt.status).toBe("SUCCEEDED");
+      expect(attempt.result?.questionVersion).toBe(p.questionVersion);
+      expect(attempt.result?.witnesses).toBeUndefined();
+    }
+  });
+});
+
+describe("default v4 spatial semantics affect only legal decision HTTP input", () => {
+  it("distinguishes legal self positions while legacy, future outcome and unreferenced claims stay invariant", async () => {
+    const set = syntheticSet(), c = set.candidates[0]!, m = set.materials[0]!, t = c.decisionTick;
+    const self = { id: "selected-self-position", claim_type: "PLAYER_POSITION" as const, source_type: "DIRECT_VISION" as const, knowledge_kind: "OBSERVED" as const, subject_ref: set.playerId, subject_resolution: "EXACT_PLAYER" as const, available_from_tick: t, evidence_tick: t, expires_at_tick: t + 64, spatial_estimate: { type: "EXACT_POINT" as const, point: { x: 100, y: 100, z: 0 } }, confidence: 1, sharing_scope: "SELF" as const, evidence_refs: [], derived_by: "synthetic-observer", limitations: [] };
+    c.observableClaimRefs = [self.id]; m.observableContext!.state.claims = [self];
+    const options = { mapName: "de_mirage", tickRate: 64, playerId: set.playerId };
+    const first = buildDecisionAssessmentPacket(c, m, options), legacyFirst = buildDecisionAssessmentPacket(c, m, { ...options, projectionVersion: "LEGACY" });
+    const remote = fakeRemote();
+    expect((await assessWithJev(first.packet!, env, { fetcher: remote })).status).toBe("SUCCEEDED");
+    self.spatial_estimate.point = { x: 2000, y: 2000, z: 0 };
+    const second = buildDecisionAssessmentPacket(c, m, options), legacySecond = buildDecisionAssessmentPacket(c, m, { ...options, projectionVersion: "LEGACY" });
+    expect((await assessWithJev(second.packet!, env, { fetcher: remote })).status).toBe("SUCCEEDED");
+    const firstBody = String(remote.mock.calls[0]![1]?.body), secondBody = String(remote.mock.calls[1]![1]?.body);
+    expect(firstBody).not.toBe(secondBody);
+    expect(first.binding?.packetFingerprint).not.toBe(second.binding?.packetFingerprint);
+    expect(first.packet?.state.observations[0]?.semantic?.spatial.mapCells).not.toEqual(second.packet?.state.observations[0]?.semantic?.spatial.mapCells);
+    expect(first.packet?.state.observations[0]?.semantic?.subject.role).toBe("SELF");
+    expect(JSON.stringify(buildJevHttpBody(legacyFirst.packet!))).toBe(JSON.stringify(buildJevHttpBody(legacySecond.packet!)));
+    expect(legacyFirst.binding?.packetFingerprint).toBe(legacySecond.binding?.packetFingerprint);
+    m.outcomeFacts = [{ ...m.outcomeFacts[0]!, text: "future win OUTCOME-SECRET", outcomeKind: "KILL" }];
+    c.resultSummary = { ...c.resultSummary, selectedPlayerDeath: false, winProbabilityAfter: 1 };
+    m.observableContext!.state.claims = [self, { ...self, id: "unreferenced-claim", subject_ref: "unreferenced-secret-player", spatial_estimate: { type: "EXACT_POINT", point: { x: 9000, y: 9000, z: 0 } } }];
+    const third = buildDecisionAssessmentPacket(c, m, options);
+    expect((await assessWithJev(third.packet!, env, { fetcher: remote })).status).toBe("SUCCEEDED");
+    expect(remote.mock.calls[2]![1]?.body).toBe(remote.mock.calls[1]![1]?.body);
+    expect(third.binding?.packetFingerprint).toBe(second.binding?.packetFingerprint);
+    expect(secondBody).not.toMatch(/p-user|selected-self-position|"x"|"y"|"z"/);
+    const questions = JSON.parse(secondBody).questions;
+    expect(questions.riskWarranted.instructions).toContain("not tactical callouts");
+    expect(questions.riskWarranted.instructions).toContain("not reachability, travel time, line of sight or trade capability");
+    expect(questions.riskWarranted.instructions).toContain("not the player's front/back/left/right");
+    expect(String(remote.mock.calls[2]![1]?.body)).not.toMatch(/OUTCOME-SECRET|unreferenced-secret/);
   });
 });

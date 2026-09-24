@@ -1,0 +1,2491 @@
+{
+  "version": "decision-semantics-eval.v1",
+  "generatedAt": "2026-09-24T06:50:55.967Z",
+  "split": "holdout",
+  "frozenDataset": {
+    "version": "decision-semantics-proxy.v1",
+    "sha256": "0efb9189eff4df85f3e7e06d6d1141b262ce138ee9a3ad5623cef0731e1a07e8",
+    "cases": 9,
+    "groups": 9,
+    "developmentCases": 3,
+    "holdoutCases": 6,
+    "labelSource": "AGENT_AUTHORED_PROXY",
+    "expertLabels": 0,
+    "timeBasis": "SYNTHETIC_RELATIVE_TIME",
+    "note": "Development archetypes were previously explored. Holdout is a new pre-call proxy test, not a blinded coach-labeled set."
+  },
+  "configuredVersions": {
+    "projection": "decision-assessment-projection.v1",
+    "projectionWithUserContext": "decision-assessment-projection.v2",
+    "projectionWithReturnAndFire": "decision-assessment-projection.v3",
+    "questionsReturnAndFire": "return-and-fire-questions.v1",
+    "questions": "recontact-questions.v1",
+    "projectionWithObservationSemantics": "decision-assessment-projection.v4",
+    "questionsWithWitnesses": "decision-evidence-questions.v2",
+    "acceptance": "recontact-acceptance.v1",
+    "artifact": "decision-assessment.v1",
+    "model": "jev-1.13.0"
+  },
+  "requestTimeoutMs": 3000,
+  "totalDeadlineMs": 600000,
+  "maximumCalls": 18,
+  "plannedCalls": 18,
+  "comparison": "Old Jev uses exactly the same source-derived metadata and checked facts but intentionally drops semantic. New Jev and generation share v4 state and six questions. This compares a combined projection/protocol revision, not separate causal attribution to each change.",
+  "productionAcceptance": "DISABLED_UNVALIDATED_PROXY_LABELS",
+  "plan": [
+    {
+      "caseId": "test-urgent-objective",
+      "group": "test-urgency",
+      "arm": "OLD_JEV",
+      "packetSha256": "32be7338810fdbf510813061c1f0b9c65f5c9183fe00119d3610c86ba5fd194f",
+      "canonicalBodySha256": "7123b8ebdb2f0d7919e1b9a354bf961d809eccec325b6370f7db528b8e5fbc7b",
+      "questions": 34
+    },
+    {
+      "caseId": "test-urgent-objective",
+      "group": "test-urgency",
+      "arm": "NEW_JEV",
+      "packetSha256": "1de12e208c36a625e9bd61b3b5a92c9c972b692bd8eab3bd34239d7554fec882",
+      "canonicalBodySha256": "5d9f6b258db714ab90916575f93c3ea825f535d7b8f708c102a613b531e769dd",
+      "questions": 6
+    },
+    {
+      "caseId": "test-urgent-objective",
+      "group": "test-urgency",
+      "arm": "GENERATION_MODEL",
+      "packetSha256": "1de12e208c36a625e9bd61b3b5a92c9c972b692bd8eab3bd34239d7554fec882",
+      "canonicalBodySha256": "5d9f6b258db714ab90916575f93c3ea825f535d7b8f708c102a613b531e769dd",
+      "questions": 6
+    },
+    {
+      "caseId": "test-multiple-supported-options",
+      "group": "test-options",
+      "arm": "OLD_JEV",
+      "packetSha256": "ed35f1b9168d98729fbc617cb1336b74b13da8fe85284f788828c9cb40eeda0d",
+      "canonicalBodySha256": "6bbc7709581a9e142252516ccbca18efc8d09c9c02890abf2a846c64b78d6e26",
+      "questions": 34
+    },
+    {
+      "caseId": "test-multiple-supported-options",
+      "group": "test-options",
+      "arm": "NEW_JEV",
+      "packetSha256": "23274ee7fbc4ff0b143246d0fb3f5168c73ebbd6d8a56d0a009a162fb29ddfb9",
+      "canonicalBodySha256": "21d98e70634d254016b85bd78d61903d36357d68d46bc7740915fd5dc060cf33",
+      "questions": 6
+    },
+    {
+      "caseId": "test-multiple-supported-options",
+      "group": "test-options",
+      "arm": "GENERATION_MODEL",
+      "packetSha256": "23274ee7fbc4ff0b143246d0fb3f5168c73ebbd6d8a56d0a009a162fb29ddfb9",
+      "canonicalBodySha256": "21d98e70634d254016b85bd78d61903d36357d68d46bc7740915fd5dc060cf33",
+      "questions": 6
+    },
+    {
+      "caseId": "test-cover-unreachable",
+      "group": "test-cover",
+      "arm": "OLD_JEV",
+      "packetSha256": "a743bf07db12ae1915e63d646b9f805595c8792e0a2c44fb3ebdea77589b9eac",
+      "canonicalBodySha256": "dbb1c336786fb5f35d15cf02c700adf220d1de7222f92662a88a4b7ca0656738",
+      "questions": 34
+    },
+    {
+      "caseId": "test-cover-unreachable",
+      "group": "test-cover",
+      "arm": "NEW_JEV",
+      "packetSha256": "eced31bb4e84076ca47d96ff9d0c154c75ee5ddcbf32b674fad61a85b46bdc9e",
+      "canonicalBodySha256": "6b6a743cc2216306c4ce146e658a44e4106b80068f67995c5635a51f067005b6",
+      "questions": 6
+    },
+    {
+      "caseId": "test-cover-unreachable",
+      "group": "test-cover",
+      "arm": "GENERATION_MODEL",
+      "packetSha256": "eced31bb4e84076ca47d96ff9d0c154c75ee5ddcbf32b674fad61a85b46bdc9e",
+      "canonicalBodySha256": "6b6a743cc2216306c4ce146e658a44e4106b80068f67995c5635a51f067005b6",
+      "questions": 6
+    },
+    {
+      "caseId": "test-user-count-conflict",
+      "group": "test-user-conflict",
+      "arm": "OLD_JEV",
+      "packetSha256": "c560ac74c72cb32e1d578d51a1ff3eafa7bf5da8bb37bd0679db21668f84e9f7",
+      "canonicalBodySha256": "8bf86742b42190ddfd5041125a193b5a2bb7dd9bd1b587da56cc5239fea496dc",
+      "questions": 10
+    },
+    {
+      "caseId": "test-user-count-conflict",
+      "group": "test-user-conflict",
+      "arm": "NEW_JEV",
+      "packetSha256": "6f1b9eaad18db4d06c504e575c4c29320b47c18671c81c1333450bcbec4d23f8",
+      "canonicalBodySha256": "81fbe541caa4302f34aec1324eef0b0f362f1edc4b749150e88f3765697e5934",
+      "questions": 6
+    },
+    {
+      "caseId": "test-user-count-conflict",
+      "group": "test-user-conflict",
+      "arm": "GENERATION_MODEL",
+      "packetSha256": "6f1b9eaad18db4d06c504e575c4c29320b47c18671c81c1333450bcbec4d23f8",
+      "canonicalBodySha256": "81fbe541caa4302f34aec1324eef0b0f362f1edc4b749150e88f3765697e5934",
+      "questions": 6
+    },
+    {
+      "caseId": "test-current-vision-avoidable",
+      "group": "test-current-vision",
+      "arm": "OLD_JEV",
+      "packetSha256": "63f1f9cd60782b291781acdfe5a1b700541463a83629cc53b525597f88ba5635",
+      "canonicalBodySha256": "c8f87931b34d2a4a7d391992b1abf519d3df155d569f3cbbe5ff9016c0ebea37",
+      "questions": 34
+    },
+    {
+      "caseId": "test-current-vision-avoidable",
+      "group": "test-current-vision",
+      "arm": "NEW_JEV",
+      "packetSha256": "1ca2a3f56858e8be4e86e556a2bcb3a826e7150837f72ed8ae20361192217c3d",
+      "canonicalBodySha256": "22b285f9589864570758aed545f114519d40bc2d1a64692aa3ba125c04180b58",
+      "questions": 6
+    },
+    {
+      "caseId": "test-current-vision-avoidable",
+      "group": "test-current-vision",
+      "arm": "GENERATION_MODEL",
+      "packetSha256": "1ca2a3f56858e8be4e86e556a2bcb3a826e7150837f72ed8ae20361192217c3d",
+      "canonicalBodySha256": "22b285f9589864570758aed545f114519d40bc2d1a64692aa3ba125c04180b58",
+      "questions": 6
+    },
+    {
+      "caseId": "test-history-and-sound",
+      "group": "test-indirect-information",
+      "arm": "OLD_JEV",
+      "packetSha256": "b612986b157458be474cfb44fb9a4fa004ee338fa884f041adaadea5d48b083e",
+      "canonicalBodySha256": "3fd29e13d843c00b22b6560079cb85c69d2a9db51f54a7c7fd20767fc8e057ac",
+      "questions": 10
+    },
+    {
+      "caseId": "test-history-and-sound",
+      "group": "test-indirect-information",
+      "arm": "NEW_JEV",
+      "packetSha256": "8782dff64903d2bbfa502c17d6cadcc4bdd55f4c3a9051477eff8f8a36be1537",
+      "canonicalBodySha256": "75e69367d2111da747b034b8cb8c5cef5091f83c89a066fa4763ad445cede207",
+      "questions": 6
+    },
+    {
+      "caseId": "test-history-and-sound",
+      "group": "test-indirect-information",
+      "arm": "GENERATION_MODEL",
+      "packetSha256": "8782dff64903d2bbfa502c17d6cadcc4bdd55f4c3a9051477eff8f8a36be1537",
+      "canonicalBodySha256": "75e69367d2111da747b034b8cb8c5cef5091f83c89a066fa4763ad445cede207",
+      "questions": 6
+    }
+  ],
+  "mode": "LIVE_COMPARISON",
+  "elapsedMs": 26717,
+  "remoteCalls": 18,
+  "comparisonComplete": true,
+  "configuredGenerationModel": "deepseek-v4-flash",
+  "rules": [
+    {
+      "caseId": "test-urgent-objective",
+      "provenance": "DETERMINISTIC_PROXY_NOT_GOLD",
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "decision-evidence-questions.v2",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 1,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 0
+          },
+          "refs": [
+            "e1",
+            "e2",
+            "e3"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 1,
+            "UNKNOWN": 0
+          },
+          "refs": [
+            "e3"
+          ]
+        },
+        "contextSufficient": {
+          "choice": "SUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 1,
+            "INSUFFICIENT": 0
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MULTIPLE_REASONABLE_ACTIONS"
+        ],
+        "witnesses": {
+          "riskWarranted": {
+            "choice": "OBJECTIVE_URGENCY",
+            "confidence": 1,
+            "probabilities": {
+              "TRADE_SUPPORT": 0,
+              "OBJECTIVE_URGENCY": 1,
+              "AVOIDABLE_RECONTACT": 0,
+              "NONE": 0
+            }
+          },
+          "alternativePreferable": {
+            "choice": "NO_APPLICABLE_ALTERNATIVE",
+            "confidence": 1,
+            "probabilities": {
+              "COVER_WITH_DELAY": 0,
+              "TRADE_WITH_DELAY": 0,
+              "MULTIPLE_SUPPORTED_OPTIONS": 0,
+              "NO_APPLICABLE_ALTERNATIVE": 1,
+              "NONE": 0
+            }
+          },
+          "contextSufficient": {
+            "choice": "COMPLETE",
+            "confidence": 1,
+            "probabilities": {
+              "COMPLETE": 1,
+              "MISSING_TIMING": 0,
+              "MISSING_TRADE": 0,
+              "MISSING_COVER": 0,
+              "UNVERIFIED_CONTACT": 0,
+              "USER_UNCERTAINTY": 0,
+              "UNRESOLVED_CONTEXT": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "caseId": "test-multiple-supported-options",
+      "provenance": "DETERMINISTIC_PROXY_NOT_GOLD",
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "decision-evidence-questions.v2",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 1,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 0
+          },
+          "refs": [
+            "e1",
+            "e2",
+            "e4"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 1,
+            "UNKNOWN": 0
+          },
+          "refs": [
+            "e3",
+            "e4"
+          ]
+        },
+        "contextSufficient": {
+          "choice": "SUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 1,
+            "INSUFFICIENT": 0
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MULTIPLE_REASONABLE_ACTIONS"
+        ],
+        "witnesses": {
+          "riskWarranted": {
+            "choice": "TRADE_SUPPORT",
+            "confidence": 1,
+            "probabilities": {
+              "TRADE_SUPPORT": 1,
+              "OBJECTIVE_URGENCY": 0,
+              "AVOIDABLE_RECONTACT": 0,
+              "NONE": 0
+            }
+          },
+          "alternativePreferable": {
+            "choice": "MULTIPLE_SUPPORTED_OPTIONS",
+            "confidence": 1,
+            "probabilities": {
+              "COVER_WITH_DELAY": 0,
+              "TRADE_WITH_DELAY": 0,
+              "MULTIPLE_SUPPORTED_OPTIONS": 1,
+              "NO_APPLICABLE_ALTERNATIVE": 0,
+              "NONE": 0
+            }
+          },
+          "contextSufficient": {
+            "choice": "COMPLETE",
+            "confidence": 1,
+            "probabilities": {
+              "COMPLETE": 1,
+              "MISSING_TIMING": 0,
+              "MISSING_TRADE": 0,
+              "MISSING_COVER": 0,
+              "UNVERIFIED_CONTACT": 0,
+              "USER_UNCERTAINTY": 0,
+              "UNRESOLVED_CONTEXT": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "caseId": "test-cover-unreachable",
+      "provenance": "DETERMINISTIC_PROXY_NOT_GOLD",
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "decision-evidence-questions.v2",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 0,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 0,
+            "INSUFFICIENT": 1
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MULTIPLE_REASONABLE_ACTIONS"
+        ],
+        "witnesses": {
+          "riskWarranted": {
+            "choice": "NONE",
+            "confidence": 1,
+            "probabilities": {
+              "TRADE_SUPPORT": 0,
+              "OBJECTIVE_URGENCY": 0,
+              "AVOIDABLE_RECONTACT": 0,
+              "NONE": 1
+            }
+          },
+          "alternativePreferable": {
+            "choice": "NONE",
+            "confidence": 1,
+            "probabilities": {
+              "COVER_WITH_DELAY": 0,
+              "TRADE_WITH_DELAY": 0,
+              "MULTIPLE_SUPPORTED_OPTIONS": 0,
+              "NO_APPLICABLE_ALTERNATIVE": 0,
+              "NONE": 1
+            }
+          },
+          "contextSufficient": {
+            "choice": "UNRESOLVED_CONTEXT",
+            "confidence": 1,
+            "probabilities": {
+              "COMPLETE": 0,
+              "MISSING_TIMING": 0,
+              "MISSING_TRADE": 0,
+              "MISSING_COVER": 0,
+              "UNVERIFIED_CONTACT": 0,
+              "USER_UNCERTAINTY": 0,
+              "UNRESOLVED_CONTEXT": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "caseId": "test-user-count-conflict",
+      "provenance": "DETERMINISTIC_PROXY_NOT_GOLD",
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "decision-evidence-questions.v2",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 0,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 0,
+            "INSUFFICIENT": 1
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MISSING_CONTEXT"
+        ],
+        "witnesses": {
+          "riskWarranted": {
+            "choice": "NONE",
+            "confidence": 1,
+            "probabilities": {
+              "TRADE_SUPPORT": 0,
+              "OBJECTIVE_URGENCY": 0,
+              "AVOIDABLE_RECONTACT": 0,
+              "NONE": 1
+            }
+          },
+          "alternativePreferable": {
+            "choice": "NONE",
+            "confidence": 1,
+            "probabilities": {
+              "COVER_WITH_DELAY": 0,
+              "TRADE_WITH_DELAY": 0,
+              "MULTIPLE_SUPPORTED_OPTIONS": 0,
+              "NO_APPLICABLE_ALTERNATIVE": 0,
+              "NONE": 1
+            }
+          },
+          "contextSufficient": {
+            "choice": "MISSING_TIMING",
+            "confidence": 1,
+            "probabilities": {
+              "COMPLETE": 0,
+              "MISSING_TIMING": 1,
+              "MISSING_TRADE": 0,
+              "MISSING_COVER": 0,
+              "UNVERIFIED_CONTACT": 0,
+              "USER_UNCERTAINTY": 0,
+              "UNRESOLVED_CONTEXT": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "caseId": "test-current-vision-avoidable",
+      "provenance": "DETERMINISTIC_PROXY_NOT_GOLD",
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "decision-evidence-questions.v2",
+        "riskWarranted": {
+          "choice": "UNWARRANTED",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 0,
+            "UNWARRANTED": 1,
+            "UNKNOWN": 0
+          },
+          "refs": [
+            "e1",
+            "e2",
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "PREFERABLE",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 1,
+            "NOT_ESTABLISHED": 0,
+            "UNKNOWN": 0
+          },
+          "refs": [
+            "e3",
+            "e5"
+          ]
+        },
+        "contextSufficient": {
+          "choice": "SUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 1,
+            "INSUFFICIENT": 0
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MULTIPLE_REASONABLE_ACTIONS"
+        ],
+        "witnesses": {
+          "riskWarranted": {
+            "choice": "AVOIDABLE_RECONTACT",
+            "confidence": 1,
+            "probabilities": {
+              "TRADE_SUPPORT": 0,
+              "OBJECTIVE_URGENCY": 0,
+              "AVOIDABLE_RECONTACT": 1,
+              "NONE": 0
+            }
+          },
+          "alternativePreferable": {
+            "choice": "COVER_WITH_DELAY",
+            "confidence": 1,
+            "probabilities": {
+              "COVER_WITH_DELAY": 1,
+              "TRADE_WITH_DELAY": 0,
+              "MULTIPLE_SUPPORTED_OPTIONS": 0,
+              "NO_APPLICABLE_ALTERNATIVE": 0,
+              "NONE": 0
+            }
+          },
+          "contextSufficient": {
+            "choice": "COMPLETE",
+            "confidence": 1,
+            "probabilities": {
+              "COMPLETE": 1,
+              "MISSING_TIMING": 0,
+              "MISSING_TRADE": 0,
+              "MISSING_COVER": 0,
+              "UNVERIFIED_CONTACT": 0,
+              "USER_UNCERTAINTY": 0,
+              "UNRESOLVED_CONTEXT": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "caseId": "test-history-and-sound",
+      "provenance": "DETERMINISTIC_PROXY_NOT_GOLD",
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "decision-evidence-questions.v2",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 0,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 0,
+            "INSUFFICIENT": 1
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MISSING_CONTEXT"
+        ],
+        "witnesses": {
+          "riskWarranted": {
+            "choice": "NONE",
+            "confidence": 1,
+            "probabilities": {
+              "TRADE_SUPPORT": 0,
+              "OBJECTIVE_URGENCY": 0,
+              "AVOIDABLE_RECONTACT": 0,
+              "NONE": 1
+            }
+          },
+          "alternativePreferable": {
+            "choice": "NONE",
+            "confidence": 1,
+            "probabilities": {
+              "COVER_WITH_DELAY": 0,
+              "TRADE_WITH_DELAY": 0,
+              "MULTIPLE_SUPPORTED_OPTIONS": 0,
+              "NO_APPLICABLE_ALTERNATIVE": 0,
+              "NONE": 1
+            }
+          },
+          "contextSufficient": {
+            "choice": "MISSING_TIMING",
+            "confidence": 1,
+            "probabilities": {
+              "COMPLETE": 0,
+              "MISSING_TIMING": 1,
+              "MISSING_TRADE": 0,
+              "MISSING_COVER": 0,
+              "UNVERIFIED_CONTACT": 0,
+              "USER_UNCERTAINTY": 0,
+              "UNRESOLVED_CONTEXT": 0
+            }
+          }
+        }
+      }
+    }
+  ],
+  "summaries": {
+    "OLD_JEV": {
+      "cases": 6,
+      "parsed": 6,
+      "gateValid": 2,
+      "gateValidNonabstaining": 0,
+      "primarySuccess": 0,
+      "primaryRate": 0,
+      "primaryDefinition": "GATE_VALID_AND_NONABSTAINING_AND_ALL_THREE_AUTHOR_LABEL_SETS_HIT",
+      "rawAllLabelSetHits": 2,
+      "rawDenominator": 6,
+      "parsedRefusals": 6,
+      "fallbackReasons": {
+        "VALIDATION_REJECTED": 4
+      },
+      "remoteCalls": 6,
+      "latency": {
+        "completedSamples": 6,
+        "completedP50MsDescriptive": 523.5,
+        "timeouts": 0,
+        "p95Ms": null,
+        "p99Ms": null,
+        "note": "Timeouts are right-censored; tiny non-randomized samples cannot establish reliable tail latency."
+      },
+      "usage": {
+        "inputTokens": 31314,
+        "outputTokens": 7665,
+        "knownCostUsd": 0.001315188,
+        "unknownCostCalls": 0
+      },
+      "professionalQuality": "NOT_MEASURED_NO_COACH_LABELS",
+      "confidenceInterval": null,
+      "uncertainty": "At most six new proxy scenario groups; no stable population-quality interval or acceptance threshold is inferred."
+    },
+    "NEW_JEV": {
+      "cases": 6,
+      "parsed": 5,
+      "gateValid": 1,
+      "gateValidNonabstaining": 0,
+      "primarySuccess": 0,
+      "primaryRate": 0,
+      "primaryDefinition": "GATE_VALID_AND_NONABSTAINING_AND_ALL_THREE_AUTHOR_LABEL_SETS_HIT",
+      "rawAllLabelSetHits": 1,
+      "rawDenominator": 5,
+      "parsedRefusals": 5,
+      "fallbackReasons": {
+        "VALIDATION_REJECTED": 4,
+        "UPSTREAM_PROBABILITY": 1
+      },
+      "remoteCalls": 6,
+      "latency": {
+        "completedSamples": 6,
+        "completedP50MsDescriptive": 397,
+        "timeouts": 0,
+        "p95Ms": null,
+        "p99Ms": null,
+        "note": "Timeouts are right-censored; tiny non-randomized samples cannot establish reliable tail latency."
+      },
+      "usage": {
+        "inputTokens": 27570,
+        "outputTokens": 2305,
+        "knownCostUsd": 0.00115794,
+        "unknownCostCalls": 0
+      },
+      "professionalQuality": "NOT_MEASURED_NO_COACH_LABELS",
+      "confidenceInterval": null,
+      "uncertainty": "At most six new proxy scenario groups; no stable population-quality interval or acceptance threshold is inferred."
+    },
+    "GENERATION_MODEL": {
+      "cases": 6,
+      "parsed": 6,
+      "gateValid": 4,
+      "gateValidNonabstaining": 2,
+      "primarySuccess": 2,
+      "primaryRate": 0.3333333333333333,
+      "primaryDefinition": "GATE_VALID_AND_NONABSTAINING_AND_ALL_THREE_AUTHOR_LABEL_SETS_HIT",
+      "rawAllLabelSetHits": 4,
+      "rawDenominator": 6,
+      "parsedRefusals": 2,
+      "fallbackReasons": {
+        "VALIDATION_REJECTED": 2
+      },
+      "remoteCalls": 6,
+      "latency": {
+        "completedSamples": 6,
+        "completedP50MsDescriptive": 1710,
+        "timeouts": 0,
+        "p95Ms": null,
+        "p99Ms": null,
+        "note": "Timeouts are right-censored; tiny non-randomized samples cannot establish reliable tail latency."
+      },
+      "usage": {
+        "inputTokens": 22771,
+        "outputTokens": 2508,
+        "knownCostUsd": 0,
+        "unknownCostCalls": 6
+      },
+      "professionalQuality": "NOT_MEASURED_NO_COACH_LABELS",
+      "confidenceInterval": null,
+      "uncertainty": "At most six new proxy scenario groups; no stable population-quality interval or acceptance threshold is inferred."
+    }
+  },
+  "rows": [
+    {
+      "caseId": "test-urgent-objective",
+      "group": "test-urgency",
+      "split": "holdout",
+      "arm": "OLD_JEV",
+      "packetSha256": "32be7338810fdbf510813061c1f0b9c65f5c9183fe00119d3610c86ba5fd194f",
+      "canonicalBodySha256": "7123b8ebdb2f0d7919e1b9a354bf961d809eccec325b6370f7db528b8e5fbc7b",
+      "actualRequestSha256": "7123b8ebdb2f0d7919e1b9a354bf961d809eccec325b6370f7db528b8e5fbc7b",
+      "status": "FALLBACK",
+      "reason": "VALIDATION_REJECTED",
+      "actualModel": "jev-1.13.0",
+      "remoteCalls": 1,
+      "latencyMs": 1136,
+      "usage": {
+        "inputTokens": 6612,
+        "outputTokens": 1672,
+        "costUsd": 0.000277704
+      },
+      "result": null,
+      "diagnosticResult": {
+        "model": "jev-1.13.0",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 0.59,
+          "probabilities": {
+            "UNWARRANTED": 0.22,
+            "WARRANTED": 0.73,
+            "UNKNOWN": 0.05
+          },
+          "refs": [
+            "e5"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.72,
+          "probabilities": {
+            "UNKNOWN": 0.01,
+            "PREFERABLE": 0.17,
+            "NOT_ESTABLISHED": 0.82
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.7,
+          "probabilities": {
+            "INSUFFICIENT": 0.85,
+            "SUFFICIENT": 0.15
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "parsed": true,
+      "gateValid": false,
+      "nonabstaining": false,
+      "riskHit": true,
+      "alternativeHit": true,
+      "sufficiencyHit": false,
+      "allLabelSetsHit": false,
+      "primarySuccess": false,
+      "refusal": true,
+      "evidenceConfidence": 0.95,
+      "rejectionReasons": [
+        "UNSUPPORTED_CITATION"
+      ]
+    },
+    {
+      "caseId": "test-urgent-objective",
+      "group": "test-urgency",
+      "split": "holdout",
+      "arm": "NEW_JEV",
+      "packetSha256": "1de12e208c36a625e9bd61b3b5a92c9c972b692bd8eab3bd34239d7554fec882",
+      "canonicalBodySha256": "5d9f6b258db714ab90916575f93c3ea825f535d7b8f708c102a613b531e769dd",
+      "actualRequestSha256": "5d9f6b258db714ab90916575f93c3ea825f535d7b8f708c102a613b531e769dd",
+      "status": "FALLBACK",
+      "reason": "VALIDATION_REJECTED",
+      "actualModel": "jev-1.13.0",
+      "remoteCalls": 1,
+      "latencyMs": 886,
+      "usage": {
+        "inputTokens": 4573,
+        "outputTokens": 395,
+        "costUsd": 0.00019206600000000001
+      },
+      "result": null,
+      "diagnosticResult": {
+        "model": "jev-1.13.0",
+        "questionVersion": "decision-evidence-questions.v2",
+        "riskWarranted": {
+          "choice": "UNWARRANTED",
+          "confidence": 0.85,
+          "probabilities": {
+            "UNWARRANTED": 0.9,
+            "UNKNOWN": 0.01,
+            "WARRANTED": 0.09
+          },
+          "refs": [
+            "e1",
+            "e2",
+            "e3"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.92,
+          "probabilities": {
+            "NOT_ESTABLISHED": 0.95,
+            "PREFERABLE": 0.02,
+            "UNKNOWN": 0.03
+          },
+          "refs": [
+            "e3"
+          ]
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.33,
+          "probabilities": {
+            "SUFFICIENT": 0.33,
+            "INSUFFICIENT": 0.67
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "witnesses": {
+          "riskWarranted": {
+            "choice": "OBJECTIVE_URGENCY",
+            "confidence": 0.76,
+            "probabilities": {
+              "NONE": 0.11,
+              "OBJECTIVE_URGENCY": 0.83,
+              "TRADE_SUPPORT": 0,
+              "AVOIDABLE_RECONTACT": 0.06
+            }
+          },
+          "alternativePreferable": {
+            "choice": "NO_APPLICABLE_ALTERNATIVE",
+            "confidence": 0.98,
+            "probabilities": {
+              "NO_APPLICABLE_ALTERNATIVE": 0.99,
+              "NONE": 0.01,
+              "COVER_WITH_DELAY": 0,
+              "MULTIPLE_SUPPORTED_OPTIONS": 0,
+              "TRADE_WITH_DELAY": 0
+            }
+          },
+          "contextSufficient": {
+            "choice": "COMPLETE",
+            "confidence": 0.76,
+            "probabilities": {
+              "USER_UNCERTAINTY": 0,
+              "MISSING_COVER": 0,
+              "MISSING_TIMING": 0,
+              "UNRESOLVED_CONTEXT": 0.15,
+              "COMPLETE": 0.8,
+              "UNVERIFIED_CONTACT": 0.05,
+              "MISSING_TRADE": 0
+            }
+          }
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MISSING_CONTEXT"
+        ]
+      },
+      "parsed": true,
+      "gateValid": false,
+      "nonabstaining": false,
+      "riskHit": false,
+      "alternativeHit": true,
+      "sufficiencyHit": false,
+      "allLabelSetsHit": false,
+      "primarySuccess": false,
+      "refusal": true,
+      "evidenceConfidence": 0.95,
+      "rejectionReasons": [
+        "WITNESS_LABEL_MISMATCH",
+        "UNSUPPORTED_CITATION",
+        "UNSUPPORTED_RISK_JUDGMENT"
+      ]
+    },
+    {
+      "caseId": "test-urgent-objective",
+      "group": "test-urgency",
+      "split": "holdout",
+      "arm": "GENERATION_MODEL",
+      "packetSha256": "1de12e208c36a625e9bd61b3b5a92c9c972b692bd8eab3bd34239d7554fec882",
+      "canonicalBodySha256": "5d9f6b258db714ab90916575f93c3ea825f535d7b8f708c102a613b531e769dd",
+      "actualRequestSha256": "fe30bcf367dd158f5a5b3d5c9508ba12e081eeb542a2c73b4b0d33a0c8a5a707",
+      "status": "FALLBACK",
+      "reason": "VALIDATION_REJECTED",
+      "actualModel": "deepseek-flash",
+      "remoteCalls": 1,
+      "latencyMs": 1847,
+      "usage": {
+        "inputTokens": 3791,
+        "outputTokens": 425,
+        "costUsd": null
+      },
+      "result": null,
+      "diagnosticResult": {
+        "model": "deepseek-flash",
+        "questionVersion": "decision-evidence-questions.v2",
+        "riskWarranted": {
+          "choice": "UNWARRANTED",
+          "confidence": 0.72,
+          "probabilities": {
+            "WARRANTED": 0.18,
+            "UNWARRANTED": 0.72,
+            "UNKNOWN": 0.1
+          },
+          "refs": [
+            "e1",
+            "e2",
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.62,
+          "probabilities": {
+            "PREFERABLE": 0.18,
+            "NOT_ESTABLISHED": 0.62,
+            "UNKNOWN": 0.2
+          },
+          "refs": [
+            "e3"
+          ]
+        },
+        "contextSufficient": {
+          "choice": "SUFFICIENT",
+          "confidence": 0.7,
+          "probabilities": {
+            "SUFFICIENT": 0.7,
+            "INSUFFICIENT": 0.3
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "witnesses": {
+          "riskWarranted": {
+            "choice": "AVOIDABLE_RECONTACT",
+            "confidence": 0.72,
+            "probabilities": {
+              "TRADE_SUPPORT": 0.05,
+              "OBJECTIVE_URGENCY": 0.13,
+              "AVOIDABLE_RECONTACT": 0.72,
+              "NONE": 0.1
+            }
+          },
+          "alternativePreferable": {
+            "choice": "NO_APPLICABLE_ALTERNATIVE",
+            "confidence": 0.6,
+            "probabilities": {
+              "COVER_WITH_DELAY": 0.12,
+              "TRADE_WITH_DELAY": 0.05,
+              "MULTIPLE_SUPPORTED_OPTIONS": 0.13,
+              "NO_APPLICABLE_ALTERNATIVE": 0.6,
+              "NONE": 0.1
+            }
+          },
+          "contextSufficient": {
+            "choice": "COMPLETE",
+            "confidence": 0.7,
+            "probabilities": {
+              "COMPLETE": 0.7,
+              "MISSING_TIMING": 0.05,
+              "MISSING_TRADE": 0.05,
+              "MISSING_COVER": 0.05,
+              "UNVERIFIED_CONTACT": 0.08,
+              "USER_UNCERTAINTY": 0.03,
+              "UNRESOLVED_CONTEXT": 0.04
+            }
+          }
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "parsed": true,
+      "gateValid": false,
+      "nonabstaining": true,
+      "riskHit": false,
+      "alternativeHit": true,
+      "sufficiencyHit": true,
+      "allLabelSetsHit": false,
+      "primarySuccess": false,
+      "refusal": false,
+      "evidenceConfidence": 0.95,
+      "rejectionReasons": [
+        "INAPPLICABLE_WITNESS",
+        "UNSUPPORTED_RISK_JUDGMENT"
+      ]
+    },
+    {
+      "caseId": "test-multiple-supported-options",
+      "group": "test-options",
+      "split": "holdout",
+      "arm": "OLD_JEV",
+      "packetSha256": "ed35f1b9168d98729fbc617cb1336b74b13da8fe85284f788828c9cb40eeda0d",
+      "canonicalBodySha256": "6bbc7709581a9e142252516ccbca18efc8d09c9c02890abf2a846c64b78d6e26",
+      "actualRequestSha256": "6bbc7709581a9e142252516ccbca18efc8d09c9c02890abf2a846c64b78d6e26",
+      "status": "FALLBACK",
+      "reason": "VALIDATION_REJECTED",
+      "actualModel": "jev-1.13.0",
+      "remoteCalls": 1,
+      "latencyMs": 579,
+      "usage": {
+        "inputTokens": 6612,
+        "outputTokens": 1668,
+        "costUsd": 0.000277704
+      },
+      "result": null,
+      "diagnosticResult": {
+        "model": "jev-1.13.0",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 0.24,
+          "probabilities": {
+            "UNWARRANTED": 0.43,
+            "WARRANTED": 0.49,
+            "UNKNOWN": 0.08
+          },
+          "refs": [
+            "e4"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.78,
+          "probabilities": {
+            "UNKNOWN": 0.01,
+            "PREFERABLE": 0.14,
+            "NOT_ESTABLISHED": 0.85
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.88,
+          "probabilities": {
+            "SUFFICIENT": 0.06,
+            "INSUFFICIENT": 0.94
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "parsed": true,
+      "gateValid": false,
+      "nonabstaining": false,
+      "riskHit": true,
+      "alternativeHit": true,
+      "sufficiencyHit": false,
+      "allLabelSetsHit": false,
+      "primarySuccess": false,
+      "refusal": true,
+      "evidenceConfidence": 0.95,
+      "rejectionReasons": [
+        "UNSUPPORTED_CITATION"
+      ]
+    },
+    {
+      "caseId": "test-multiple-supported-options",
+      "group": "test-options",
+      "split": "holdout",
+      "arm": "NEW_JEV",
+      "packetSha256": "23274ee7fbc4ff0b143246d0fb3f5168c73ebbd6d8a56d0a009a162fb29ddfb9",
+      "canonicalBodySha256": "21d98e70634d254016b85bd78d61903d36357d68d46bc7740915fd5dc060cf33",
+      "actualRequestSha256": "21d98e70634d254016b85bd78d61903d36357d68d46bc7740915fd5dc060cf33",
+      "status": "FALLBACK",
+      "reason": "VALIDATION_REJECTED",
+      "actualModel": "jev-1.13.0",
+      "remoteCalls": 1,
+      "latencyMs": 689,
+      "usage": {
+        "inputTokens": 4573,
+        "outputTokens": 387,
+        "costUsd": 0.00019206600000000001
+      },
+      "result": null,
+      "diagnosticResult": {
+        "model": "jev-1.13.0",
+        "questionVersion": "decision-evidence-questions.v2",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 0.3,
+          "probabilities": {
+            "UNWARRANTED": 0.41,
+            "UNKNOWN": 0.06,
+            "WARRANTED": 0.53
+          },
+          "refs": [
+            "e1",
+            "e2",
+            "e4"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.71,
+          "probabilities": {
+            "NOT_ESTABLISHED": 0.8,
+            "PREFERABLE": 0.08,
+            "UNKNOWN": 0.12
+          },
+          "refs": [
+            "e3",
+            "e4"
+          ]
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.56,
+          "probabilities": {
+            "INSUFFICIENT": 0.78,
+            "SUFFICIENT": 0.22
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "witnesses": {
+          "riskWarranted": {
+            "choice": "TRADE_SUPPORT",
+            "confidence": 0.82,
+            "probabilities": {
+              "NONE": 0.12,
+              "OBJECTIVE_URGENCY": 0,
+              "TRADE_SUPPORT": 0.87,
+              "AVOIDABLE_RECONTACT": 0.01
+            }
+          },
+          "alternativePreferable": {
+            "choice": "MULTIPLE_SUPPORTED_OPTIONS",
+            "confidence": 0.91,
+            "probabilities": {
+              "NONE": 0.01,
+              "NO_APPLICABLE_ALTERNATIVE": 0,
+              "MULTIPLE_SUPPORTED_OPTIONS": 0.93,
+              "TRADE_WITH_DELAY": 0.06,
+              "COVER_WITH_DELAY": 0
+            }
+          },
+          "contextSufficient": {
+            "choice": "COMPLETE",
+            "confidence": 0.72,
+            "probabilities": {
+              "COMPLETE": 0.77,
+              "MISSING_TRADE": 0,
+              "UNRESOLVED_CONTEXT": 0.18,
+              "MISSING_COVER": 0,
+              "UNVERIFIED_CONTACT": 0.05,
+              "USER_UNCERTAINTY": 0,
+              "MISSING_TIMING": 0
+            }
+          }
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MISSING_CONTEXT",
+          "MULTIPLE_REASONABLE_ACTIONS"
+        ]
+      },
+      "parsed": true,
+      "gateValid": false,
+      "nonabstaining": false,
+      "riskHit": true,
+      "alternativeHit": true,
+      "sufficiencyHit": false,
+      "allLabelSetsHit": false,
+      "primarySuccess": false,
+      "refusal": true,
+      "evidenceConfidence": 0.95,
+      "rejectionReasons": [
+        "WITNESS_LABEL_MISMATCH"
+      ]
+    },
+    {
+      "caseId": "test-multiple-supported-options",
+      "group": "test-options",
+      "split": "holdout",
+      "arm": "GENERATION_MODEL",
+      "packetSha256": "23274ee7fbc4ff0b143246d0fb3f5168c73ebbd6d8a56d0a009a162fb29ddfb9",
+      "canonicalBodySha256": "21d98e70634d254016b85bd78d61903d36357d68d46bc7740915fd5dc060cf33",
+      "actualRequestSha256": "b197dc2bdea4c44209b7261bb93ead26ebfccb3bc0cfbf9a12d3132cde8b051e",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "actualModel": "deepseek-flash",
+      "remoteCalls": 1,
+      "latencyMs": 2018,
+      "usage": {
+        "inputTokens": 3791,
+        "outputTokens": 421,
+        "costUsd": null
+      },
+      "result": {
+        "model": "deepseek-flash",
+        "questionVersion": "decision-evidence-questions.v2",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 0.72,
+          "probabilities": {
+            "WARRANTED": 0.72,
+            "UNWARRANTED": 0.13,
+            "UNKNOWN": 0.15
+          },
+          "refs": [
+            "e1",
+            "e2",
+            "e4"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.6,
+          "probabilities": {
+            "PREFERABLE": 0.2,
+            "NOT_ESTABLISHED": 0.6,
+            "UNKNOWN": 0.2
+          },
+          "refs": [
+            "e3",
+            "e4"
+          ]
+        },
+        "contextSufficient": {
+          "choice": "SUFFICIENT",
+          "confidence": 0.7,
+          "probabilities": {
+            "SUFFICIENT": 0.7,
+            "INSUFFICIENT": 0.3
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "witnesses": {
+          "riskWarranted": {
+            "choice": "TRADE_SUPPORT",
+            "confidence": 0.7,
+            "probabilities": {
+              "TRADE_SUPPORT": 0.7,
+              "OBJECTIVE_URGENCY": 0.05,
+              "AVOIDABLE_RECONTACT": 0.15,
+              "NONE": 0.1
+            }
+          },
+          "alternativePreferable": {
+            "choice": "MULTIPLE_SUPPORTED_OPTIONS",
+            "confidence": 0.55,
+            "probabilities": {
+              "COVER_WITH_DELAY": 0.1,
+              "TRADE_WITH_DELAY": 0.2,
+              "MULTIPLE_SUPPORTED_OPTIONS": 0.55,
+              "NO_APPLICABLE_ALTERNATIVE": 0.05,
+              "NONE": 0.1
+            }
+          },
+          "contextSufficient": {
+            "choice": "COMPLETE",
+            "confidence": 0.68,
+            "probabilities": {
+              "COMPLETE": 0.68,
+              "MISSING_TIMING": 0.05,
+              "MISSING_TRADE": 0.05,
+              "MISSING_COVER": 0.05,
+              "UNVERIFIED_CONTACT": 0.07,
+              "USER_UNCERTAINTY": 0.05,
+              "UNRESOLVED_CONTEXT": 0.05
+            }
+          }
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MULTIPLE_REASONABLE_ACTIONS"
+        ]
+      },
+      "diagnosticResult": null,
+      "parsed": true,
+      "gateValid": true,
+      "nonabstaining": true,
+      "riskHit": true,
+      "alternativeHit": true,
+      "sufficiencyHit": true,
+      "allLabelSetsHit": true,
+      "primarySuccess": true,
+      "refusal": false,
+      "evidenceConfidence": 0.95,
+      "rejectionReasons": []
+    },
+    {
+      "caseId": "test-cover-unreachable",
+      "group": "test-cover",
+      "split": "holdout",
+      "arm": "OLD_JEV",
+      "packetSha256": "a743bf07db12ae1915e63d646b9f805595c8792e0a2c44fb3ebdea77589b9eac",
+      "canonicalBodySha256": "dbb1c336786fb5f35d15cf02c700adf220d1de7222f92662a88a4b7ca0656738",
+      "actualRequestSha256": "dbb1c336786fb5f35d15cf02c700adf220d1de7222f92662a88a4b7ca0656738",
+      "status": "FALLBACK",
+      "reason": "VALIDATION_REJECTED",
+      "actualModel": "jev-1.13.0",
+      "remoteCalls": 1,
+      "latencyMs": 712,
+      "usage": {
+        "inputTokens": 6613,
+        "outputTokens": 1670,
+        "costUsd": 0.00027774600000000005
+      },
+      "result": null,
+      "diagnosticResult": {
+        "model": "jev-1.13.0",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNWARRANTED",
+          "confidence": 0.34,
+          "probabilities": {
+            "UNKNOWN": 0.07,
+            "WARRANTED": 0.37,
+            "UNWARRANTED": 0.56
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.89,
+          "probabilities": {
+            "UNKNOWN": 0.01,
+            "PREFERABLE": 0.06,
+            "NOT_ESTABLISHED": 0.93
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.85,
+          "probabilities": {
+            "SUFFICIENT": 0.07,
+            "INSUFFICIENT": 0.93
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "parsed": true,
+      "gateValid": false,
+      "nonabstaining": false,
+      "riskHit": false,
+      "alternativeHit": true,
+      "sufficiencyHit": true,
+      "allLabelSetsHit": false,
+      "primarySuccess": false,
+      "refusal": true,
+      "evidenceConfidence": 0,
+      "rejectionReasons": [
+        "UNSUPPORTED_CITATION",
+        "UNSUPPORTED_RISK_JUDGMENT"
+      ]
+    },
+    {
+      "caseId": "test-cover-unreachable",
+      "group": "test-cover",
+      "split": "holdout",
+      "arm": "NEW_JEV",
+      "packetSha256": "eced31bb4e84076ca47d96ff9d0c154c75ee5ddcbf32b674fad61a85b46bdc9e",
+      "canonicalBodySha256": "6b6a743cc2216306c4ce146e658a44e4106b80068f67995c5635a51f067005b6",
+      "actualRequestSha256": "6b6a743cc2216306c4ce146e658a44e4106b80068f67995c5635a51f067005b6",
+      "status": "FALLBACK",
+      "reason": "VALIDATION_REJECTED",
+      "actualModel": "jev-1.13.0",
+      "remoteCalls": 1,
+      "latencyMs": 298,
+      "usage": {
+        "inputTokens": 4574,
+        "outputTokens": 381,
+        "costUsd": 0.000192108
+      },
+      "result": null,
+      "diagnosticResult": {
+        "model": "jev-1.13.0",
+        "questionVersion": "decision-evidence-questions.v2",
+        "riskWarranted": {
+          "choice": "UNWARRANTED",
+          "confidence": 0.98,
+          "probabilities": {
+            "WARRANTED": 0.01,
+            "UNKNOWN": 0,
+            "UNWARRANTED": 0.99
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.51,
+          "probabilities": {
+            "NOT_ESTABLISHED": 0.68,
+            "UNKNOWN": 0.06,
+            "PREFERABLE": 0.26
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.33,
+          "probabilities": {
+            "SUFFICIENT": 0.33,
+            "INSUFFICIENT": 0.67
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "witnesses": {
+          "riskWarranted": {
+            "choice": "NONE",
+            "confidence": 0.51,
+            "probabilities": {
+              "OBJECTIVE_URGENCY": 0,
+              "NONE": 0.63,
+              "TRADE_SUPPORT": 0,
+              "AVOIDABLE_RECONTACT": 0.37
+            }
+          },
+          "alternativePreferable": {
+            "choice": "NONE",
+            "confidence": 0.64,
+            "probabilities": {
+              "NO_APPLICABLE_ALTERNATIVE": 0.17,
+              "NONE": 0.72,
+              "TRADE_WITH_DELAY": 0,
+              "COVER_WITH_DELAY": 0.02,
+              "MULTIPLE_SUPPORTED_OPTIONS": 0.09
+            }
+          },
+          "contextSufficient": {
+            "choice": "COMPLETE",
+            "confidence": 0.75,
+            "probabilities": {
+              "MISSING_TRADE": 0,
+              "MISSING_TIMING": 0,
+              "COMPLETE": 0.8,
+              "USER_UNCERTAINTY": 0,
+              "MISSING_COVER": 0,
+              "UNVERIFIED_CONTACT": 0.05,
+              "UNRESOLVED_CONTEXT": 0.15
+            }
+          }
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MISSING_CONTEXT"
+        ]
+      },
+      "parsed": true,
+      "gateValid": false,
+      "nonabstaining": false,
+      "riskHit": false,
+      "alternativeHit": true,
+      "sufficiencyHit": true,
+      "allLabelSetsHit": false,
+      "primarySuccess": false,
+      "refusal": true,
+      "evidenceConfidence": 0.95,
+      "rejectionReasons": [
+        "WITNESS_LABEL_MISMATCH",
+        "UNSUPPORTED_CITATION",
+        "UNSUPPORTED_RISK_JUDGMENT"
+      ]
+    },
+    {
+      "caseId": "test-cover-unreachable",
+      "group": "test-cover",
+      "split": "holdout",
+      "arm": "GENERATION_MODEL",
+      "packetSha256": "eced31bb4e84076ca47d96ff9d0c154c75ee5ddcbf32b674fad61a85b46bdc9e",
+      "canonicalBodySha256": "6b6a743cc2216306c4ce146e658a44e4106b80068f67995c5635a51f067005b6",
+      "actualRequestSha256": "00a3e6a0e717c769f970ef44606a8d6c3b74d05d3acf37052c9f4afad566729a",
+      "status": "FALLBACK",
+      "reason": "VALIDATION_REJECTED",
+      "actualModel": "deepseek-flash",
+      "remoteCalls": 1,
+      "latencyMs": 1634,
+      "usage": {
+        "inputTokens": 3791,
+        "outputTokens": 425,
+        "costUsd": null
+      },
+      "result": null,
+      "diagnosticResult": {
+        "model": "deepseek-flash",
+        "questionVersion": "decision-evidence-questions.v2",
+        "riskWarranted": {
+          "choice": "UNWARRANTED",
+          "confidence": 0.62,
+          "probabilities": {
+            "WARRANTED": 0.18,
+            "UNWARRANTED": 0.62,
+            "UNKNOWN": 0.2
+          },
+          "refs": [
+            "e1",
+            "e2",
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.55,
+          "probabilities": {
+            "PREFERABLE": 0.2,
+            "NOT_ESTABLISHED": 0.55,
+            "UNKNOWN": 0.25
+          },
+          "refs": [
+            "e3"
+          ]
+        },
+        "contextSufficient": {
+          "choice": "SUFFICIENT",
+          "confidence": 0.6,
+          "probabilities": {
+            "SUFFICIENT": 0.6,
+            "INSUFFICIENT": 0.4
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "witnesses": {
+          "riskWarranted": {
+            "choice": "AVOIDABLE_RECONTACT",
+            "confidence": 0.6,
+            "probabilities": {
+              "TRADE_SUPPORT": 0.05,
+              "OBJECTIVE_URGENCY": 0.05,
+              "AVOIDABLE_RECONTACT": 0.6,
+              "NONE": 0.3
+            }
+          },
+          "alternativePreferable": {
+            "choice": "NO_APPLICABLE_ALTERNATIVE",
+            "confidence": 0.5,
+            "probabilities": {
+              "COVER_WITH_DELAY": 0.1,
+              "TRADE_WITH_DELAY": 0.05,
+              "MULTIPLE_SUPPORTED_OPTIONS": 0.2,
+              "NO_APPLICABLE_ALTERNATIVE": 0.5,
+              "NONE": 0.15
+            }
+          },
+          "contextSufficient": {
+            "choice": "COMPLETE",
+            "confidence": 0.6,
+            "probabilities": {
+              "COMPLETE": 0.6,
+              "MISSING_TIMING": 0.05,
+              "MISSING_TRADE": 0.1,
+              "MISSING_COVER": 0.1,
+              "UNVERIFIED_CONTACT": 0.05,
+              "USER_UNCERTAINTY": 0.05,
+              "UNRESOLVED_CONTEXT": 0.05
+            }
+          }
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "parsed": true,
+      "gateValid": false,
+      "nonabstaining": true,
+      "riskHit": false,
+      "alternativeHit": true,
+      "sufficiencyHit": false,
+      "allLabelSetsHit": false,
+      "primarySuccess": false,
+      "refusal": false,
+      "evidenceConfidence": 0.95,
+      "rejectionReasons": [
+        "INAPPLICABLE_WITNESS",
+        "UNSUPPORTED_RISK_JUDGMENT"
+      ]
+    },
+    {
+      "caseId": "test-user-count-conflict",
+      "group": "test-user-conflict",
+      "split": "holdout",
+      "arm": "OLD_JEV",
+      "packetSha256": "c560ac74c72cb32e1d578d51a1ff3eafa7bf5da8bb37bd0679db21668f84e9f7",
+      "canonicalBodySha256": "8bf86742b42190ddfd5041125a193b5a2bb7dd9bd1b587da56cc5239fea496dc",
+      "actualRequestSha256": "8bf86742b42190ddfd5041125a193b5a2bb7dd9bd1b587da56cc5239fea496dc",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "actualModel": "jev-1.13.0",
+      "remoteCalls": 1,
+      "latencyMs": 282,
+      "usage": {
+        "inputTokens": 2413,
+        "outputTokens": 492,
+        "costUsd": 0.000101346
+      },
+      "result": {
+        "model": "jev-1.13.0",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.5,
+          "probabilities": {
+            "UNKNOWN": 0.66,
+            "WARRANTED": 0.28,
+            "UNWARRANTED": 0.06
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.46,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "UNKNOWN": 0.64,
+            "NOT_ESTABLISHED": 0.36
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "INSUFFICIENT": 1,
+            "SUFFICIENT": 0
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED",
+          "USER_CONTEXT_UNVERIFIED"
+        ]
+      },
+      "diagnosticResult": null,
+      "parsed": true,
+      "gateValid": true,
+      "nonabstaining": false,
+      "riskHit": true,
+      "alternativeHit": true,
+      "sufficiencyHit": true,
+      "allLabelSetsHit": true,
+      "primarySuccess": false,
+      "refusal": true,
+      "evidenceConfidence": 0,
+      "rejectionReasons": []
+    },
+    {
+      "caseId": "test-user-count-conflict",
+      "group": "test-user-conflict",
+      "split": "holdout",
+      "arm": "NEW_JEV",
+      "packetSha256": "6f1b9eaad18db4d06c504e575c4c29320b47c18671c81c1333450bcbec4d23f8",
+      "canonicalBodySha256": "81fbe541caa4302f34aec1324eef0b0f362f1edc4b749150e88f3765697e5934",
+      "actualRequestSha256": "81fbe541caa4302f34aec1324eef0b0f362f1edc4b749150e88f3765697e5934",
+      "status": "FALLBACK",
+      "reason": "UPSTREAM_PROBABILITY",
+      "actualModel": null,
+      "remoteCalls": 1,
+      "latencyMs": 444,
+      "usage": {
+        "inputTokens": 4457,
+        "outputTokens": 376,
+        "costUsd": 0.000187194
+      },
+      "result": null,
+      "diagnosticResult": null,
+      "parsed": false,
+      "gateValid": false,
+      "nonabstaining": false,
+      "riskHit": null,
+      "alternativeHit": null,
+      "sufficiencyHit": null,
+      "allLabelSetsHit": null,
+      "primarySuccess": false,
+      "refusal": null,
+      "evidenceConfidence": null,
+      "rejectionReasons": []
+    },
+    {
+      "caseId": "test-user-count-conflict",
+      "group": "test-user-conflict",
+      "split": "holdout",
+      "arm": "GENERATION_MODEL",
+      "packetSha256": "6f1b9eaad18db4d06c504e575c4c29320b47c18671c81c1333450bcbec4d23f8",
+      "canonicalBodySha256": "81fbe541caa4302f34aec1324eef0b0f362f1edc4b749150e88f3765697e5934",
+      "actualRequestSha256": "148d326df552adb1c7fb8793e803acf0d951d46f92acbd9c768e60b9c269dd7e",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "actualModel": "deepseek-flash",
+      "remoteCalls": 1,
+      "latencyMs": 1569,
+      "usage": {
+        "inputTokens": 3698,
+        "outputTokens": 408,
+        "costUsd": null
+      },
+      "result": {
+        "model": "deepseek-flash",
+        "questionVersion": "decision-evidence-questions.v2",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.5,
+          "probabilities": {
+            "WARRANTED": 0.25,
+            "UNWARRANTED": 0.25,
+            "UNKNOWN": 0.5
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.5,
+          "probabilities": {
+            "PREFERABLE": 0.2,
+            "NOT_ESTABLISHED": 0.3,
+            "UNKNOWN": 0.5
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.6,
+          "probabilities": {
+            "SUFFICIENT": 0.2,
+            "INSUFFICIENT": 0.8
+          },
+          "refs": []
+        },
+        "witnesses": {
+          "riskWarranted": {
+            "choice": "NONE",
+            "confidence": 0.5,
+            "probabilities": {
+              "TRADE_SUPPORT": 0.2,
+              "OBJECTIVE_URGENCY": 0.15,
+              "AVOIDABLE_RECONTACT": 0.15,
+              "NONE": 0.5
+            }
+          },
+          "alternativePreferable": {
+            "choice": "NONE",
+            "confidence": 0.5,
+            "probabilities": {
+              "COVER_WITH_DELAY": 0.15,
+              "TRADE_WITH_DELAY": 0.15,
+              "MULTIPLE_SUPPORTED_OPTIONS": 0.15,
+              "NO_APPLICABLE_ALTERNATIVE": 0.15,
+              "NONE": 0.4
+            }
+          },
+          "contextSufficient": {
+            "choice": "MISSING_TIMING",
+            "confidence": 0.35,
+            "probabilities": {
+              "COMPLETE": 0.1,
+              "MISSING_TIMING": 0.35,
+              "MISSING_TRADE": 0.25,
+              "MISSING_COVER": 0.2,
+              "UNVERIFIED_CONTACT": 0.05,
+              "USER_UNCERTAINTY": 0.03,
+              "UNRESOLVED_CONTEXT": 0.02
+            }
+          }
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MISSING_CONTEXT",
+          "USER_CONTEXT_UNVERIFIED"
+        ]
+      },
+      "diagnosticResult": null,
+      "parsed": true,
+      "gateValid": true,
+      "nonabstaining": false,
+      "riskHit": true,
+      "alternativeHit": true,
+      "sufficiencyHit": true,
+      "allLabelSetsHit": true,
+      "primarySuccess": false,
+      "refusal": true,
+      "evidenceConfidence": 0,
+      "rejectionReasons": []
+    },
+    {
+      "caseId": "test-current-vision-avoidable",
+      "group": "test-current-vision",
+      "split": "holdout",
+      "arm": "OLD_JEV",
+      "packetSha256": "63f1f9cd60782b291781acdfe5a1b700541463a83629cc53b525597f88ba5635",
+      "canonicalBodySha256": "c8f87931b34d2a4a7d391992b1abf519d3df155d569f3cbbe5ff9016c0ebea37",
+      "actualRequestSha256": "c8f87931b34d2a4a7d391992b1abf519d3df155d569f3cbbe5ff9016c0ebea37",
+      "status": "FALLBACK",
+      "reason": "VALIDATION_REJECTED",
+      "actualModel": "jev-1.13.0",
+      "remoteCalls": 1,
+      "latencyMs": 468,
+      "usage": {
+        "inputTokens": 6612,
+        "outputTokens": 1671,
+        "costUsd": 0.000277704
+      },
+      "result": null,
+      "diagnosticResult": {
+        "model": "jev-1.13.0",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 0.55,
+          "probabilities": {
+            "WARRANTED": 0.7,
+            "UNKNOWN": 0.09,
+            "UNWARRANTED": 0.21
+          },
+          "refs": [
+            "e3",
+            "e5"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.84,
+          "probabilities": {
+            "NOT_ESTABLISHED": 0.89,
+            "UNKNOWN": 0.01,
+            "PREFERABLE": 0.1
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.66,
+          "probabilities": {
+            "SUFFICIENT": 0.17,
+            "INSUFFICIENT": 0.83
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "parsed": true,
+      "gateValid": false,
+      "nonabstaining": false,
+      "riskHit": false,
+      "alternativeHit": false,
+      "sufficiencyHit": false,
+      "allLabelSetsHit": false,
+      "primarySuccess": false,
+      "refusal": true,
+      "evidenceConfidence": 0.95,
+      "rejectionReasons": [
+        "UNSUPPORTED_CITATION",
+        "UNSUPPORTED_RISK_JUDGMENT"
+      ]
+    },
+    {
+      "caseId": "test-current-vision-avoidable",
+      "group": "test-current-vision",
+      "split": "holdout",
+      "arm": "NEW_JEV",
+      "packetSha256": "1ca2a3f56858e8be4e86e556a2bcb3a826e7150837f72ed8ae20361192217c3d",
+      "canonicalBodySha256": "22b285f9589864570758aed545f114519d40bc2d1a64692aa3ba125c04180b58",
+      "actualRequestSha256": "22b285f9589864570758aed545f114519d40bc2d1a64692aa3ba125c04180b58",
+      "status": "FALLBACK",
+      "reason": "VALIDATION_REJECTED",
+      "actualModel": "jev-1.13.0",
+      "remoteCalls": 1,
+      "latencyMs": 278,
+      "usage": {
+        "inputTokens": 4573,
+        "outputTokens": 390,
+        "costUsd": 0.00019206600000000001
+      },
+      "result": null,
+      "diagnosticResult": {
+        "model": "jev-1.13.0",
+        "questionVersion": "decision-evidence-questions.v2",
+        "riskWarranted": {
+          "choice": "UNWARRANTED",
+          "confidence": 0.98,
+          "probabilities": {
+            "UNKNOWN": 0.01,
+            "WARRANTED": 0.01,
+            "UNWARRANTED": 0.98
+          },
+          "refs": [
+            "e1",
+            "e2",
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.38,
+          "probabilities": {
+            "PREFERABLE": 0.32,
+            "NOT_ESTABLISHED": 0.58,
+            "UNKNOWN": 0.1
+          },
+          "refs": [
+            "e3",
+            "e5"
+          ]
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.27,
+          "probabilities": {
+            "SUFFICIENT": 0.36,
+            "INSUFFICIENT": 0.64
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "witnesses": {
+          "riskWarranted": {
+            "choice": "AVOIDABLE_RECONTACT",
+            "confidence": 0.99,
+            "probabilities": {
+              "OBJECTIVE_URGENCY": 0,
+              "TRADE_SUPPORT": 0,
+              "AVOIDABLE_RECONTACT": 0.99,
+              "NONE": 0.01
+            }
+          },
+          "alternativePreferable": {
+            "choice": "COVER_WITH_DELAY",
+            "confidence": 0.87,
+            "probabilities": {
+              "MULTIPLE_SUPPORTED_OPTIONS": 0.02,
+              "NO_APPLICABLE_ALTERNATIVE": 0.01,
+              "COVER_WITH_DELAY": 0.9,
+              "TRADE_WITH_DELAY": 0,
+              "NONE": 0.07
+            }
+          },
+          "contextSufficient": {
+            "choice": "COMPLETE",
+            "confidence": 0.82,
+            "probabilities": {
+              "MISSING_TRADE": 0,
+              "COMPLETE": 0.85,
+              "UNVERIFIED_CONTACT": 0.04,
+              "USER_UNCERTAINTY": 0,
+              "MISSING_COVER": 0,
+              "MISSING_TIMING": 0,
+              "UNRESOLVED_CONTEXT": 0.11
+            }
+          }
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MISSING_CONTEXT"
+        ]
+      },
+      "parsed": true,
+      "gateValid": false,
+      "nonabstaining": false,
+      "riskHit": true,
+      "alternativeHit": false,
+      "sufficiencyHit": false,
+      "allLabelSetsHit": false,
+      "primarySuccess": false,
+      "refusal": true,
+      "evidenceConfidence": 0.95,
+      "rejectionReasons": [
+        "WITNESS_LABEL_MISMATCH"
+      ]
+    },
+    {
+      "caseId": "test-current-vision-avoidable",
+      "group": "test-current-vision",
+      "split": "holdout",
+      "arm": "GENERATION_MODEL",
+      "packetSha256": "1ca2a3f56858e8be4e86e556a2bcb3a826e7150837f72ed8ae20361192217c3d",
+      "canonicalBodySha256": "22b285f9589864570758aed545f114519d40bc2d1a64692aa3ba125c04180b58",
+      "actualRequestSha256": "d5a2d328963025de4ed27376121e4b2b4edbf6da56c49b5642028d81305b0532",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "actualModel": "deepseek-flash",
+      "remoteCalls": 1,
+      "latencyMs": 1786,
+      "usage": {
+        "inputTokens": 3791,
+        "outputTokens": 421,
+        "costUsd": null
+      },
+      "result": {
+        "model": "deepseek-flash",
+        "questionVersion": "decision-evidence-questions.v2",
+        "riskWarranted": {
+          "choice": "UNWARRANTED",
+          "confidence": 0.72,
+          "probabilities": {
+            "WARRANTED": 0.18,
+            "UNWARRANTED": 0.72,
+            "UNKNOWN": 0.1
+          },
+          "refs": [
+            "e1",
+            "e2",
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "PREFERABLE",
+          "confidence": 0.6,
+          "probabilities": {
+            "PREFERABLE": 0.6,
+            "NOT_ESTABLISHED": 0.3,
+            "UNKNOWN": 0.1
+          },
+          "refs": [
+            "e3",
+            "e5"
+          ]
+        },
+        "contextSufficient": {
+          "choice": "SUFFICIENT",
+          "confidence": 0.7,
+          "probabilities": {
+            "SUFFICIENT": 0.7,
+            "INSUFFICIENT": 0.3
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "witnesses": {
+          "riskWarranted": {
+            "choice": "AVOIDABLE_RECONTACT",
+            "confidence": 0.7,
+            "probabilities": {
+              "TRADE_SUPPORT": 0.05,
+              "OBJECTIVE_URGENCY": 0.05,
+              "AVOIDABLE_RECONTACT": 0.7,
+              "NONE": 0.2
+            }
+          },
+          "alternativePreferable": {
+            "choice": "COVER_WITH_DELAY",
+            "confidence": 0.58,
+            "probabilities": {
+              "COVER_WITH_DELAY": 0.58,
+              "TRADE_WITH_DELAY": 0.05,
+              "MULTIPLE_SUPPORTED_OPTIONS": 0.22,
+              "NO_APPLICABLE_ALTERNATIVE": 0.05,
+              "NONE": 0.1
+            }
+          },
+          "contextSufficient": {
+            "choice": "COMPLETE",
+            "confidence": 0.68,
+            "probabilities": {
+              "COMPLETE": 0.68,
+              "MISSING_TIMING": 0.05,
+              "MISSING_TRADE": 0.05,
+              "MISSING_COVER": 0.05,
+              "UNVERIFIED_CONTACT": 0.07,
+              "USER_UNCERTAINTY": 0.05,
+              "UNRESOLVED_CONTEXT": 0.05
+            }
+          }
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "diagnosticResult": null,
+      "parsed": true,
+      "gateValid": true,
+      "nonabstaining": true,
+      "riskHit": true,
+      "alternativeHit": true,
+      "sufficiencyHit": true,
+      "allLabelSetsHit": true,
+      "primarySuccess": true,
+      "refusal": false,
+      "evidenceConfidence": 0.95,
+      "rejectionReasons": []
+    },
+    {
+      "caseId": "test-history-and-sound",
+      "group": "test-indirect-information",
+      "split": "holdout",
+      "arm": "OLD_JEV",
+      "packetSha256": "b612986b157458be474cfb44fb9a4fa004ee338fa884f041adaadea5d48b083e",
+      "canonicalBodySha256": "3fd29e13d843c00b22b6560079cb85c69d2a9db51f54a7c7fd20767fc8e057ac",
+      "actualRequestSha256": "3fd29e13d843c00b22b6560079cb85c69d2a9db51f54a7c7fd20767fc8e057ac",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "actualModel": "jev-1.13.0",
+      "remoteCalls": 1,
+      "latencyMs": 372,
+      "usage": {
+        "inputTokens": 2452,
+        "outputTokens": 492,
+        "costUsd": 0.00010298400000000002
+      },
+      "result": {
+        "model": "jev-1.13.0",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.59,
+          "probabilities": {
+            "UNKNOWN": 0.73,
+            "WARRANTED": 0.27,
+            "UNWARRANTED": 0
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.51,
+          "probabilities": {
+            "UNKNOWN": 0.68,
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 0.32
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "INSUFFICIENT": 1,
+            "SUFFICIENT": 0
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "diagnosticResult": null,
+      "parsed": true,
+      "gateValid": true,
+      "nonabstaining": false,
+      "riskHit": true,
+      "alternativeHit": true,
+      "sufficiencyHit": true,
+      "allLabelSetsHit": true,
+      "primarySuccess": false,
+      "refusal": true,
+      "evidenceConfidence": 0,
+      "rejectionReasons": []
+    },
+    {
+      "caseId": "test-history-and-sound",
+      "group": "test-indirect-information",
+      "split": "holdout",
+      "arm": "NEW_JEV",
+      "packetSha256": "8782dff64903d2bbfa502c17d6cadcc4bdd55f4c3a9051477eff8f8a36be1537",
+      "canonicalBodySha256": "75e69367d2111da747b034b8cb8c5cef5091f83c89a066fa4763ad445cede207",
+      "actualRequestSha256": "75e69367d2111da747b034b8cb8c5cef5091f83c89a066fa4763ad445cede207",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "actualModel": "jev-1.13.0",
+      "remoteCalls": 1,
+      "latencyMs": 350,
+      "usage": {
+        "inputTokens": 4820,
+        "outputTokens": 376,
+        "costUsd": 0.00020244000000000002
+      },
+      "result": {
+        "model": "jev-1.13.0",
+        "questionVersion": "decision-evidence-questions.v2",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.86,
+          "probabilities": {
+            "UNWARRANTED": 0.03,
+            "WARRANTED": 0.07,
+            "UNKNOWN": 0.9
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.57,
+          "probabilities": {
+            "PREFERABLE": 0.01,
+            "UNKNOWN": 0.71,
+            "NOT_ESTABLISHED": 0.28
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 0,
+            "INSUFFICIENT": 1
+          },
+          "refs": []
+        },
+        "witnesses": {
+          "riskWarranted": {
+            "choice": "NONE",
+            "confidence": 0.99,
+            "probabilities": {
+              "AVOIDABLE_RECONTACT": 0.01,
+              "OBJECTIVE_URGENCY": 0,
+              "NONE": 0.99,
+              "TRADE_SUPPORT": 0
+            }
+          },
+          "alternativePreferable": {
+            "choice": "NONE",
+            "confidence": 0.94,
+            "probabilities": {
+              "COVER_WITH_DELAY": 0,
+              "NO_APPLICABLE_ALTERNATIVE": 0.03,
+              "TRADE_WITH_DELAY": 0,
+              "NONE": 0.96,
+              "MULTIPLE_SUPPORTED_OPTIONS": 0.01
+            }
+          },
+          "contextSufficient": {
+            "choice": "UNRESOLVED_CONTEXT",
+            "confidence": 0.72,
+            "probabilities": {
+              "COMPLETE": 0.02,
+              "UNRESOLVED_CONTEXT": 0.76,
+              "MISSING_TRADE": 0.06,
+              "MISSING_COVER": 0.02,
+              "USER_UNCERTAINTY": 0,
+              "MISSING_TIMING": 0.04,
+              "UNVERIFIED_CONTACT": 0.1
+            }
+          }
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MISSING_CONTEXT"
+        ]
+      },
+      "diagnosticResult": null,
+      "parsed": true,
+      "gateValid": true,
+      "nonabstaining": false,
+      "riskHit": true,
+      "alternativeHit": true,
+      "sufficiencyHit": true,
+      "allLabelSetsHit": true,
+      "primarySuccess": false,
+      "refusal": true,
+      "evidenceConfidence": 0,
+      "rejectionReasons": []
+    },
+    {
+      "caseId": "test-history-and-sound",
+      "group": "test-indirect-information",
+      "split": "holdout",
+      "arm": "GENERATION_MODEL",
+      "packetSha256": "8782dff64903d2bbfa502c17d6cadcc4bdd55f4c3a9051477eff8f8a36be1537",
+      "canonicalBodySha256": "75e69367d2111da747b034b8cb8c5cef5091f83c89a066fa4763ad445cede207",
+      "actualRequestSha256": "031df8c2b5560ab4abe54f931e201e81e180a78b13a1f22f8cb3097d1d0069cf",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "actualModel": "deepseek-flash",
+      "remoteCalls": 1,
+      "latencyMs": 1611,
+      "usage": {
+        "inputTokens": 3909,
+        "outputTokens": 408,
+        "costUsd": null
+      },
+      "result": {
+        "model": "deepseek-flash",
+        "questionVersion": "decision-evidence-questions.v2",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.55,
+          "probabilities": {
+            "WARRANTED": 0.25,
+            "UNWARRANTED": 0.2,
+            "UNKNOWN": 0.55
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.5,
+          "probabilities": {
+            "PREFERABLE": 0.15,
+            "NOT_ESTABLISHED": 0.35,
+            "UNKNOWN": 0.5
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.6,
+          "probabilities": {
+            "SUFFICIENT": 0.2,
+            "INSUFFICIENT": 0.8
+          },
+          "refs": []
+        },
+        "witnesses": {
+          "riskWarranted": {
+            "choice": "NONE",
+            "confidence": 0.6,
+            "probabilities": {
+              "TRADE_SUPPORT": 0.1,
+              "OBJECTIVE_URGENCY": 0.1,
+              "AVOIDABLE_RECONTACT": 0.2,
+              "NONE": 0.6
+            }
+          },
+          "alternativePreferable": {
+            "choice": "NONE",
+            "confidence": 0.55,
+            "probabilities": {
+              "COVER_WITH_DELAY": 0.1,
+              "TRADE_WITH_DELAY": 0.1,
+              "MULTIPLE_SUPPORTED_OPTIONS": 0.15,
+              "NO_APPLICABLE_ALTERNATIVE": 0.1,
+              "NONE": 0.55
+            }
+          },
+          "contextSufficient": {
+            "choice": "MISSING_TRADE",
+            "confidence": 0.4,
+            "probabilities": {
+              "COMPLETE": 0.15,
+              "MISSING_TIMING": 0.2,
+              "MISSING_TRADE": 0.4,
+              "MISSING_COVER": 0.15,
+              "UNVERIFIED_CONTACT": 0.05,
+              "USER_UNCERTAINTY": 0.03,
+              "UNRESOLVED_CONTEXT": 0.02
+            }
+          }
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MISSING_CONTEXT"
+        ]
+      },
+      "diagnosticResult": null,
+      "parsed": true,
+      "gateValid": true,
+      "nonabstaining": false,
+      "riskHit": true,
+      "alternativeHit": true,
+      "sufficiencyHit": true,
+      "allLabelSetsHit": true,
+      "primarySuccess": false,
+      "refusal": true,
+      "evidenceConfidence": 0,
+      "rejectionReasons": []
+    }
+  ]
+}

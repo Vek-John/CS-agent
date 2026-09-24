@@ -563,3 +563,4 @@ export * from "./coaching-language";
 export * from "./teaching-gates";
 
 export * from "./decision-assessment";
+export * from "./decision-witness";
