@@ -86,7 +86,30 @@ export type ObservationSpatialEstimate =
       type: "NONE";
     };
 
+/** Explicit pre-decision user statement, never a parsed Demo fact or verified tactic. */
+export interface UserTacticalContext {
+  version: "user-tactical-context.v1";
+  enemyArea: "A_SITE" | "B_SITE" | "MID" | "UNKNOWN";
+  enemyCount: number | null;
+  plan: "TRADE" | "TAKE_SPACE" | "HOLD" | "RETREAT" | "EXECUTE" | "UNKNOWN";
+}
+
+/** A closed vocabulary keeps identities, results and injected instructions out. */
+export function parseUserTacticalContext(value: unknown): UserTacticalContext {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("INVALID_USER_TACTICAL_CONTEXT");
+  const input = value as Record<string, unknown>;
+  const keys = ["version", "enemyArea", "enemyCount", "plan"];
+  if (Object.keys(input).length !== keys.length || Object.keys(input).some(key => !keys.includes(key))
+    || input.version !== "user-tactical-context.v1"
+    || typeof input.enemyArea !== "string" || !["A_SITE", "B_SITE", "MID", "UNKNOWN"].includes(input.enemyArea)
+    || typeof input.plan !== "string" || !["TRADE", "TAKE_SPACE", "HOLD", "RETREAT", "EXECUTE", "UNKNOWN"].includes(input.plan)
+    || input.enemyCount !== null && (typeof input.enemyCount !== "number" || !Number.isInteger(input.enemyCount) || input.enemyCount < 0 || input.enemyCount > 5)) throw new Error("INVALID_USER_TACTICAL_CONTEXT");
+  return { version: "user-tactical-context.v1", enemyArea: input.enemyArea as UserTacticalContext["enemyArea"], enemyCount: input.enemyCount as number | null, plan: input.plan as UserTacticalContext["plan"] };
+}
+
 export interface ObservationClaim {
+  /** Allowed only with USER_CONTEXT / USER_ASSERTED / USER_CONTEXT_ONLY provenance. */
+  user_tactical_context?: UserTacticalContext;
   id: string;
   claim_type: ObservationClaimType;
   knowledge_kind: ObservationKnowledgeKind;

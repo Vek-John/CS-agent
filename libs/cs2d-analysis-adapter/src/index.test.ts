@@ -550,9 +550,9 @@ describe("cs2d analysis adapter", () => {
     expect(changed.observation_evidence[0]).toEqual(baseline.observation_evidence[0]);
   });
 
-  it("does not turn ShotEvent or aggregate damage into exact selected-player facts", () => {
+  it("does not turn unattributed ShotEvent or aggregate damage into exact selected-player facts", () => {
     const bundle = buildCs2dAnalysisBundle({ replay: replayFixture(), selectedSteamId: "p-t1", demoId: "demo-fixture" });
-    expect(bundle.metadata.warnings).toContain("cs2d ShotEvent 没有 shooterSteamId；适配层不把射击归因到任何玩家，等待 parser 扩展。");
+    expect(bundle.metadata.warnings).toContain("缺少明确 shooterSteamId 的射击保持未归属；已归属射击也不能单独证明再次接触或重复探身。");
     expect(bundle.metadata.warnings).toContain("当前 cs2d GameEvent 没有 HurtEvent；Round.damage 只有回合聚合，不能伪装成逐 tick 受击。");
     expect(bundle.metadata.warnings).toContain("GrenadePath.t is rounded to about 0.1s; utility cue boundaries use conservative canonical Frame ticks and never claim an exact throw or landing tick.");
     expect(bundle.match_timeline.match_events?.some((event) => event.event_type === "DAMAGE" && event.fact_confidence === 1)).toBe(false);
@@ -815,6 +815,47 @@ describe("cs2d analysis adapter", () => {
     expect(deserializeCs2dAnalysisBundle(serializeCs2dAnalysisBundle(bundle))).toEqual(bundle);
   });
 
+  it("reads existing 1.5.0 bundles without rewriting their snapshot refs or candidate hash", () => {
+    const bundle = buildCs2dAnalysisBundle({ replay: replayFixture(), selectedSteamId: "p-t1", demoId: "legacy-public-refs" });
+    const legacy = rehashBoundaryFixture({ ...bundle, metadata: { ...bundle.metadata, adapter_version: "cs2d-analysis-adapter/1.5.0" as const }, candidate_set: { ...bundle.candidate_set, materials: bundle.candidate_set.materials.map(material => ({ ...material, decisionSnapshot: { ...material.decisionSnapshot!, selectedPlayer: { ...material.decisionSnapshot!.selectedPlayer, evidenceRefs: ["legacy-raw-frame-source"] } } })) } });
+    const restored = deserializeCs2dAnalysisBundle(JSON.stringify(legacy));
+    expect(restored.candidate_set.hash).toBe(legacy.candidate_set.hash);
+    expect(restored.candidate_set.materials[0]!.decisionSnapshot!.selectedPlayer.evidenceRefs).toEqual(["legacy-raw-frame-source"]);
+  });
+
+  it("exposes only explicitly attributed self weapon-fire facts without inferring contact or coordinate ownership", () => {
+    const base = replayFixture();
+    const baseline = buildCs2dAnalysisBundle({ replay: base, selectedSteamId: "p-t1", demoId: "shot-facts" });
+    for (const actor of ["p-t1", "p-ct1", null, undefined]) {
+      const replay = { ...base, rounds: base.rounds.map(round => ({ ...round, events: round.events.map(event => event.type === "shot" ? { ...event, shooterSteamId: actor } : event) })) };
+      const bundle = buildCs2dAnalysisBundle({ replay, selectedSteamId: "p-t1", demoId: "shot-facts" });
+      const shots = bundle.match_timeline.match_events!.filter(event => event.event_type === "WEAPON_FIRE");
+      if (actor === "p-t1") {
+        expect(shots.length).toBeGreaterThan(0);
+        expect(shots.every(event => event.actor_player_id === "p-t1" && !event.target_player_id)).toBe(true);
+        expect(JSON.stringify(shots)).not.toMatch(/"x"|"y"|"yaw"|world_position/);
+      } else expect(shots).toEqual([]);
+      expect(bundle.candidate_set.candidates.length).toBe(baseline.candidate_set.candidates.length);
+      expect(bundle.candidate_set.materials.every(material => material.playerActionFacts.every(action => !action.decisionAction))).toBe(true);
+      expect(deserializeCs2dAnalysisBundle(serializeCs2dAnalysisBundle(bundle))).toEqual(bundle);
+    }
+  });
+
+  it("binds public live-player/count snapshot evidence to this candidate's pre-decision facts", () => {
+    const bundle = buildCs2dAnalysisBundle({ replay: replayFixture(), selectedSteamId: "p-t1", demoId: "public-bindings" });
+    for (const candidate of bundle.candidate_set.candidates) {
+      const material = bundle.candidate_set.materials.find(item => item.candidateId === candidate.candidateId)!;
+      const allowed = new Set(material.decisionFacts.filter(fact => fact.observed_by_player && fact.available_at_tick <= candidate.decisionTick).map(fact => fact.id));
+      for (const value of [material.decisionSnapshot!.selectedPlayer, material.decisionSnapshot!.aliveCounts]) {
+        if (!value.value) continue;
+        expect(value.evidenceRefs.length).toBeGreaterThan(0);
+        expect(value.evidenceRefs.every(ref => allowed.has(ref) && candidate.factRefs.includes(ref))).toBe(true);
+      }
+      expect(material.playerActionFacts.every(action => action.decisionAction === undefined)).toBe(true);
+    }
+    expect(deserializeCs2dAnalysisBundle(serializeCs2dAnalysisBundle(bundle))).toEqual(bundle);
+  });
+
   it("fails explicitly above 512 candidate windows instead of truncating the match", () => {
     const source = replayFixture();
     const event = source.rounds[0].events.find((event) => event.type === "kill")!;
@@ -833,7 +874,7 @@ describe("cs2d analysis adapter", () => {
 
   it("rejects partial trusted context in both new and legacy bundles even with a valid recomputed hash", () => {
     const bundle = buildCs2dAnalysisBundle({ replay: replayFixture(), selectedSteamId: "p-t1", demoId: "partial-context" });
-    for (const adapterVersion of ["cs2d-analysis-adapter/1.5.0", "cs2d-analysis-adapter/1.4.0"] as const) {
+    for (const adapterVersion of ["cs2d-analysis-adapter/1.5.2", "cs2d-analysis-adapter/1.5.1", "cs2d-analysis-adapter/1.5.0", "cs2d-analysis-adapter/1.4.0"] as const) {
       for (const missing of ["decisionSnapshot", "observableContext"] as const) {
         const materials = bundle.candidate_set.materials.map((material, index) => {
           if (index > 0) return material;
@@ -877,4 +918,88 @@ describe("cs2d analysis adapter", () => {
     expect(deserializeCs2dAnalysisBundle(serializeCs2dAnalysisBundle(bundle))).toEqual(bundle);
   });
 
+});
+
+/** Synthetic self path regression, not a parsed Demo or expert judgment. */
+function returnAndFireReplay(): Cs2dReplay {
+  const base = replayFixture();
+  return { ...base, rounds: [{ ...base.rounds[0]!, damage: {}, grenadePaths: [],
+    frames: Array.from({ length: 49 }, (_, i) => {
+      const tick = 64 + i * 8;
+      return { tick, t: tick / 64, players: base.players.map(p => ({
+        ...state(p.steamId, tick, ["p-t1", "p-t2", "p-t3", "p-ct1", "p-ct2"].includes(p.steamId) ? 100 : 0),
+        x: p.steamId === "p-t1" ? i <= 8 ? i * 8 : Math.max(0, 128 - i * 8) : 5000,
+        y: 0, z: 64
+      })) };
+    }),
+    events: [64, 192].map(tick => ({ type: "shot" as const, shooterSteamId: "p-t1", tick, t: tick / 64, x: 99999, y: -99999, yaw: 0 }))
+  }] };
+}
+
+describe("return-and-fire adapter boundary", () => {
+  const buildReturn = (replay: Cs2dReplay) => buildCs2dAnalysisBundle({ replay, selectedSteamId: "p-t1", demoId: "synthetic-return-fire" });
+  it("keeps an overlapping win-rate teaching window when shot attribution adds an experimental candidate", () => {
+    const replay = returnAndFireReplay();
+    const withoutAttribution = { ...replay, rounds: replay.rounds.map(round => ({
+      ...round, events: round.events.map(event => event.type === "shot" ? { ...event, shooterSteamId: undefined } : event)
+    })) };
+    const build = (input: Cs2dReplay) => buildCs2dAnalysisBundle({
+      replay: input, selectedSteamId: "p-t1", demoId: "synthetic-return-fire",
+      winProbabilityTimeline: negativeSelectedSideTimeline(192)
+    });
+    const baseline = build(withoutAttribution);
+    const attributed = build(replay);
+    expect(baseline.review_plan.cues).toHaveLength(1);
+    expect(attributed.candidate_set.candidates.some(candidate => candidate.source.kind === "RETURN_AND_FIRE")).toBe(true);
+    expect(attributed.candidate_set.candidates.some(candidate => candidate.source.kind === "WIN_RATE_DROP")).toBe(true);
+    expect(attributed.review_plan.cues).toEqual(baseline.review_plan.cues);
+    expect(attributed.review_plan.segments).toEqual(baseline.review_plan.segments);
+  });
+  it("binds sampled self movement and explicit fire as an action, independently of outcome frames", () => {
+    const before = buildReturn(returnAndFireReplay());
+    const candidate = before.candidate_set.candidates.find(c => c.source.kind === "RETURN_AND_FIRE")!;
+    expect(candidate).toBeDefined();
+    const material = before.candidate_set.materials.find(m => m.candidateId === candidate.candidateId)!;
+    expect(material.playerActionFacts).toHaveLength(1);
+    expect(material.playerActionFacts[0]).toMatchObject({ actorPlayerId: "p-t1", availableAtTick: 192, decisionAction: { version: "decision-action.v1", kind: "RETURN_AND_FIRE", startTick: 128, endTick: 192, priorShotTick: 64, source: "SELF_MOVEMENT_FIRE_V1" } });
+    expect(candidate.actionRefs).toEqual([material.playerActionFacts[0]!.id]);
+    expect(material.outcomeFacts).toHaveLength(1);
+    expect(material.outcomeFacts[0]).toMatchObject({ outcomeKind: "OTHER", availableAtTick: 448 });
+    expect(material.outcomeFacts[0]!.text).toContain("存活、100 HP");
+    const input = returnAndFireReplay();
+    const after = buildReturn({ ...input, rounds: input.rounds.map(r => ({ ...r, winner: "CT", frames: r.frames.map(f => ({ ...f, players: f.players.map(p => f.tick > 192 ? { ...p, health: 0, alive: false } : p) })) })) });
+    const changed = after.candidate_set.materials.find(m => m.candidateId === candidate.candidateId)!;
+    expect(changed.playerActionFacts).toEqual(material.playerActionFacts);
+    expect(changed.decisionFacts).toEqual(material.decisionFacts);
+    expect(changed.observableContext).toEqual(material.observableContext);
+    expect(changed.outcomeFacts[0]!.text).toContain("阵亡、0 HP");
+    expect(serializeCs2dAnalysisBundle(before)).toContain("RETURN_AND_FIRE");
+    expect(deserializeCs2dAnalysisBundle(serializeCs2dAnalysisBundle(before)).candidate_set.hash).toBe(before.candidate_set.hash);
+  });
+  it("does not nominate old, unknown or other-actor shots, even when tracer positions match", () => {
+    for (const actor of [undefined, null, "p-t2"]) {
+      const input = returnAndFireReplay();
+      const bundle = buildReturn({ ...input, rounds: input.rounds.map(r => ({ ...r, events: r.events.map(e => e.type === "shot" ? { ...e, shooterSteamId: actor, x: 0, y: 0 } : e) })) });
+      expect(bundle.candidate_set.candidates.some(c => c.source.kind === "RETURN_AND_FIRE")).toBe(false);
+    }
+  });
+  it("preserves the action when no outcome sample exists instead of inventing an outcome", () => {
+    const input = returnAndFireReplay();
+    const bundle = buildReturn({ ...input, rounds: input.rounds.map(r => ({ ...r, frames: r.frames.filter(f => f.tick < 192) })) });
+    const candidate = bundle.candidate_set.candidates.find(c => c.source.kind === "RETURN_AND_FIRE")!;
+    const material = bundle.candidate_set.materials.find(m => m.candidateId === candidate.candidateId)!;
+    expect(material.playerActionFacts[0]!.decisionAction?.kind).toBe("RETURN_AND_FIRE");
+    expect(material.outcomeFacts).toEqual([]); expect(candidate.outcomeRefs).toEqual([]);
+  });
+  it("limits nomination to the public live-round phase", () => {
+    const input = returnAndFireReplay();
+    const bundle = buildReturn({ ...input, rounds: input.rounds.map(r => ({ ...r, decidedTick: 180 })) });
+    expect(bundle.candidate_set.candidates.some(c => c.source.kind === "RETURN_AND_FIRE")).toBe(false);
+  });
+  it.each(["cs2d-analysis-adapter/1.5.2", "cs2d-analysis-adapter/1.6.0"] as const)("continues reading %s history without changing saved material", (version) => {
+    const bundle = buildCs2dAnalysisBundle({ replay: replayFixture(), selectedSteamId: "p-t1", demoId: "old-1.5.2" });
+    const old = { ...bundle, metadata: { ...bundle.metadata, adapter_version: version } };
+    const restored = deserializeCs2dAnalysisBundle(JSON.stringify(old));
+    expect(restored).toEqual(old); expect(restored.candidate_set.hash).toBe(old.candidate_set.hash);
+  });
 });

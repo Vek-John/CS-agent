@@ -561,3 +561,5 @@ export * from "./narration-package-builder";
 export * from "./coaching-language";
 
 export * from "./teaching-gates";
+
+export * from "./decision-assessment";

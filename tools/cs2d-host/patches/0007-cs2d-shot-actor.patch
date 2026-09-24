@@ -1,0 +1,85 @@
+--- a/packages/parser/src/collector.rs
++++ b/packages/parser/src/collector.rs
+@@ -128,8 +128,8 @@
+     /// Damage: (tick, attacker steamId, health damage, weapon classname lowercased).
+     /// The weapon lets the build split out utility damage. Aggregated per round.
+     pub(crate) hurts: Vec<(u32, String, i32, String)>,
+-    /// Shots (tracers): (tick, x, y, yaw) of the shooter.
+-    pub(crate) shots: Vec<(u32, f64, f64, f64)>,
++    /// Shots (tracers): (tick, x, y, yaw, optional event-resolved shooter).
++    pub(crate) shots: Vec<(u32, f64, f64, f64, Option<String>)>,
+     /// Blinds: (tick, userid, duration, flasher steamId). The victim steamId comes
+     /// from the userid->steam map; the flasher is resolved from the attacker pawn.
+     pub(crate) blinds_raw: Vec<(u32, i32, f64, Option<String>)>,
+@@ -645,7 +645,8 @@
+                     if let Ok(p) = ctx.entities().get_by_handle(ph as u32 as usize) {
+                         let x = round1(world_coord(p, "CBodyComponent.m_cellX", "CBodyComponent.m_vecX"));
+                         let y = round1(world_coord(p, "CBodyComponent.m_cellY", "CBodyComponent.m_vecY"));
+-                        self.shots.push((tick, x, y, round1(pawn_yaw(p))));
++                        let shooter = steam_from_pawn_handle(self, ctx, ph);
++                        self.shots.push((tick, x, y, round1(pawn_yaw(p)), shooter));
+                     }
+                 }
+             }
+--- a/packages/parser/src/assemble.rs
++++ b/packages/parser/src/assemble.rs
+@@ -444,7 +444,8 @@
+     }
+ 
+     // Shot tracers.
+-    for &(tick, x, y, yaw) in &c.shots {
++    for (tick, x, y, yaw, shooter) in &c.shots {
++        let (tick, x, y, yaw) = (*tick, *x, *y, *yaw);
+         if let Some(idx) = round_of(tick, &rounds) {
+             let start = rounds[idx].freeze_start_tick;
+             rounds[idx].events.push(Event::Shot {
+@@ -453,6 +454,7 @@
+                 x,
+                 y,
+                 yaw,
++                shooter_steam_id: shooter.clone(),
+             });
+         }
+     }
+--- a/packages/parser/src/schema.rs
++++ b/packages/parser/src/schema.rs
+@@ -210,7 +210,7 @@
+     #[serde(rename = "bomb_exploded", rename_all = "camelCase")]
+     BombExploded { tick: u32, t: f64, player_steam_id: Option<String> },
+     #[serde(rename = "shot", rename_all = "camelCase")]
+-    Shot { tick: u32, t: f64, x: f64, y: f64, yaw: f64 },
++    Shot { tick: u32, t: f64, x: f64, y: f64, yaw: f64, shooter_steam_id: Option<String> },
+     #[serde(rename = "grenade", rename_all = "camelCase")]
+     Grenade {
+         tick: u32,
+@@ -273,3 +273,19 @@
+ pub(crate) fn is_false(b: &bool) -> bool {
+     !*b
+ }
++
++#[cfg(test)]
++mod shot_actor_tests {
++    use super::Event;
++
++    #[test]
++    fn shot_actor_serializes_known_and_explicit_unknown_without_other_fields() {
++        for actor in [Some("test-actor".to_string()), None] {
++            let event = Event::Shot { tick: 64, t: 1.0, x: 0.0, y: 0.0, yaw: 0.0, shooter_steam_id: actor.clone() };
++            let json = serde_json::to_value(&event).unwrap();
++            assert_eq!(json["shooterSteamId"], serde_json::to_value(actor).unwrap());
++            assert_eq!(json.as_object().unwrap().len(), 7);
++            assert_eq!(json["type"], "shot");
++        }
++    }
++}
+--- a/packages/replay-core/src/schema.ts
++++ b/packages/replay-core/src/schema.ts
+@@ -310,6 +310,8 @@
+ /** Gunfire shot (used to draw the tracer). */
+ export interface ShotEvent extends BaseEvent {
+   type: 'shot'
++  /** Event-resolved actor; absent on old Replays, null when unresolved. */
++  shooterSteamId?: string | null
+   /** Shooter position (game units). */
+   x: number
+   y: number

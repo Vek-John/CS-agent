@@ -1,3 +1,4 @@
+import { nominateReturnAndFire } from "./return-and-fire";
 import { buildDecisionSnapshot, buildObservableDecisionContext, assertDecisionSnapshot } from "./decision-context";
 export { buildDecisionSnapshot, buildObservableDecisionContext, assertDecisionSnapshot } from "./decision-context";
 import type {
@@ -66,11 +67,11 @@ export const CS2D_SOURCE = {
   input_boundary: "WASM_WORKER_STRUCTURED_REPLAY_ONLY"
 } as const;
 
-export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.5.0" as const;
+export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.6.1" as const;
 export const CS2D_TIMELINE_VERSION = "zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec/timeline/1.0.0" as const;
 export const CS2D_OBSERVATION_VERSION = "cs2d-analysis-adapter/1.0.0/internal-observation" as const;
-export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.5.0/signals" as const;
-export const CS2D_PLANNER_VERSION = "cs2d-analysis-adapter/1.5.0/planner" as const;
+export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.6.0/signals" as const;
+export const CS2D_PLANNER_VERSION = "cs2d-analysis-adapter/1.6.0/planner" as const;
 
 /** MVP pacing target: a full match should feel coached, not interrupted. */
 const OUTCOME_WINDOW_SECONDS = 4;
@@ -80,13 +81,13 @@ export const CS2D_LIMITATIONS = {
   frameSampling:
     "cs2d Frame 是下采样状态（常见约 8Hz），不是逐 tick/lossless 状态；帧间变化只能作为区间或趋势证据。",
   shotAttribution:
-    "cs2d ShotEvent 没有 shooterSteamId；适配层不把射击归因到任何玩家，等待 parser 扩展。",
+    "缺少明确 shooterSteamId 的射击保持未归属；已归属射击也不能单独证明再次接触或重复探身。",
   hurtEvents:
     "当前 cs2d GameEvent 没有 HurtEvent；Round.damage 只有回合聚合，不能伪装成逐 tick 受击。",
   observationBoundary:
     "内部 ObservationState 只服务于选手决策证据和 LLM 引用，不是用户视角或 renderer 输入。",
   parserExtension:
-    "若需要逐次伤害或射击主体，需要 parser 提供 HurtEvent 与 ShotEvent.shooterSteamId。"
+    "逐次伤害仍需要 HurtEvent；接触与探身还需要独立的可观察接触或曝光证据。"
 } as const;
 
 export interface Cs2dPlayerMeta {
@@ -158,6 +159,8 @@ export interface Cs2dGrenadeEvent {
 
 export interface Cs2dShotEvent {
   readonly type: "shot";
+  /** Explicit parser attribution only; old/missing values never use position matching. */
+  readonly shooterSteamId?: string | null;
   readonly tick: number;
   readonly t: number;
   readonly x: number;
@@ -245,7 +248,7 @@ export interface Cs2dExcludedRound {
 }
 
 export interface Cs2dAnalysisMetadata {
-  readonly adapter_version: typeof CS2D_ADAPTER_VERSION | "cs2d-analysis-adapter/1.4.0";
+  readonly adapter_version: typeof CS2D_ADAPTER_VERSION | "cs2d-analysis-adapter/1.6.0" | "cs2d-analysis-adapter/1.5.2" | "cs2d-analysis-adapter/1.5.1" | "cs2d-analysis-adapter/1.5.0" | "cs2d-analysis-adapter/1.4.0";
   readonly source: Cs2dReplaySourceMetadata;
   readonly input_map: string;
   readonly selected_steam_id: string;
@@ -302,7 +305,7 @@ interface NormalizedState {
   readonly source: Cs2dPlayerState;
 }
 
-type SignalKind = "DEATH" | "KILL" | "BOMB" | "UTILITY" | "HP_CHANGE" | "WIN_RATE_DROP";
+type SignalKind = "RETURN_AND_FIRE" | "DEATH" | "KILL" | "BOMB" | "UTILITY" | "HP_CHANGE" | "WIN_RATE_DROP";
 
 interface RawSignalCandidate {
   readonly round: NormalizedRound;
@@ -315,6 +318,9 @@ interface RawSignalCandidate {
   readonly utilityKind?: string;
   readonly bombEventType?: Cs2dBombEvent["type"];
   readonly timingLimitation?: string;
+  readonly decisionAction?: CanonicalAnalysisFact["decisionAction"];
+  readonly actionSourceRefs?: readonly string[];
+  readonly outcomeState?: NormalizedState;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -655,7 +661,7 @@ function collectCandidates(
       if (!isRecord(event) || !finiteTick(event.tick) || event.tick < round.freezeEndTick || event.tick > round.decidedTick) return;
       const ref = sourceRef(round, eventIndex);
       if (event.type === "shot") {
-        sawShot = true;
+        sawShot ||= typeof event.shooterSteamId !== "string" || !event.shooterSteamId.trim();
         return;
       }
 
@@ -694,6 +700,20 @@ function collectCandidates(
         });
       }
     });
+
+    if (replay.map === "de_mirage") {
+      for (const action of nominateReturnAndFire({ frames: asArray(round.source.frames), events: sourceEvents, selectedPlayerId: selectedSteamId, tickRate, startTick: round.freezeEndTick, endTick: Math.min(round.endTick, round.decidedTick + 1) })) {
+        // Scope is the public live-round phase; the movement predicate reads no enemies or outcomes.
+        candidates.push({ round, kind: "RETURN_AND_FIRE", sourceTick: action.shotTick, decisionTick: action.decisionTick, revealTick: action.shotTick,
+          state: stateAtOrBefore(roundStates, action.decisionTick),
+          sourceRef: `cs2d-r${round.number}-return-fire-${action.priorShotTick}-${action.shotTick}`,
+          outcomeState: [...roundStates].reverse().find(state => state.sample.tick >= action.shotTick && state.sample.tick <= Math.min(round.endTick, action.shotTick + OUTCOME_WINDOW_SECONDS * tickRate)),
+          actionSourceRefs: [sourceRef(round, action.priorShotEventIndex), sourceRef(round, action.shotEventIndex), ...action.sampleTicks.map(tick => `state-${round.number}-${tick}`)],
+          decisionAction: { version: "decision-action.v1", kind: "RETURN_AND_FIRE", startTick: action.decisionTick, endTick: action.shotTick, priorShotTick: action.priorShotTick, source: "SELF_MOVEMENT_FIRE_V1" },
+          timingLimitation: "自身采样轨迹满足离开至少48单位后返回24单位内并再次开枪；不证明接敌、视线、探身、目标或战术目的。最多回看32次射击/10秒且最多256个连续采样，采样间隙≤0.25秒，高度差≤32单位，动作≤2秒，命中后冷却2秒。"
+        });
+      }
+    }
 
     if (round.damage && finiteNumber(round.damage[selectedSteamId]) && round.damage[selectedSteamId] > 0) {
       sawAggregateDamage = true;
@@ -761,7 +781,7 @@ function collectCandidates(
   if (sawAggregateDamage) issue(warnings, CS2D_LIMITATIONS.hurtEvents);
   issue(warnings, CS2D_LIMITATIONS.parserExtension);
 
-  const priority: Record<SignalKind, number> = { DEATH: 0, HP_CHANGE: 1, KILL: 2, BOMB: 3, UTILITY: 4, WIN_RATE_DROP: 5 };
+  const priority: Record<SignalKind, number> = { RETURN_AND_FIRE: 4, DEATH: 0, HP_CHANGE: 1, KILL: 2, BOMB: 3, UTILITY: 4, WIN_RATE_DROP: 5 };
   candidates.sort((left, right) =>
     left.decisionTick - right.decisionTick ||
     priority[left.kind] - priority[right.kind] ||
@@ -872,12 +892,14 @@ function actionFactText(candidate: RawSignalCandidate): string {
       if (candidate.bombEventType === "bomb_defused") return `你完成了拆包。`;
       return `C4 发生了状态变化。`;
     case "UTILITY": return `你${place}使用了${candidate.utilityKind ?? "道具"}。`;
+    case "RETURN_AND_FIRE": return "你在一次开枪后离开原位置，随后回到其附近并再次开枪；不能据此确认是否接敌或探身。";
     default: throw new Error("Outcome-only signals cannot be promoted to player action facts.");
   }
 }
 
 function outcomeFactText(candidate: RawSignalCandidate): string {
   switch (candidate.kind) {
+    case "RETURN_AND_FIRE": return `结果窗口末你的记录状态为${candidate.outcomeState?.sample.alive ? "存活" : "阵亡"}、${candidate.outcomeState?.sample.health} HP；这是采样状态，不能据此确认变化原因或精确发生时刻。`;
     case "DEATH": return "你随后被击杀。";
     case "KILL": return "你随后完成击杀。";
     case "HP_CHANGE": return "你的血量随后下降，伤害来源尚不能确认。";
@@ -922,7 +944,12 @@ function buildCanonicalGeneratorInput(
   for (const raw of rawCandidates) {
     const sourceSnapshot = buildDecisionSnapshot({ round: raw.round.source, selectedPlayerId: selectedSteamId, decisionTick: raw.decisionTick, tickRate, snapshotId: `snapshot-${raw.sourceRef}`, rosterIds });
     const stateFactId = `fact-${raw.sourceRef}-state`;
-    const decisionSnapshot = { ...sourceSnapshot, supportChecks: sourceSnapshot.supportChecks.map((check) =>
+    const decisionSnapshot = { ...sourceSnapshot,
+      // These already-generated facts are the candidate-owned public evidence.
+      // Keep their original sourceRefs on the facts, not as dangling model refs.
+      selectedPlayer: { ...sourceSnapshot.selectedPlayer, evidenceRefs: sourceSnapshot.selectedPlayer.value && raw.state ? [stateFactId] : [] },
+      aliveCounts: { ...sourceSnapshot.aliveCounts, evidenceRefs: sourceSnapshot.aliveCounts.value ? [`fact-${raw.sourceRef}-alive-counts`] : [] },
+      supportChecks: sourceSnapshot.supportChecks.map((check) =>
       check.status === "APPLICABLE" && check.boundary === "OBSERVABLE"
         ? { ...check, evidenceRefs: [check.code === "teammateAlive" ? `fact-${raw.sourceRef}-alive-counts` : stateFactId] }
         : check
@@ -951,36 +978,37 @@ function buildCanonicalGeneratorInput(
     };
     const sampledAt = decisionSnapshot.sampledAtTick ?? raw.decisionTick;
     const counts = decisionSnapshot.aliveCounts.value;
-    if (counts) addPublicFact("alive-counts", `当时己方 ${counts.allies} 人存活${decisionSnapshot.selectedPlayer.value?.alive ? "（包括你）" : ""}，对方 ${counts.enemies} 人存活。`, decisionSnapshot.aliveCounts.evidenceRefs, sampledAt);
+    if (counts) addPublicFact("alive-counts", `当时己方 ${counts.allies} 人存活${decisionSnapshot.selectedPlayer.value?.alive ? "（包括你）" : ""}，对方 ${counts.enemies} 人存活。`, sourceSnapshot.aliveCounts.evidenceRefs, sampledAt);
     if (decisionSnapshot.score.value) addPublicFact("score", `当时比分：进攻方 ${decisionSnapshot.score.value.t}，防守方 ${decisionSnapshot.score.value.ct}。`, [`round-${raw.round.number}-score-before`], raw.round.startTick);
     addPublicFact("clock", "当前回合的剩余时间无法从记录确认。", [`round-${raw.round.number}-clock`], raw.decisionTick, ["round_timer"]);
     if (decisionSnapshot.bomb.boundary === "OBSERVABLE" && decisionSnapshot.bomb.value) {
       const bombNames = { NOT_CARRIED: "未携带", CARRIED: "携带中", DROPPED: "掉落", PLANTED: "已安放", DEFUSED: "已拆除", EXPLODED: "已爆炸", UNKNOWN: "未知" };
       addPublicFact("bomb", `C4 状态：${bombNames[decisionSnapshot.bomb.value.state]}。`, decisionSnapshot.bomb.evidenceRefs, raw.decisionTick);
     }
-    const hasVerifiedAction = raw.kind === "UTILITY" || (raw.kind === "BOMB" && raw.bombEventType !== "bomb_exploded");
+    const hasVerifiedAction = raw.kind === "RETURN_AND_FIRE" || raw.kind === "UTILITY" || (raw.kind === "BOMB" && raw.bombEventType !== "bomb_exploded");
     if (hasVerifiedAction) facts.push({
       id: actionFactId,
       kind: "PLAYER_ACTION",
       roundNumber: raw.round.number,
       tick: raw.revealTick,
       text: actionFactText(raw),
-      sourceRefs: [raw.sourceRef],
+      sourceRefs: raw.actionSourceRefs ?? [raw.sourceRef],
       observedByPlayer: true,
-      missingFields: ["exact_action_start"],
-      limitations: ["只能确认动作发生或完成，不能推定其起始时刻和战术目的。"]
+      ...(raw.decisionAction ? { actionActorPlayerId: selectedSteamId, decisionAction: raw.decisionAction } : {}),
+      missingFields: raw.decisionAction ? ["contact_visibility", "tactical_intent"] : ["exact_action_start"],
+      limitations: raw.decisionAction ? [raw.timingLimitation!] : ["只能确认动作发生或完成，不能推定其起始时刻和战术目的。"]
     });
-    if (raw.kind !== "WIN_RATE_DROP") facts.push({
+    if (raw.kind !== "WIN_RATE_DROP" && (raw.kind !== "RETURN_AND_FIRE" || raw.outcomeState)) facts.push({
       id: outcomeFactId,
       kind: "OUTCOME",
       roundNumber: raw.round.number,
-      tick: raw.revealTick,
+      tick: raw.outcomeState?.sample.tick ?? raw.revealTick,
       text: outcomeFactText(raw),
-      sourceRefs: [raw.sourceRef],
+      sourceRefs: raw.outcomeState ? [...raw.outcomeState.sample.fact_refs] : [raw.sourceRef],
       observedByPlayer: true,
       missingFields: [],
       limitations: raw.timingLimitation ? [raw.timingLimitation] : [],
-      outcomeKind: raw.kind
+      outcomeKind: raw.kind === "RETURN_AND_FIRE" ? "OTHER" : raw.kind
     });
     const observerFacts = state ? [directVisionFactFromSample(stateFactId, state.sample.player_id, {
       player_id: state.sample.player_id,
@@ -1028,7 +1056,7 @@ function buildCanonicalGeneratorInput(
       sourceRefs: [raw.sourceRef],
       factRefs: [...(state ? [stateFactId] : []), ...publicFactIds],
       actionRefs: hasVerifiedAction ? [actionFactId] : [],
-      outcomeRefs: raw.kind === "WIN_RATE_DROP" ? [] : [outcomeFactId],
+      outcomeRefs: raw.kind === "WIN_RATE_DROP" || raw.kind === "RETURN_AND_FIRE" && !raw.outcomeState ? [] : [outcomeFactId],
       observableClaimRefs: observableState?.claims.map((claim) => claim.id) ?? [],
       evidenceRefs: [raw.sourceRef],
       playerSide: side,
@@ -1071,6 +1099,17 @@ function buildSelectedMatchEvents(
   for (const round of rounds) {
     for (const event of asArray(round.source.events)) {
       if (!isRecord(event) || !finiteTick(event.tick) || event.tick < round.startTick || event.tick >= round.officialEndTick) continue;
+      if (event.type === "shot") {
+        if (event.shooterSteamId !== selectedSteamId) continue;
+        events.push({
+          id: `shot-r${round.number}-t${event.tick}-${events.length + 1}`,
+          tick: event.tick, event_type: "WEAPON_FIRE", actor_player_id: selectedSteamId,
+          payload: { source: "cs2d", game_event: "shot", attribution: "EXPLICIT_PAWN_MAPPING" },
+          source_parser_event: "cs2d:weapon_fire", fact_confidence: 1,
+          fact_refs: [], missing_fields: []
+        });
+        continue;
+      }
       if (event.type === "kill") {
         const actor = typeof event.attackerSteamId === "string" ? event.attackerSteamId : undefined;
         const victim = typeof event.victimSteamId === "string" ? event.victimSteamId : undefined;
@@ -1327,7 +1366,9 @@ export function buildCs2dAnalysisBundle(input: Cs2dAnalysisInput): Cs2dAnalysisB
   // receive a preceding compact snapshot instead of borrowing a distant decision.
   if (winProbabilityTimeline.status === "AVAILABLE") for (const swing of winProbabilityTimeline.swings) {
     const round = rounds.find((item) => swing.tick >= item.freezeEndTick && swing.tick <= item.decidedTick);
-    if (!round || candidates.some((candidate) => candidate.round.number === round.number && Math.abs(candidate.revealTick - swing.tick) <= Math.max(1, Math.round(tickRate / 2)))) continue;
+    // A movement/fire observation has no baseline teaching judgment. Keep the
+    // independent swing so enabling shot attribution cannot erase a useful cue.
+    if (!round || candidates.some((candidate) => candidate.kind !== "RETURN_AND_FIRE" && candidate.round.number === round.number && Math.abs(candidate.revealTick - swing.tick) <= Math.max(1, Math.round(tickRate / 2)))) continue;
     const roundStates = statesForRound(states, round);
     const decisionTick = precedingDecisionTick(roundStates, round, swing.tick);
     if (decisionTick === undefined) continue;
@@ -1485,7 +1526,7 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
     throw new Error("cs2d win-probability contract is invalid.");
   }
   if (
-    ![CS2D_ADAPTER_VERSION, "cs2d-analysis-adapter/1.4.0"].includes(bundle.metadata.adapter_version) ||
+    ![CS2D_ADAPTER_VERSION, "cs2d-analysis-adapter/1.6.0", "cs2d-analysis-adapter/1.5.2", "cs2d-analysis-adapter/1.5.1", "cs2d-analysis-adapter/1.5.0", "cs2d-analysis-adapter/1.4.0"].includes(bundle.metadata.adapter_version) ||
     bundle.metadata.source.repository !== CS2D_SOURCE.repository ||
     bundle.metadata.source.commit !== CS2D_SOURCE.commit ||
     bundle.metadata.renderer_input !== false ||

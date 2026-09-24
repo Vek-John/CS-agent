@@ -25,7 +25,9 @@ function candidateMaterialFor(cue: CoachCue, candidateSet: CandidateSet) {
 }
 
 export function buildCoachingPackage(cue: CoachCue, candidateSet: CandidateSet, observationEvidence: readonly ObservableState[], additionalLimitations: readonly string[] = []): CoachingPackage {
-  const { candidate, material } = candidateMaterialFor(cue, candidateSet);
+  const source = candidateMaterialFor(cue, candidateSet);
+  const candidate = source.candidate;
+  const material = cue.decisionAssessment ? { ...source.material, decisionAssessment: cue.decisionAssessment } : source.material;
   const observableState = material.observableStateId ? observationEvidence.find((state) => state.id === material.observableStateId) : undefined;
   if (material.observableStateId && !observableState) throw new Error(`Candidate ${candidate.candidateId} references missing ObservableState ${material.observableStateId}.`);
   const observableIds = new Set(cue.observable_fact_refs);
@@ -59,10 +61,11 @@ export function buildCoachingPackage(cue: CoachCue, candidateSet: CandidateSet, 
     decisionContext: { facts, claims },
     ...(context ? { observableContext: { ...context, state: { ...context.state, claims } } } : {}),
     assessment,
+    ...(material.decisionAssessment ? { decisionAssessment: material.decisionAssessment } : {}),
     behaviorHypotheses: [...(cue.behaviorHypotheses ?? material.behaviorHypotheses ?? [])],
     adviceOptions: approved,
     playerAction,
-    inferences: assessment.hasEvaluableDecision ? [...material.inferences] : [],
+    inferences: assessment.hasEvaluableDecision ? [...(material.decisionAssessment ? cue.inferences : material.inferences)] : [],
     advice,
     evidence,
     primaryFocusCode: cue.primary_focus_code ?? "UNSPECIFIED_FOCUS",

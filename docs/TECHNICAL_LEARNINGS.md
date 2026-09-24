@@ -6,7 +6,7 @@
 > - 产品目标与范围以 [PRD.md](../PRD.md) 和 [MVP_SCOPE.md](../MVP_SCOPE.md) 为准。
 > - 本文记录「为什么做这个选择」「实际踩到了什么问题」「如何验证」；它可以解释架构，但不能覆盖架构契约。
 >
-> 最后更新：2026-09-14
+> 最后更新：2026-09-24
 
 ## 1. 维护规则
 
@@ -307,7 +307,7 @@ Edge `151.0.4129.93`、macOS `26.5.2 (25F84)`、Apple M1 Metal 的主页面、if
 
 **限制 / 下一步**
 
-batch8 raw-CDP 运行超过 5 分钟没有 telemetry，按时限终止；batch64 未启动，未测结果不写成性能数字。Falcons/Spirit `453,977,283` bytes 的 batch16 尝试了 CDP target、iframe-local Replay 和最后一次 Playwright Edge 启动：CDP target 在 iframe 可用前超时，首个 harness 曾因把 433 MB Replay 序列化回 Node OOM，Playwright `channel=msedge` 又在页面创建前 `SIGABRT`，所以无 Falcons WebGPU telemetry；既有 parser smoke 仍只证明约 `25.562s` 解析、10 人和 NiKo 选择。当前保守推荐 batch16，合理区间约 8–16（8 未实测），不再扩展 128/256。已知 CPU shape fallback、profiling 无 kernel 事件和 Cloudflare 26.8 MB WASM 限制均阻止切换生产默认；保留失败时独立回退到 INT8 WASM。
+batch8 raw-CDP 运行超过 5 分钟没有 telemetry，按时限终止；batch64 未启动，未测结果不写成性能数字。Falcons/Spirit `453,978,283` bytes 的 batch16 尝试了 CDP target、iframe-local Replay 和最后一次 Playwright Edge 启动：CDP target 在 iframe 可用前超时，首个 harness 曾因把 433 MB Replay 序列化回 Node OOM，Playwright `channel=msedge` 又在页面创建前 `SIGABRT`，所以无 Falcons WebGPU telemetry；既有 parser smoke 仍只证明约 `25.562s` 解析、10 人和 NiKo 选择。当前保守推荐 batch16，合理区间约 8–16（8 未实测），不再扩展 128/256。已知 CPU shape fallback、profiling 无 kernel 事件和 Cloudflare 26.8 MB WASM 限制均阻止切换生产默认；保留失败时独立回退到 INT8 WASM。
 
 ### 4.13 2026-08-20：WebGPU 结果的证据边界
 
@@ -335,7 +335,7 @@ WebGPU session 成功不等于 pure WebGPU；必须同时保留 ORT 节点分配
 
 **触发**
 
-需要对 `spirit-vs-falcons-m2-mirage.dem` 做一次有界的 WebGPU FP16 batch16 验收；该文件为 `453,977,283` bytes，不能把 Replay 或逐帧数据搬回 Node。
+需要对 `spirit-vs-falcons-m2-mirage.dem` 做一次有界的 WebGPU FP16 batch16 验收；该文件为 `453,978,283` bytes，不能把 Replay 或逐帧数据搬回 Node。
 
 **决定**
 
@@ -1428,6 +1428,90 @@ Director只选已经通过门的候选和重点，Compiler重验。Narrator与�
 **限制 / 下一步**
 
 当前解析结果仍缺少可靠LOS/声学/语音、伤害来源、补枪时机、道具用途、可达掩体和剩余计时，具体建议因此保持不可验证；正式正向/执行/被迫分类已有过程证据门，但不能称此Demo已经具备这些确定判断。模型自由改写目前受封闭语义限制；未使用真实DeepSeek凭据，本地HTTP降级和模拟Provider输出均经过验证。真实PostgreSQL三项与旧Pixi Falcons一项保持原有opt-in跳过。本轮不发布或替换用户安装包；生产策略拒绝旧PWA注册的404及ORT的CPU shape节点提示保持诊断记录，不称纯GPU或零控制台诊断。
+
+### 2026-09-23：同输入比较显示Jev更快，但尚无新增可用决策判断
+
+**问题**：接线和拒判测试不能回答用户“是否有提升”。此前只有两条生成模型对照，且真实v3模式受未知接触门限制，5次拒判无法证明战术能力。
+
+**决定**：冻结现有题目/门槛，用9个不同合成输入给两个provider各跑一次3秒同题对照；对生成模型5个超时输入单列10秒诊断。真实Demo重新单次解析，精确匹配此前5个Jev final-body哈希后复用历史结果，并调用现有生成模型；同信息、异协议/非同时测量的限制明确记录。
+
+**验证**：本轮28次新请求。3秒下Jev解析9/9、门通过4/9，生成模型解析/门通过4/9，其余超时；通过者全部拒判。10秒诊断也未产生通过门的非拒判结果。5个真实输入三方原子选择完全一致；Jev历史p50 461ms、生成本次1814ms。新增工具5tests及严格TS通过，独审关闭输出symlink边界P2。完整数据见 [效果对照](validation/JEV_QUALITY_COMPARISON.md)。
+
+**限制/处理**：作者设定不是专家标签，单Demo5节点相关，超时为右删失，10秒是失败子集诊断。可以说本次结构化完成更快，不能说准确率或教学质量更好。保留默认规则/关闭正式接受，先解决合法信息与原子引用支持，再验证新增判断；不靠更多相同拒判调用宣称提升。
+
+### 2026-09-23：用已有本人轨迹验证拒判，不把坐标返回升级为重新接敌
+
+**问题**：真实Demo已有本人开枪归属和8Hz位置，但旧试点要求RECONTACT/REPEEK结构事实，导致517个原候选没有可发送输入。用户要求直接复用现有材料；继续索取标注不能解决可独立实现的事实动作链路。
+
+**决定与落点**：cs2d adapter增加保守RETURN_AND_FIRE提名：同回合本人明确射击、连续存活自身采样、离开48 units后返回24 units内，2秒动作/10秒先前射击范围。阈值只定义未校准的动作模式。接触/视野仍UNKNOWN；projection.v3与独立问题版本明确这一点，强判由CONTACT_UNVERIFIED拒绝并保留原答案诊断。CandidateGenerator转发事实，Director仍决定是否值得讲，Narrator表达已接受的证据不足；默认模式不增加这种教学。结果窗口本人状态单独作为OUTCOME，不影响提名或Jev请求。
+
+**验证**：新测试覆盖actor/缺帧/高度/时间/连发去重、最终HTTP结果替换不变、强判拒绝、默认无教学、TEST_ONLY实际准备和恢复零重复评估；全量测试/TypeScript/production build及单解析真实输入证据见 [验收报告](validation/JEV_ACCEPTANCE.md)。真实调用只由一个有期限的控制器执行，凭证从不回显stdin读入，不写配置。原始Replay不离开子进程。
+
+**限制**：8Hz采样并非逐tick位置。几何模式可能对应战术上完全不同的动作，缺少视野、报点及目标条件仍不能判对错。专业质量与自动接受门槛没有教练留出数据，保持未验证；本次真实输入可运行不等于模型具备专业教练能力。
+
+### 2026-09-22：Jev 决策评估接线不能代替合法动作生产或专业验证
+
+**问题**
+
+现有 `assessment` 由 `assessCandidateTeaching` 在 assembly、Director、Compiler 和 CoachingPackage 多处重算，混合过程判断与教学价值；单改 Director 字段会在下游丢失。真实候选主要来自死亡/击杀，不能反推玩家重复 peek。当前 cs2d shot 无 shooter，Observer 只构建自身位置，snapshot 的原始引用也不满足新候选内别名门。
+
+**决策**
+
+增加 provider-neutral 的三原子评估和原生 Jev adapter，默认规则、旁路和显式 TEST_ONLY 分离。规则数值/窗口留代码；最终 HTTP 精确重建白名单，所有自由文本和未来结果不入 Jev。评估是派生 Inference，冻结 cue 持有 artifact，恢复时纯本地重验。新准备关闭实验时剥离旧 overlay；未校准评估不产生新习惯计数。长期约束见 ARCHITECTURE 6.6.1。
+
+Jev 并行问题看不到彼此答案，不能泛问“此引用支持判断吗”；改为具体命题×引用别名逐项判断。引用归属不等于语义支持，不能自动把所有白名单引用塞给结论。Native confidence 不等于 argmax probability，更不等于战术正确率。HTTP fetch 和 JSON 解码一起受总期限约束，本地 GET/POST 也需要独立期限及取消 race；仅上游 AbortController 不足以防止准备永久卡住。
+
+**验证**
+
+最终 `pnpm check`：130 文件通过、3 文件跳过，978 测试通过、5 测试跳过；TypeScript 与 Web production build 通过。`pnpm desktop:test:unit`：runtime 14、打包/IPC 21、sidecar stub 1、Rust 44 全通过。桌面 runtime 与 standalone 构建通过，真实 sidecar 两次启动、SQLite/资料库去重/Memory导出删除/backup及新可选init→内存配置 smoke通过；没有安装用户应用。构建脚本改为包内 esbuild/Next 命令，修复隔离工作树无根级软链接的既有假设。
+
+Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结 cue、Narrator，重复准备和本地恢复无新增调用；声明为工程测试而非模型效果。真实 60.6MB Demo 一次 WASM解析、10玩家×9回合、517候选，1937断言通过，**0可评估候选**。不能用修复第一层snapshot引用来掩盖后续动作、视野和适用性缺口。
+
+使用用户提供凭证运行两轮各7次真实 `jev-1.13.0` 请求；第二轮保留被门拒绝的输出，避免首轮只统计通过者的分母偏差。累计73606输入tokens、18615输出tokens，按公开费率估算$0.003091452；两轮p50为547/707ms，p95/p99样本不足。第二轮9条案例记录（7个真实请求、2次反事实复用）：7条可解析，2条概率校验失败；可解析中2条通过、5条引用校验拒绝；全部可解析输出都认为上下文不足。自动正式接受保持0。没有生成模型凭证或教练标签，不能报告三模型完整比较或专业准确率。
+
+**限制**
+
+真实产品最小切片未完成：需要明确射手事实、observer-scoped接触/曝光、独立“接触→脱离→再次接触”动作生产及规范引用传递；当前报点只含类别元数据。旁路仍在冻结前有界等待，不是独立后台队列。Jev的引用/概率失败保留在报告，没有降低策略换通过。详细命令、版本、结果与逐条验收见 docs/validation/JEV_ACCEPTANCE.md；模型实测与专业质量分别列状态。
+
+### 2026-09-22：候选证据引用要在生产处闭合，不能让模型绕过悬空引用
+
+**问题**：首轮真实Demo的517个候选全部停在MISSING_LIVE_PLAYER_CONTEXT，但快照实际有决策前本人状态；引用仍是raw frame ID，不是候选持有的Fact ID。
+
+**决策**：adapter1.5.1在创建已有本人/人数事实时绑定快照引用，事实自身保留原始source refs。旧1.5.0/1.4.0历史不重写。CandidateGenerator2.2.0只传递已经存在、明确属于所选玩家且有独立来源/合法窗口的结构动作；其他玩家动作过滤，不把传递接口描述成接触检测器。
+
+**验证**：新真实复验仍0可评估，但拒判准确分为354个场景外和163个缺动作；1937断言通过。完整pnpm check为982测试通过、5既有跳过，tsc与Web生产构建通过；Viewer的vue-tsc和生产构建也通过，全部在任务工作树。
+
+**限制**：没有shot shooter或observer-scoped接触/曝光事实，仍不能生成真实再次接触动作。动作传递和引用修复是必要工程步骤，不能代替信息来源。专业标注/具体报点语义也仍缺失。
+
+### 2026-09-22：不能把PATH缺失误判为工具链缺失，也不能把shot/spotted当作peek
+
+**问题**：续轮初查只用默认PATH，误以为缺WASM工具链；源码实际在weapon_fire已有明确pawn，射手属于可编码的漏字段。同时USER_CONTEXT只有opaque引用，模型无法区分不同报点内容。
+
+**决策**：重新核对既有build脚本的`~/.cargo/bin`配置与一手源码，采用0007加法补丁保留shooterSteamId，unknown=null；adapter仅输出明确本人WEAPON_FIRE事实。原schema不读取射击目标、不推断接触。增加封闭UserTacticalContext并严格维持用户陈述来源；有内容才用v2模型投影，无内容v1/cache不变。
+
+**验证**：offline WASM构建、Rust序列化、patch幂等与工具7测通过；真实Demo1242shots全合法actor，十玩家1937断言与整场覆盖通过，但163个优势窗口仍缺独立接触动作。封闭报点两例新增真实Jev调用都拒判信息不足；累计16次，估算$0.003287592。987项测试、tsc、Web与Viewer生产构建通过。
+
+**限制**：一手资料明确spotted不是LOS/FOV；射击和雷达信息不能直接成为真实重复peek标签。类型/适配/接口改善不等于新事实已经存在，也不等于专业质量。新报点schema未接新增用户UI或任意自由文本解析。后续需要可靠接触/曝光事实或可追溯人工标注，以及独立教练留出集。
+
+### 2026-09-22：凭证缺失与JSON模式契约应在明确配置路径上核实
+
+**问题**：任务进程未注入生成key，但主工作区已有合法localhost provider配置；只查process.env造成“无可用凭证”的过早结论。对照生成请求又缺少官方JSON模式要求的显式JSON指令，前四次返回400。
+
+**决策**：仅通过显式路径流式读取具名key/model，不复制配置、不输出key；补JSON指令、与既有provider一致的非思考模式，分别记录请求模型与服务端实际返回标识。失败证据保留，不改成零费用或成功。
+
+**验证**：DeepSeek两次真实同packet对照成功，返回deepseek-flash，1933/2002ms、3618输入/1050输出tokens，两例均UNKNOWN/INSUFFICIENT。加了请求JSON关键字和服务端模型provenance回归。全部provider累计22次（Jev16、生成6含4失败），Jev已知估算$0.003287592，生成及全部provider总费用未知。
+
+**限制**：只有两个同组synthetic报点案例，不是专业留出；服务端Flash标识不是不可变模型权重版本。真实接触事实、专业标注和用户报点入口仍未获得验收。
+
+### 2026-09-24：实验调用要限制整段等待，实验候选不能吞掉基线讲解
+
+**问题**：评估最多10次串行本地请求，每次上限3.5秒，旁路也可能拖住开始复盘约35秒。请求次数门还在保存产物和重复请求复用之前，预算用完时会错误跳过无需付费的结果。另一处真实功能回归是 RETURN_AND_FIRE 提名抑制同一时刻的独立 WIN_RATE_DROP，但自身在基线为 NO_TEACHING_VALUE，从而让默认路线少讲一段。
+
+**决策**：准备阶段改为最多2个并发、配置后6秒总体期限，保持10个独立请求上限、零重试。每个包共享一次请求，候选绑定独立，输出顺序稳定；期限到达保留已完成结果，剩余明确记录 SESSION_TIME_BUDGET。用户取消终止准备，迟到结果不能再写入。Adapter 1.6.1 将实验返回开枪候选排除在独立胜率窗口的抑制条件之外，保留1.6.0历史读取。
+
+**验证**：先分别复现6秒仍未完成、预算阻止保存结果复用，以及明确射手归属将原1个cue变为0个的失败，再修复。新增8项调度测试覆盖总体期限、并发、同包复用、预算后复用、顺序、取消和晚到响应；重合候选测试同时检查原cue与segment保持。`pnpm check`：135文件/1,039测试通过，5项既有跳过，TypeScript及Web production build通过。桌面unit：14 runtime、21 prepare/IPC、1 stub、44 Rust通过；Viewer与desktop prepare构建通过，真实sidecar正常及decision-pilot两种启动均通过，测试数据和进程由harness清理。
+
+**限制**：这些改动提升准备速度和基线稳定性，没有新增Jev专业准确率证据；本轮不重复调用已知只能拒判的真实输入。当前非用户观察只投影元数据，缺少空间/主体语义，需后续独立设计有用且不越界的表示。取消不能保证上游已发生费用被撤销。未做本轮完整WKWebView视觉走查、应用安装或发布。用户要求审查聚焦实际功能，本轮没有新增产物哈希审计。
 
 ## 5. 常用问题排查表
 

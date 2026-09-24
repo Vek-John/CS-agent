@@ -22,6 +22,46 @@ pub struct RuntimeInit {
     pub runtime_root: PathBuf,
     pub viewer_root: PathBuf,
     pub provider: ProviderInit,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decision_provider: Option<DecisionProviderInit>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
+pub enum DecisionProviderMode {
+    #[serde(rename = "JEV_SHADOW")]
+    Shadow,
+    #[serde(rename = "JEV_EXPERIMENT")]
+    Experiment,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
+pub enum DecisionAcceptance {
+    #[serde(rename = "SHADOW_ONLY")]
+    ShadowOnly,
+    #[serde(rename = "TEST_ONLY")]
+    TestOnly,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DecisionProviderInit {
+    pub kind: &'static str,
+    pub mode: DecisionProviderMode,
+    pub acceptance: DecisionAcceptance,
+    pub api_key: Option<String>,
+    pub model: &'static str,
+}
+
+impl std::fmt::Debug for DecisionProviderInit {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_struct("DecisionProviderInit")
+            .field("kind", &self.kind)
+            .field("mode", &self.mode)
+            .field("acceptance", &self.acceptance)
+            .field("has_api_key", &self.api_key.is_some())
+            .field("model", &self.model)
+            .finish()
+    }
 }
 
 #[derive(Debug, Serialize)]

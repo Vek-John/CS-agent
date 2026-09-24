@@ -238,6 +238,13 @@ export interface GenerationManifest {
 }
 
 export interface ReviewPlan {
+  /** Derived inference audit; absent in legacy plans. Never triggers evaluation on restore. */
+  decision_assessment_run?: {
+    version: "decision-assessment-run.v1";
+    mode: import("./decision-assessment").DecisionAssessmentMode;
+    calls: number; accepted: number;
+    records: readonly { candidateId: string; reason: string; artifact?: import("./decision-assessment").DecisionAssessmentArtifact }[];
+  };
   id: string;
   demo_id: string;
   player_id: string;
@@ -376,3 +383,4 @@ export * from "./coaching";
 export * from "./teaching-diagnosis";
 
 export * from "./decision-context";
+export * from "./decision-assessment";

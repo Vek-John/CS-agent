@@ -390,6 +390,7 @@ impl Supervisor {
                 return self.fail(&app, SupervisorError::InitFailed);
             }
         };
+        let decision_provider = crate::provider::runtime_decision_provider(&paths.data_dir);
         let init = RuntimeInit {
             schema_version: crate::protocol::INIT_SCHEMA,
             app_version: app.package_info().version.to_string(),
@@ -403,6 +404,7 @@ impl Supervisor {
             runtime_root: paths.runtime_root,
             viewer_root: paths.viewer_root,
             provider,
+            decision_provider,
         };
         let mut init_line = match serde_json::to_vec(&init) {
             Ok(line) => line,

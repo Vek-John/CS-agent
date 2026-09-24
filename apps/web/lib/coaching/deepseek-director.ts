@@ -7,7 +7,7 @@ import type {
   CandidateSignalKind,
   CandidateResultSummary
 } from "@cs-coach/contracts";
-import { MAX_DIRECTOR_PACKET_CANDIDATES, MAX_TEACHING_CUES } from "@cs-coach/contracts";
+import { CANDIDATE_SIGNAL_KINDS, MAX_DIRECTOR_PACKET_CANDIDATES, MAX_TEACHING_CUES } from "@cs-coach/contracts";
 import {
   buildDirectorRequest,
   buildGatedAdviceOptions,
@@ -147,7 +147,7 @@ function safeText(value: unknown, max = 500): value is string {
 
 function parseProviderCandidate(value: unknown): DirectorProviderCandidate {
   if (!isRecord(value) || !exactKeys(value, ["candidate_id", "source_kind", "deterministic_score", "missing_fields", "limitations", "reason_refs", "evidence_refs", "result_summary", "allowed_focus_codes", ...(value.decision_summary === undefined ? [] : ["decision_summary"])])) throw new DirectorValidationError("Director candidate summary shape is invalid.");
-  if (!alias(value.candidate_id, "c") || !["DEATH", "KILL", "BOMB", "UTILITY", "HP_CHANGE", "WIN_RATE_DROP"].includes(String(value.source_kind)) || !finite(value.deterministic_score) || !Array.isArray(value.missing_fields) || !Array.isArray(value.limitations) || !Array.isArray(value.reason_refs) || !Array.isArray(value.evidence_refs) || !isRecord(value.result_summary) || !Array.isArray(value.allowed_focus_codes)) throw new DirectorValidationError("Director candidate summary contains invalid fields.");
+  if (!alias(value.candidate_id, "c") || !(CANDIDATE_SIGNAL_KINDS as readonly string[]).includes(String(value.source_kind)) || !finite(value.deterministic_score) || !Array.isArray(value.missing_fields) || !Array.isArray(value.limitations) || !Array.isArray(value.reason_refs) || !Array.isArray(value.evidence_refs) || !isRecord(value.result_summary) || !Array.isArray(value.allowed_focus_codes)) throw new DirectorValidationError("Director candidate summary contains invalid fields.");
   if (!value.missing_fields.every((item) => typeof item === "string") || !value.limitations.every((item) => typeof item === "string") || !value.reason_refs.every((item) => alias(item, "r")) || !value.evidence_refs.every((item) => alias(item, "e")) || !value.allowed_focus_codes.every((item) => typeof item === "string" && item.length <= 120)) throw new DirectorValidationError("Director candidate summary contains invalid refs or focus codes.");
   const summary = value.result_summary;
   const summaryKeys = ["selectedPlayerDeath", "economyClass", "concurrentEvents", "missingFields", "limitations", ...["winProbabilityBefore", "winProbabilityAfter", "winProbabilityDelta", "winProbabilityPercentagePoints"].filter((key) => summary[key] !== undefined)];
@@ -231,7 +231,7 @@ export function parseDirectorResponse(
 }
 
 function focusFor(kind: CandidateSignalKind): string {
-  return kind === "DEATH" ? "SURVIVE_THE_NEXT_CONTACT" : kind === "KILL" ? "CONVERT_ADVANTAGE" : kind === "BOMB" ? "OBJECTIVE_TIMING" : kind === "UTILITY" ? "UTILITY_PURPOSE_AND_TEMPO" : kind === "WIN_RATE_DROP" ? "WIN_PROBABILITY_SWING_RESPONSE" : "SURVIVE_CONTACT";
+  return kind === "RETURN_AND_FIRE" ? "REVIEW_UNCERTAINTY" : kind === "DEATH" ? "SURVIVE_THE_NEXT_CONTACT" : kind === "KILL" ? "CONVERT_ADVANTAGE" : kind === "BOMB" ? "OBJECTIVE_TIMING" : kind === "UTILITY" ? "UTILITY_PURPOSE_AND_TEMPO" : kind === "WIN_RATE_DROP" ? "WIN_PROBABILITY_SWING_RESPONSE" : "SURVIVE_CONTACT";
 }
 
 export function buildDirectorProviderRequestContext(set: CandidateSet, maxSelected = MAX_TEACHING_CUES): DirectorProviderRequestContext {

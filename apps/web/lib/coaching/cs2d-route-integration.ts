@@ -1,3 +1,4 @@
+import { requestDecisionAssessments } from "./decision-assessment-host";
 import type {
   CandidateSet,
   CoachingRouteState,
@@ -89,6 +90,7 @@ export interface ReviewPreparationAnalysisInput {
 
 export interface ReviewPreparationProviderOverrides {
   director?: typeof requestTeachingDirector;
+  assessDecisions?: typeof requestDecisionAssessments;
   narrator?: typeof requestNarrationBundle;
 }
 
@@ -105,28 +107,42 @@ export function createCs2dReviewPreparationDependencies(
 ): ReviewPreparationDependencies {
   const director = overrides.director ?? requestTeachingDirector;
   const narrator = overrides.narrator ?? requestNarrationBundle;
+  const assessDecisions = overrides.assessDecisions ?? requestDecisionAssessments;
+  let preparedSet = analysis.candidateSet;
+  let preparation: Promise<ReviewPlan> | undefined;
   return {
     prepareRoute: async ({ inputPlan, signal }) => {
-      if (analysis.candidateSet.status === "FAILED") {
-        throw new Error(`CANDIDATE_SET_FAILED:${analysis.candidateSet.failureReason ?? "UNKNOWN"}`);
-      }
-      const directorCandidateCount = buildDirectorRequest(analysis.candidateSet, MAX_DIRECTOR_CUES).candidates.length;
-      const directorDecisionSet: DirectorDecisionSet = directorCandidateCount === 0
-        ? deterministicDirectorFallback(analysis.candidateSet, analysis.candidateSet.candidates.length === 0 ? "NO_CANDIDATES" : "NO_PRACTICAL_CANDIDATES", MAX_DIRECTOR_CUES)
-        : await director(analysis.candidateSet, { signal, maxSelected: MAX_DIRECTOR_CUES });
-      const compiled = compileReviewPlan({
-        timeline: analysis.matchTimeline,
-        candidateSet: analysis.candidateSet,
-        directorDecisionSet,
-        planId: inputPlan.id,
-        observationVersion: analysis.candidateSet.generationManifest.observationVersion,
-        signalVersion: analysis.candidateSet.generationManifest.signalVersion,
-        plannerVersion: inputPlan.planner_version,
-        parserVersion: inputPlan.generation_manifest.parser_version,
-        promptVersion: directorDecisionSet.manifest.promptVersion ?? inputPlan.generation_manifest.prompt_version,
-        maxCues: MAX_DIRECTOR_CUES
+      if (preparation) return preparation;
+      preparation = (async () => {
+        if (analysis.candidateSet.status === "FAILED") {
+          throw new Error(`CANDIDATE_SET_FAILED:${analysis.candidateSet.failureReason ?? "UNKNOWN"}`);
+        }
+        const assessed = await assessDecisions(analysis.candidateSet, { mapName: analysis.matchTimeline.map_name, tickRate: analysis.matchTimeline.tick_rate, signal });
+        if (signal.aborted) throw new DOMException("Preparation cancelled", "AbortError");
+        preparedSet = assessed.candidateSet;
+        const directorCandidateCount = buildDirectorRequest(preparedSet, MAX_DIRECTOR_CUES).candidates.length;
+        const directorDecisionSet: DirectorDecisionSet = directorCandidateCount === 0
+          ? deterministicDirectorFallback(preparedSet, preparedSet.candidates.length === 0 ? "NO_CANDIDATES" : "NO_PRACTICAL_CANDIDATES", MAX_DIRECTOR_CUES)
+          : await director(preparedSet, { signal, maxSelected: MAX_DIRECTOR_CUES });
+        const compiled = compileReviewPlan({
+          timeline: analysis.matchTimeline,
+          candidateSet: preparedSet,
+          directorDecisionSet,
+          planId: inputPlan.id,
+          observationVersion: preparedSet.generationManifest.observationVersion,
+          signalVersion: preparedSet.generationManifest.signalVersion,
+          plannerVersion: inputPlan.planner_version,
+          parserVersion: inputPlan.generation_manifest.parser_version,
+          promptVersion: directorDecisionSet.manifest.promptVersion ?? inputPlan.generation_manifest.prompt_version,
+          maxCues: MAX_DIRECTOR_CUES
+        });
+        if (signal.aborted) throw new DOMException("Preparation cancelled", "AbortError");
+        return { ...compiled.plan, decision_assessment_run: assessed.run };
+      })().catch((error) => {
+        preparation = undefined; // An explicit retry after cancellation/failure remains possible.
+        throw error;
       });
-      return compiled.plan;
+      return preparation;
     },
     prepareNarration: async ({ cue, signal }) => {
       const coachingPackage = buildCoachingPackage(

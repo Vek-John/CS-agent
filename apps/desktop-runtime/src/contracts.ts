@@ -41,6 +41,16 @@ export type DesktopProviderConfig =
   | DeepseekProviderConfig
   | OpenAiCompatibleProviderConfig;
 
+export interface JevDecisionProviderConfig {
+  readonly kind: "JEV";
+  readonly mode: "JEV_SHADOW" | "JEV_EXPERIMENT";
+  readonly acceptance: "SHADOW_ONLY" | "TEST_ONLY";
+  readonly apiKey: string | null;
+  readonly model: "jev-1.13.0";
+}
+
+export type RuntimeDecisionProviderConfig = JevDecisionProviderConfig | { readonly kind: "RULE_BASELINE" };
+
 export interface DesktopRuntimeInit {
   readonly schemaVersion: "desktop-runtime-init.v1";
   readonly appVersion: string;
@@ -52,6 +62,7 @@ export interface DesktopRuntimeInit {
   readonly runtimeRoot: string;
   readonly viewerRoot: string;
   readonly provider: DesktopProviderConfig;
+  readonly decisionProvider?: JevDecisionProviderConfig;
 }
 
 export type StartupErrorCode =
@@ -142,7 +153,8 @@ export function parseDesktopRuntimeInit(line: string): DesktopRuntimeInit {
   } catch {
     throw new RuntimeStartupError("INIT_INVALID");
   }
-  if (!isRecord(input) || !hasExactFields(input, INIT_FIELDS)) throw new RuntimeStartupError("INIT_INVALID");
+  if (!isRecord(input) || (!hasExactFields(input, INIT_FIELDS)
+    && !hasExactFields(input, [...INIT_FIELDS, "decisionProvider"]))) throw new RuntimeStartupError("INIT_INVALID");
   if (input.schemaVersion !== "desktop-runtime-init.v1"
     || !boundedString(input.appVersion, 1, 120)
     || !boundedString(input.buildSha, 1, 120)
@@ -166,7 +178,35 @@ export function parseDesktopRuntimeInit(line: string): DesktopRuntimeInit {
     runtimeRoot: input.runtimeRoot,
     viewerRoot: input.viewerRoot,
     provider: validateDesktopProviderConfig(input.provider),
+    ...(Object.hasOwn(input, "decisionProvider")
+      ? { decisionProvider: validateDecisionProviderConfig(input.decisionProvider) } : {}),
   });
+}
+
+export function validateDecisionProviderConfig(value: unknown): JevDecisionProviderConfig {
+  if (!isRecord(value)
+    || !hasExactFields(value, ["kind", "mode", "acceptance", "apiKey", "model"])
+    || value.kind !== "JEV"
+    || (value.mode !== "JEV_SHADOW" && value.mode !== "JEV_EXPERIMENT")
+    || (value.acceptance !== "SHADOW_ONLY" && value.acceptance !== "TEST_ONLY")
+    || value.model !== "jev-1.13.0"
+    || (value.apiKey !== null && !boundedString(value.apiKey, 1, 512))) {
+    throw new RuntimeStartupError("INIT_INVALID");
+  }
+  return Object.freeze({ kind: "JEV", mode: value.mode, acceptance: value.acceptance,
+    apiKey: value.apiKey, model: value.model });
+}
+
+const DECISION_PROVIDER_SYMBOL = Symbol.for("cs-agent.desktop.decision-provider.v1");
+type DecisionProviderGlobal = typeof globalThis & { [DECISION_PROVIDER_SYMBOL]?: RuntimeDecisionProviderConfig };
+
+/** Old init envelopes explicitly disable decision-provider environment fallback. */
+export function installRuntimeDecisionProviderConfig(provider?: JevDecisionProviderConfig): void {
+  (globalThis as DecisionProviderGlobal)[DECISION_PROVIDER_SYMBOL] = provider ?? Object.freeze({ kind: "RULE_BASELINE" });
+}
+
+export function currentRuntimeDecisionProviderConfig(): RuntimeDecisionProviderConfig | undefined {
+  return (globalThis as DecisionProviderGlobal)[DECISION_PROVIDER_SYMBOL];
 }
 
 const RUNTIME_PROVIDER_SYMBOL = Symbol.for("cs-agent.desktop.provider.v1");

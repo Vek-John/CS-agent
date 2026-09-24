@@ -15,6 +15,7 @@ const realDemoPath = join(repoRoot, "demoTests/test_demo.dem");
 const realDemoHash = "84a1a4191302bdd2a3bbb5a727842093744b1fb1a228aeec630369e44b622cb2";
 const tsxCli = fileURLToPath(import.meta.resolve("tsx/cli"));
 const appPath = join(repoRoot, "apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/CS Agent Coach.app");
+const decisionPilotMode = process.argv.includes("--decision-pilot");
 const preparedMode = process.argv.includes("--prepared");
 const webkitMode = process.argv.includes("--webkit");
 const webkitDemoMode = process.argv.includes("--webkit-demo");
@@ -85,6 +86,7 @@ async function startSidecar(stage) {
     runtimeRoot,
     viewerRoot,
     provider: { kind: "NONE", apiKey: null, baseUrl: null, model: null },
+    ...(decisionPilotMode ? { decisionProvider: { kind: "JEV", mode: "JEV_SHADOW", acceptance: "SHADOW_ONLY", apiKey: null, model: "jev-1.13.0" } } : {}),
   })}\n`);
 
   const readyLine = new Promise((resolve, reject) => {
@@ -470,6 +472,13 @@ function assertPublicExport(value, raw) {
 
 try {
   const first = await startSidecar("first");
+  if (decisionPilotMode) {
+    const response = await sessionFetch(first, "/api/coaching/assess-decision");
+    const config = await boundedJson(response, "decision provider configuration");
+    if (response.status !== 200 || config.mode !== "JEV_SHADOW" || config.acceptance !== "DISABLED"
+      || Object.keys(config).length !== 2) throw new Error("decision provider init/config boundary failed");
+    process.stdout.write("PASS decision provider optional init to in-memory configuration without credentials or model calls\n");
+  }
   const cookie = `cs_agent_runtime=${first.message.sessionToken}`;
   const desktop = await fetch(`${first.message.appOrigin}/desktop`, { headers: { cookie } });
   if (desktop.status !== 200) throw new Error(`desktop smoke returned ${desktop.status}`);

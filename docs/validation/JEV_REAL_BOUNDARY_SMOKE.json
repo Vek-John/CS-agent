@@ -1,0 +1,213 @@
+{
+  "schemaVersion": "jev-real-smoke.v1",
+  "status": "PASS",
+  "generatedAt": "2026-09-22T13:11:49.121Z",
+  "source": "CANONICAL_DEMO",
+  "demoSha256": "84a1a4191302bdd2a3bbb5a727842093744b1fb1a228aeec630369e44b622cb2",
+  "inputBytes": 60601900,
+  "map": "de_mirage",
+  "parserWasmSha256": "dcbd003a6aca5882fe7233d20a3e892be8d1383574a86a4f0663568f90a8c459",
+  "parserJsSha256": "1d43484106b25a25d82a986525427f904d045125c730deaf51758559541ffbda",
+  "samplingHz": 8,
+  "parseInvocations": 1,
+  "parseMs": 13147,
+  "elapsedMs": 15667,
+  "heapLimitMiB": 1536,
+  "peakRssBytes": 427524096,
+  "deadlineMs": 600000,
+  "decisionAssessmentVersions": {
+    "projection": "decision-assessment-projection.v1",
+    "questions": "recontact-questions.v1",
+    "acceptance": "recontact-acceptance.v1",
+    "artifact": "decision-assessment.v1",
+    "model": "jev-1.13.0"
+  },
+  "players": 10,
+  "rounds": 9,
+  "playerRoundObservations": 90,
+  "candidates": 517,
+  "eligible": 0,
+  "rejected": 517,
+  "supportRate": 0,
+  "rejectionReasons": {
+    "UNSUPPORTED_SCENARIO": 354,
+    "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 163
+  },
+  "playerSummaries": [
+    {
+      "playerIndex": 1,
+      "rounds": 9,
+      "candidates": 58,
+      "cues": 2,
+      "segments": 31,
+      "explicitSkips": 18,
+      "bundleBytes": 5850620,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 29,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 29
+      },
+      "buildMs": 288
+    },
+    {
+      "playerIndex": 2,
+      "rounds": 9,
+      "candidates": 61,
+      "cues": 2,
+      "segments": 31,
+      "explicitSkips": 18,
+      "bundleBytes": 6107725,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 21,
+        "UNSUPPORTED_SCENARIO": 40
+      },
+      "buildMs": 300
+    },
+    {
+      "playerIndex": 3,
+      "rounds": 9,
+      "candidates": 61,
+      "cues": 1,
+      "segments": 29,
+      "explicitSkips": 18,
+      "bundleBytes": 5871272,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 27,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 34
+      },
+      "buildMs": 246
+    },
+    {
+      "playerIndex": 4,
+      "rounds": 9,
+      "candidates": 66,
+      "cues": 3,
+      "segments": 33,
+      "explicitSkips": 18,
+      "bundleBytes": 6178122,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 26,
+        "UNSUPPORTED_SCENARIO": 40
+      },
+      "buildMs": 276
+    },
+    {
+      "playerIndex": 5,
+      "rounds": 9,
+      "candidates": 51,
+      "cues": 3,
+      "segments": 31,
+      "explicitSkips": 18,
+      "bundleBytes": 5793330,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 25,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 26
+      },
+      "buildMs": 252
+    },
+    {
+      "playerIndex": 6,
+      "rounds": 9,
+      "candidates": 36,
+      "cues": 1,
+      "segments": 29,
+      "explicitSkips": 18,
+      "bundleBytes": 4725044,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 28,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 8
+      },
+      "buildMs": 171
+    },
+    {
+      "playerIndex": 7,
+      "rounds": 9,
+      "candidates": 51,
+      "cues": 2,
+      "segments": 30,
+      "explicitSkips": 18,
+      "bundleBytes": 5297530,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 44,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 7
+      },
+      "buildMs": 199
+    },
+    {
+      "playerIndex": 8,
+      "rounds": 9,
+      "candidates": 42,
+      "cues": 4,
+      "segments": 33,
+      "explicitSkips": 18,
+      "bundleBytes": 5142576,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 38,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 4
+      },
+      "buildMs": 197
+    },
+    {
+      "playerIndex": 9,
+      "rounds": 9,
+      "candidates": 38,
+      "cues": 4,
+      "segments": 33,
+      "explicitSkips": 18,
+      "bundleBytes": 5106374,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 35,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 3
+      },
+      "buildMs": 159
+    },
+    {
+      "playerIndex": 10,
+      "rounds": 9,
+      "candidates": 53,
+      "cues": 4,
+      "segments": 34,
+      "explicitSkips": 18,
+      "bundleBytes": 5642931,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 48,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 5
+      },
+      "buildMs": 344
+    }
+  ],
+  "assertions": 1937,
+  "fullTimelineCoverage": "PASS",
+  "explicitSkipReasons": "PASS",
+  "serializationRoundTrip": "PASS",
+  "remoteModelCalls": 0,
+  "modelQuality": "NOT_EVALUATED",
+  "expertLabels": 0,
+  "limitations": [
+    "SINGLE_DEMO_TEN_CORRELATED_PLAYER_PERSPECTIVES",
+    "EIGHT_HZ_STATE_SAMPLING_NOT_EXACT_PER_TICK_STATE",
+    "NO_REMOTE_MODEL_CALLS",
+    "NO_EXPERT_LABELS",
+    "STRUCTURAL_COVERAGE_NOT_TACTICAL_ACCURACY",
+    "NO_ELIGIBLE_PACKET_ON_THIS_REAL_DEMO"
+  ]
+}

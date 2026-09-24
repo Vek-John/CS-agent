@@ -11,7 +11,7 @@ import {
   type LibraryStats,
 } from "@cs-coach/review-library/server";
 import type { DesktopRuntimeInit } from "./contracts";
-import { installRuntimeProviderConfig, RuntimeStartupError } from "./contracts";
+import { installRuntimeDecisionProviderConfig, installRuntimeProviderConfig, RuntimeStartupError } from "./contracts";
 import {
   appSecurityHeaders,
   createRuntimeToken,
@@ -551,6 +551,7 @@ export async function startDesktopRuntime(
   options: DesktopRuntimeOptions = {},
 ): Promise<DesktopRuntimeController> {
   installRuntimeProviderConfig(init.provider);
+  installRuntimeDecisionProviderConfig(init.decisionProvider);
   process.env.DEPLOY_TARGET = "desktop";
   process.env.NEXT_PUBLIC_DEPLOY_TARGET = "desktop";
   process.env.MEMORY_ENABLED = "true";

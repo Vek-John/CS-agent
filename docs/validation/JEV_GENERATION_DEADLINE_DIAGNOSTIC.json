@@ -1,0 +1,283 @@
+{
+  "version": "jev-generation-deadline-diagnostic.v1",
+  "generatedAt": "2026-09-23T15:17:27.841Z",
+  "purpose": "DIAGNOSTIC_ONLY_NOT_PRODUCTION_TIMEOUT_CHANGE",
+  "configuredGenerationModel": "deepseek-v4-flash",
+  "remoteCalls": 5,
+  "elapsedMs": 26347,
+  "requestTimeoutMs": 10000,
+  "selectedCases": [
+    "good-choice-bad-result",
+    "bad-choice-good-result",
+    "reasonable-active-contest",
+    "reliable-new-information",
+    "multiple-reasonable-actions"
+  ],
+  "priorReportCreatedAt": "2026-09-23T15:15:13.242Z",
+  "expertLabels": 0,
+  "rows": [
+    {
+      "caseId": "good-choice-bad-result",
+      "demoGroup": "synthetic-objective-a",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "packetFingerprint": "decision-v1-eb670249-cde97107-784",
+      "canonicalBodySha256": "bee54415d9ee05d03723a5780569b7b36a017000b0689132cfb1fc2f3555b6d7",
+      "originalReason": "TIMEOUT",
+      "originalDeadlineMs": 3000,
+      "diagnosticDeadlineMs": 10000,
+      "status": "SUCCEEDED",
+      "result": {
+        "model": "deepseek-flash",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.55,
+          "probabilities": {
+            "WARRANTED": 0.3,
+            "UNWARRANTED": 0.15,
+            "UNKNOWN": 0.55
+          },
+          "refs": [
+            "e1",
+            "e2"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.5,
+          "probabilities": {
+            "PREFERABLE": 0.25,
+            "NOT_ESTABLISHED": 0.5,
+            "UNKNOWN": 0.25
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.6,
+          "probabilities": {
+            "SUFFICIENT": 0.25,
+            "INSUFFICIENT": 0.75
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "latencyMs": 4481,
+      "usage": {
+        "inputTokens": 5537,
+        "outputTokens": 1712,
+        "costUsd": null
+      },
+      "actualModel": "deepseek-flash",
+      "parsed": true,
+      "valid": true,
+      "authorExpectationMatch": {
+        "risk": false,
+        "alternative": true,
+        "sufficiency": false
+      }
+    },
+    {
+      "caseId": "bad-choice-good-result",
+      "demoGroup": "synthetic-unnecessary-b",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "packetFingerprint": "decision-v1-1aacba17-ebfb12a7-784",
+      "canonicalBodySha256": "b592c883f65fb3c1d61587e2f0275f31da0ac5610fb44d629f64624e872feb55",
+      "originalReason": "TIMEOUT",
+      "originalDeadlineMs": 3000,
+      "diagnosticDeadlineMs": 10000,
+      "status": "SUCCEEDED",
+      "result": {
+        "model": "deepseek-flash",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.55,
+          "probabilities": {
+            "WARRANTED": 0.3,
+            "UNWARRANTED": 0.15,
+            "UNKNOWN": 0.55
+          },
+          "refs": [
+            "e1"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.5,
+          "probabilities": {
+            "PREFERABLE": 0.25,
+            "NOT_ESTABLISHED": 0.5,
+            "UNKNOWN": 0.25
+          },
+          "refs": [
+            "e3",
+            "e5"
+          ]
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.6,
+          "probabilities": {
+            "SUFFICIENT": 0.25,
+            "INSUFFICIENT": 0.75
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "latencyMs": 4549,
+      "usage": {
+        "inputTokens": 5537,
+        "outputTokens": 1717,
+        "costUsd": null
+      },
+      "actualModel": "deepseek-flash",
+      "parsed": true,
+      "valid": true,
+      "authorExpectationMatch": {
+        "risk": false,
+        "alternative": false,
+        "sufficiency": false
+      }
+    },
+    {
+      "caseId": "reasonable-active-contest",
+      "demoGroup": "synthetic-trade-c",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "packetFingerprint": "decision-v1-b95644c6-cfa1c3f0-788",
+      "canonicalBodySha256": "09a0e90bbdf250ce46f528a22b7f5042ee62be18581adcf8141f318046944a5a",
+      "originalReason": "TIMEOUT",
+      "originalDeadlineMs": 3000,
+      "diagnosticDeadlineMs": 10000,
+      "status": "FALLBACK",
+      "reason": "UPSTREAM_FINISH",
+      "latencyMs": 6168,
+      "usage": {
+        "inputTokens": 5537,
+        "outputTokens": 2400,
+        "costUsd": null
+      },
+      "parsed": false,
+      "valid": false,
+      "authorExpectationMatch": null
+    },
+    {
+      "caseId": "reliable-new-information",
+      "demoGroup": "synthetic-information-e",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "packetFingerprint": "decision-v1-c2923d96-8b3882ce-953",
+      "canonicalBodySha256": "f13204f7b8a8053a3e5b139d81247455e4768744e6d035c64e98089b3b1555a0",
+      "originalReason": "TIMEOUT",
+      "originalDeadlineMs": 3000,
+      "diagnosticDeadlineMs": 10000,
+      "status": "FALLBACK",
+      "reason": "UPSTREAM_FINISH",
+      "latencyMs": 6265,
+      "usage": {
+        "inputTokens": 5593,
+        "outputTokens": 2400,
+        "costUsd": null
+      },
+      "parsed": false,
+      "valid": false,
+      "authorExpectationMatch": null
+    },
+    {
+      "caseId": "multiple-reasonable-actions",
+      "demoGroup": "synthetic-multiple-f",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "packetFingerprint": "decision-v1-8f07d73-2fe63d89-785",
+      "canonicalBodySha256": "4a09a6c0e5364bcd7c4f6846e33d75533275161b420f7042ae0f763ec25447e9",
+      "originalReason": "TIMEOUT",
+      "originalDeadlineMs": 3000,
+      "diagnosticDeadlineMs": 10000,
+      "status": "FALLBACK",
+      "reason": "VALIDATION_REJECTED",
+      "latencyMs": 4869,
+      "usage": {
+        "inputTokens": 5537,
+        "outputTokens": 1719,
+        "costUsd": null
+      },
+      "diagnosticResult": {
+        "model": "deepseek-flash",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 0.62,
+          "probabilities": {
+            "WARRANTED": 0.62,
+            "UNWARRANTED": 0.13,
+            "UNKNOWN": 0.25
+          },
+          "refs": [
+            "e4",
+            "e5"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.55,
+          "probabilities": {
+            "PREFERABLE": 0.2,
+            "NOT_ESTABLISHED": 0.55,
+            "UNKNOWN": 0.25
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.6,
+          "probabilities": {
+            "SUFFICIENT": 0.3,
+            "INSUFFICIENT": 0.7
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "rejectionReasons": [
+        "UNSUPPORTED_CITATION"
+      ],
+      "actualModel": "deepseek-flash",
+      "parsed": true,
+      "valid": false,
+      "authorExpectationMatch": {
+        "risk": true,
+        "alternative": true,
+        "sufficiency": true
+      }
+    }
+  ]
+}

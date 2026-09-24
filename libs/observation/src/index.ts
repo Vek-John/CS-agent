@@ -1,3 +1,4 @@
+import { parseUserTacticalContext, type UserTacticalContext } from "@cs-coach/contracts";
 import type {
   AudibilityAssessment,
   DirectionSector,
@@ -12,7 +13,7 @@ import type {
   WorldPoint
 } from "@cs-coach/contracts";
 
-export const OBSERVATION_VERSION = "observation/1.0.0";
+export const OBSERVATION_VERSION = "observation/1.1.0";
 export const OBSERVATION_DERIVER = "@cs-coach/observation/rules";
 
 const SOUND_LIMITATIONS = [
@@ -103,6 +104,7 @@ export interface TeamSharedObservationFact extends ObservationFactBase {
 }
 
 export interface UserContextObservationFact extends ObservationFactBase {
+  user_tactical_context?: UserTacticalContext;
   source_type: "USER_CONTEXT";
   context_ref: string;
   context_tick?: number;
@@ -289,6 +291,10 @@ export function collectObservationFactIssues(fact: ObservationFact): string[] {
     );
   }
 
+  if (candidate.user_tactical_context !== undefined) {
+    try { parseUserTacticalContext(candidate.user_tactical_context); } catch { issues.push("INVALID_USER_TACTICAL_CONTEXT"); }
+    if (sourceType !== "USER_CONTEXT") issues.push("USER_TACTICAL_CONTEXT_WRONG_SOURCE");
+  }
   switch (sourceType) {
     case "DIRECT_VISION":
     case "SPOTTED":
@@ -644,7 +650,7 @@ function buildClaimForFact(
       };
 
     case "USER_CONTEXT":
-      return makeClaimBase(
+      return { ...makeClaimBase(
         {
           ...fact,
           tick: fact.context_tick ?? fact.tick
@@ -659,7 +665,7 @@ function buildClaimForFact(
         undefined,
         fact.context_ref,
         "context"
-      );
+      ), ...(fact.user_tactical_context ? { user_tactical_context: parseUserTacticalContext(fact.user_tactical_context) } : {}) };
 
     case "LAST_KNOWN": {
       const confirmation: ObservationClaim = makeClaimBase(
@@ -881,6 +887,10 @@ export function collectObservationClaimIssues(
     (claim.knowledge_kind !== "USER_ASSERTED" || claim.sharing_scope !== "USER_CONTEXT_ONLY")
   ) {
     issues.push(`User-context claim ${claim.id} must remain USER_ASSERTED and isolated.`);
+  }
+  if (claim.user_tactical_context !== undefined) {
+    try { parseUserTacticalContext(claim.user_tactical_context); } catch { issues.push("INVALID_USER_TACTICAL_CONTEXT"); }
+    if (claim.source_type !== "USER_CONTEXT" || claim.knowledge_kind !== "USER_ASSERTED" || claim.sharing_scope !== "USER_CONTEXT_ONLY") issues.push("USER_TACTICAL_CONTEXT_WRONG_SOURCE");
   }
   if (atTick !== undefined && (claim.available_from_tick > atTick || claim.evidence_tick > atTick)) {
     issues.push(`Claim ${claim.id} is from the future of tick ${atTick}.`);

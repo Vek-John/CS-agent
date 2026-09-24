@@ -18,7 +18,8 @@ export const CANDIDATE_SIGNAL_KINDS = [
   "BOMB",
   "UTILITY",
   "HP_CHANGE",
-  "WIN_RATE_DROP"
+  "WIN_RATE_DROP",
+  "RETURN_AND_FIRE"
 ] as const;
 
 export type CandidateSignalKind = (typeof CANDIDATE_SIGNAL_KINDS)[number];
@@ -37,6 +38,7 @@ export const DIRECTOR_FOCUS_CODES_BY_SIGNAL: Record<CandidateSignalKind, readonl
   BOMB: ["OBJECTIVE_TIMING", "REVIEW_UNCERTAINTY", "VERIFIED_DECISION_REVIEW", "POSITIVE_PROCESS", "EXECUTION_REVIEW", "FORCED_CHOICE"],
   UTILITY: ["UTILITY_PURPOSE_AND_TEMPO", "REVIEW_UNCERTAINTY", "VERIFIED_DECISION_REVIEW", "POSITIVE_PROCESS", "EXECUTION_REVIEW", "FORCED_CHOICE"],
   HP_CHANGE: ["SURVIVE_CONTACT", "REVIEW_UNCERTAINTY", "VERIFIED_DECISION_REVIEW", "POSITIVE_PROCESS", "EXECUTION_REVIEW", "FORCED_CHOICE"],
+  RETURN_AND_FIRE: ["REVIEW_UNCERTAINTY"],
   WIN_RATE_DROP: ["WIN_PROBABILITY_SWING_RESPONSE", "REVIEW_UNCERTAINTY", "VERIFIED_DECISION_REVIEW", "POSITIVE_PROCESS", "EXECUTION_REVIEW", "FORCED_CHOICE"]
 };
 
@@ -56,6 +58,9 @@ export type CanonicalFactKind = "DECISION_CONTEXT" | "PLAYER_ACTION" | "OUTCOME"
 
 /** Parser-neutral fact DTO. Parser adapters can populate it without coaching conclusions. */
 export interface CanonicalAnalysisFact {
+  /** Optional action-producer output; must have an explicit actor and independent source refs. */
+  actionActorPlayerId?: string;
+  decisionAction?: PlayerActionFact["decisionAction"];
   id: string;
   kind: CanonicalFactKind;
   roundNumber: number;
@@ -195,6 +200,23 @@ export interface CandidateSet {
 
 /** A verified player action is separate from an ObservableClaim. */
 export interface PlayerActionFact {
+  /** Strict action-only window; never inferred from free text or outcome events. */
+  decisionAction?: {
+    version: "decision-action.v1";
+    kind: "RECONTACT" | "REPEEK";
+    startTick: number;
+    endTick: number;
+    priorContactTick: number;
+    source: "REPLAY_GEOMETRY_V1" | "SYNTHETIC_REGRESSION";
+  } | {
+    version: "decision-action.v1";
+    /** Self movement and attributed shots only; does not establish renewed enemy contact. */
+    kind: "RETURN_AND_FIRE";
+    startTick: number;
+    endTick: number;
+    priorShotTick: number;
+    source: "SELF_MOVEMENT_FIRE_V1";
+  };
   id: string;
   text: string;
   actorPlayerId: string;

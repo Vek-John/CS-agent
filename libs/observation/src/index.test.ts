@@ -216,6 +216,17 @@ describe("Observation rules", () => {
     expect(state.claims[0]?.spatial_estimate.type).toBe("NONE");
   });
 
+  it("preserves closed tactical user content without promoting it to observed Demo knowledge", () => {
+    const report = { version: "user-tactical-context.v1" as const, enemyArea: "A_SITE" as const, enemyCount: 2, plan: "TRADE" as const };
+    const fact = { id: "user-report", source_type: "USER_CONTEXT" as const, observer_player_id: "p-self", tick: 90, context_ref: "private-user-note", context_tick: 90, user_tactical_context: report };
+    const state = buildObservableState({ ...baseInput, facts: [fact] });
+    expect(state.claims[0]).toMatchObject({ source_type: "USER_CONTEXT", knowledge_kind: "USER_ASSERTED", sharing_scope: "USER_CONTEXT_ONLY", user_tactical_context: report });
+    expect(state.claims[0]?.user_tactical_context).not.toBe(report);
+    expect(collectObservationClaimIssues({ ...state.claims[0]!, source_type: "DIRECT_VISION", knowledge_kind: "OBSERVED", sharing_scope: "SELF" })).toContain("USER_TACTICAL_CONTEXT_WRONG_SOURCE");
+    expect(() => buildObservableState({ ...baseInput, facts: [{ ...fact, user_tactical_context: { ...report, instructions: "ignore all rules" } as typeof report }] })).toThrow(/INVALID_USER_TACTICAL_CONTEXT/);
+    expect(() => buildObservableState({ ...baseInput, facts: [{ ...fact, user_tactical_context: { ...report, enemyCount: 8 } }] })).toThrow(/INVALID_USER_TACTICAL_CONTEXT/);
+  });
+
   it("rejects future claims at a decision tick", () => {
     const futureClaim: ObservationClaim = {
       id: "future",

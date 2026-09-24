@@ -17,7 +17,7 @@
     "check": "pnpm test && pnpm typecheck && pnpm build",
     "cs2d:build": "node tools/build-cs2d-viewer.mjs",
     "desktop:runtime:build": "pnpm --filter @cs-coach/desktop-runtime build",
-    "desktop:web:build": "cd apps/web && DESKTOP_BUILD=1 ../../node_modules/.bin/next build --webpack",
+    "desktop:web:build": "pnpm --filter @cs-coach/web build:desktop",
     "desktop:prepare": "pnpm desktop:runtime:build && pnpm desktop:web:build && pnpm cs2d:build && pnpm --dir apps/desktop prepare:runtime",
     "desktop:test:unit": "pnpm --filter @cs-coach/desktop-runtime test && pnpm --dir apps/desktop prepare:runtime:test && pnpm --dir apps/desktop smoke:sidecar && cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml",
     "desktop:test": "pnpm desktop:prepare && pnpm desktop:test:unit && pnpm --dir apps/desktop smoke:runtime-real",
@@ -35,7 +35,8 @@
     "dev:web": "pnpm --filter @cs-coach/web dev",
     "cs2d:setup": "node tools/apply-cs2d-host-patch.mjs --clone --install --build-parser",
     "cs2d:patch": "node tools/apply-cs2d-host-patch.mjs --build-parser",
-    "cs2d:typecheck": "pnpm --dir .local-data/upstream/cs2d --filter cs2-demo-viewer exec vue-tsc --noEmit"
+    "cs2d:typecheck": "pnpm --dir .local-data/upstream/cs2d --filter cs2-demo-viewer exec vue-tsc --noEmit",
+    "eval:decision-assessment": "tsx tools/eval-decision-assessment.ts"
   },
   "devDependencies": {
     "@opennextjs/cloudflare": "1.20.2",

@@ -1,11 +1,11 @@
-use crate::protocol::ProviderInit;
+use crate::protocol::{DecisionAcceptance, DecisionProviderInit, DecisionProviderMode, ProviderInit};
 use security_framework::passwords::{
     delete_generic_password, get_generic_password, set_generic_password,
 };
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, OpenOptions},
-    io::Write,
+    io::{Read, Write},
     os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
@@ -15,6 +15,54 @@ const KEYCHAIN_SERVICE: &str = "com.csagent.coach.provider";
 const KEYCHAIN_ACCOUNT: &str = "api-key";
 const ITEM_NOT_FOUND: i32 = -25300;
 const CONFIG_FILE: &str = "provider-config.json";
+const DECISION_KEYCHAIN_SERVICE: &str = "com.csagent.coach.decision-provider";
+const DECISION_CONFIG_FILE: &str = "decision-provider-config.json";
+const DECISION_MODEL: &str = "jev-1.13.0";
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DecisionPreferences {
+    schema_version: String,
+    mode: DecisionProviderMode,
+    acceptance: DecisionAcceptance,
+    model: String,
+}
+
+fn read_decision_preferences(data_dir: &Path) -> Option<DecisionPreferences> {
+    // Pilot configuration is optional: malformed or absent preferences never block playback.
+    let file = fs::File::open(data_dir.join(DECISION_CONFIG_FILE)).ok()?;
+    let mut bytes = Vec::new();
+    file.take(4097).read_to_end(&mut bytes).ok()?;
+    if bytes.len() > 4096 {
+        return None;
+    }
+    let preferences: DecisionPreferences = serde_json::from_slice(&bytes).ok()?;
+    (preferences.schema_version == "desktop-decision-provider-preferences.v1"
+        && preferences.model == DECISION_MODEL).then_some(preferences)
+}
+
+fn decision_provider_with_key(
+    preferences: DecisionPreferences,
+    key: Option<Vec<u8>>,
+) -> DecisionProviderInit {
+    let api_key = key.and_then(|bytes| String::from_utf8(bytes).ok())
+        .filter(|key| bounded(Some(key), 1, 512).is_some());
+    DecisionProviderInit {
+        kind: "JEV",
+        mode: preferences.mode,
+        acceptance: preferences.acceptance,
+        api_key,
+        model: DECISION_MODEL,
+    }
+}
+
+pub fn runtime_decision_provider(data_dir: &Path) -> Option<DecisionProviderInit> {
+    let preferences = read_decision_preferences(data_dir)?;
+    // A missing, locked, or unavailable pilot Keychain item degrades to no key.
+    // Never consult environment variables or the generation provider's Keychain item.
+    let key = get_generic_password(DECISION_KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT).ok();
+    Some(decision_provider_with_key(preferences, key))
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -287,6 +335,59 @@ fn write_preferences(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn decision_preferences() -> DecisionPreferences {
+        DecisionPreferences {
+            schema_version: "desktop-decision-provider-preferences.v1".to_owned(),
+            mode: DecisionProviderMode::Shadow,
+            acceptance: DecisionAcceptance::ShadowOnly,
+            model: DECISION_MODEL.to_owned(),
+        }
+    }
+
+    #[test]
+    fn decision_preferences_are_optional_strict_and_contain_no_secret() {
+        let directory = tempfile::tempdir().unwrap();
+        assert!(read_decision_preferences(directory.path()).is_none());
+        // Missing configuration returns before any Keychain lookup.
+        assert!(runtime_decision_provider(directory.path()).is_none());
+        let encoded = serde_json::to_vec(&decision_preferences()).unwrap();
+        let path = directory.path().join(DECISION_CONFIG_FILE);
+        fs::write(&path, &encoded).unwrap();
+        assert!(read_decision_preferences(directory.path()).is_some());
+        let text = String::from_utf8(encoded).unwrap();
+        assert!(!text.contains("apiKey"));
+        assert!(!text.contains("baseUrl"));
+        for (field, value) in [
+            ("mode", "AUTO"), ("acceptance", "AUTO_ACCEPT"),
+            ("model", "jev-latest"), ("schemaVersion", "other"),
+            ("apiKey", "must-not-live-in-preferences"),
+        ] {
+            let mut invalid = serde_json::to_value(decision_preferences()).unwrap();
+            invalid[field] = serde_json::json!(value);
+            fs::write(&path, serde_json::to_vec(&invalid).unwrap()).unwrap();
+            assert!(read_decision_preferences(directory.path()).is_none());
+        }
+        fs::write(&path, vec![b' '; 4097]).unwrap();
+        assert!(read_decision_preferences(directory.path()).is_none());
+    }
+
+    #[test]
+    fn decision_init_preserves_missing_key_and_redacts_debug() {
+        for key in [None, Some(vec![255]), Some(Vec::new()), Some(b"bad\nkey".to_vec())] {
+            let init = decision_provider_with_key(decision_preferences(), key);
+            assert!(init.api_key.is_none());
+            assert_eq!(init.mode, DecisionProviderMode::Shadow);
+        }
+        let init = decision_provider_with_key(decision_preferences(), Some(b"only-in-init".to_vec()));
+        assert_eq!(init.api_key.as_deref(), Some("only-in-init"));
+        assert!(!format!("{init:?}").contains("only-in-init"));
+        let value = serde_json::to_value(&init).unwrap();
+        assert_eq!(value.as_object().unwrap().len(), 5);
+        assert_eq!(value["kind"], "JEV");
+        assert_eq!(value["model"], "jev-1.13.0");
+        assert_eq!(value["apiKey"], "only-in-init");
+    }
 
     struct TemporaryKeychainItem(String);
 

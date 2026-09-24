@@ -1,8 +1,8 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：5.6.0
-> 最后更新：2026-09-14
+> 版本：5.8.1
+> 最后更新：2026-09-24
 > 适用范围：Web 2D 到桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
 > 当前产品范围：[MVP_SCOPE.md](./MVP_SCOPE.md)
@@ -496,6 +496,28 @@ PlanCompiler 把 CandidateSet、DirectorDecisionSet、GroundTruth、ObservableSt
 - 编译后的 route fingerprint、segment/cue 顺序、tick、candidate 绑定和主要重点在会话启动前冻结。
 
 PlanCompiler 最终划分 `SKIP`、`BRIEF`、`OBSERVE`、`DEEP_DIVE` 和 `HABIT_CHECK`，但“是否值得深讲”的主要判断来自 Director，而不是由播放器或 Narrator 临时决定。没有候选的普通回合只保留完整覆盖，不产生 Director/Narrator job；索引为 UNKNOWN 的区间只能 `BRIEF/OBSERVE/BUFFERING` 或显式失败，不能自动标为低价值。PlanCompiler 是模型与播放器之间不可绕过的硬边界；“CompiledReviewPlan”只表示通过该模块校验并冻结的现有 `ReviewPlan`，不是另一份平行计划对象。
+
+### 6.6.1 受限决策评估试点（Jev）
+
+`DecisionAssessment` 是 CandidateSet 与 Director 之间的可选派生 Inference seam，不是新 Parser、胜率模型或教学控制器。当前仅定义 Mirage 人数优势后的再次接触场景，以及视野未确认的自身移动返回并再次开枪实验分支；决策合理性（risk/alternative）、证据充分性（context）与 Director 的教学价值选择分别处理。`NO_TEACHING_VALUE` 不用作模型拒判；没有已验证替代项不推出 `FORCED_CHOICE`。模型不生成教练长文本、播放器命令或 Memory 写入。
+
+投影从候选绑定的 `DecisionSnapshot`、该玩家 `ObservableState` 与独立 `PlayerActionFact.decisionAction` 重建固定白名单。人数差、时间窗口和适用性由代码提供，未知保留 UNKNOWN。动作窗口最多决策后 2 秒，前次接触最多决策前 10 秒；仅投影动作种类与相对时长，绝不发送自由文案、原始身份/路径/tick、结果、胜率、raw Replay、完整事件流或旧 assessment。模型只能看到别名，实际引用绑定留在本地。用户补充保留 USER_PROVIDED 与不确定性；队友看见不自动共享。无结构补充时继续使用v1投影；带 `user_tactical_context`（`user-tactical-context.v1`） 的USER_CONTEXT可用v2投影表达封闭的敌区（A/B/MID/UNKNOWN）、敌人数（0–5/null）和战术意图枚举。自由正文、身份与指令不进入模型；用户内容不能批准Demo条件，人数自相矛盾时禁止SUFFICIENT。旧v1 fingerprint/恢复不变。
+
+试点采用原生 `POST https://api.typesafe.ai/v1/systemone`，固定 `jev-1.13.0`，三个 Choice 原子与按“具体命题 × 引用别名”构建的有限语义支持问题。问题共享同一合法 state，彼此答案不构成信息权限隔离。引用归属、角色、适用性、概率分布、时间、版本和当前投影 fingerprint 由代码复核；native confidence 与 evidence confidence 分开。被拒但可解析的输出只存审计 diagnostics，不进入教学。规则量表及 0.8 证据门槛是保守工程策略，未经 CS2 教练校准，不能解释为正确率。
+
+配置与生成 provider 独立：RULE_BASELINE 为缺省；JEV_SHADOW 仅记录旁路；JEV_EXPERIMENT 只有显式 TEST_ONLY 接受配置能消费经校验结果。没有正式自动接受阈值或启用开关。localhost API 使用具名服务端变量；桌面独立 Keychain service → 可选 init 字段 → sidecar Symbol 内存，缺失 init 显式基线、禁止环境回退；缺 key 不阻塞基础复盘。原 `/chat/completions` 仍只服务生成模型，Jev 不作为 Narrator。
+
+评估在路线冻结前有界完成：本地配置 GET 750ms、配置后整个评估阶段默认 6000ms、本地请求及 JSON 3500ms、原生 Jev 请求及 JSON 2500ms，无自动重试。每次准备最多 10 个不同包的远端请求，并发最多 2；相同包共享本次请求，但候选证据绑定各自保留。保存产物与本次结果复用不占新请求预算，记录按原候选顺序返回。总期限到达时取消在途请求、保留已经完成的合法结果，未开始候选明确记录 SESSION_TIME_BUDGET 并保留基线。用户取消仍终止整个准备，晚到结果不能继续推进。旁路是有界准备阶段对照，不是独立后台队列；取消不保证撤销上游已产生费用。新准备按当前配置剥离旧实验 overlay；保存的冻结历史则保持原产物，由独立恢复路径纯本地验证，不重跑评估。
+
+规范 CandidateSet/hash 仍表示原始提名，准备阶段只施加临时 inference overlay。最终 cue 保存 `decisionAssessment`，ReviewPlan 保存 `decision_assessment_run`（版本、模式、调用计数、接受数、拒绝原因、原子输出、usage、延迟与输入 provenance）；旧产物字段可缺省。CoachingPackage 在恢复时从冻结 cue 取 artifact，针对原候选重新核对 fingerprint/绑定及适用性。Narrator 只表达通过的判断，decision/outcome 引用与 OutcomeCompletionGate 不变。实验判断不得通过 `verifiedHabitKey` 新增习惯计数；Memory 的 consent、诊断证据、幂等和晋级流程不改。
+
+**真实动作分支**：0007补丁在同一次WASM parse从明确pawn映射保留 `shooterSteamId`，unknown为null、旧字段缺省兼容。Adapter仅根据同回合本人明确射击与连续活体位置采样提名 `RETURN_AND_FIRE`：此前10秒内开枪、离开原位置至少48 Source units、返回24 units内后再次开枪；自身高度变化不超过32 units，采样间隔与shot前端点年龄不超过0.25秒。回看最多32次本人射击；每个完整模式后冷却2秒并清空旧锚点。这些是未校准的几何提名阈值，不是战术原则或可见性结论。最远位置的最后一个采样为决策点，返回开枪动作最多2秒。只读取本人位置和明确actor/tick，不从shot坐标、敌人位置、spotted、死亡、击杀或胜率推断接触。
+
+新动作经 CandidateGenerator 2.3.0 转为 `SELF_MOVEMENT_FIRE_V1` provenance，使用独立 v3投影、`RETURN_AND_FIRE_AFTER_ADVANTAGE`场景及`return-and-fire-questions.v1`。动作字段为kind/durationSeconds/sincePriorShotSeconds/contactStatus=UNVERIFIED/refs；不使用priorContact语义。模型原始回答保持原样，任何肯定风险/替代项/信息充分性结论由 `CONTACT_UNVERIFIED` 拒绝；只有UNKNOWN/UNKNOWN/INSUFFICIENT可作为实验拒判参与现有教学。旧v1/v2问题、fingerprint和恢复不变。默认规则模式中新提名没有教学价值，不触发新评估或新增习惯。结果窗口自己的状态可独立成为OUTCOME事实，不进入动作或Jev输入。
+
+**能力边界**：这个真实输入分支闭合的是受限证据与诚实拒判流程，仍未证明真正recontact/重复peek或专业决策正确性。缺可靠observer视野/曝光、现场战术条件及教练留出标签时，不允许启用正式自动裁判。封闭报点schema已提供，但本轮未新增玩家报点UI。详见 `docs/JEV_DECISION_ASSESSMENT.md` 与 `docs/validation/JEV_ACCEPTANCE.md`。
+
+实验 RETURN_AND_FIRE 提名没有基线教学判断，不能抑制同时发生的独立 WIN_RATE_DROP 候选；启用明确射手归属不会因此移除原有教学片段。Adapter 1.6.1 修正该去重行为，旧 1.6.0 及已支持的历史版本继续按保存产物恢复。
 
 ### 6.7 SessionOrchestrator
 
@@ -1628,3 +1650,7 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 | 5.5.2 | 2026-09-03 | 增加 Review Revision artifact contract 版本与 migration 006：新 v2 Revision 继续强制独立 CandidateSet Artifact；迁移前 v1 READY Revision 可从 checksummed AnalysisBundle 内的同一 CandidateSet 兼容恢复，避免永久历史因后加的存储投影门失效。 |
 
 | 5.6.0 | 2026-09-14 | 增加可信决策快照、可观察摘要、行为假设与建议适用性门；事件/结果不自动等于错误，模型受限于可验证语义，用户呈现明确不确定性，保持完整路线与恢复边界。 |
+
+| 5.8.0 | 2026-09-23 | 增加真实本人移动返回/再次开枪的受限v3动作分支，独立未知接触语义与强判拒绝门；旧投影兼容、默认规则不变。 |
+| 5.7.0 | 2026-09-22 | 增加固定版本 Jev 受限决策 Inference、独立配置/内存密钥、冻结 cue provenance、离线与 live 对照；默认规则且正式自动接受关闭，真实 recontact 动作生产与专业质量尚未完成。 |
+| 5.8.1 | 2026-09-24 | 评估准备改为并发2与6秒总体期限，保存结果/同包复用独立于新请求预算；实验返回开枪候选不再抑制原有胜率讲解。 |

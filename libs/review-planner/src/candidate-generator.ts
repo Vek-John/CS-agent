@@ -19,7 +19,7 @@ import type {
 } from "@cs-coach/contracts";
 import { assembleCandidateSet } from "./teaching-pipeline";
 
-export const CANDIDATE_GENERATOR_VERSION = "review-planner/candidate-generator/2.1.0";
+export const CANDIDATE_GENERATOR_VERSION = "review-planner/candidate-generator/2.3.0";
 const OUTCOME_WINDOW_SECONDS = 4;
 const PRE_ROLL_SECONDS = 1;
 const WIN_RATE_DROP_THRESHOLD = 0.12;
@@ -88,6 +88,7 @@ function outcomeFactsFor(signal: CanonicalSignal, facts: Map<string, CanonicalAn
 }
 
 function contextCodeFor(signal: CanonicalSignal): string {
+  if (signal.kind === "RETURN_AND_FIRE") return "return-and-fire-unverified";
   if (signal.kind === "WIN_RATE_DROP") return "win-rate-review";
   const context = signal.playerContext;
   if (!context) return "contact-preparation";
@@ -199,6 +200,25 @@ function mergeSignals(input: CandidateGeneratorInput): CanonicalSignal[] {
   return merged;
 }
 
+/** Forward existing structured evidence only; this is not an action detector. */
+function boundDecisionAction(fact: CanonicalAnalysisFact, signal: CanonicalSignal, input: CandidateGeneratorInput): PlayerActionFact["decisionAction"] | undefined {
+  const action = fact.decisionAction;
+  if (fact.kind !== "PLAYER_ACTION" || !action || fact.actionActorPlayerId !== input.playerId || !fact.observedByPlayer || fact.sourceRefs.length === 0) return undefined;
+  if (action.version !== "decision-action.v1") return undefined;
+  const returnAndFire = action.kind === "RETURN_AND_FIRE";
+  if (returnAndFire ? action.source !== "SELF_MOVEMENT_FIRE_V1" : !["RECONTACT", "REPEEK"].includes(action.kind) || !["REPLAY_GEOMETRY_V1", "SYNTHETIC_REGRESSION"].includes(action.source)) return undefined;
+  const priorTick = returnAndFire ? action.priorShotTick : action.priorContactTick;
+  if (![action.startTick, action.endTick, priorTick].every(Number.isSafeInteger)
+    || action.startTick < signal.decisionTick || action.startTick > signal.decisionTick + input.timeline.tick_rate
+    || action.endTick < action.startTick || action.endTick > signal.decisionTick + 2 * input.timeline.tick_rate
+    || fact.tick < action.endTick || fact.tick > signal.decisionTick + 2 * input.timeline.tick_rate
+    || priorTick > signal.decisionTick || priorTick >= action.startTick
+    || priorTick < signal.decisionTick - 10 * input.timeline.tick_rate
+    || returnAndFire && action.startTick - priorTick > 10 * input.timeline.tick_rate) return undefined;
+  if (action.kind === "RETURN_AND_FIRE") return { version: action.version, kind: action.kind, startTick: action.startTick, endTick: action.endTick, priorShotTick: action.priorShotTick, source: action.source };
+  return { version: action.version, kind: action.kind, startTick: action.startTick, endTick: action.endTick, priorContactTick: action.priorContactTick, source: action.source };
+}
+
 function materializeSignal(input: CandidateGeneratorInput, signal: CanonicalSignal, facts: Map<string, CanonicalAnalysisFact>, economy: WinProbabilityEconomyClass, swing?: WinProbabilitySwing): { candidate: TeachingCandidate; material: CandidateMaterial } | undefined {
   const round = input.timeline.rounds.find((item) => item.round_number === signal.roundNumber);
   if (!round || signal.revealTick <= signal.decisionTick) return undefined;
@@ -207,15 +227,18 @@ function materializeSignal(input: CandidateGeneratorInput, signal: CanonicalSign
   if (outcomeEnd <= signal.revealTick) return undefined;
   const id = candidateId(signal);
   const decisionSourceFacts = factsFor(signal, facts, "DECISION_CONTEXT").filter((fact) => fact.tick <= signal.decisionTick);
-  const actionSourceFacts = actionFactsFor(signal, facts).filter((fact) => fact.tick <= signal.revealTick);
+  const actionSourceFacts = actionFactsFor(signal, facts).filter((fact) => fact.tick <= signal.revealTick && (fact.actionActorPlayerId === undefined || fact.actionActorPlayerId === input.playerId));
   const outcomeSourceFacts = outcomeFactsFor(signal, facts).filter((fact) => fact.tick >= signal.revealTick && fact.tick <= outcomeEnd);
   const decisionFacts: Fact[] = decisionSourceFacts.map((fact) => ({ id: fact.id, text: fact.text, availability: "DECISION", available_at_tick: fact.tick, source: "DEMO", observed_by_player: fact.observedByPlayer }));
-  const actionFacts: PlayerActionFact[] = actionSourceFacts.map((fact) => ({ id: fact.id, text: fact.text, actorPlayerId: input.playerId, availableAtTick: fact.tick, source: "DEMO", evidenceRefs: [...fact.sourceRefs], limitations: [...fact.limitations, ...fact.missingFields] }));
+  const actionFacts: PlayerActionFact[] = actionSourceFacts.map((fact) => {
+    const decisionAction = boundDecisionAction(fact, signal, input);
+    return { id: fact.id, text: fact.text, actorPlayerId: input.playerId, availableAtTick: fact.tick, source: "DEMO", evidenceRefs: [...fact.sourceRefs], limitations: [...fact.limitations, ...fact.missingFields], ...(decisionAction ? { decisionAction } : {}) };
+  });
   const outcomeFacts: OutcomeFact[] = outcomeSourceFacts.map((fact) => ({ id: fact.id, text: fact.text, availableAtTick: fact.tick, source: "DEMO", outcomeKind: fact.outcomeKind ?? "OTHER", evidenceRefs: [...fact.sourceRefs], limitations: [...fact.limitations, ...fact.missingFields] }));
   const evidence: Evidence[] = [{ id: `evidence-${id}`, source: "DEMO", label: `结构化 ${signal.kind} 信号`, fact_refs: decisionFacts.map((fact) => fact.id) }];
   const measurement = windowProbability(input, signal, outcomeEnd, swing);
   const result = resultSummary(input, signal, economy, measurement.probability, swing);
-  const scoreBase: Record<CanonicalSignal["kind"], number> = { DEATH: 5, HP_CHANGE: 4, KILL: 3, BOMB: 2, UTILITY: 1, WIN_RATE_DROP: 4 };
+  const scoreBase: Record<CanonicalSignal["kind"], number> = { DEATH: 5, HP_CHANGE: 4, KILL: 3, BOMB: 2, UTILITY: 1, WIN_RATE_DROP: 4, RETURN_AND_FIRE: 1 };
   const dropBonus = result.winProbabilityDelta !== undefined && result.winProbabilityDelta < 0 ? Math.min(6, Math.round(-result.winProbabilityDelta * 10)) : 0;
   const candidate: TeachingCandidate = {
     candidateId: id,

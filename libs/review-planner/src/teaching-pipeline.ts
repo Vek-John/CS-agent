@@ -448,7 +448,7 @@ function buildCue(
     id: `i${cueNumber}`,
     text: copy.explanation,
     confidence: assessment.confidence,
-    fact_refs: [...observableFactRefs],
+    fact_refs: material.decisionAssessment ? assessment.supportingEvidenceRefs.filter((ref) => observableFactRefs.includes(ref)) : [...observableFactRefs],
     counter_evidence_refs: assessment.counterEvidenceRefs,
     missing_fields: assessment.missingFields,
     limitations: assessment.limitations,
@@ -479,6 +479,7 @@ function buildCue(
     inferences: assessment.hasEvaluableDecision ? [inference] : [],
     advice,
     assessment: assessment,
+    ...(material.decisionAssessment ? { decisionAssessment: material.decisionAssessment } : {}),
     adviceOptions: buildGatedAdviceOptions(candidate, material),
     ...(material.observableContext ? { observableContext: material.observableContext } : {}),
     behaviorHypotheses: [...(material.behaviorHypotheses ?? [])],
@@ -785,6 +786,10 @@ export function deterministicNarrationBundle(
   const first = packageInput.decisionContext.facts.slice(0, 3).map((fact) => fact.text).join(" ") || "当前可用决策事实有限";
   const action = packageInput.playerAction[0]?.text ?? "当前记录不足以确认具体行动意图。";
   const advice = packageInput.advice[0]?.text ?? UNCERTAIN_ADVICE_TEXT;
+  const coreIssueRefs = !packageInput.decisionAssessment ? unique([...decisionRefs, ...actionRefs])
+    : packageInput.assessment?.hasEvaluableDecision
+      ? packageInput.assessment.supportingEvidenceRefs.filter((ref) => decisionNamespace.has(ref) || actionNamespace.has(ref))
+      : unique([...decisionRefs.slice(0, 1), ...actionRefs.slice(0, 1)]);
   const outcomeText = [outcome.outcomeFacts[0]?.text, outcome.winProbabilityImpact?.text].filter((text): text is string => Boolean(text)).join(" ") || "结果事实将在结果窗口完成后展示";
   return {
     cueId: packageInput.cueId,
@@ -792,7 +797,7 @@ export function deterministicNarrationBundle(
     primaryFocusCode: packageInput.primaryFocusCode,
     currentSituation: { text: first, refs: decisionRefs, limitations: packageInput.limitations.length > 0 ? [playerFacingLimitation()] : [] },
     playerAction: { text: action, refs: actionRefs, limitations: packageInput.limitations.length > 0 ? [playerFacingLimitation()] : [] },
-    coreIssue: { text: packageInput.assessment?.explanation ?? playerFacingFocusProblem(packageInput.primaryFocusCode), refs: unique([...decisionRefs, ...actionRefs]), limitations: packageInput.limitations.length > 0 ? [playerFacingLimitation()] : [] },
+    coreIssue: { text: packageInput.assessment?.explanation ?? playerFacingFocusProblem(packageInput.primaryFocusCode), refs: coreIssueRefs, limitations: packageInput.limitations.length > 0 ? [playerFacingLimitation()] : [] },
     betterPlay: { text: advice, refs: unique([...adviceRefs, ...evidenceRefs, ...decisionRefs]), limitations: packageInput.limitations.length > 0 ? [playerFacingLimitation()] : [] },
     outcomeImpact: { text: outcomeText, refs: outcomeRefs, limitations: outcome.limitations.length > 0 ? [playerFacingLimitation()] : [] }
   };

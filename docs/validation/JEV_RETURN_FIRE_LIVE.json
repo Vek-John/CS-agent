@@ -1,0 +1,593 @@
+{
+  "schemaVersion": "jev-real-smoke.v1",
+  "status": "PASS",
+  "generatedAt": "2026-09-23T11:33:48.894Z",
+  "source": "CANONICAL_DEMO",
+  "demoSha256": "84a1a4191302bdd2a3bbb5a727842093744b1fb1a228aeec630369e44b622cb2",
+  "inputBytes": 60601900,
+  "map": "de_mirage",
+  "parserWasmSha256": "5ba3c62319d2f24cb6bc60e031ed0e9e39f0d11bd6e5b641c19bf804e16b7242",
+  "parserJsSha256": "1d43484106b25a25d82a986525427f904d045125c730deaf51758559541ffbda",
+  "samplingHz": 8,
+  "parseInvocations": 1,
+  "parseMs": 6133,
+  "elapsedMs": 17835,
+  "heapLimitMiB": 1536,
+  "peakRssBytes": 590921728,
+  "deadlineMs": 600000,
+  "decisionAssessmentVersions": {
+    "projection": "decision-assessment-projection.v1",
+    "projectionWithUserContext": "decision-assessment-projection.v2",
+    "projectionWithReturnAndFire": "decision-assessment-projection.v3",
+    "questionsReturnAndFire": "return-and-fire-questions.v1",
+    "questions": "recontact-questions.v1",
+    "acceptance": "recontact-acceptance.v1",
+    "artifact": "decision-assessment.v1",
+    "model": "jev-1.13.0"
+  },
+  "players": 10,
+  "rounds": 9,
+  "playerRoundObservations": 90,
+  "candidates": 535,
+  "eligible": 8,
+  "rejected": 527,
+  "supportRate": 0.014953271028037384,
+  "rejectionReasons": {
+    "UNSUPPORTED_SCENARIO": 364,
+    "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 163
+  },
+  "signalCounts": {
+    "KILL": 62,
+    "HP_CHANGE": 234,
+    "DEATH": 62,
+    "UTILITY": 150,
+    "BOMB": 9,
+    "RETURN_AND_FIRE": 18
+  },
+  "actionPatternCounts": {
+    "RETURN_AND_FIRE": 18
+  },
+  "playerSummaries": [
+    {
+      "playerIndex": 1,
+      "rounds": 9,
+      "candidates": 58,
+      "cues": 2,
+      "segments": 31,
+      "explicitSkips": 18,
+      "bundleBytes": 5872113,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 29,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 29
+      },
+      "signalCounts": {
+        "KILL": 11,
+        "HP_CHANGE": 21,
+        "DEATH": 5,
+        "UTILITY": 19,
+        "BOMB": 2
+      },
+      "actionPatternCounts": {},
+      "buildMs": 298
+    },
+    {
+      "playerIndex": 2,
+      "rounds": 9,
+      "candidates": 63,
+      "cues": 2,
+      "segments": 31,
+      "explicitSkips": 18,
+      "bundleBytes": 6240686,
+      "eligible": 1,
+      "supportRate": 0.015873015873015872,
+      "rejectionReasons": {
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 21,
+        "UNSUPPORTED_SCENARIO": 41
+      },
+      "signalCounts": {
+        "HP_CHANGE": 23,
+        "DEATH": 4,
+        "UTILITY": 25,
+        "KILL": 9,
+        "RETURN_AND_FIRE": 2
+      },
+      "actionPatternCounts": {
+        "RETURN_AND_FIRE": 2
+      },
+      "buildMs": 1306
+    },
+    {
+      "playerIndex": 3,
+      "rounds": 9,
+      "candidates": 66,
+      "cues": 1,
+      "segments": 29,
+      "explicitSkips": 18,
+      "bundleBytes": 6123796,
+      "eligible": 4,
+      "supportRate": 0.06060606060606061,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 28,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 34
+      },
+      "signalCounts": {
+        "RETURN_AND_FIRE": 5,
+        "HP_CHANGE": 30,
+        "KILL": 5,
+        "DEATH": 7,
+        "UTILITY": 19
+      },
+      "actionPatternCounts": {
+        "RETURN_AND_FIRE": 5
+      },
+      "buildMs": 2077
+    },
+    {
+      "playerIndex": 4,
+      "rounds": 9,
+      "candidates": 67,
+      "cues": 3,
+      "segments": 33,
+      "explicitSkips": 18,
+      "bundleBytes": 6288816,
+      "eligible": 1,
+      "supportRate": 0.014925373134328358,
+      "rejectionReasons": {
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 26,
+        "UNSUPPORTED_SCENARIO": 40
+      },
+      "signalCounts": {
+        "HP_CHANGE": 22,
+        "KILL": 11,
+        "UTILITY": 29,
+        "DEATH": 4,
+        "RETURN_AND_FIRE": 1
+      },
+      "actionPatternCounts": {
+        "RETURN_AND_FIRE": 1
+      },
+      "buildMs": 255
+    },
+    {
+      "playerIndex": 5,
+      "rounds": 9,
+      "candidates": 58,
+      "cues": 3,
+      "segments": 31,
+      "explicitSkips": 18,
+      "bundleBytes": 6112921,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 32,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 26
+      },
+      "signalCounts": {
+        "UTILITY": 25,
+        "KILL": 4,
+        "BOMB": 6,
+        "HP_CHANGE": 14,
+        "DEATH": 2,
+        "RETURN_AND_FIRE": 7
+      },
+      "actionPatternCounts": {
+        "RETURN_AND_FIRE": 7
+      },
+      "buildMs": 328
+    },
+    {
+      "playerIndex": 6,
+      "rounds": 9,
+      "candidates": 36,
+      "cues": 1,
+      "segments": 29,
+      "explicitSkips": 18,
+      "bundleBytes": 4737045,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 28,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 8
+      },
+      "signalCounts": {
+        "DEATH": 9,
+        "HP_CHANGE": 22,
+        "KILL": 2,
+        "UTILITY": 3
+      },
+      "actionPatternCounts": {},
+      "buildMs": 158
+    },
+    {
+      "playerIndex": 7,
+      "rounds": 9,
+      "candidates": 51,
+      "cues": 2,
+      "segments": 30,
+      "explicitSkips": 18,
+      "bundleBytes": 5318134,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 44,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 7
+      },
+      "signalCounts": {
+        "KILL": 4,
+        "HP_CHANGE": 27,
+        "DEATH": 9,
+        "UTILITY": 11
+      },
+      "actionPatternCounts": {},
+      "buildMs": 191
+    },
+    {
+      "playerIndex": 8,
+      "rounds": 9,
+      "candidates": 44,
+      "cues": 4,
+      "segments": 33,
+      "explicitSkips": 18,
+      "bundleBytes": 5269034,
+      "eligible": 2,
+      "supportRate": 0.045454545454545456,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 38,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 4
+      },
+      "signalCounts": {
+        "UTILITY": 5,
+        "KILL": 6,
+        "HP_CHANGE": 24,
+        "DEATH": 7,
+        "RETURN_AND_FIRE": 2
+      },
+      "actionPatternCounts": {
+        "RETURN_AND_FIRE": 2
+      },
+      "buildMs": 251
+    },
+    {
+      "playerIndex": 9,
+      "rounds": 9,
+      "candidates": 39,
+      "cues": 4,
+      "segments": 33,
+      "explicitSkips": 18,
+      "bundleBytes": 5169836,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 36,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 3
+      },
+      "signalCounts": {
+        "DEATH": 7,
+        "HP_CHANGE": 22,
+        "UTILITY": 7,
+        "KILL": 2,
+        "RETURN_AND_FIRE": 1
+      },
+      "actionPatternCounts": {
+        "RETURN_AND_FIRE": 1
+      },
+      "buildMs": 185
+    },
+    {
+      "playerIndex": 10,
+      "rounds": 9,
+      "candidates": 53,
+      "cues": 4,
+      "segments": 34,
+      "explicitSkips": 18,
+      "bundleBytes": 5681961,
+      "eligible": 0,
+      "supportRate": 0,
+      "rejectionReasons": {
+        "UNSUPPORTED_SCENARIO": 48,
+        "MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION": 5
+      },
+      "signalCounts": {
+        "DEATH": 8,
+        "HP_CHANGE": 29,
+        "KILL": 8,
+        "BOMB": 1,
+        "UTILITY": 7
+      },
+      "actionPatternCounts": {},
+      "buildMs": 204
+    }
+  ],
+  "assertions": 1999,
+  "fullTimelineCoverage": "PASS",
+  "explicitSkipReasons": "PASS",
+  "serializationRoundTrip": "PASS",
+  "remoteModelCalls": 5,
+  "execution": "LIVE_JEV_WITH_DETERMINISTIC_DIRECTOR_NARRATOR",
+  "live": {
+    "execution": "LIVE_JEV",
+    "requestedMode": "JEV_EXPERIMENT",
+    "acceptance": "TEST_ONLY",
+    "maxCalls": 5,
+    "attempts": 5,
+    "remoteCalls": 5,
+    "deduplicated": 0,
+    "budgetSkipped": 3,
+    "accepted": 5,
+    "directorConsumed": 2,
+    "cueArtifacts": 2,
+    "narratorConsumed": 2,
+    "restoredNarrations": 28,
+    "restoredArtifactReads": 2,
+    "restorationAssessmentCalls": 0,
+    "counterfactualChecks": 8,
+    "directorProvider": "DETERMINISTIC_FALLBACK",
+    "narratorProvider": "DETERMINISTIC_FALLBACK",
+    "latencyMs": {
+      "samples": 5,
+      "p50": 461,
+      "p95": null,
+      "p99": null,
+      "reliableTailEstimate": false
+    },
+    "requestRecords": [
+      {
+        "requestNumber": 1,
+        "bodySha256": "decc0e293ce24a645f28975c14b76168c36501a6a6d751a274974a6c12168899",
+        "stateSha256": "8095e1128da9d6feabbf09836e5e479a4286fb31312a151638b5ce896a14272a",
+        "bodyBytes": 9975,
+        "whitelistPassed": true,
+        "topLevelFields": [
+          "model",
+          "questions",
+          "state"
+        ],
+        "stateFields": [
+          "action",
+          "evidence",
+          "map",
+          "projectionVersion",
+          "questionVersion",
+          "scenario",
+          "state"
+        ],
+        "actionFields": [
+          "contactStatus",
+          "durationSeconds",
+          "kind",
+          "refs",
+          "sincePriorShotSeconds"
+        ],
+        "questionCount": 10,
+        "projectionVersion": "decision-assessment-projection.v3",
+        "questionVersion": "return-and-fire-questions.v1",
+        "scenario": "RETURN_AND_FIRE_AFTER_ADVANTAGE",
+        "requestedModel": "jev-1.13.0",
+        "returnedModel": "jev-1.13.0",
+        "status": "SUCCEEDED",
+        "reason": null,
+        "rejectionReasons": [],
+        "choices": {
+          "riskWarranted": "UNKNOWN",
+          "alternativePreferable": "UNKNOWN",
+          "contextSufficient": "INSUFFICIENT"
+        },
+        "modelConfidence": 0.98,
+        "latencyMs": 1031,
+        "usage": {
+          "inputTokens": 2637,
+          "outputTokens": 491,
+          "costUsd": 0.000110754
+        }
+      },
+      {
+        "requestNumber": 2,
+        "bodySha256": "593b9543c138ce393fe8848ab074842acc28f8def9ff482202319eafc2529750",
+        "stateSha256": "de8310d4057d14cc350bc6e1ffff374bb99d2114bd62066d59df4d96df4e93bf",
+        "bodyBytes": 9975,
+        "whitelistPassed": true,
+        "topLevelFields": [
+          "model",
+          "questions",
+          "state"
+        ],
+        "stateFields": [
+          "action",
+          "evidence",
+          "map",
+          "projectionVersion",
+          "questionVersion",
+          "scenario",
+          "state"
+        ],
+        "actionFields": [
+          "contactStatus",
+          "durationSeconds",
+          "kind",
+          "refs",
+          "sincePriorShotSeconds"
+        ],
+        "questionCount": 10,
+        "projectionVersion": "decision-assessment-projection.v3",
+        "questionVersion": "return-and-fire-questions.v1",
+        "scenario": "RETURN_AND_FIRE_AFTER_ADVANTAGE",
+        "requestedModel": "jev-1.13.0",
+        "returnedModel": "jev-1.13.0",
+        "status": "SUCCEEDED",
+        "reason": null,
+        "rejectionReasons": [],
+        "choices": {
+          "riskWarranted": "UNKNOWN",
+          "alternativePreferable": "UNKNOWN",
+          "contextSufficient": "INSUFFICIENT"
+        },
+        "modelConfidence": 0.99,
+        "latencyMs": 426,
+        "usage": {
+          "inputTokens": 2637,
+          "outputTokens": 491,
+          "costUsd": 0.000110754
+        }
+      },
+      {
+        "requestNumber": 3,
+        "bodySha256": "26d6b382d8e654f3adc760436eb5fa5c1aa285ea9753b22ebb633a638ca2315d",
+        "stateSha256": "eec0863e921ca6fd44bda9e45135d340cc98eb0d0f7a50ed003f79569faf27a5",
+        "bodyBytes": 9972,
+        "whitelistPassed": true,
+        "topLevelFields": [
+          "model",
+          "questions",
+          "state"
+        ],
+        "stateFields": [
+          "action",
+          "evidence",
+          "map",
+          "projectionVersion",
+          "questionVersion",
+          "scenario",
+          "state"
+        ],
+        "actionFields": [
+          "contactStatus",
+          "durationSeconds",
+          "kind",
+          "refs",
+          "sincePriorShotSeconds"
+        ],
+        "questionCount": 10,
+        "projectionVersion": "decision-assessment-projection.v3",
+        "questionVersion": "return-and-fire-questions.v1",
+        "scenario": "RETURN_AND_FIRE_AFTER_ADVANTAGE",
+        "requestedModel": "jev-1.13.0",
+        "returnedModel": "jev-1.13.0",
+        "status": "SUCCEEDED",
+        "reason": null,
+        "rejectionReasons": [],
+        "choices": {
+          "riskWarranted": "UNKNOWN",
+          "alternativePreferable": "UNKNOWN",
+          "contextSufficient": "INSUFFICIENT"
+        },
+        "modelConfidence": 0.99,
+        "latencyMs": 461,
+        "usage": {
+          "inputTokens": 2634,
+          "outputTokens": 491,
+          "costUsd": 0.000110628
+        }
+      },
+      {
+        "requestNumber": 4,
+        "bodySha256": "ece85d2e348259201a51c26b9b5192e018e4196a579f0504202ff4e22ddb5db8",
+        "stateSha256": "a9ab4407a902a591f666e256210399f8bb6cab9a78a50a513c5e0042491c906d",
+        "bodyBytes": 9974,
+        "whitelistPassed": true,
+        "topLevelFields": [
+          "model",
+          "questions",
+          "state"
+        ],
+        "stateFields": [
+          "action",
+          "evidence",
+          "map",
+          "projectionVersion",
+          "questionVersion",
+          "scenario",
+          "state"
+        ],
+        "actionFields": [
+          "contactStatus",
+          "durationSeconds",
+          "kind",
+          "refs",
+          "sincePriorShotSeconds"
+        ],
+        "questionCount": 10,
+        "projectionVersion": "decision-assessment-projection.v3",
+        "questionVersion": "return-and-fire-questions.v1",
+        "scenario": "RETURN_AND_FIRE_AFTER_ADVANTAGE",
+        "requestedModel": "jev-1.13.0",
+        "returnedModel": "jev-1.13.0",
+        "status": "SUCCEEDED",
+        "reason": null,
+        "rejectionReasons": [],
+        "choices": {
+          "riskWarranted": "UNKNOWN",
+          "alternativePreferable": "UNKNOWN",
+          "contextSufficient": "INSUFFICIENT"
+        },
+        "modelConfidence": 0.99,
+        "latencyMs": 439,
+        "usage": {
+          "inputTokens": 2636,
+          "outputTokens": 491,
+          "costUsd": 0.000110712
+        }
+      },
+      {
+        "requestNumber": 5,
+        "bodySha256": "1297231c4e6dcad6a3e2800c3c59dcd9299205de524db47aeee6171f3342d6d1",
+        "stateSha256": "1e4b2d998d3edf02cd24d5ed7336942af4933162d430bb1ca44ac9920708b05c",
+        "bodyBytes": 9974,
+        "whitelistPassed": true,
+        "topLevelFields": [
+          "model",
+          "questions",
+          "state"
+        ],
+        "stateFields": [
+          "action",
+          "evidence",
+          "map",
+          "projectionVersion",
+          "questionVersion",
+          "scenario",
+          "state"
+        ],
+        "actionFields": [
+          "contactStatus",
+          "durationSeconds",
+          "kind",
+          "refs",
+          "sincePriorShotSeconds"
+        ],
+        "questionCount": 10,
+        "projectionVersion": "decision-assessment-projection.v3",
+        "questionVersion": "return-and-fire-questions.v1",
+        "scenario": "RETURN_AND_FIRE_AFTER_ADVANTAGE",
+        "requestedModel": "jev-1.13.0",
+        "returnedModel": "jev-1.13.0",
+        "status": "SUCCEEDED",
+        "reason": null,
+        "rejectionReasons": [],
+        "choices": {
+          "riskWarranted": "UNKNOWN",
+          "alternativePreferable": "UNKNOWN",
+          "contextSufficient": "INSUFFICIENT"
+        },
+        "modelConfidence": 0.99,
+        "latencyMs": 476,
+        "usage": {
+          "inputTokens": 2636,
+          "outputTokens": 491,
+          "costUsd": 0.000110712
+        }
+      }
+    ]
+  },
+  "modelQuality": "NOT_EXPERT_EVALUATED",
+  "expertLabels": 0,
+  "limitations": [
+    "SINGLE_DEMO_TEN_CORRELATED_PLAYER_PERSPECTIVES",
+    "EIGHT_HZ_STATE_SAMPLING_NOT_EXACT_PER_TICK_STATE",
+    "AT_MOST_FIVE_CALLS_NOT_RELIABLE_TAIL_OR_QUALITY_ESTIMATE",
+    "DETERMINISTIC_DIRECTOR_AND_NARRATOR",
+    "NO_EXPERT_LABELS",
+    "STRUCTURAL_COVERAGE_NOT_TACTICAL_ACCURACY"
+  ]
+}

@@ -92,9 +92,55 @@ describe("parser-neutral CandidateGenerator", () => {
     expect(set.materials[0].decisionFacts[0].id).toBe("state-2");
   });
 
+  it("carries an independently attributed bounded action through the real candidate producer without outcome fields", () => {
+    const source = input([signal("DEATH")]);
+    const detail = { version: "decision-action.v1" as const, kind: "REPEEK" as const, startTick: 2350, endTick: 2350, priorContactTick: 2300, source: "SYNTHETIC_REGRESSION" as const };
+    source.facts = source.facts.map(fact => fact.kind === "PLAYER_ACTION" ? { ...fact, actionActorPlayerId: "p-user", decisionAction: detail } : fact);
+    const first = generateCandidateSet(source).materials[0]!.playerActionFacts[0]!;
+    expect(first.decisionAction).toEqual(detail);
+    expect(first.decisionAction).not.toBe(detail);
+    const changed = { ...source, facts: source.facts.map(fact => fact.kind === "OUTCOME" ? { ...fact, outcomeKind: "KILL" as const, text: "A favorable synthetic result" } : fact) };
+    expect(generateCandidateSet(changed).materials[0]!.playerActionFacts[0]!.decisionAction).toEqual(detail);
+    for (const invalid of [
+      { actionActorPlayerId: "other-player", decisionAction: detail },
+      { actionActorPlayerId: "p-user", decisionAction: { ...detail, endTick: 9999 } },
+      { actionActorPlayerId: "p-user", decisionAction: detail, sourceRefs: [] },
+    ]) {
+      const altered = { ...source, facts: source.facts.map(fact => fact.kind === "PLAYER_ACTION" ? { ...fact, ...invalid } : fact) };
+      const actions = generateCandidateSet(altered).materials[0]!.playerActionFacts;
+      expect(actions[0]?.decisionAction).toBeUndefined();
+      if (invalid.actionActorPlayerId !== "p-user") expect(actions).toEqual([]);
+    }
+  });
+
   it("maps T-side CT probability to selected-player probability before scoring", () => {
     const set = generateCandidateSet(input([signal("DEATH")], winTimeline({ id: "t-drop", tick: 2430, before: 0.3, after: 0.7 })));
     expect(set.candidates[0].resultSummary).toMatchObject({ winProbabilityBefore: 0.7, winProbabilityAfter: 0.3, winProbabilityDelta: -0.4, winProbabilityPercentagePoints: -40 });
+  });
+
+  it("keeps movement-return/fire facts bounded, outcome-independent and untaught by default", () => {
+    const item = { ...signal("RETURN_AND_FIRE"), outcomeRefs: [] };
+    const source = input([item]);
+    const detail = { version: "decision-action.v1" as const, kind: "RETURN_AND_FIRE" as const,
+      startTick: 2350, endTick: 2410, priorShotTick: 2300, source: "SELF_MOVEMENT_FIRE_V1" as const };
+    source.facts = source.facts.map(fact => fact.kind === "PLAYER_ACTION"
+      ? { ...fact, tick: 2410, actionActorPlayerId: "p-user", decisionAction: detail } : fact);
+    const set = generateCandidateSet(source);
+    const material = set.materials[0]!;
+    expect(material.playerActionFacts[0]!.decisionAction).toEqual(detail);
+    expect(material.outcomeFacts).toEqual([]);
+    expect(set.candidates[0]!.assessment?.kind).toBe("NO_TEACHING_VALUE");
+    expect(buildDirectorRequest(set).candidates).toEqual([]);
+    const altered = { ...source, facts: source.facts.map(fact => fact.kind === "OUTCOME"
+      ? { ...fact, outcomeKind: "KILL" as const, text: "Synthetic outcome changed" } : fact) };
+    expect(generateCandidateSet(altered).materials[0]!.playerActionFacts).toEqual(material.playerActionFacts);
+    for (const invalid of [
+      { ...detail, priorShotTick: 2350 }, { ...detail, priorShotTick: 100 },
+      { ...detail, endTick: 2500 }, { ...detail, startTick: 2349 }
+    ]) {
+      const changed = { ...source, facts: source.facts.map(fact => fact.kind === "PLAYER_ACTION" ? { ...fact, decisionAction: invalid } : fact) };
+      expect(generateCandidateSet(changed).materials[0]!.playerActionFacts[0]!.decisionAction).toBeUndefined();
+    }
   });
 
   it.each(["T", "CT"] as const)("retains sample-only 11-to-24 percent death counterevidence on %s before Director selection", (side) => {

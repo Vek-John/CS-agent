@@ -1,0 +1,838 @@
+{
+  "schemaVersion": "jev-existing-model-comparison.v1",
+  "status": "PASS",
+  "generatedAt": "2026-09-23T15:20:23.363Z",
+  "mode": "LIVE_GENERATION_WITH_HISTORICAL_JEV",
+  "demoSha256": "84a1a4191302bdd2a3bbb5a727842093744b1fb1a228aeec630369e44b622cb2",
+  "reusedJevMeasuredAt": "2026-09-23T11:33:48.894Z",
+  "requestedInputs": 5,
+  "exactHashMatches": 5,
+  "newRemoteCalls": 5,
+  "newJevCalls": 0,
+  "maxCalls": 5,
+  "timeoutMs": 3000,
+  "deadlineMs": 600000,
+  "heapLimitMiB": 1536,
+  "elapsedMs": 16260,
+  "parserTelemetry": {
+    "parseInvocations": 1,
+    "parseMs": 6140,
+    "players": 10,
+    "rounds": 9,
+    "candidates": 535,
+    "eligible": 8,
+    "matched": 5,
+    "peakRssBytes": 492552192
+  },
+  "rows": [
+    {
+      "inputIndex": 1,
+      "bodySha256": "decc0e293ce24a645f28975c14b76168c36501a6a6d751a274974a6c12168899",
+      "source": "CANONICAL_DEMO",
+      "baselineAssessmentKind": "NO_TEACHING_VALUE",
+      "projectionVersion": "decision-assessment-projection.v3",
+      "questionVersion": "return-and-fire-questions.v1",
+      "provider": "RULE",
+      "provenance": "DETERMINISTIC_PROXY_NOT_GOLD",
+      "choices": {
+        "riskWarranted": "UNKNOWN",
+        "alternativePreferable": "UNKNOWN",
+        "contextSufficient": "INSUFFICIENT"
+      },
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "return-and-fire-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 0,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 0,
+            "INSUFFICIENT": 1
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "structuralValid": true,
+      "evidenceConfidence": 0,
+      "remoteCallsThisRun": 0,
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "costUsd": 0
+      }
+    },
+    {
+      "inputIndex": 1,
+      "bodySha256": "decc0e293ce24a645f28975c14b76168c36501a6a6d751a274974a6c12168899",
+      "source": "CANONICAL_DEMO",
+      "baselineAssessmentKind": "NO_TEACHING_VALUE",
+      "projectionVersion": "decision-assessment-projection.v3",
+      "questionVersion": "return-and-fire-questions.v1",
+      "provider": "JEV",
+      "provenance": "HISTORICAL_LIVE_REUSE",
+      "measuredAt": "2026-09-23T11:33:48.894Z",
+      "status": "SUCCEEDED",
+      "requestedModel": "jev-1.13.0",
+      "returnedModel": "jev-1.13.0",
+      "choices": {
+        "riskWarranted": "UNKNOWN",
+        "alternativePreferable": "UNKNOWN",
+        "contextSufficient": "INSUFFICIENT"
+      },
+      "modelConfidence": 0.98,
+      "latencyMs": 1031,
+      "usage": {
+        "inputTokens": 2637,
+        "outputTokens": 491,
+        "costUsd": 0.000110754
+      },
+      "remoteCallsThisRun": 0,
+      "limitation": "HISTORICAL_SUMMARY_HAS_NO_FULL_PROBABILITIES_OR_REFS"
+    },
+    {
+      "inputIndex": 1,
+      "bodySha256": "decc0e293ce24a645f28975c14b76168c36501a6a6d751a274974a6c12168899",
+      "source": "CANONICAL_DEMO",
+      "baselineAssessmentKind": "NO_TEACHING_VALUE",
+      "projectionVersion": "decision-assessment-projection.v3",
+      "questionVersion": "return-and-fire-questions.v1",
+      "provider": "GENERATION_MODEL",
+      "provenance": "CURRENT_LIVE_CALL",
+      "measuredAt": "2026-09-23T15:20:16.297Z",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "requestedModel": "deepseek-v4-flash",
+      "returnedModel": "deepseek-flash",
+      "choices": {
+        "riskWarranted": "UNKNOWN",
+        "alternativePreferable": "UNKNOWN",
+        "contextSufficient": "INSUFFICIENT"
+      },
+      "result": {
+        "model": "deepseek-flash",
+        "questionVersion": "return-and-fire-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.85,
+          "probabilities": {
+            "WARRANTED": 0.05,
+            "UNWARRANTED": 0.1,
+            "UNKNOWN": 0.85
+          },
+          "refs": [
+            "e2"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.85,
+          "probabilities": {
+            "PREFERABLE": 0.05,
+            "NOT_ESTABLISHED": 0.1,
+            "UNKNOWN": 0.85
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.9,
+          "probabilities": {
+            "SUFFICIENT": 0.05,
+            "INSUFFICIENT": 0.95
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "diagnosticResult": null,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0,
+      "modelConfidence": 0.85,
+      "latencyMs": 2264,
+      "usage": {
+        "inputTokens": 2127,
+        "outputTokens": 526,
+        "costUsd": null
+      },
+      "remoteCallsThisRun": 1
+    },
+    {
+      "inputIndex": 2,
+      "bodySha256": "593b9543c138ce393fe8848ab074842acc28f8def9ff482202319eafc2529750",
+      "source": "CANONICAL_DEMO",
+      "baselineAssessmentKind": "NO_TEACHING_VALUE",
+      "projectionVersion": "decision-assessment-projection.v3",
+      "questionVersion": "return-and-fire-questions.v1",
+      "provider": "RULE",
+      "provenance": "DETERMINISTIC_PROXY_NOT_GOLD",
+      "choices": {
+        "riskWarranted": "UNKNOWN",
+        "alternativePreferable": "UNKNOWN",
+        "contextSufficient": "INSUFFICIENT"
+      },
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "return-and-fire-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 0,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 0,
+            "INSUFFICIENT": 1
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "structuralValid": true,
+      "evidenceConfidence": 0,
+      "remoteCallsThisRun": 0,
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "costUsd": 0
+      }
+    },
+    {
+      "inputIndex": 2,
+      "bodySha256": "593b9543c138ce393fe8848ab074842acc28f8def9ff482202319eafc2529750",
+      "source": "CANONICAL_DEMO",
+      "baselineAssessmentKind": "NO_TEACHING_VALUE",
+      "projectionVersion": "decision-assessment-projection.v3",
+      "questionVersion": "return-and-fire-questions.v1",
+      "provider": "JEV",
+      "provenance": "HISTORICAL_LIVE_REUSE",
+      "measuredAt": "2026-09-23T11:33:48.894Z",
+      "status": "SUCCEEDED",
+      "requestedModel": "jev-1.13.0",
+      "returnedModel": "jev-1.13.0",
+      "choices": {
+        "riskWarranted": "UNKNOWN",
+        "alternativePreferable": "UNKNOWN",
+        "contextSufficient": "INSUFFICIENT"
+      },
+      "modelConfidence": 0.99,
+      "latencyMs": 426,
+      "usage": {
+        "inputTokens": 2637,
+        "outputTokens": 491,
+        "costUsd": 0.000110754
+      },
+      "remoteCallsThisRun": 0,
+      "limitation": "HISTORICAL_SUMMARY_HAS_NO_FULL_PROBABILITIES_OR_REFS"
+    },
+    {
+      "inputIndex": 2,
+      "bodySha256": "593b9543c138ce393fe8848ab074842acc28f8def9ff482202319eafc2529750",
+      "source": "CANONICAL_DEMO",
+      "baselineAssessmentKind": "NO_TEACHING_VALUE",
+      "projectionVersion": "decision-assessment-projection.v3",
+      "questionVersion": "return-and-fire-questions.v1",
+      "provider": "GENERATION_MODEL",
+      "provenance": "CURRENT_LIVE_CALL",
+      "measuredAt": "2026-09-23T15:20:18.202Z",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "requestedModel": "deepseek-v4-flash",
+      "returnedModel": "deepseek-flash",
+      "choices": {
+        "riskWarranted": "UNKNOWN",
+        "alternativePreferable": "UNKNOWN",
+        "contextSufficient": "INSUFFICIENT"
+      },
+      "result": {
+        "model": "deepseek-flash",
+        "questionVersion": "return-and-fire-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.9,
+          "probabilities": {
+            "WARRANTED": 0.05,
+            "UNWARRANTED": 0.05,
+            "UNKNOWN": 0.9
+          },
+          "refs": [
+            "e2"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.9,
+          "probabilities": {
+            "PREFERABLE": 0.05,
+            "NOT_ESTABLISHED": 0.05,
+            "UNKNOWN": 0.9
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.95,
+          "probabilities": {
+            "SUFFICIENT": 0.05,
+            "INSUFFICIENT": 0.95
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "diagnosticResult": null,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0,
+      "modelConfidence": 0.9,
+      "latencyMs": 1902,
+      "usage": {
+        "inputTokens": 2127,
+        "outputTokens": 526,
+        "costUsd": null
+      },
+      "remoteCallsThisRun": 1
+    },
+    {
+      "inputIndex": 3,
+      "bodySha256": "26d6b382d8e654f3adc760436eb5fa5c1aa285ea9753b22ebb633a638ca2315d",
+      "source": "CANONICAL_DEMO",
+      "baselineAssessmentKind": "NO_TEACHING_VALUE",
+      "projectionVersion": "decision-assessment-projection.v3",
+      "questionVersion": "return-and-fire-questions.v1",
+      "provider": "RULE",
+      "provenance": "DETERMINISTIC_PROXY_NOT_GOLD",
+      "choices": {
+        "riskWarranted": "UNKNOWN",
+        "alternativePreferable": "UNKNOWN",
+        "contextSufficient": "INSUFFICIENT"
+      },
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "return-and-fire-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 0,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 0,
+            "INSUFFICIENT": 1
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "structuralValid": true,
+      "evidenceConfidence": 0,
+      "remoteCallsThisRun": 0,
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "costUsd": 0
+      }
+    },
+    {
+      "inputIndex": 3,
+      "bodySha256": "26d6b382d8e654f3adc760436eb5fa5c1aa285ea9753b22ebb633a638ca2315d",
+      "source": "CANONICAL_DEMO",
+      "baselineAssessmentKind": "NO_TEACHING_VALUE",
+      "projectionVersion": "decision-assessment-projection.v3",
+      "questionVersion": "return-and-fire-questions.v1",
+      "provider": "JEV",
+      "provenance": "HISTORICAL_LIVE_REUSE",
+      "measuredAt": "2026-09-23T11:33:48.894Z",
+      "status": "SUCCEEDED",
+      "requestedModel": "jev-1.13.0",
+      "returnedModel": "jev-1.13.0",
+      "choices": {
+        "riskWarranted": "UNKNOWN",
+        "alternativePreferable": "UNKNOWN",
+        "contextSufficient": "INSUFFICIENT"
+      },
+      "modelConfidence": 0.99,
+      "latencyMs": 461,
+      "usage": {
+        "inputTokens": 2634,
+        "outputTokens": 491,
+        "costUsd": 0.000110628
+      },
+      "remoteCallsThisRun": 0,
+      "limitation": "HISTORICAL_SUMMARY_HAS_NO_FULL_PROBABILITIES_OR_REFS"
+    },
+    {
+      "inputIndex": 3,
+      "bodySha256": "26d6b382d8e654f3adc760436eb5fa5c1aa285ea9753b22ebb633a638ca2315d",
+      "source": "CANONICAL_DEMO",
+      "baselineAssessmentKind": "NO_TEACHING_VALUE",
+      "projectionVersion": "decision-assessment-projection.v3",
+      "questionVersion": "return-and-fire-questions.v1",
+      "provider": "GENERATION_MODEL",
+      "provenance": "CURRENT_LIVE_CALL",
+      "measuredAt": "2026-09-23T15:20:19.928Z",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "requestedModel": "deepseek-v4-flash",
+      "returnedModel": "deepseek-flash",
+      "choices": {
+        "riskWarranted": "UNKNOWN",
+        "alternativePreferable": "UNKNOWN",
+        "contextSufficient": "INSUFFICIENT"
+      },
+      "result": {
+        "model": "deepseek-flash",
+        "questionVersion": "return-and-fire-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.9,
+          "probabilities": {
+            "WARRANTED": 0.05,
+            "UNWARRANTED": 0.05,
+            "UNKNOWN": 0.9
+          },
+          "refs": [
+            "e2"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.9,
+          "probabilities": {
+            "PREFERABLE": 0.05,
+            "NOT_ESTABLISHED": 0.05,
+            "UNKNOWN": 0.9
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.95,
+          "probabilities": {
+            "SUFFICIENT": 0.05,
+            "INSUFFICIENT": 0.95
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "diagnosticResult": null,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0,
+      "modelConfidence": 0.9,
+      "latencyMs": 1725,
+      "usage": {
+        "inputTokens": 2127,
+        "outputTokens": 526,
+        "costUsd": null
+      },
+      "remoteCallsThisRun": 1
+    },
+    {
+      "inputIndex": 4,
+      "bodySha256": "ece85d2e348259201a51c26b9b5192e018e4196a579f0504202ff4e22ddb5db8",
+      "source": "CANONICAL_DEMO",
+      "baselineAssessmentKind": "NO_TEACHING_VALUE",
+      "projectionVersion": "decision-assessment-projection.v3",
+      "questionVersion": "return-and-fire-questions.v1",
+      "provider": "RULE",
+      "provenance": "DETERMINISTIC_PROXY_NOT_GOLD",
+      "choices": {
+        "riskWarranted": "UNKNOWN",
+        "alternativePreferable": "UNKNOWN",
+        "contextSufficient": "INSUFFICIENT"
+      },
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "return-and-fire-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 0,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 0,
+            "INSUFFICIENT": 1
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "structuralValid": true,
+      "evidenceConfidence": 0,
+      "remoteCallsThisRun": 0,
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "costUsd": 0
+      }
+    },
+    {
+      "inputIndex": 4,
+      "bodySha256": "ece85d2e348259201a51c26b9b5192e018e4196a579f0504202ff4e22ddb5db8",
+      "source": "CANONICAL_DEMO",
+      "baselineAssessmentKind": "NO_TEACHING_VALUE",
+      "projectionVersion": "decision-assessment-projection.v3",
+      "questionVersion": "return-and-fire-questions.v1",
+      "provider": "JEV",
+      "provenance": "HISTORICAL_LIVE_REUSE",
+      "measuredAt": "2026-09-23T11:33:48.894Z",
+      "status": "SUCCEEDED",
+      "requestedModel": "jev-1.13.0",
+      "returnedModel": "jev-1.13.0",
+      "choices": {
+        "riskWarranted": "UNKNOWN",
+        "alternativePreferable": "UNKNOWN",
+        "contextSufficient": "INSUFFICIENT"
+      },
+      "modelConfidence": 0.99,
+      "latencyMs": 439,
+      "usage": {
+        "inputTokens": 2636,
+        "outputTokens": 491,
+        "costUsd": 0.000110712
+      },
+      "remoteCallsThisRun": 0,
+      "limitation": "HISTORICAL_SUMMARY_HAS_NO_FULL_PROBABILITIES_OR_REFS"
+    },
+    {
+      "inputIndex": 4,
+      "bodySha256": "ece85d2e348259201a51c26b9b5192e018e4196a579f0504202ff4e22ddb5db8",
+      "source": "CANONICAL_DEMO",
+      "baselineAssessmentKind": "NO_TEACHING_VALUE",
+      "projectionVersion": "decision-assessment-projection.v3",
+      "questionVersion": "return-and-fire-questions.v1",
+      "provider": "GENERATION_MODEL",
+      "provenance": "CURRENT_LIVE_CALL",
+      "measuredAt": "2026-09-23T15:20:21.742Z",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "requestedModel": "deepseek-v4-flash",
+      "returnedModel": "deepseek-flash",
+      "choices": {
+        "riskWarranted": "UNKNOWN",
+        "alternativePreferable": "UNKNOWN",
+        "contextSufficient": "INSUFFICIENT"
+      },
+      "result": {
+        "model": "deepseek-flash",
+        "questionVersion": "return-and-fire-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.9,
+          "probabilities": {
+            "WARRANTED": 0.05,
+            "UNWARRANTED": 0.05,
+            "UNKNOWN": 0.9
+          },
+          "refs": [
+            "e2"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.9,
+          "probabilities": {
+            "PREFERABLE": 0.05,
+            "NOT_ESTABLISHED": 0.05,
+            "UNKNOWN": 0.9
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.95,
+          "probabilities": {
+            "SUFFICIENT": 0.05,
+            "INSUFFICIENT": 0.95
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "diagnosticResult": null,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0,
+      "modelConfidence": 0.9,
+      "latencyMs": 1814,
+      "usage": {
+        "inputTokens": 2127,
+        "outputTokens": 526,
+        "costUsd": null
+      },
+      "remoteCallsThisRun": 1
+    },
+    {
+      "inputIndex": 5,
+      "bodySha256": "1297231c4e6dcad6a3e2800c3c59dcd9299205de524db47aeee6171f3342d6d1",
+      "source": "CANONICAL_DEMO",
+      "baselineAssessmentKind": "NO_TEACHING_VALUE",
+      "projectionVersion": "decision-assessment-projection.v3",
+      "questionVersion": "return-and-fire-questions.v1",
+      "provider": "RULE",
+      "provenance": "DETERMINISTIC_PROXY_NOT_GOLD",
+      "choices": {
+        "riskWarranted": "UNKNOWN",
+        "alternativePreferable": "UNKNOWN",
+        "contextSufficient": "INSUFFICIENT"
+      },
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "return-and-fire-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 0,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 0,
+            "INSUFFICIENT": 1
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "structuralValid": true,
+      "evidenceConfidence": 0,
+      "remoteCallsThisRun": 0,
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "costUsd": 0
+      }
+    },
+    {
+      "inputIndex": 5,
+      "bodySha256": "1297231c4e6dcad6a3e2800c3c59dcd9299205de524db47aeee6171f3342d6d1",
+      "source": "CANONICAL_DEMO",
+      "baselineAssessmentKind": "NO_TEACHING_VALUE",
+      "projectionVersion": "decision-assessment-projection.v3",
+      "questionVersion": "return-and-fire-questions.v1",
+      "provider": "JEV",
+      "provenance": "HISTORICAL_LIVE_REUSE",
+      "measuredAt": "2026-09-23T11:33:48.894Z",
+      "status": "SUCCEEDED",
+      "requestedModel": "jev-1.13.0",
+      "returnedModel": "jev-1.13.0",
+      "choices": {
+        "riskWarranted": "UNKNOWN",
+        "alternativePreferable": "UNKNOWN",
+        "contextSufficient": "INSUFFICIENT"
+      },
+      "modelConfidence": 0.99,
+      "latencyMs": 476,
+      "usage": {
+        "inputTokens": 2636,
+        "outputTokens": 491,
+        "costUsd": 0.000110712
+      },
+      "remoteCallsThisRun": 0,
+      "limitation": "HISTORICAL_SUMMARY_HAS_NO_FULL_PROBABILITIES_OR_REFS"
+    },
+    {
+      "inputIndex": 5,
+      "bodySha256": "1297231c4e6dcad6a3e2800c3c59dcd9299205de524db47aeee6171f3342d6d1",
+      "source": "CANONICAL_DEMO",
+      "baselineAssessmentKind": "NO_TEACHING_VALUE",
+      "projectionVersion": "decision-assessment-projection.v3",
+      "questionVersion": "return-and-fire-questions.v1",
+      "provider": "GENERATION_MODEL",
+      "provenance": "CURRENT_LIVE_CALL",
+      "measuredAt": "2026-09-23T15:20:23.363Z",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "requestedModel": "deepseek-v4-flash",
+      "returnedModel": "deepseek-flash",
+      "choices": {
+        "riskWarranted": "UNKNOWN",
+        "alternativePreferable": "UNKNOWN",
+        "contextSufficient": "INSUFFICIENT"
+      },
+      "result": {
+        "model": "deepseek-flash",
+        "questionVersion": "return-and-fire-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.9,
+          "probabilities": {
+            "WARRANTED": 0.05,
+            "UNWARRANTED": 0.05,
+            "UNKNOWN": 0.9
+          },
+          "refs": [
+            "e2"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.9,
+          "probabilities": {
+            "PREFERABLE": 0.05,
+            "NOT_ESTABLISHED": 0.05,
+            "UNKNOWN": 0.9
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.95,
+          "probabilities": {
+            "SUFFICIENT": 0.05,
+            "INSUFFICIENT": 0.95
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "diagnosticResult": null,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0,
+      "modelConfidence": 0.9,
+      "latencyMs": 1621,
+      "usage": {
+        "inputTokens": 2127,
+        "outputTokens": 526,
+        "costUsd": null
+      },
+      "remoteCallsThisRun": 1
+    }
+  ],
+  "expertLabels": 0,
+  "tacticalImprovement": "NOT_ESTABLISHED",
+  "confidenceIntervals": null,
+  "limitations": [
+    "ONE_DEMO_CORRELATED_INPUTS",
+    "HISTORICAL_JEV_NOT_CONCURRENT",
+    "IDENTICAL_STATE_AND_RUBRIC_DIFFERENT_NATIVE_PROTOCOL",
+    "GENERATION_SELF_REPORTED_PROBABILITIES_NOT_NATIVE_CONFIDENCE",
+    "RULE_PROXY_NOT_EXPERT_GOLD",
+    "REFUSAL_IS_NOT_PROOF_OF_QUALITY_GAIN",
+    "FIVE_SAMPLES_INSUFFICIENT_FOR_TAIL_LATENCY_OR_TACTICAL_ACCURACY",
+    "HISTORICAL_JEV_SUMMARY_NO_FULL_PROBABILITIES_OR_REFS",
+    "GENERATION_COST_NOT_AVAILABLE_FROM_ADAPTER"
+  ]
+}

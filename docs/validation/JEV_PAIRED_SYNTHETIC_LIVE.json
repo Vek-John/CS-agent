@@ -1,0 +1,3081 @@
+{
+  "version": "decision-assessment-eval.v2",
+  "createdAt": "2026-09-23T15:15:13.242Z",
+  "mode": "LIVE_SMOKE",
+  "versions": {
+    "projection": "decision-assessment-projection.v1",
+    "projectionWithUserContext": "decision-assessment-projection.v2",
+    "projectionWithReturnAndFire": "decision-assessment-projection.v3",
+    "questionsReturnAndFire": "return-and-fire-questions.v1",
+    "questions": "recontact-questions.v1",
+    "acceptance": "recontact-acceptance.v1",
+    "artifact": "decision-assessment.v1",
+    "model": "jev-1.13.0"
+  },
+  "fixtureChecks": {
+    "status": "PASS",
+    "cases": 11,
+    "demoGroups": 6,
+    "counterfactualPairs": 2,
+    "quality": "Packet-only engineering assertions; final HTTP serialization is covered by adapter tests, not proved by this fixture check."
+  },
+  "caseSelection": {
+    "prefix": null,
+    "cases": 11
+  },
+  "generationCredentialFileRequested": true,
+  "configuredGenerationModel": "deepseek-v4-flash",
+  "budget": {
+    "maximumCalls": 18,
+    "remoteCalls": 18,
+    "requestTimeoutMs": 3000,
+    "deadlineMs": 600000,
+    "elapsedMs": 35928
+  },
+  "dataInventory": {
+    "realDemosInDataset": 0,
+    "expertLabels": 0,
+    "labelSource": "SYNTHETIC_AUTHOR_EXPECTATION",
+    "splitUnit": "demoGroup",
+    "thresholdTuningPerformed": false
+  },
+  "comparison": {
+    "sharedInformation": "Identical DecisionAssessmentPacket; no outcomes or baseline answer sent to either provider.",
+    "remainingDifferences": [
+      "Jev native Choice distributions versus generation-model JSON-reported probabilities; calibration meanings differ.",
+      "Rule baseline encodes an unvalidated principle, not human ground truth.",
+      "Provider adapters may use different transport/prompts; actual versions and results retained per row.",
+      "No automatic acceptance threshold is tuned on this dataset."
+    ]
+  },
+  "regressions": {
+    "fixturePacketBoundaries": "PASS",
+    "rejectedDiagnosticAccounting": "PASS",
+    "finalHttpSerializationAndPromptInjection": "Run adapter/core regression tests; this CLI does not prove HTTP isolation or live adversarial robustness.",
+    "modelOutcomeInvariance": "Counterfactuals share a packet/cache key and reuse one response; this is engineering cache evidence, not an independent model counterfactual quality measurement."
+  },
+  "byProvider": {
+    "RULE": {
+      "all": {
+        "cases": 11,
+        "blocked": 0,
+        "fallback": 0,
+        "outputParsing": {
+          "attemptedRows": 11,
+          "parsedRows": 11,
+          "unparsedRows": 0,
+          "rate": 1
+        },
+        "deterministicValidation": {
+          "evaluatedParsedRows": 11,
+          "passed": 11,
+          "rejected": 0,
+          "passRateAmongParsed": 1
+        },
+        "structuralValidity": {
+          "evaluated": 11,
+          "valid": 11,
+          "rate": 1,
+          "denominator": "ALL_NON_BLOCKED_ROWS_INCLUDING_PARSE_AND_VALIDATION_FAILURES"
+        },
+        "fallbackReasons": {},
+        "deterministicRejectionReasons": {},
+        "proxyMetricDenominator": "ALL_PARSED_OUTPUTS_INCLUDING_DETERMINISTICALLY_REJECTED_DIAGNOSTICS",
+        "proxyAcceptableLabelHit": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 6,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "proxyAcceptableAlternativeHit": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 6,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "proxyAcceptableSufficiencyHit": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 6,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "refusalRate": {
+          "estimate": 0.36363636363636365,
+          "ci95": [
+            0,
+            0.6666666666666666
+          ],
+          "groups": 6,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "professionalDecisionAccuracy": {
+          "value": null,
+          "status": "BLOCKED_NO_EXPERT_HOLDOUT"
+        },
+        "productionAutomaticAcceptance": {
+          "enabled": false,
+          "accepted": 0,
+          "coverage": 0,
+          "errorRate": null,
+          "reason": "No expert-validated acceptance threshold; evaluation never publishes teaching or Memory."
+        },
+        "calibration": {
+          "proxyBrier": {
+            "estimate": 0,
+            "ci95": [
+              0,
+              0
+            ],
+            "groups": 4,
+            "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+          },
+          "proxyEceFiveBins": 0,
+          "singletonAuthorLabelCount": 8,
+          "status": "DESCRIPTIVE_PROXY_ONLY",
+          "warning": "Ambiguous acceptable sets are excluded. Model confidence is not evidence confidence or empirical tactical accuracy; too few synthetic labels for calibrated thresholds."
+        }
+      },
+      "calibration": {
+        "cases": 3,
+        "blocked": 0,
+        "fallback": 0,
+        "outputParsing": {
+          "attemptedRows": 3,
+          "parsedRows": 3,
+          "unparsedRows": 0,
+          "rate": 1
+        },
+        "deterministicValidation": {
+          "evaluatedParsedRows": 3,
+          "passed": 3,
+          "rejected": 0,
+          "passRateAmongParsed": 1
+        },
+        "structuralValidity": {
+          "evaluated": 3,
+          "valid": 3,
+          "rate": 1,
+          "denominator": "ALL_NON_BLOCKED_ROWS_INCLUDING_PARSE_AND_VALIDATION_FAILURES"
+        },
+        "fallbackReasons": {},
+        "deterministicRejectionReasons": {},
+        "proxyMetricDenominator": "ALL_PARSED_OUTPUTS_INCLUDING_DETERMINISTICALLY_REJECTED_DIAGNOSTICS",
+        "proxyAcceptableLabelHit": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 2,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "proxyAcceptableAlternativeHit": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 2,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "proxyAcceptableSufficiencyHit": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 2,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "refusalRate": {
+          "estimate": 0,
+          "ci95": [
+            0,
+            0
+          ],
+          "groups": 2,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "professionalDecisionAccuracy": {
+          "value": null,
+          "status": "BLOCKED_NO_EXPERT_HOLDOUT"
+        },
+        "productionAutomaticAcceptance": {
+          "enabled": false,
+          "accepted": 0,
+          "coverage": 0,
+          "errorRate": null,
+          "reason": "No expert-validated acceptance threshold; evaluation never publishes teaching or Memory."
+        },
+        "calibration": {
+          "proxyBrier": {
+            "estimate": 0,
+            "ci95": null,
+            "groups": 1,
+            "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+          },
+          "proxyEceFiveBins": 0,
+          "singletonAuthorLabelCount": 2,
+          "status": "DESCRIPTIVE_PROXY_ONLY",
+          "warning": "Ambiguous acceptable sets are excluded. Model confidence is not evidence confidence or empirical tactical accuracy; too few synthetic labels for calibrated thresholds."
+        }
+      },
+      "holdout": {
+        "cases": 8,
+        "blocked": 0,
+        "fallback": 0,
+        "outputParsing": {
+          "attemptedRows": 8,
+          "parsedRows": 8,
+          "unparsedRows": 0,
+          "rate": 1
+        },
+        "deterministicValidation": {
+          "evaluatedParsedRows": 8,
+          "passed": 8,
+          "rejected": 0,
+          "passRateAmongParsed": 1
+        },
+        "structuralValidity": {
+          "evaluated": 8,
+          "valid": 8,
+          "rate": 1,
+          "denominator": "ALL_NON_BLOCKED_ROWS_INCLUDING_PARSE_AND_VALIDATION_FAILURES"
+        },
+        "fallbackReasons": {},
+        "deterministicRejectionReasons": {},
+        "proxyMetricDenominator": "ALL_PARSED_OUTPUTS_INCLUDING_DETERMINISTICALLY_REJECTED_DIAGNOSTICS",
+        "proxyAcceptableLabelHit": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 4,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "proxyAcceptableAlternativeHit": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 4,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "proxyAcceptableSufficiencyHit": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 4,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "refusalRate": {
+          "estimate": 0.5,
+          "ci95": [
+            0,
+            0.8
+          ],
+          "groups": 4,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "professionalDecisionAccuracy": {
+          "value": null,
+          "status": "BLOCKED_NO_EXPERT_HOLDOUT"
+        },
+        "productionAutomaticAcceptance": {
+          "enabled": false,
+          "accepted": 0,
+          "coverage": 0,
+          "errorRate": null,
+          "reason": "No expert-validated acceptance threshold; evaluation never publishes teaching or Memory."
+        },
+        "calibration": {
+          "proxyBrier": {
+            "estimate": 0,
+            "ci95": [
+              0,
+              0
+            ],
+            "groups": 3,
+            "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+          },
+          "proxyEceFiveBins": 0,
+          "singletonAuthorLabelCount": 6,
+          "status": "DESCRIPTIVE_PROXY_ONLY",
+          "warning": "Ambiguous acceptable sets are excluded. Model confidence is not evidence confidence or empirical tactical accuracy; too few synthetic labels for calibrated thresholds."
+        }
+      },
+      "actualRemoteCalls": 0,
+      "deduplicatedReuses": 0,
+      "actualUsage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "knownCostUsd": null,
+        "unknownCostCalls": 0
+      },
+      "latency": {
+        "samples": 0,
+        "p50MsDescriptive": null,
+        "p95Ms": null,
+        "p99Ms": null,
+        "status": "INSUFFICIENT_SAMPLES_FOR_TAIL_ESTIMATION",
+        "warning": "At most 100 remote calls, few unique synthetic inputs; no reliable service-level tail estimate. Reused rows are excluded."
+      }
+    },
+    "JEV": {
+      "all": {
+        "cases": 11,
+        "blocked": 0,
+        "fallback": 7,
+        "outputParsing": {
+          "attemptedRows": 11,
+          "parsedRows": 11,
+          "unparsedRows": 0,
+          "rate": 1
+        },
+        "deterministicValidation": {
+          "evaluatedParsedRows": 11,
+          "passed": 4,
+          "rejected": 7,
+          "passRateAmongParsed": 0.36363636363636365
+        },
+        "structuralValidity": {
+          "evaluated": 11,
+          "valid": 4,
+          "rate": 0.36363636363636365,
+          "denominator": "ALL_NON_BLOCKED_ROWS_INCLUDING_PARSE_AND_VALIDATION_FAILURES"
+        },
+        "fallbackReasons": {
+          "VALIDATION_REJECTED": 7
+        },
+        "deterministicRejectionReasons": {
+          "UNSUPPORTED_CITATION": 7,
+          "UNSUPPORTED_RISK_JUDGMENT": 2
+        },
+        "proxyMetricDenominator": "ALL_PARSED_OUTPUTS_INCLUDING_DETERMINISTICALLY_REJECTED_DIAGNOSTICS",
+        "proxyAcceptableLabelHit": {
+          "estimate": 0.8181818181818182,
+          "ci95": [
+            0.4,
+            1
+          ],
+          "groups": 6,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "proxyAcceptableAlternativeHit": {
+          "estimate": 0.8181818181818182,
+          "ci95": [
+            0.4,
+            1
+          ],
+          "groups": 6,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "proxyAcceptableSufficiencyHit": {
+          "estimate": 0.6363636363636364,
+          "ci95": [
+            0.2,
+            1
+          ],
+          "groups": 6,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "refusalRate": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 6,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "professionalDecisionAccuracy": {
+          "value": null,
+          "status": "BLOCKED_NO_EXPERT_HOLDOUT"
+        },
+        "productionAutomaticAcceptance": {
+          "enabled": false,
+          "accepted": 0,
+          "coverage": 0,
+          "errorRate": null,
+          "reason": "No expert-validated acceptance threshold; evaluation never publishes teaching or Memory."
+        },
+        "calibration": {
+          "proxyBrier": {
+            "estimate": 0.263525,
+            "ci95": [
+              0.08159999999999999,
+              0.5072000000000001
+            ],
+            "groups": 4,
+            "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+          },
+          "proxyEceFiveBins": 0.31625000000000003,
+          "singletonAuthorLabelCount": 8,
+          "status": "DESCRIPTIVE_PROXY_ONLY",
+          "warning": "Ambiguous acceptable sets are excluded. Model confidence is not evidence confidence or empirical tactical accuracy; too few synthetic labels for calibrated thresholds."
+        }
+      },
+      "calibration": {
+        "cases": 3,
+        "blocked": 0,
+        "fallback": 3,
+        "outputParsing": {
+          "attemptedRows": 3,
+          "parsedRows": 3,
+          "unparsedRows": 0,
+          "rate": 1
+        },
+        "deterministicValidation": {
+          "evaluatedParsedRows": 3,
+          "passed": 0,
+          "rejected": 3,
+          "passRateAmongParsed": 0
+        },
+        "structuralValidity": {
+          "evaluated": 3,
+          "valid": 0,
+          "rate": 0,
+          "denominator": "ALL_NON_BLOCKED_ROWS_INCLUDING_PARSE_AND_VALIDATION_FAILURES"
+        },
+        "fallbackReasons": {
+          "VALIDATION_REJECTED": 3
+        },
+        "deterministicRejectionReasons": {
+          "UNSUPPORTED_CITATION": 3
+        },
+        "proxyMetricDenominator": "ALL_PARSED_OUTPUTS_INCLUDING_DETERMINISTICALLY_REJECTED_DIAGNOSTICS",
+        "proxyAcceptableLabelHit": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 2,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "proxyAcceptableAlternativeHit": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 2,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "proxyAcceptableSufficiencyHit": {
+          "estimate": 0.3333333333333333,
+          "ci95": [
+            0,
+            1
+          ],
+          "groups": 2,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "refusalRate": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 2,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "professionalDecisionAccuracy": {
+          "value": null,
+          "status": "BLOCKED_NO_EXPERT_HOLDOUT"
+        },
+        "productionAutomaticAcceptance": {
+          "enabled": false,
+          "accepted": 0,
+          "coverage": 0,
+          "errorRate": null,
+          "reason": "No expert-validated acceptance threshold; evaluation never publishes teaching or Memory."
+        },
+        "calibration": {
+          "proxyBrier": {
+            "estimate": 0.08239999999999999,
+            "ci95": null,
+            "groups": 1,
+            "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+          },
+          "proxyEceFiveBins": 0.21999999999999997,
+          "singletonAuthorLabelCount": 2,
+          "status": "DESCRIPTIVE_PROXY_ONLY",
+          "warning": "Ambiguous acceptable sets are excluded. Model confidence is not evidence confidence or empirical tactical accuracy; too few synthetic labels for calibrated thresholds."
+        }
+      },
+      "holdout": {
+        "cases": 8,
+        "blocked": 0,
+        "fallback": 4,
+        "outputParsing": {
+          "attemptedRows": 8,
+          "parsedRows": 8,
+          "unparsedRows": 0,
+          "rate": 1
+        },
+        "deterministicValidation": {
+          "evaluatedParsedRows": 8,
+          "passed": 4,
+          "rejected": 4,
+          "passRateAmongParsed": 0.5
+        },
+        "structuralValidity": {
+          "evaluated": 8,
+          "valid": 4,
+          "rate": 0.5,
+          "denominator": "ALL_NON_BLOCKED_ROWS_INCLUDING_PARSE_AND_VALIDATION_FAILURES"
+        },
+        "fallbackReasons": {
+          "VALIDATION_REJECTED": 4
+        },
+        "deterministicRejectionReasons": {
+          "UNSUPPORTED_CITATION": 4,
+          "UNSUPPORTED_RISK_JUDGMENT": 2
+        },
+        "proxyMetricDenominator": "ALL_PARSED_OUTPUTS_INCLUDING_DETERMINISTICALLY_REJECTED_DIAGNOSTICS",
+        "proxyAcceptableLabelHit": {
+          "estimate": 0.75,
+          "ci95": [
+            0.14285714285714285,
+            1
+          ],
+          "groups": 4,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "proxyAcceptableAlternativeHit": {
+          "estimate": 0.75,
+          "ci95": [
+            0.14285714285714285,
+            1
+          ],
+          "groups": 4,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "proxyAcceptableSufficiencyHit": {
+          "estimate": 0.75,
+          "ci95": [
+            0.14285714285714285,
+            1
+          ],
+          "groups": 4,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "refusalRate": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 4,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "professionalDecisionAccuracy": {
+          "value": null,
+          "status": "BLOCKED_NO_EXPERT_HOLDOUT"
+        },
+        "productionAutomaticAcceptance": {
+          "enabled": false,
+          "accepted": 0,
+          "coverage": 0,
+          "errorRate": null,
+          "reason": "No expert-validated acceptance threshold; evaluation never publishes teaching or Memory."
+        },
+        "calibration": {
+          "proxyBrier": {
+            "estimate": 0.3239,
+            "ci95": [
+              0.07999999999999999,
+              0.6488
+            ],
+            "groups": 3,
+            "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+          },
+          "proxyEceFiveBins": 0.34833333333333333,
+          "singletonAuthorLabelCount": 6,
+          "status": "DESCRIPTIVE_PROXY_ONLY",
+          "warning": "Ambiguous acceptable sets are excluded. Model confidence is not evidence confidence or empirical tactical accuracy; too few synthetic labels for calibrated thresholds."
+        }
+      },
+      "actualRemoteCalls": 9,
+      "deduplicatedReuses": 2,
+      "actualUsage": {
+        "inputTokens": 41473,
+        "outputTokens": 10291,
+        "knownCostUsd": 0.0017418660000000001,
+        "unknownCostCalls": 0
+      },
+      "latency": {
+        "samples": 9,
+        "p50MsDescriptive": 501,
+        "p95Ms": null,
+        "p99Ms": null,
+        "status": "INSUFFICIENT_SAMPLES_FOR_TAIL_ESTIMATION",
+        "warning": "At most 100 remote calls, few unique synthetic inputs; no reliable service-level tail estimate. Reused rows are excluded."
+      }
+    },
+    "GENERATION_MODEL": {
+      "all": {
+        "cases": 11,
+        "blocked": 0,
+        "fallback": 7,
+        "outputParsing": {
+          "attemptedRows": 11,
+          "parsedRows": 4,
+          "unparsedRows": 7,
+          "rate": 0.36363636363636365
+        },
+        "deterministicValidation": {
+          "evaluatedParsedRows": 4,
+          "passed": 4,
+          "rejected": 0,
+          "passRateAmongParsed": 1
+        },
+        "structuralValidity": {
+          "evaluated": 11,
+          "valid": 4,
+          "rate": 0.36363636363636365,
+          "denominator": "ALL_NON_BLOCKED_ROWS_INCLUDING_PARSE_AND_VALIDATION_FAILURES"
+        },
+        "fallbackReasons": {
+          "TIMEOUT": 7
+        },
+        "deterministicRejectionReasons": {},
+        "proxyMetricDenominator": "ALL_PARSED_OUTPUTS_INCLUDING_DETERMINISTICALLY_REJECTED_DIAGNOSTICS",
+        "proxyAcceptableLabelHit": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 2,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "proxyAcceptableAlternativeHit": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 2,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "proxyAcceptableSufficiencyHit": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 2,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "refusalRate": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 2,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "professionalDecisionAccuracy": {
+          "value": null,
+          "status": "BLOCKED_NO_EXPERT_HOLDOUT"
+        },
+        "productionAutomaticAcceptance": {
+          "enabled": false,
+          "accepted": 0,
+          "coverage": 0,
+          "errorRate": null,
+          "reason": "No expert-validated acceptance threshold; evaluation never publishes teaching or Memory."
+        },
+        "calibration": {
+          "proxyBrier": {
+            "estimate": 0.345,
+            "ci95": [
+              0.24000000000000005,
+              0.37999999999999995
+            ],
+            "groups": 2,
+            "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+          },
+          "proxyEceFiveBins": 0.475,
+          "singletonAuthorLabelCount": 4,
+          "status": "DESCRIPTIVE_PROXY_ONLY",
+          "warning": "Ambiguous acceptable sets are excluded. Model confidence is not evidence confidence or empirical tactical accuracy; too few synthetic labels for calibrated thresholds."
+        }
+      },
+      "calibration": {
+        "cases": 3,
+        "blocked": 0,
+        "fallback": 3,
+        "outputParsing": {
+          "attemptedRows": 3,
+          "parsedRows": 0,
+          "unparsedRows": 3,
+          "rate": 0
+        },
+        "deterministicValidation": {
+          "evaluatedParsedRows": 0,
+          "passed": 0,
+          "rejected": 0,
+          "passRateAmongParsed": null
+        },
+        "structuralValidity": {
+          "evaluated": 3,
+          "valid": 0,
+          "rate": 0,
+          "denominator": "ALL_NON_BLOCKED_ROWS_INCLUDING_PARSE_AND_VALIDATION_FAILURES"
+        },
+        "fallbackReasons": {
+          "TIMEOUT": 3
+        },
+        "deterministicRejectionReasons": {},
+        "proxyMetricDenominator": "ALL_PARSED_OUTPUTS_INCLUDING_DETERMINISTICALLY_REJECTED_DIAGNOSTICS",
+        "proxyAcceptableLabelHit": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableAlternativeHit": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableSufficiencyHit": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "refusalRate": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "professionalDecisionAccuracy": {
+          "value": null,
+          "status": "BLOCKED_NO_EXPERT_HOLDOUT"
+        },
+        "productionAutomaticAcceptance": {
+          "enabled": false,
+          "accepted": 0,
+          "coverage": 0,
+          "errorRate": null,
+          "reason": "No expert-validated acceptance threshold; evaluation never publishes teaching or Memory."
+        },
+        "calibration": {
+          "proxyBrier": {
+            "estimate": null,
+            "ci95": null,
+            "groups": 0,
+            "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+          },
+          "proxyEceFiveBins": null,
+          "singletonAuthorLabelCount": 0,
+          "status": "DESCRIPTIVE_PROXY_ONLY",
+          "warning": "Ambiguous acceptable sets are excluded. Model confidence is not evidence confidence or empirical tactical accuracy; too few synthetic labels for calibrated thresholds."
+        }
+      },
+      "holdout": {
+        "cases": 8,
+        "blocked": 0,
+        "fallback": 4,
+        "outputParsing": {
+          "attemptedRows": 8,
+          "parsedRows": 4,
+          "unparsedRows": 4,
+          "rate": 0.5
+        },
+        "deterministicValidation": {
+          "evaluatedParsedRows": 4,
+          "passed": 4,
+          "rejected": 0,
+          "passRateAmongParsed": 1
+        },
+        "structuralValidity": {
+          "evaluated": 8,
+          "valid": 4,
+          "rate": 0.5,
+          "denominator": "ALL_NON_BLOCKED_ROWS_INCLUDING_PARSE_AND_VALIDATION_FAILURES"
+        },
+        "fallbackReasons": {
+          "TIMEOUT": 4
+        },
+        "deterministicRejectionReasons": {},
+        "proxyMetricDenominator": "ALL_PARSED_OUTPUTS_INCLUDING_DETERMINISTICALLY_REJECTED_DIAGNOSTICS",
+        "proxyAcceptableLabelHit": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 2,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "proxyAcceptableAlternativeHit": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 2,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "proxyAcceptableSufficiencyHit": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 2,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "refusalRate": {
+          "estimate": 1,
+          "ci95": [
+            1,
+            1
+          ],
+          "groups": 2,
+          "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+        },
+        "professionalDecisionAccuracy": {
+          "value": null,
+          "status": "BLOCKED_NO_EXPERT_HOLDOUT"
+        },
+        "productionAutomaticAcceptance": {
+          "enabled": false,
+          "accepted": 0,
+          "coverage": 0,
+          "errorRate": null,
+          "reason": "No expert-validated acceptance threshold; evaluation never publishes teaching or Memory."
+        },
+        "calibration": {
+          "proxyBrier": {
+            "estimate": 0.345,
+            "ci95": [
+              0.24000000000000005,
+              0.37999999999999995
+            ],
+            "groups": 2,
+            "warning": "Exploratory 1,000-draw Demo-cluster bootstrap over synthetic author expectations; small group count and no expert labels prevent professional-quality claims."
+          },
+          "proxyEceFiveBins": 0.475,
+          "singletonAuthorLabelCount": 4,
+          "status": "DESCRIPTIVE_PROXY_ONLY",
+          "warning": "Ambiguous acceptable sets are excluded. Model confidence is not evidence confidence or empirical tactical accuracy; too few synthetic labels for calibrated thresholds."
+        }
+      },
+      "actualRemoteCalls": 9,
+      "deduplicatedReuses": 2,
+      "actualUsage": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "knownCostUsd": null,
+        "unknownCostCalls": 9
+      },
+      "latency": {
+        "samples": 9,
+        "p50MsDescriptive": 3002,
+        "p95Ms": null,
+        "p99Ms": null,
+        "status": "INSUFFICIENT_SAMPLES_FOR_TAIL_ESTIMATION",
+        "warning": "At most 100 remote calls, few unique synthetic inputs; no reliable service-level tail estimate. Reused rows are excluded."
+      }
+    }
+  },
+  "rows": [
+    {
+      "caseId": "good-choice-bad-result",
+      "demoGroup": "synthetic-objective-a",
+      "split": "CALIBRATION",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "RULE",
+      "packetFingerprint": "decision-v1-eb670249-cde97107-784",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "RULE_BASELINE",
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 1,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 0
+          },
+          "refs": [
+            "e1",
+            "e2",
+            "e4"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 1,
+            "UNKNOWN": 0
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "SUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 1,
+            "INSUFFICIENT": 0
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MULTIPLE_REASONABLE_ACTIONS"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0.95,
+      "modelConfidence": 1,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": false,
+      "latencyMs": 0.05120800000076997,
+      "remoteCall": false,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "costUsd": 0
+      },
+      "brierProxy": 0,
+      "calibrationProxy": {
+        "confidence": 1,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "good-choice-good-result",
+      "demoGroup": "synthetic-objective-a",
+      "split": "CALIBRATION",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "RULE",
+      "packetFingerprint": "decision-v1-eb670249-cde97107-784",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "RULE_BASELINE",
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 1,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 0
+          },
+          "refs": [
+            "e1",
+            "e2",
+            "e4"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 1,
+            "UNKNOWN": 0
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "SUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 1,
+            "INSUFFICIENT": 0
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MULTIPLE_REASONABLE_ACTIONS"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0.95,
+      "modelConfidence": 1,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": false,
+      "latencyMs": 0.04066700000021228,
+      "remoteCall": false,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "costUsd": 0
+      },
+      "brierProxy": 0,
+      "calibrationProxy": {
+        "confidence": 1,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "bad-choice-good-result",
+      "demoGroup": "synthetic-unnecessary-b",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "RULE",
+      "packetFingerprint": "decision-v1-1aacba17-ebfb12a7-784",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "RULE_BASELINE",
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNWARRANTED",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 0,
+            "UNWARRANTED": 1,
+            "UNKNOWN": 0
+          },
+          "refs": [
+            "e1",
+            "e2",
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "PREFERABLE",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 1,
+            "NOT_ESTABLISHED": 0,
+            "UNKNOWN": 0
+          },
+          "refs": [
+            "e3",
+            "e5"
+          ]
+        },
+        "contextSufficient": {
+          "choice": "SUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 1,
+            "INSUFFICIENT": 0
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MULTIPLE_REASONABLE_ACTIONS"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0.95,
+      "modelConfidence": 1,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": false,
+      "latencyMs": 0.044042000000445114,
+      "remoteCall": false,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "costUsd": 0
+      },
+      "brierProxy": 0,
+      "calibrationProxy": {
+        "confidence": 1,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "unnecessary-risk-bad-result",
+      "demoGroup": "synthetic-unnecessary-b",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "RULE",
+      "packetFingerprint": "decision-v1-1aacba17-ebfb12a7-784",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "RULE_BASELINE",
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNWARRANTED",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 0,
+            "UNWARRANTED": 1,
+            "UNKNOWN": 0
+          },
+          "refs": [
+            "e1",
+            "e2",
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "PREFERABLE",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 1,
+            "NOT_ESTABLISHED": 0,
+            "UNKNOWN": 0
+          },
+          "refs": [
+            "e3",
+            "e5"
+          ]
+        },
+        "contextSufficient": {
+          "choice": "SUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 1,
+            "INSUFFICIENT": 0
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MULTIPLE_REASONABLE_ACTIONS"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0.95,
+      "modelConfidence": 1,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": false,
+      "latencyMs": 0.03862500000013824,
+      "remoteCall": false,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "costUsd": 0
+      },
+      "brierProxy": 0,
+      "calibrationProxy": {
+        "confidence": 1,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "reasonable-active-contest",
+      "demoGroup": "synthetic-trade-c",
+      "split": "CALIBRATION",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "RULE",
+      "packetFingerprint": "decision-v1-b95644c6-cfa1c3f0-788",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "RULE_BASELINE",
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 1,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 0
+          },
+          "refs": [
+            "e1",
+            "e2",
+            "e4"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 1,
+            "UNKNOWN": 0
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "SUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 1,
+            "INSUFFICIENT": 0
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MULTIPLE_REASONABLE_ACTIONS"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0.95,
+      "modelConfidence": 1,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": false,
+      "latencyMs": 0.024290999999720952,
+      "remoteCall": false,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "costUsd": 0
+      },
+      "brierProxy": null,
+      "calibrationProxy": null
+    },
+    {
+      "caseId": "missing-context",
+      "demoGroup": "synthetic-missing-d",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "RULE",
+      "packetFingerprint": "decision-v1-eb878903-1fdd5d1b-607",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "RULE_BASELINE",
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 0,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 1,
+            "UNKNOWN": 0
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 0,
+            "INSUFFICIENT": 1
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MISSING_CONTEXT"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0,
+      "modelConfidence": 1,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": true,
+      "latencyMs": 0.012999999999919964,
+      "remoteCall": false,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "costUsd": 0
+      },
+      "brierProxy": 0,
+      "calibrationProxy": {
+        "confidence": 1,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "reliable-new-information",
+      "demoGroup": "synthetic-information-e",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "RULE",
+      "packetFingerprint": "decision-v1-c2923d96-8b3882ce-953",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "RULE_BASELINE",
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 1,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 0
+          },
+          "refs": [
+            "e1",
+            "e2",
+            "e4"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 1,
+            "UNKNOWN": 0
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "SUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 1,
+            "INSUFFICIENT": 0
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MULTIPLE_REASONABLE_ACTIONS"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0.95,
+      "modelConfidence": 1,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": false,
+      "latencyMs": 0.17241699999976845,
+      "remoteCall": false,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "costUsd": 0
+      },
+      "brierProxy": null,
+      "calibrationProxy": null
+    },
+    {
+      "caseId": "multiple-reasonable-actions",
+      "demoGroup": "synthetic-multiple-f",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "RULE",
+      "packetFingerprint": "decision-v1-8f07d73-2fe63d89-785",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "RULE_BASELINE",
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 1,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 0
+          },
+          "refs": [
+            "e1",
+            "e2",
+            "e4"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 1,
+            "UNKNOWN": 0
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "SUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 1,
+            "INSUFFICIENT": 0
+          },
+          "refs": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MULTIPLE_REASONABLE_ACTIONS"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0.95,
+      "modelConfidence": 1,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": false,
+      "latencyMs": 0.035292000000481494,
+      "remoteCall": false,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "costUsd": 0
+      },
+      "brierProxy": null,
+      "calibrationProxy": null
+    },
+    {
+      "caseId": "user-context-not-demo-fact",
+      "demoGroup": "synthetic-information-e",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "RULE",
+      "packetFingerprint": "decision-v1-720e60f9-99014755-772",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "RULE_BASELINE",
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 0,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 1,
+            "UNKNOWN": 0
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 0,
+            "INSUFFICIENT": 1
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MISSING_CONTEXT"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0,
+      "modelConfidence": 1,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": true,
+      "latencyMs": 0.013458000000355241,
+      "remoteCall": false,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "costUsd": 0
+      },
+      "brierProxy": 0,
+      "calibrationProxy": {
+        "confidence": 1,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "structured-report-a",
+      "demoGroup": "synthetic-information-e",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "RULE",
+      "packetFingerprint": "decision-v1-8ba0cea6-7c31c744-880",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "RULE_BASELINE",
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 0,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 1,
+            "UNKNOWN": 0
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 0,
+            "INSUFFICIENT": 1
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MISSING_CONTEXT"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0,
+      "modelConfidence": 1,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": true,
+      "latencyMs": 0.009000000000014552,
+      "remoteCall": false,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "costUsd": 0
+      },
+      "brierProxy": 0,
+      "calibrationProxy": {
+        "confidence": 1,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "structured-report-b",
+      "demoGroup": "synthetic-information-e",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "RULE",
+      "packetFingerprint": "decision-v1-405cc42f-5329edc7-880",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "RULE_BASELINE",
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 0,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 1,
+            "UNKNOWN": 0
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 0,
+            "INSUFFICIENT": 1
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MISSING_CONTEXT"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0,
+      "modelConfidence": 1,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": true,
+      "latencyMs": 0.00841599999967002,
+      "remoteCall": false,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "costUsd": 0
+      },
+      "brierProxy": 0,
+      "calibrationProxy": {
+        "confidence": 1,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "good-choice-bad-result",
+      "demoGroup": "synthetic-objective-a",
+      "split": "CALIBRATION",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "JEV",
+      "packetFingerprint": "decision-v1-eb670249-cde97107-784",
+      "status": "FALLBACK",
+      "reason": "VALIDATION_REJECTED",
+      "model": "jev-1.13.0",
+      "result": null,
+      "diagnosticResult": {
+        "model": "jev-1.13.0",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 0.66,
+          "probabilities": {
+            "UNWARRANTED": 0.18,
+            "UNKNOWN": 0.04,
+            "WARRANTED": 0.78
+          },
+          "refs": [
+            "e4",
+            "e5"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.69,
+          "probabilities": {
+            "PREFERABLE": 0.2,
+            "NOT_ESTABLISHED": 0.79,
+            "UNKNOWN": 0.01
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.93,
+          "probabilities": {
+            "SUFFICIENT": 0.04,
+            "INSUFFICIENT": 0.96
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "schemaParsed": true,
+      "structuralValid": false,
+      "rejectionReasons": [
+        "UNSUPPORTED_CITATION"
+      ],
+      "evidenceConfidence": 0.95,
+      "modelConfidence": 0.66,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": false,
+      "refused": true,
+      "latencyMs": 2272,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 6447,
+        "outputTokens": 1667,
+        "costUsd": 0.000270774
+      },
+      "brierProxy": 0.08239999999999999,
+      "calibrationProxy": {
+        "confidence": 0.78,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "good-choice-bad-result",
+      "demoGroup": "synthetic-objective-a",
+      "split": "CALIBRATION",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "GENERATION_MODEL",
+      "packetFingerprint": "decision-v1-eb670249-cde97107-784",
+      "status": "FALLBACK",
+      "reason": "TIMEOUT",
+      "model": null,
+      "result": null,
+      "diagnosticResult": null,
+      "schemaParsed": false,
+      "structuralValid": null,
+      "rejectionReasons": [],
+      "evidenceConfidence": null,
+      "modelConfidence": null,
+      "acceptableLabelHit": null,
+      "acceptableAlternativeHit": null,
+      "acceptableSufficiencyHit": null,
+      "refused": null,
+      "latencyMs": 3013,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "costUsd": null
+      },
+      "brierProxy": null,
+      "calibrationProxy": null
+    },
+    {
+      "caseId": "good-choice-good-result",
+      "demoGroup": "synthetic-objective-a",
+      "split": "CALIBRATION",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "JEV",
+      "packetFingerprint": "decision-v1-eb670249-cde97107-784",
+      "status": "FALLBACK",
+      "reason": "VALIDATION_REJECTED",
+      "model": "jev-1.13.0",
+      "result": null,
+      "diagnosticResult": {
+        "model": "jev-1.13.0",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 0.66,
+          "probabilities": {
+            "UNWARRANTED": 0.18,
+            "UNKNOWN": 0.04,
+            "WARRANTED": 0.78
+          },
+          "refs": [
+            "e4",
+            "e5"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.69,
+          "probabilities": {
+            "PREFERABLE": 0.2,
+            "NOT_ESTABLISHED": 0.79,
+            "UNKNOWN": 0.01
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.93,
+          "probabilities": {
+            "SUFFICIENT": 0.04,
+            "INSUFFICIENT": 0.96
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "schemaParsed": true,
+      "structuralValid": false,
+      "rejectionReasons": [
+        "UNSUPPORTED_CITATION"
+      ],
+      "evidenceConfidence": 0.95,
+      "modelConfidence": 0.66,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": false,
+      "refused": true,
+      "latencyMs": 2272,
+      "remoteCall": false,
+      "reusedInRun": true,
+      "usage": {
+        "inputTokens": 6447,
+        "outputTokens": 1667,
+        "costUsd": 0.000270774
+      },
+      "brierProxy": 0.08239999999999999,
+      "calibrationProxy": {
+        "confidence": 0.78,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "good-choice-good-result",
+      "demoGroup": "synthetic-objective-a",
+      "split": "CALIBRATION",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "GENERATION_MODEL",
+      "packetFingerprint": "decision-v1-eb670249-cde97107-784",
+      "status": "FALLBACK",
+      "reason": "TIMEOUT",
+      "model": null,
+      "result": null,
+      "diagnosticResult": null,
+      "schemaParsed": false,
+      "structuralValid": null,
+      "rejectionReasons": [],
+      "evidenceConfidence": null,
+      "modelConfidence": null,
+      "acceptableLabelHit": null,
+      "acceptableAlternativeHit": null,
+      "acceptableSufficiencyHit": null,
+      "refused": null,
+      "latencyMs": 3013,
+      "remoteCall": false,
+      "reusedInRun": true,
+      "usage": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "costUsd": null
+      },
+      "brierProxy": null,
+      "calibrationProxy": null
+    },
+    {
+      "caseId": "bad-choice-good-result",
+      "demoGroup": "synthetic-unnecessary-b",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "JEV",
+      "packetFingerprint": "decision-v1-1aacba17-ebfb12a7-784",
+      "status": "FALLBACK",
+      "reason": "VALIDATION_REJECTED",
+      "model": "jev-1.13.0",
+      "result": null,
+      "diagnosticResult": {
+        "model": "jev-1.13.0",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 0.24,
+          "probabilities": {
+            "WARRANTED": 0.5,
+            "UNWARRANTED": 0.38,
+            "UNKNOWN": 0.12
+          },
+          "refs": [
+            "e5"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.71,
+          "probabilities": {
+            "UNKNOWN": 0.01,
+            "PREFERABLE": 0.18,
+            "NOT_ESTABLISHED": 0.81
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.95,
+          "probabilities": {
+            "INSUFFICIENT": 0.97,
+            "SUFFICIENT": 0.03
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "schemaParsed": true,
+      "structuralValid": false,
+      "rejectionReasons": [
+        "UNSUPPORTED_CITATION",
+        "UNSUPPORTED_RISK_JUDGMENT"
+      ],
+      "evidenceConfidence": 0.95,
+      "modelConfidence": 0.24,
+      "acceptableLabelHit": false,
+      "acceptableAlternativeHit": false,
+      "acceptableSufficiencyHit": false,
+      "refused": true,
+      "latencyMs": 638,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 6447,
+        "outputTokens": 1666,
+        "costUsd": 0.000270774
+      },
+      "brierProxy": 0.6488,
+      "calibrationProxy": {
+        "confidence": 0.5,
+        "correct": 0
+      }
+    },
+    {
+      "caseId": "bad-choice-good-result",
+      "demoGroup": "synthetic-unnecessary-b",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "GENERATION_MODEL",
+      "packetFingerprint": "decision-v1-1aacba17-ebfb12a7-784",
+      "status": "FALLBACK",
+      "reason": "TIMEOUT",
+      "model": null,
+      "result": null,
+      "diagnosticResult": null,
+      "schemaParsed": false,
+      "structuralValid": null,
+      "rejectionReasons": [],
+      "evidenceConfidence": null,
+      "modelConfidence": null,
+      "acceptableLabelHit": null,
+      "acceptableAlternativeHit": null,
+      "acceptableSufficiencyHit": null,
+      "refused": null,
+      "latencyMs": 3002,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "costUsd": null
+      },
+      "brierProxy": null,
+      "calibrationProxy": null
+    },
+    {
+      "caseId": "unnecessary-risk-bad-result",
+      "demoGroup": "synthetic-unnecessary-b",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "JEV",
+      "packetFingerprint": "decision-v1-1aacba17-ebfb12a7-784",
+      "status": "FALLBACK",
+      "reason": "VALIDATION_REJECTED",
+      "model": "jev-1.13.0",
+      "result": null,
+      "diagnosticResult": {
+        "model": "jev-1.13.0",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 0.24,
+          "probabilities": {
+            "WARRANTED": 0.5,
+            "UNWARRANTED": 0.38,
+            "UNKNOWN": 0.12
+          },
+          "refs": [
+            "e5"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.71,
+          "probabilities": {
+            "UNKNOWN": 0.01,
+            "PREFERABLE": 0.18,
+            "NOT_ESTABLISHED": 0.81
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.95,
+          "probabilities": {
+            "INSUFFICIENT": 0.97,
+            "SUFFICIENT": 0.03
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "schemaParsed": true,
+      "structuralValid": false,
+      "rejectionReasons": [
+        "UNSUPPORTED_CITATION",
+        "UNSUPPORTED_RISK_JUDGMENT"
+      ],
+      "evidenceConfidence": 0.95,
+      "modelConfidence": 0.24,
+      "acceptableLabelHit": false,
+      "acceptableAlternativeHit": false,
+      "acceptableSufficiencyHit": false,
+      "refused": true,
+      "latencyMs": 638,
+      "remoteCall": false,
+      "reusedInRun": true,
+      "usage": {
+        "inputTokens": 6447,
+        "outputTokens": 1666,
+        "costUsd": 0.000270774
+      },
+      "brierProxy": 0.6488,
+      "calibrationProxy": {
+        "confidence": 0.5,
+        "correct": 0
+      }
+    },
+    {
+      "caseId": "unnecessary-risk-bad-result",
+      "demoGroup": "synthetic-unnecessary-b",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "GENERATION_MODEL",
+      "packetFingerprint": "decision-v1-1aacba17-ebfb12a7-784",
+      "status": "FALLBACK",
+      "reason": "TIMEOUT",
+      "model": null,
+      "result": null,
+      "diagnosticResult": null,
+      "schemaParsed": false,
+      "structuralValid": null,
+      "rejectionReasons": [],
+      "evidenceConfidence": null,
+      "modelConfidence": null,
+      "acceptableLabelHit": null,
+      "acceptableAlternativeHit": null,
+      "acceptableSufficiencyHit": null,
+      "refused": null,
+      "latencyMs": 3002,
+      "remoteCall": false,
+      "reusedInRun": true,
+      "usage": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "costUsd": null
+      },
+      "brierProxy": null,
+      "calibrationProxy": null
+    },
+    {
+      "caseId": "reasonable-active-contest",
+      "demoGroup": "synthetic-trade-c",
+      "split": "CALIBRATION",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "JEV",
+      "packetFingerprint": "decision-v1-b95644c6-cfa1c3f0-788",
+      "status": "FALLBACK",
+      "reason": "VALIDATION_REJECTED",
+      "model": "jev-1.13.0",
+      "result": null,
+      "diagnosticResult": {
+        "model": "jev-1.13.0",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 0.52,
+          "probabilities": {
+            "UNWARRANTED": 0.25,
+            "UNKNOWN": 0.07,
+            "WARRANTED": 0.68
+          },
+          "refs": [
+            "e4",
+            "e5"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.84,
+          "probabilities": {
+            "PREFERABLE": 0.1,
+            "NOT_ESTABLISHED": 0.89,
+            "UNKNOWN": 0.01
+          },
+          "refs": [
+            "e4"
+          ]
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.72,
+          "probabilities": {
+            "INSUFFICIENT": 0.86,
+            "SUFFICIENT": 0.14
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "schemaParsed": true,
+      "structuralValid": false,
+      "rejectionReasons": [
+        "UNSUPPORTED_CITATION"
+      ],
+      "evidenceConfidence": 0.95,
+      "modelConfidence": 0.52,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": true,
+      "latencyMs": 602,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 6448,
+        "outputTokens": 1663,
+        "costUsd": 0.00027081600000000006
+      },
+      "brierProxy": null,
+      "calibrationProxy": null
+    },
+    {
+      "caseId": "reasonable-active-contest",
+      "demoGroup": "synthetic-trade-c",
+      "split": "CALIBRATION",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "GENERATION_MODEL",
+      "packetFingerprint": "decision-v1-b95644c6-cfa1c3f0-788",
+      "status": "FALLBACK",
+      "reason": "TIMEOUT",
+      "model": null,
+      "result": null,
+      "diagnosticResult": null,
+      "schemaParsed": false,
+      "structuralValid": null,
+      "rejectionReasons": [],
+      "evidenceConfidence": null,
+      "modelConfidence": null,
+      "acceptableLabelHit": null,
+      "acceptableAlternativeHit": null,
+      "acceptableSufficiencyHit": null,
+      "refused": null,
+      "latencyMs": 3002,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "costUsd": null
+      },
+      "brierProxy": null,
+      "calibrationProxy": null
+    },
+    {
+      "caseId": "missing-context",
+      "demoGroup": "synthetic-missing-d",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "JEV",
+      "packetFingerprint": "decision-v1-eb878903-1fdd5d1b-607",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "jev-1.13.0",
+      "result": {
+        "model": "jev-1.13.0",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.69,
+          "probabilities": {
+            "WARRANTED": 0.2,
+            "UNKNOWN": 0.8,
+            "UNWARRANTED": 0
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.54,
+          "probabilities": {
+            "NOT_ESTABLISHED": 0.3,
+            "PREFERABLE": 0,
+            "UNKNOWN": 0.7
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "INSUFFICIENT": 1,
+            "SUFFICIENT": 0
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0,
+      "modelConfidence": 0.54,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": true,
+      "latencyMs": 475,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 2196,
+        "outputTokens": 492,
+        "costUsd": 0.000092232
+      },
+      "brierProxy": 0.07999999999999999,
+      "calibrationProxy": {
+        "confidence": 0.8,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "missing-context",
+      "demoGroup": "synthetic-missing-d",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "GENERATION_MODEL",
+      "packetFingerprint": "decision-v1-eb878903-1fdd5d1b-607",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "deepseek-flash",
+      "result": {
+        "model": "deepseek-flash",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.6,
+          "probabilities": {
+            "WARRANTED": 0.2,
+            "UNWARRANTED": 0.2,
+            "UNKNOWN": 0.6
+          },
+          "refs": [
+            "e1",
+            "e2"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.7,
+          "probabilities": {
+            "PREFERABLE": 0.1,
+            "NOT_ESTABLISHED": 0.2,
+            "UNKNOWN": 0.7
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.9,
+          "probabilities": {
+            "SUFFICIENT": 0.1,
+            "INSUFFICIENT": 0.9
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 1,
+      "modelConfidence": 0.6,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": true,
+      "latencyMs": 2271,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 1721,
+        "outputTokens": 787,
+        "costUsd": null
+      },
+      "brierProxy": 0.24000000000000005,
+      "calibrationProxy": {
+        "confidence": 0.6,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "reliable-new-information",
+      "demoGroup": "synthetic-information-e",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "JEV",
+      "packetFingerprint": "decision-v1-c2923d96-8b3882ce-953",
+      "status": "FALLBACK",
+      "reason": "VALIDATION_REJECTED",
+      "model": "jev-1.13.0",
+      "result": null,
+      "diagnosticResult": {
+        "model": "jev-1.13.0",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 0.66,
+          "probabilities": {
+            "WARRANTED": 0.77,
+            "UNWARRANTED": 0.19,
+            "UNKNOWN": 0.04
+          },
+          "refs": [
+            "e4",
+            "e5"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.88,
+          "probabilities": {
+            "NOT_ESTABLISHED": 0.92,
+            "PREFERABLE": 0.07,
+            "UNKNOWN": 0.01
+          },
+          "refs": [
+            "e3"
+          ]
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.69,
+          "probabilities": {
+            "INSUFFICIENT": 0.84,
+            "SUFFICIENT": 0.16
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "schemaParsed": true,
+      "structuralValid": false,
+      "rejectionReasons": [
+        "UNSUPPORTED_CITATION"
+      ],
+      "evidenceConfidence": 0.95,
+      "modelConfidence": 0.66,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": true,
+      "latencyMs": 501,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 6536,
+        "outputTokens": 1663,
+        "costUsd": 0.000274512
+      },
+      "brierProxy": null,
+      "calibrationProxy": null
+    },
+    {
+      "caseId": "reliable-new-information",
+      "demoGroup": "synthetic-information-e",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "GENERATION_MODEL",
+      "packetFingerprint": "decision-v1-c2923d96-8b3882ce-953",
+      "status": "FALLBACK",
+      "reason": "TIMEOUT",
+      "model": null,
+      "result": null,
+      "diagnosticResult": null,
+      "schemaParsed": false,
+      "structuralValid": null,
+      "rejectionReasons": [],
+      "evidenceConfidence": null,
+      "modelConfidence": null,
+      "acceptableLabelHit": null,
+      "acceptableAlternativeHit": null,
+      "acceptableSufficiencyHit": null,
+      "refused": null,
+      "latencyMs": 3003,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "costUsd": null
+      },
+      "brierProxy": null,
+      "calibrationProxy": null
+    },
+    {
+      "caseId": "multiple-reasonable-actions",
+      "demoGroup": "synthetic-multiple-f",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "JEV",
+      "packetFingerprint": "decision-v1-8f07d73-2fe63d89-785",
+      "status": "FALLBACK",
+      "reason": "VALIDATION_REJECTED",
+      "model": "jev-1.13.0",
+      "result": null,
+      "diagnosticResult": {
+        "model": "jev-1.13.0",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "WARRANTED",
+          "confidence": 0.47,
+          "probabilities": {
+            "UNWARRANTED": 0.25,
+            "UNKNOWN": 0.11,
+            "WARRANTED": 0.64
+          },
+          "refs": [
+            "e4",
+            "e5"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 0.84,
+          "probabilities": {
+            "UNKNOWN": 0.01,
+            "NOT_ESTABLISHED": 0.9,
+            "PREFERABLE": 0.09
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.86,
+          "probabilities": {
+            "INSUFFICIENT": 0.93,
+            "SUFFICIENT": 0.07
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED"
+        ]
+      },
+      "schemaParsed": true,
+      "structuralValid": false,
+      "rejectionReasons": [
+        "UNSUPPORTED_CITATION"
+      ],
+      "evidenceConfidence": 0.95,
+      "modelConfidence": 0.47,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": true,
+      "latencyMs": 713,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 6447,
+        "outputTokens": 1664,
+        "costUsd": 0.000270774
+      },
+      "brierProxy": null,
+      "calibrationProxy": null
+    },
+    {
+      "caseId": "multiple-reasonable-actions",
+      "demoGroup": "synthetic-multiple-f",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "GENERATION_MODEL",
+      "packetFingerprint": "decision-v1-8f07d73-2fe63d89-785",
+      "status": "FALLBACK",
+      "reason": "TIMEOUT",
+      "model": null,
+      "result": null,
+      "diagnosticResult": null,
+      "schemaParsed": false,
+      "structuralValid": null,
+      "rejectionReasons": [],
+      "evidenceConfidence": null,
+      "modelConfidence": null,
+      "acceptableLabelHit": null,
+      "acceptableAlternativeHit": null,
+      "acceptableSufficiencyHit": null,
+      "refused": null,
+      "latencyMs": 3002,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "costUsd": null
+      },
+      "brierProxy": null,
+      "calibrationProxy": null
+    },
+    {
+      "caseId": "user-context-not-demo-fact",
+      "demoGroup": "synthetic-information-e",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "JEV",
+      "packetFingerprint": "decision-v1-720e60f9-99014755-772",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "jev-1.13.0",
+      "result": {
+        "model": "jev-1.13.0",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.75,
+          "probabilities": {
+            "UNKNOWN": 0.83,
+            "WARRANTED": 0.17,
+            "UNWARRANTED": 0
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.51,
+          "probabilities": {
+            "NOT_ESTABLISHED": 0.33,
+            "UNKNOWN": 0.67,
+            "PREFERABLE": 0
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "INSUFFICIENT": 1,
+            "SUFFICIENT": 0
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED",
+          "USER_CONTEXT_UNVERIFIED"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0,
+      "modelConfidence": 0.51,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": true,
+      "latencyMs": 418,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 2282,
+        "outputTokens": 492,
+        "costUsd": 0.00009584400000000001
+      },
+      "brierProxy": 0.05780000000000002,
+      "calibrationProxy": {
+        "confidence": 0.83,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "user-context-not-demo-fact",
+      "demoGroup": "synthetic-information-e",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "GENERATION_MODEL",
+      "packetFingerprint": "decision-v1-720e60f9-99014755-772",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "deepseek-flash",
+      "result": {
+        "model": "deepseek-flash",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.5,
+          "probabilities": {
+            "WARRANTED": 0.3,
+            "UNWARRANTED": 0.2,
+            "UNKNOWN": 0.5
+          },
+          "refs": [
+            "e1",
+            "e2"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.55,
+          "probabilities": {
+            "PREFERABLE": 0.15,
+            "NOT_ESTABLISHED": 0.3,
+            "UNKNOWN": 0.55
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.75,
+          "probabilities": {
+            "SUFFICIENT": 0.15,
+            "INSUFFICIENT": 0.85
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED",
+          "USER_CONTEXT_UNVERIFIED"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 1,
+      "modelConfidence": 0.5,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": true,
+      "latencyMs": 1785,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 1774,
+        "outputTokens": 525,
+        "costUsd": null
+      },
+      "brierProxy": 0.38,
+      "calibrationProxy": {
+        "confidence": 0.5,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "structured-report-a",
+      "demoGroup": "synthetic-information-e",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "JEV",
+      "packetFingerprint": "decision-v1-8ba0cea6-7c31c744-880",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "jev-1.13.0",
+      "result": {
+        "model": "jev-1.13.0",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.51,
+          "probabilities": {
+            "UNKNOWN": 0.67,
+            "WARRANTED": 0.32,
+            "UNWARRANTED": 0.01
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.37,
+          "probabilities": {
+            "NOT_ESTABLISHED": 0.42,
+            "UNKNOWN": 0.58,
+            "PREFERABLE": 0
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "INSUFFICIENT": 1,
+            "SUFFICIENT": 0
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED",
+          "USER_CONTEXT_UNVERIFIED"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0,
+      "modelConfidence": 0.37,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": true,
+      "latencyMs": 395,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 2335,
+        "outputTokens": 492,
+        "costUsd": 0.00009807
+      },
+      "brierProxy": 0.21139999999999998,
+      "calibrationProxy": {
+        "confidence": 0.67,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "structured-report-a",
+      "demoGroup": "synthetic-information-e",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "GENERATION_MODEL",
+      "packetFingerprint": "decision-v1-8ba0cea6-7c31c744-880",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "deepseek-flash",
+      "result": {
+        "model": "deepseek-flash",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.5,
+          "probabilities": {
+            "WARRANTED": 0.3,
+            "UNWARRANTED": 0.2,
+            "UNKNOWN": 0.5
+          },
+          "refs": [
+            "e1",
+            "e2"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.6,
+          "probabilities": {
+            "PREFERABLE": 0.2,
+            "NOT_ESTABLISHED": 0.3,
+            "UNKNOWN": 0.5
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.8,
+          "probabilities": {
+            "SUFFICIENT": 0.2,
+            "INSUFFICIENT": 0.8
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED",
+          "USER_CONTEXT_UNVERIFIED"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 1,
+      "modelConfidence": 0.5,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": true,
+      "latencyMs": 1975,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 1809,
+        "outputTokens": 525,
+        "costUsd": null
+      },
+      "brierProxy": 0.38,
+      "calibrationProxy": {
+        "confidence": 0.5,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "structured-report-b",
+      "demoGroup": "synthetic-information-e",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "JEV",
+      "packetFingerprint": "decision-v1-405cc42f-5329edc7-880",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "jev-1.13.0",
+      "result": {
+        "model": "jev-1.13.0",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.43,
+          "probabilities": {
+            "WARRANTED": 0.38,
+            "UNKNOWN": 0.61,
+            "UNWARRANTED": 0.01
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.44,
+          "probabilities": {
+            "UNKNOWN": 0.63,
+            "NOT_ESTABLISHED": 0.37,
+            "PREFERABLE": 0
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 0,
+            "INSUFFICIENT": 1
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED",
+          "USER_CONTEXT_UNVERIFIED"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0,
+      "modelConfidence": 0.43,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": true,
+      "latencyMs": 458,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 2335,
+        "outputTokens": 492,
+        "costUsd": 0.00009807
+      },
+      "brierProxy": 0.2966,
+      "calibrationProxy": {
+        "confidence": 0.61,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "structured-report-b",
+      "demoGroup": "synthetic-information-e",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "GENERATION_MODEL",
+      "packetFingerprint": "decision-v1-405cc42f-5329edc7-880",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "deepseek-flash",
+      "result": {
+        "model": "deepseek-flash",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.5,
+          "probabilities": {
+            "WARRANTED": 0.3,
+            "UNWARRANTED": 0.2,
+            "UNKNOWN": 0.5
+          },
+          "refs": [
+            "e1",
+            "e2"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.55,
+          "probabilities": {
+            "PREFERABLE": 0.15,
+            "NOT_ESTABLISHED": 0.3,
+            "UNKNOWN": 0.55
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.8,
+          "probabilities": {
+            "SUFFICIENT": 0.2,
+            "INSUFFICIENT": 0.8
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED",
+          "USER_CONTEXT_UNVERIFIED"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 1,
+      "modelConfidence": 0.5,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": true,
+      "latencyMs": 2086,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 1809,
+        "outputTokens": 525,
+        "costUsd": null
+      },
+      "brierProxy": 0.38,
+      "calibrationProxy": {
+        "confidence": 0.5,
+        "correct": 1
+      }
+    }
+  ]
+}

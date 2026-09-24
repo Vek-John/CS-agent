@@ -1,3 +1,4 @@
+import { resolveDecisionAssessment } from "./decision-assessment";
 import type {
   AdviceOption, AdviceApplicabilityResult, BehaviorHypothesis, CandidateMaterial,
   DecisionCheck, TeachingAssessment, TeachingCandidate, TrustedDecisionSemantics
@@ -102,6 +103,13 @@ const PROCESS_ASSESSMENTS: Readonly<Record<string, TeachingAssessment["kind"]>> 
 };
 
 export function assessCandidateTeaching(candidate: TeachingCandidate, material: CandidateMaterial): TeachingAssessment {
+  const decisionAssessment = resolveDecisionAssessment(candidate, material);
+  if (decisionAssessment) {
+    if (decisionAssessment.kind === "DECISION_ERROR" && !buildGatedAdviceOptions(candidate, material).some((option) => option.applicability?.allowedIntoNarrator)) {
+      return { ...decisionAssessment, kind: "INSUFFICIENT_EVIDENCE", confidence: 0.35, hasEvaluableDecision: false, missingFields: ["executable_alternative"], explanation: "现有信息不足以确认可执行的替代行动，暂不判断这次选择有错。" };
+    }
+    return decisionAssessment;
+  }
   const hypotheses = verifiedHypotheses(candidate, material);
   const positiveResult = (candidate.resultSummary.winProbabilityDelta ?? 0) > 0 || (candidate.resultSummary.winProbabilityPercentagePoints ?? 0) > 0;
   const counterEvidenceRefs = unique([...(positiveResult ? candidate.winRateSignalRefs : []), ...hypotheses.flatMap((hypothesis) => hypothesis.counterEvidenceRefs)]);
@@ -145,6 +153,8 @@ export function allowedTeachingFocusCodes(assessment: TeachingAssessment): strin
 }
 
 export function verifiedHabitKey(candidate: TeachingCandidate, material: CandidateMaterial): string | undefined {
+  // Uncalibrated pilot judgments must not create new habit counts or promotion evidence.
+  if (material.decisionAssessment || candidate.decisionAssessment) return undefined;
   const assessment = assessCandidateTeaching(candidate, material);
   if (!assessment.hasEvaluableDecision || assessment.kind !== "DECISION_ERROR") return undefined;
   const hypotheses = verifiedHypotheses(candidate, material);

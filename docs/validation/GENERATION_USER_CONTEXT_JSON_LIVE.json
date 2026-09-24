@@ -1,0 +1,1126 @@
+{
+  "version": "decision-assessment-eval.v2",
+  "createdAt": "2026-09-22T13:46:10.867Z",
+  "mode": "LIVE_SMOKE",
+  "versions": {
+    "projection": "decision-assessment-projection.v1",
+    "projectionWithUserContext": "decision-assessment-projection.v2",
+    "questions": "recontact-questions.v1",
+    "acceptance": "recontact-acceptance.v1",
+    "artifact": "decision-assessment.v1",
+    "model": "jev-1.13.0"
+  },
+  "fixtureChecks": {
+    "status": "PASS",
+    "cases": 11,
+    "demoGroups": 6,
+    "counterfactualPairs": 2,
+    "quality": "Packet-only engineering assertions; final HTTP serialization is covered by adapter tests, not proved by this fixture check."
+  },
+  "caseSelection": {
+    "prefix": "structured-report-",
+    "cases": 2
+  },
+  "generationCredentialFileRequested": true,
+  "configuredGenerationModel": "deepseek-v4-flash",
+  "budget": {
+    "maximumCalls": 2,
+    "remoteCalls": 2,
+    "requestTimeoutMs": 2500,
+    "deadlineMs": 600000,
+    "elapsedMs": 3945
+  },
+  "dataInventory": {
+    "realDemosInDataset": 0,
+    "expertLabels": 0,
+    "labelSource": "SYNTHETIC_AUTHOR_EXPECTATION",
+    "splitUnit": "demoGroup",
+    "thresholdTuningPerformed": false
+  },
+  "comparison": {
+    "sharedInformation": "Identical DecisionAssessmentPacket; no outcomes or baseline answer sent to either provider.",
+    "remainingDifferences": [
+      "Jev native Choice distributions versus generation-model JSON-reported probabilities; calibration meanings differ.",
+      "Rule baseline encodes an unvalidated principle, not human ground truth.",
+      "Provider adapters may use different transport/prompts; actual versions and results retained per row.",
+      "No automatic acceptance threshold is tuned on this dataset."
+    ]
+  },
+  "regressions": {
+    "fixturePacketBoundaries": "PASS",
+    "rejectedDiagnosticAccounting": "PASS",
+    "finalHttpSerializationAndPromptInjection": "Run adapter/core regression tests; this CLI does not prove HTTP isolation or live adversarial robustness.",
+    "modelOutcomeInvariance": "Counterfactuals share a packet/cache key and reuse one response; this is engineering cache evidence, not an independent model counterfactual quality measurement."
+  },
+  "byProvider": {
+    "RULE": {
+      "all": {
+        "cases": 2,
+        "blocked": 0,
+        "fallback": 0,
+        "outputParsing": {
+          "attemptedRows": 2,
+          "parsedRows": 2,
+          "unparsedRows": 0,
+          "rate": 1
+        },
+        "deterministicValidation": {
+          "evaluatedParsedRows": 2,
+          "passed": 2,
+          "rejected": 0,
+          "passRateAmongParsed": 1
+        },
+        "structuralValidity": {
+          "evaluated": 2,
+          "valid": 2,
+          "rate": 1,
+          "denominator": "ALL_NON_BLOCKED_ROWS_INCLUDING_PARSE_AND_VALIDATION_FAILURES"
+        },
+        "fallbackReasons": {},
+        "deterministicRejectionReasons": {},
+        "proxyMetricDenominator": "ALL_PARSED_OUTPUTS_INCLUDING_DETERMINISTICALLY_REJECTED_DIAGNOSTICS",
+        "proxyAcceptableLabelHit": {
+          "estimate": 1,
+          "ci95": null,
+          "groups": 1,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableAlternativeHit": {
+          "estimate": 1,
+          "ci95": null,
+          "groups": 1,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableSufficiencyHit": {
+          "estimate": 1,
+          "ci95": null,
+          "groups": 1,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "refusalRate": {
+          "estimate": 1,
+          "ci95": null,
+          "groups": 1,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "professionalDecisionAccuracy": {
+          "value": null,
+          "status": "BLOCKED_NO_EXPERT_HOLDOUT"
+        },
+        "productionAutomaticAcceptance": {
+          "enabled": false,
+          "accepted": 0,
+          "coverage": 0,
+          "errorRate": null,
+          "reason": "No expert-validated acceptance threshold; evaluation never publishes teaching or Memory."
+        },
+        "calibration": {
+          "proxyBrier": {
+            "estimate": 0,
+            "ci95": null,
+            "groups": 1,
+            "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+          },
+          "proxyEceFiveBins": 0,
+          "singletonAuthorLabelCount": 2,
+          "status": "DESCRIPTIVE_PROXY_ONLY",
+          "warning": "Ambiguous acceptable sets are excluded. Model confidence is not evidence confidence or empirical tactical accuracy; too few synthetic labels for calibrated thresholds."
+        }
+      },
+      "calibration": {
+        "cases": 0,
+        "blocked": 0,
+        "fallback": 0,
+        "outputParsing": {
+          "attemptedRows": 0,
+          "parsedRows": 0,
+          "unparsedRows": 0,
+          "rate": null
+        },
+        "deterministicValidation": {
+          "evaluatedParsedRows": 0,
+          "passed": 0,
+          "rejected": 0,
+          "passRateAmongParsed": null
+        },
+        "structuralValidity": {
+          "evaluated": 0,
+          "valid": 0,
+          "rate": null,
+          "denominator": "ALL_NON_BLOCKED_ROWS_INCLUDING_PARSE_AND_VALIDATION_FAILURES"
+        },
+        "fallbackReasons": {},
+        "deterministicRejectionReasons": {},
+        "proxyMetricDenominator": "ALL_PARSED_OUTPUTS_INCLUDING_DETERMINISTICALLY_REJECTED_DIAGNOSTICS",
+        "proxyAcceptableLabelHit": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableAlternativeHit": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableSufficiencyHit": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "refusalRate": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "professionalDecisionAccuracy": {
+          "value": null,
+          "status": "BLOCKED_NO_EXPERT_HOLDOUT"
+        },
+        "productionAutomaticAcceptance": {
+          "enabled": false,
+          "accepted": 0,
+          "coverage": null,
+          "errorRate": null,
+          "reason": "No expert-validated acceptance threshold; evaluation never publishes teaching or Memory."
+        },
+        "calibration": {
+          "proxyBrier": {
+            "estimate": null,
+            "ci95": null,
+            "groups": 0,
+            "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+          },
+          "proxyEceFiveBins": null,
+          "singletonAuthorLabelCount": 0,
+          "status": "DESCRIPTIVE_PROXY_ONLY",
+          "warning": "Ambiguous acceptable sets are excluded. Model confidence is not evidence confidence or empirical tactical accuracy; too few synthetic labels for calibrated thresholds."
+        }
+      },
+      "holdout": {
+        "cases": 2,
+        "blocked": 0,
+        "fallback": 0,
+        "outputParsing": {
+          "attemptedRows": 2,
+          "parsedRows": 2,
+          "unparsedRows": 0,
+          "rate": 1
+        },
+        "deterministicValidation": {
+          "evaluatedParsedRows": 2,
+          "passed": 2,
+          "rejected": 0,
+          "passRateAmongParsed": 1
+        },
+        "structuralValidity": {
+          "evaluated": 2,
+          "valid": 2,
+          "rate": 1,
+          "denominator": "ALL_NON_BLOCKED_ROWS_INCLUDING_PARSE_AND_VALIDATION_FAILURES"
+        },
+        "fallbackReasons": {},
+        "deterministicRejectionReasons": {},
+        "proxyMetricDenominator": "ALL_PARSED_OUTPUTS_INCLUDING_DETERMINISTICALLY_REJECTED_DIAGNOSTICS",
+        "proxyAcceptableLabelHit": {
+          "estimate": 1,
+          "ci95": null,
+          "groups": 1,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableAlternativeHit": {
+          "estimate": 1,
+          "ci95": null,
+          "groups": 1,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableSufficiencyHit": {
+          "estimate": 1,
+          "ci95": null,
+          "groups": 1,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "refusalRate": {
+          "estimate": 1,
+          "ci95": null,
+          "groups": 1,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "professionalDecisionAccuracy": {
+          "value": null,
+          "status": "BLOCKED_NO_EXPERT_HOLDOUT"
+        },
+        "productionAutomaticAcceptance": {
+          "enabled": false,
+          "accepted": 0,
+          "coverage": 0,
+          "errorRate": null,
+          "reason": "No expert-validated acceptance threshold; evaluation never publishes teaching or Memory."
+        },
+        "calibration": {
+          "proxyBrier": {
+            "estimate": 0,
+            "ci95": null,
+            "groups": 1,
+            "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+          },
+          "proxyEceFiveBins": 0,
+          "singletonAuthorLabelCount": 2,
+          "status": "DESCRIPTIVE_PROXY_ONLY",
+          "warning": "Ambiguous acceptable sets are excluded. Model confidence is not evidence confidence or empirical tactical accuracy; too few synthetic labels for calibrated thresholds."
+        }
+      },
+      "actualRemoteCalls": 0,
+      "deduplicatedReuses": 0,
+      "actualUsage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "knownCostUsd": null,
+        "unknownCostCalls": 0
+      },
+      "latency": {
+        "samples": 0,
+        "p50MsDescriptive": null,
+        "p95Ms": null,
+        "p99Ms": null,
+        "status": "INSUFFICIENT_SAMPLES_FOR_TAIL_ESTIMATION",
+        "warning": "At most 100 remote calls, few unique synthetic inputs; no reliable service-level tail estimate. Reused rows are excluded."
+      }
+    },
+    "JEV": {
+      "all": {
+        "cases": 2,
+        "blocked": 2,
+        "fallback": 0,
+        "outputParsing": {
+          "attemptedRows": 0,
+          "parsedRows": 0,
+          "unparsedRows": 0,
+          "rate": null
+        },
+        "deterministicValidation": {
+          "evaluatedParsedRows": 0,
+          "passed": 0,
+          "rejected": 0,
+          "passRateAmongParsed": null
+        },
+        "structuralValidity": {
+          "evaluated": 0,
+          "valid": 0,
+          "rate": null,
+          "denominator": "ALL_NON_BLOCKED_ROWS_INCLUDING_PARSE_AND_VALIDATION_FAILURES"
+        },
+        "fallbackReasons": {},
+        "deterministicRejectionReasons": {},
+        "proxyMetricDenominator": "ALL_PARSED_OUTPUTS_INCLUDING_DETERMINISTICALLY_REJECTED_DIAGNOSTICS",
+        "proxyAcceptableLabelHit": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableAlternativeHit": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableSufficiencyHit": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "refusalRate": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "professionalDecisionAccuracy": {
+          "value": null,
+          "status": "BLOCKED_NO_EXPERT_HOLDOUT"
+        },
+        "productionAutomaticAcceptance": {
+          "enabled": false,
+          "accepted": 0,
+          "coverage": 0,
+          "errorRate": null,
+          "reason": "No expert-validated acceptance threshold; evaluation never publishes teaching or Memory."
+        },
+        "calibration": {
+          "proxyBrier": {
+            "estimate": null,
+            "ci95": null,
+            "groups": 0,
+            "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+          },
+          "proxyEceFiveBins": null,
+          "singletonAuthorLabelCount": 0,
+          "status": "DESCRIPTIVE_PROXY_ONLY",
+          "warning": "Ambiguous acceptable sets are excluded. Model confidence is not evidence confidence or empirical tactical accuracy; too few synthetic labels for calibrated thresholds."
+        }
+      },
+      "calibration": {
+        "cases": 0,
+        "blocked": 0,
+        "fallback": 0,
+        "outputParsing": {
+          "attemptedRows": 0,
+          "parsedRows": 0,
+          "unparsedRows": 0,
+          "rate": null
+        },
+        "deterministicValidation": {
+          "evaluatedParsedRows": 0,
+          "passed": 0,
+          "rejected": 0,
+          "passRateAmongParsed": null
+        },
+        "structuralValidity": {
+          "evaluated": 0,
+          "valid": 0,
+          "rate": null,
+          "denominator": "ALL_NON_BLOCKED_ROWS_INCLUDING_PARSE_AND_VALIDATION_FAILURES"
+        },
+        "fallbackReasons": {},
+        "deterministicRejectionReasons": {},
+        "proxyMetricDenominator": "ALL_PARSED_OUTPUTS_INCLUDING_DETERMINISTICALLY_REJECTED_DIAGNOSTICS",
+        "proxyAcceptableLabelHit": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableAlternativeHit": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableSufficiencyHit": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "refusalRate": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "professionalDecisionAccuracy": {
+          "value": null,
+          "status": "BLOCKED_NO_EXPERT_HOLDOUT"
+        },
+        "productionAutomaticAcceptance": {
+          "enabled": false,
+          "accepted": 0,
+          "coverage": null,
+          "errorRate": null,
+          "reason": "No expert-validated acceptance threshold; evaluation never publishes teaching or Memory."
+        },
+        "calibration": {
+          "proxyBrier": {
+            "estimate": null,
+            "ci95": null,
+            "groups": 0,
+            "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+          },
+          "proxyEceFiveBins": null,
+          "singletonAuthorLabelCount": 0,
+          "status": "DESCRIPTIVE_PROXY_ONLY",
+          "warning": "Ambiguous acceptable sets are excluded. Model confidence is not evidence confidence or empirical tactical accuracy; too few synthetic labels for calibrated thresholds."
+        }
+      },
+      "holdout": {
+        "cases": 2,
+        "blocked": 2,
+        "fallback": 0,
+        "outputParsing": {
+          "attemptedRows": 0,
+          "parsedRows": 0,
+          "unparsedRows": 0,
+          "rate": null
+        },
+        "deterministicValidation": {
+          "evaluatedParsedRows": 0,
+          "passed": 0,
+          "rejected": 0,
+          "passRateAmongParsed": null
+        },
+        "structuralValidity": {
+          "evaluated": 0,
+          "valid": 0,
+          "rate": null,
+          "denominator": "ALL_NON_BLOCKED_ROWS_INCLUDING_PARSE_AND_VALIDATION_FAILURES"
+        },
+        "fallbackReasons": {},
+        "deterministicRejectionReasons": {},
+        "proxyMetricDenominator": "ALL_PARSED_OUTPUTS_INCLUDING_DETERMINISTICALLY_REJECTED_DIAGNOSTICS",
+        "proxyAcceptableLabelHit": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableAlternativeHit": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableSufficiencyHit": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "refusalRate": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "professionalDecisionAccuracy": {
+          "value": null,
+          "status": "BLOCKED_NO_EXPERT_HOLDOUT"
+        },
+        "productionAutomaticAcceptance": {
+          "enabled": false,
+          "accepted": 0,
+          "coverage": 0,
+          "errorRate": null,
+          "reason": "No expert-validated acceptance threshold; evaluation never publishes teaching or Memory."
+        },
+        "calibration": {
+          "proxyBrier": {
+            "estimate": null,
+            "ci95": null,
+            "groups": 0,
+            "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+          },
+          "proxyEceFiveBins": null,
+          "singletonAuthorLabelCount": 0,
+          "status": "DESCRIPTIVE_PROXY_ONLY",
+          "warning": "Ambiguous acceptable sets are excluded. Model confidence is not evidence confidence or empirical tactical accuracy; too few synthetic labels for calibrated thresholds."
+        }
+      },
+      "actualRemoteCalls": 0,
+      "deduplicatedReuses": 0,
+      "actualUsage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "knownCostUsd": null,
+        "unknownCostCalls": 0
+      },
+      "latency": {
+        "samples": 0,
+        "p50MsDescriptive": null,
+        "p95Ms": null,
+        "p99Ms": null,
+        "status": "INSUFFICIENT_SAMPLES_FOR_TAIL_ESTIMATION",
+        "warning": "At most 100 remote calls, few unique synthetic inputs; no reliable service-level tail estimate. Reused rows are excluded."
+      }
+    },
+    "GENERATION_MODEL": {
+      "all": {
+        "cases": 2,
+        "blocked": 0,
+        "fallback": 0,
+        "outputParsing": {
+          "attemptedRows": 2,
+          "parsedRows": 2,
+          "unparsedRows": 0,
+          "rate": 1
+        },
+        "deterministicValidation": {
+          "evaluatedParsedRows": 2,
+          "passed": 2,
+          "rejected": 0,
+          "passRateAmongParsed": 1
+        },
+        "structuralValidity": {
+          "evaluated": 2,
+          "valid": 2,
+          "rate": 1,
+          "denominator": "ALL_NON_BLOCKED_ROWS_INCLUDING_PARSE_AND_VALIDATION_FAILURES"
+        },
+        "fallbackReasons": {},
+        "deterministicRejectionReasons": {},
+        "proxyMetricDenominator": "ALL_PARSED_OUTPUTS_INCLUDING_DETERMINISTICALLY_REJECTED_DIAGNOSTICS",
+        "proxyAcceptableLabelHit": {
+          "estimate": 1,
+          "ci95": null,
+          "groups": 1,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableAlternativeHit": {
+          "estimate": 1,
+          "ci95": null,
+          "groups": 1,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableSufficiencyHit": {
+          "estimate": 1,
+          "ci95": null,
+          "groups": 1,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "refusalRate": {
+          "estimate": 1,
+          "ci95": null,
+          "groups": 1,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "professionalDecisionAccuracy": {
+          "value": null,
+          "status": "BLOCKED_NO_EXPERT_HOLDOUT"
+        },
+        "productionAutomaticAcceptance": {
+          "enabled": false,
+          "accepted": 0,
+          "coverage": 0,
+          "errorRate": null,
+          "reason": "No expert-validated acceptance threshold; evaluation never publishes teaching or Memory."
+        },
+        "calibration": {
+          "proxyBrier": {
+            "estimate": 0.38,
+            "ci95": null,
+            "groups": 1,
+            "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+          },
+          "proxyEceFiveBins": 0.5,
+          "singletonAuthorLabelCount": 2,
+          "status": "DESCRIPTIVE_PROXY_ONLY",
+          "warning": "Ambiguous acceptable sets are excluded. Model confidence is not evidence confidence or empirical tactical accuracy; too few synthetic labels for calibrated thresholds."
+        }
+      },
+      "calibration": {
+        "cases": 0,
+        "blocked": 0,
+        "fallback": 0,
+        "outputParsing": {
+          "attemptedRows": 0,
+          "parsedRows": 0,
+          "unparsedRows": 0,
+          "rate": null
+        },
+        "deterministicValidation": {
+          "evaluatedParsedRows": 0,
+          "passed": 0,
+          "rejected": 0,
+          "passRateAmongParsed": null
+        },
+        "structuralValidity": {
+          "evaluated": 0,
+          "valid": 0,
+          "rate": null,
+          "denominator": "ALL_NON_BLOCKED_ROWS_INCLUDING_PARSE_AND_VALIDATION_FAILURES"
+        },
+        "fallbackReasons": {},
+        "deterministicRejectionReasons": {},
+        "proxyMetricDenominator": "ALL_PARSED_OUTPUTS_INCLUDING_DETERMINISTICALLY_REJECTED_DIAGNOSTICS",
+        "proxyAcceptableLabelHit": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableAlternativeHit": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableSufficiencyHit": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "refusalRate": {
+          "estimate": null,
+          "ci95": null,
+          "groups": 0,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "professionalDecisionAccuracy": {
+          "value": null,
+          "status": "BLOCKED_NO_EXPERT_HOLDOUT"
+        },
+        "productionAutomaticAcceptance": {
+          "enabled": false,
+          "accepted": 0,
+          "coverage": null,
+          "errorRate": null,
+          "reason": "No expert-validated acceptance threshold; evaluation never publishes teaching or Memory."
+        },
+        "calibration": {
+          "proxyBrier": {
+            "estimate": null,
+            "ci95": null,
+            "groups": 0,
+            "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+          },
+          "proxyEceFiveBins": null,
+          "singletonAuthorLabelCount": 0,
+          "status": "DESCRIPTIVE_PROXY_ONLY",
+          "warning": "Ambiguous acceptable sets are excluded. Model confidence is not evidence confidence or empirical tactical accuracy; too few synthetic labels for calibrated thresholds."
+        }
+      },
+      "holdout": {
+        "cases": 2,
+        "blocked": 0,
+        "fallback": 0,
+        "outputParsing": {
+          "attemptedRows": 2,
+          "parsedRows": 2,
+          "unparsedRows": 0,
+          "rate": 1
+        },
+        "deterministicValidation": {
+          "evaluatedParsedRows": 2,
+          "passed": 2,
+          "rejected": 0,
+          "passRateAmongParsed": 1
+        },
+        "structuralValidity": {
+          "evaluated": 2,
+          "valid": 2,
+          "rate": 1,
+          "denominator": "ALL_NON_BLOCKED_ROWS_INCLUDING_PARSE_AND_VALIDATION_FAILURES"
+        },
+        "fallbackReasons": {},
+        "deterministicRejectionReasons": {},
+        "proxyMetricDenominator": "ALL_PARSED_OUTPUTS_INCLUDING_DETERMINISTICALLY_REJECTED_DIAGNOSTICS",
+        "proxyAcceptableLabelHit": {
+          "estimate": 1,
+          "ci95": null,
+          "groups": 1,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableAlternativeHit": {
+          "estimate": 1,
+          "ci95": null,
+          "groups": 1,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "proxyAcceptableSufficiencyHit": {
+          "estimate": 1,
+          "ci95": null,
+          "groups": 1,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "refusalRate": {
+          "estimate": 1,
+          "ci95": null,
+          "groups": 1,
+          "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+        },
+        "professionalDecisionAccuracy": {
+          "value": null,
+          "status": "BLOCKED_NO_EXPERT_HOLDOUT"
+        },
+        "productionAutomaticAcceptance": {
+          "enabled": false,
+          "accepted": 0,
+          "coverage": 0,
+          "errorRate": null,
+          "reason": "No expert-validated acceptance threshold; evaluation never publishes teaching or Memory."
+        },
+        "calibration": {
+          "proxyBrier": {
+            "estimate": 0.38,
+            "ci95": null,
+            "groups": 1,
+            "warning": "Fewer than two Demo groups; cluster interval unavailable. No expert labels."
+          },
+          "proxyEceFiveBins": 0.5,
+          "singletonAuthorLabelCount": 2,
+          "status": "DESCRIPTIVE_PROXY_ONLY",
+          "warning": "Ambiguous acceptable sets are excluded. Model confidence is not evidence confidence or empirical tactical accuracy; too few synthetic labels for calibrated thresholds."
+        }
+      },
+      "actualRemoteCalls": 2,
+      "deduplicatedReuses": 0,
+      "actualUsage": {
+        "inputTokens": 3618,
+        "outputTokens": 1050,
+        "knownCostUsd": null,
+        "unknownCostCalls": 2
+      },
+      "latency": {
+        "samples": 2,
+        "p50MsDescriptive": 1967.5,
+        "p95Ms": null,
+        "p99Ms": null,
+        "status": "INSUFFICIENT_SAMPLES_FOR_TAIL_ESTIMATION",
+        "warning": "At most 100 remote calls, few unique synthetic inputs; no reliable service-level tail estimate. Reused rows are excluded."
+      }
+    }
+  },
+  "rows": [
+    {
+      "caseId": "structured-report-a",
+      "demoGroup": "synthetic-information-e",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "RULE",
+      "packetFingerprint": "decision-v1-8ba0cea6-7c31c744-880",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "RULE_BASELINE",
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 0,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 1,
+            "UNKNOWN": 0
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 0,
+            "INSUFFICIENT": 1
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MISSING_CONTEXT"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0,
+      "modelConfidence": 1,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": true,
+      "latencyMs": 0.013417000000004009,
+      "remoteCall": false,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "costUsd": 0
+      },
+      "brierProxy": 0,
+      "calibrationProxy": {
+        "confidence": 1,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "structured-report-b",
+      "demoGroup": "synthetic-information-e",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "RULE",
+      "packetFingerprint": "decision-v1-405cc42f-5329edc7-880",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "RULE_BASELINE",
+      "result": {
+        "model": "RULE_BASELINE",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 1,
+          "probabilities": {
+            "WARRANTED": 0,
+            "UNWARRANTED": 0,
+            "UNKNOWN": 1
+          },
+          "refs": []
+        },
+        "alternativePreferable": {
+          "choice": "NOT_ESTABLISHED",
+          "confidence": 1,
+          "probabilities": {
+            "PREFERABLE": 0,
+            "NOT_ESTABLISHED": 1,
+            "UNKNOWN": 0
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 1,
+          "probabilities": {
+            "SUFFICIENT": 0,
+            "INSUFFICIENT": 1
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "PRINCIPLE_UNVALIDATED",
+          "MISSING_CONTEXT"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 0,
+      "modelConfidence": 1,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": true,
+      "latencyMs": 0.008250000000003865,
+      "remoteCall": false,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "costUsd": 0
+      },
+      "brierProxy": 0,
+      "calibrationProxy": {
+        "confidence": 1,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "structured-report-a",
+      "demoGroup": "synthetic-information-e",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "JEV",
+      "packetFingerprint": "decision-v1-8ba0cea6-7c31c744-880",
+      "status": "BLOCKED",
+      "reason": "MISSING_PROVIDER_KEY",
+      "model": null,
+      "result": null,
+      "diagnosticResult": null,
+      "schemaParsed": null,
+      "structuralValid": null,
+      "rejectionReasons": [],
+      "evidenceConfidence": null,
+      "modelConfidence": null,
+      "acceptableLabelHit": null,
+      "acceptableAlternativeHit": null,
+      "acceptableSufficiencyHit": null,
+      "refused": null,
+      "latencyMs": null,
+      "remoteCall": false,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "costUsd": null
+      },
+      "brierProxy": null,
+      "calibrationProxy": null
+    },
+    {
+      "caseId": "structured-report-a",
+      "demoGroup": "synthetic-information-e",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "GENERATION_MODEL",
+      "packetFingerprint": "decision-v1-8ba0cea6-7c31c744-880",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "deepseek-flash",
+      "result": {
+        "model": "deepseek-flash",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.5,
+          "probabilities": {
+            "WARRANTED": 0.3,
+            "UNWARRANTED": 0.2,
+            "UNKNOWN": 0.5
+          },
+          "refs": [
+            "e1",
+            "e2"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.55,
+          "probabilities": {
+            "PREFERABLE": 0.15,
+            "NOT_ESTABLISHED": 0.3,
+            "UNKNOWN": 0.55
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.8,
+          "probabilities": {
+            "SUFFICIENT": 0.2,
+            "INSUFFICIENT": 0.8
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED",
+          "USER_CONTEXT_UNVERIFIED"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 1,
+      "modelConfidence": 0.5,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": true,
+      "latencyMs": 1933,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 1809,
+        "outputTokens": 525,
+        "costUsd": null
+      },
+      "brierProxy": 0.38,
+      "calibrationProxy": {
+        "confidence": 0.5,
+        "correct": 1
+      }
+    },
+    {
+      "caseId": "structured-report-b",
+      "demoGroup": "synthetic-information-e",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "JEV",
+      "packetFingerprint": "decision-v1-405cc42f-5329edc7-880",
+      "status": "BLOCKED",
+      "reason": "MISSING_PROVIDER_KEY",
+      "model": null,
+      "result": null,
+      "diagnosticResult": null,
+      "schemaParsed": null,
+      "structuralValid": null,
+      "rejectionReasons": [],
+      "evidenceConfidence": null,
+      "modelConfidence": null,
+      "acceptableLabelHit": null,
+      "acceptableAlternativeHit": null,
+      "acceptableSufficiencyHit": null,
+      "refused": null,
+      "latencyMs": null,
+      "remoteCall": false,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": null,
+        "outputTokens": null,
+        "costUsd": null
+      },
+      "brierProxy": null,
+      "calibrationProxy": null
+    },
+    {
+      "caseId": "structured-report-b",
+      "demoGroup": "synthetic-information-e",
+      "split": "HOLDOUT",
+      "provenance": "SYNTHETIC_AUTHOR_EXPECTATION",
+      "provider": "GENERATION_MODEL",
+      "packetFingerprint": "decision-v1-405cc42f-5329edc7-880",
+      "status": "SUCCEEDED",
+      "reason": null,
+      "model": "deepseek-flash",
+      "result": {
+        "model": "deepseek-flash",
+        "questionVersion": "recontact-questions.v1",
+        "riskWarranted": {
+          "choice": "UNKNOWN",
+          "confidence": 0.5,
+          "probabilities": {
+            "WARRANTED": 0.3,
+            "UNWARRANTED": 0.2,
+            "UNKNOWN": 0.5
+          },
+          "refs": [
+            "e1",
+            "e2"
+          ]
+        },
+        "alternativePreferable": {
+          "choice": "UNKNOWN",
+          "confidence": 0.55,
+          "probabilities": {
+            "PREFERABLE": 0.15,
+            "NOT_ESTABLISHED": 0.3,
+            "UNKNOWN": 0.55
+          },
+          "refs": []
+        },
+        "contextSufficient": {
+          "choice": "INSUFFICIENT",
+          "confidence": 0.75,
+          "probabilities": {
+            "SUFFICIENT": 0.2,
+            "INSUFFICIENT": 0.8
+          },
+          "refs": []
+        },
+        "limitationCodes": [
+          "MISSING_CONTEXT",
+          "PRINCIPLE_UNVALIDATED",
+          "USER_CONTEXT_UNVERIFIED"
+        ]
+      },
+      "diagnosticResult": null,
+      "schemaParsed": true,
+      "structuralValid": true,
+      "rejectionReasons": [],
+      "evidenceConfidence": 1,
+      "modelConfidence": 0.5,
+      "acceptableLabelHit": true,
+      "acceptableAlternativeHit": true,
+      "acceptableSufficiencyHit": true,
+      "refused": true,
+      "latencyMs": 2002,
+      "remoteCall": true,
+      "reusedInRun": false,
+      "usage": {
+        "inputTokens": 1809,
+        "outputTokens": 525,
+        "costUsd": null
+      },
+      "brierProxy": 0.38,
+      "calibrationProxy": {
+        "confidence": 0.5,
+        "correct": 1
+      }
+    }
+  ]
+}

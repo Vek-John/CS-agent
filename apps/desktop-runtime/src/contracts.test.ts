@@ -3,6 +3,8 @@ import { PassThrough } from "node:stream";
 import test from "node:test";
 import {
   currentRuntimeProviderConfig,
+  currentRuntimeDecisionProviderConfig,
+  installRuntimeDecisionProviderConfig,
   installRuntimeProviderConfig,
   parseDesktopRuntimeInit,
   readInitLine,
@@ -73,6 +75,43 @@ test("provider config remains in the explicit in-memory seam", () => {
   installRuntimeProviderConfig(provider);
   assert.equal(currentRuntimeProviderConfig(), provider);
   assert.equal(Object.values(process.env).includes("not-in-env"), false);
+});
+
+test("optional decision provider preserves old init and validates the independent strict union", () => {
+  const decisionProvider = {
+    kind: "JEV", mode: "JEV_SHADOW", acceptance: "SHADOW_ONLY", apiKey: null, model: "jev-1.13.0",
+  };
+  assert.equal(parseDesktopRuntimeInit(JSON.stringify(validInit())).decisionProvider, undefined);
+  for (const mode of ["JEV_SHADOW", "JEV_EXPERIMENT"]) {
+    for (const acceptance of ["SHADOW_ONLY", "TEST_ONLY"]) {
+      const config = { ...decisionProvider, mode, acceptance };
+      const parsed = parseDesktopRuntimeInit(JSON.stringify({ ...validInit(), decisionProvider: config }));
+      assert.deepEqual(parsed.decisionProvider, config);
+      assert.equal(parsed.provider.kind, "NONE");
+    }
+  }
+  for (const invalid of [
+    null, { ...decisionProvider, kind: "DEEPSEEK" }, { ...decisionProvider, mode: "AUTO" },
+    { ...decisionProvider, acceptance: "AUTO_ACCEPT" }, { ...decisionProvider, apiKey: "" },
+    { ...decisionProvider, apiKey: "x\ny" }, { ...decisionProvider, apiKey: "x".repeat(513) },
+    { ...decisionProvider, model: "jev-latest" }, { ...decisionProvider, baseUrl: "https://other.test" },
+    { ...decisionProvider, extra: true },
+  ]) {
+    assert.equal(startupCode(() => parseDesktopRuntimeInit(JSON.stringify({ ...validInit(), decisionProvider: invalid }))), "INIT_INVALID");
+  }
+});
+
+test("decision key stays in memory and old init clears a previous decision provider", () => {
+  const parsed = parseDesktopRuntimeInit(JSON.stringify({
+    ...validInit(), decisionProvider: {
+      kind: "JEV", mode: "JEV_EXPERIMENT", acceptance: "TEST_ONLY", apiKey: "decision-memory-only-secret", model: "jev-1.13.0",
+    },
+  }));
+  installRuntimeDecisionProviderConfig(parsed.decisionProvider);
+  assert.equal(currentRuntimeDecisionProviderConfig(), parsed.decisionProvider);
+  assert.equal(Object.values(process.env).includes("decision-memory-only-secret"), false);
+  installRuntimeDecisionProviderConfig(parseDesktopRuntimeInit(JSON.stringify(validInit())).decisionProvider);
+  assert.deepEqual(currentRuntimeDecisionProviderConfig(), { kind: "RULE_BASELINE" });
 });
 
 test("stdin contract consumes the first line and enforces timeout and byte limit", async () => {

@@ -1,5 +1,6 @@
 import type { Advice, TeamSide } from "./index";
 import type { ObservableState } from "./observation";
+import type { DecisionAssessmentArtifact } from "./decision-assessment";
 
 export const MAX_DECISION_SNAPSHOT_BYTES = 16 * 1024;
 export const MAX_DECISION_SNAPSHOT_PLAYERS = 10;
@@ -120,6 +121,7 @@ export interface TeachingAssessment {
 }
 /** Optional for saved-session compatibility; absent semantics are unverified. */
 export interface TrustedDecisionSemantics {
+  decisionAssessment?: DecisionAssessmentArtifact;
   decisionSnapshot?: DecisionSnapshot;
   observableContext?: ObservableDecisionContext;
   behaviorHypotheses?: readonly BehaviorHypothesis[];
