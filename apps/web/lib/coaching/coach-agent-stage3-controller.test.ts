@@ -9,6 +9,7 @@ import {
   CoachAgentStage3Controller,
   type Stage3ControllerScheduler,
 } from "./coach-agent-stage3-controller";
+import { stage3StatusView } from "./coach-agent-stage3-status";
 import type { CoachAgentStage3HostAdapter, Stage3HostAdapterInput, Stage3IdentityInput } from "./coach-agent-stage3-host-adapter";
 
 function input(): Stage3HostAdapterInput {
@@ -24,7 +25,7 @@ function result(status: CoachAgentResult["status"], effects: unknown[] = []): Co
     status,
     effects,
     checkpoint: { checkpointId: status === "WAITING_TOOL" ? "checkpoint-waiting" : "checkpoint-completed" },
-    state: { activeCueId: "cue-1", activeManualVisitId: null, completedCueIds: [], currentSessionPhase: "PAUSED_FOR_COACHING", routeCursor: 0, sessionStatus: "ACTIVE" },
+    state: { trace: [{ node: "POLICY", runId: "run-1", cueId: "cue-1", selectedCapabilityId: null }], lastToolResult: null, toolHistory: [], pendingToolCall: null, activeCueId: "cue-1", activeManualVisitId: null, completedCueIds: [], currentSessionPhase: "PAUSED_FOR_COACHING", routeCursor: 0, sessionStatus: "ACTIVE" },
   } as unknown as CoachAgentResult;
 }
 
@@ -616,6 +617,32 @@ describe("same-demonstration playback controls", () => {
     expect(h.controller.setPlaybackPaused(playback, false)).toBe(false);
     h.scheduled.at(-1)!(); await flush();
     expect(h.adapter.createResumeEvent).not.toHaveBeenCalled();
+  });
+
+  it("does not present failed execution as success when Graph still completes the cue", async () => {
+    const h = harness(); h.controller.start(input()); await flush();
+    h.controller.acceptAck(ack); await flush(); await flush();
+    expect(h.controller.currentState.status).toBe("COMPLETED");
+    expect(stage3StatusView(h.controller.currentState, { ...input(), cueId: "cue-1" })).toMatchObject({ title: "额外演示未完成", showPresentation: false });
+    expect(h.controller.currentState.presentation).toBeUndefined();
+  });
+
+  it("binds a no-tool finish to this manual visit and does not borrow old cue history", async () => {
+    const h = harness({ dispatch: async () => result("COMPLETED") });
+    h.controller.startManualCueVisit(input(), "visit-1"); await flush();
+    const scope = { ...input(), cueId: "cue-1", visitId: "visit-1" };
+    expect(stage3StatusView(h.controller.currentState, scope).title).toBe("无需额外演示");
+    expect(stage3StatusView(h.controller.currentState, { ...scope, visitId: "visit-2" }).title).toBe("本段讲解已就绪");
+    const prior = result("COMPLETED");
+    prior.state.toolHistory = [{ cueId: "cue-1", status: "SUCCEEDED", tool: "REPLAY_CUE_SLOW" }] as typeof prior.state.toolHistory;
+    const recovered = harness({ dispatch: async () => prior });
+    recovered.controller.start(input()); await flush();
+    expect(stage3StatusView(recovered.controller.currentState, scope)).toMatchObject({ title: "本段讲解已就绪", showPresentation: false });
+    const unknown = result("COMPLETED");
+    unknown.state.trace = [];
+    const missing = harness({ dispatch: async () => unknown });
+    missing.controller.start(input()); await flush();
+    expect(stage3StatusView(missing.controller.currentState, { ...input(), cueId: "cue-1" }).title).toBe("本段讲解已就绪");
   });
 
 });

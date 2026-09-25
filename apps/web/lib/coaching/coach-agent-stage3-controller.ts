@@ -37,9 +37,22 @@ export interface Stage3PlaybackState {
   readonly paused: boolean;
 }
 
+/** Ephemeral display evidence, never a Graph/checkpoint lifecycle state. */
+export interface Stage3CompletionNotice {
+  readonly sessionId: string;
+  readonly runId: string;
+  readonly cueId: string;
+  readonly generation: number;
+  readonly visitId?: string;
+  readonly outcome: "NO_DEMONSTRATION" | "SUCCEEDED" | "UNAVAILABLE";
+  readonly tool?: AgentToolRequest["tool"];
+  readonly callId?: string;
+}
+
 export interface Stage3ControllerState {
   readonly status: Stage3ControllerStatus;
   readonly playback?: Stage3PlaybackState;
+  readonly completionNotice?: Stage3CompletionNotice;
   readonly cueId?: string;
   readonly tool?: AgentToolRequest["tool"];
   readonly presentation?: TeachingToolCommandArgs;
@@ -403,7 +416,7 @@ export class CoachAgentStage3Controller {
         ...(pending.manualVisitId ? { manualVisitId: pending.manualVisitId } : {}),
       });
       if (typeof resumedPersistence !== "boolean") await resumedPersistence;
-      await this.handleAgentResult(pending.input, pending.token, next, pending.manualVisitId);
+      await this.handleAgentResult(pending.input, pending.token, next, pending.manualVisitId, { request: pending.request, result });
     } catch (error) {
       if (tokenIsCurrent(this.token, pending.token)) {
         this.setState({ status: "FAILED", cueId: pending.input.cue.id, tool: pending.request.tool, error: shortError(error, "工具结果未能回到教练状态；基础回放仍可继续。") });
@@ -411,7 +424,8 @@ export class CoachAgentStage3Controller {
     }
   }
 
-  private async handleAgentResult(input: Stage3HostAdapterInput, token: number, result: CoachAgentResult, manualVisitId?: string): Promise<void> {
+  private async handleAgentResult(input: Stage3HostAdapterInput, token: number, result: CoachAgentResult, manualVisitId?: string,
+    execution?: { request: AgentToolRequest; result: AgentToolResult }): Promise<void> {
     if (!this.isCurrent(input, token)) return;
     const manualTerminal = Boolean(
       manualVisitId &&
@@ -422,7 +436,26 @@ export class CoachAgentStage3Controller {
     if (isTerminal(result) || manualTerminal) {
       const cueSegmentIndex = input.plan?.segments?.findIndex((segment) => segment.id === input.cue.segment_id) ?? -1;
       if (!manualVisitId && cueSegmentIndex >= 0) this.adapter.markLifecycleSynced(cueSegmentIndex);
-      this.setState({ status: "COMPLETED", cueId: input.cue.id, presentation: this.state.presentation, source: manualVisitId ? "MANUAL" : "DEFAULT", ...(manualVisitId ? { visitId: manualVisitId } : {}) });
+      // Completion alone proves neither execution nor success. Only this
+      // invocation's validated result can describe a completed demonstration.
+      const scope = { sessionId: input.sessionId, runId: input.runId, cueId: input.cue.id,
+        generation: input.generation, ...(manualVisitId ? { visitId: manualVisitId } : {}) };
+      const currentExecution = execution?.request.runId === input.runId &&
+        execution.request.cueId === input.cue.id && execution.result.callId === execution.request.callId
+        ? execution : undefined;
+      const lastDecision = result.state.trace?.filter(entry => entry.node !== "FINISH").at(-1);
+      const finishedWithoutTool = lastDecision?.node === "POLICY" && lastDecision.runId === input.runId &&
+        lastDecision.cueId === input.cue.id && lastDecision.selectedCapabilityId === null &&
+        result.state.pendingToolCall === null && result.state.lastToolResult === null &&
+        result.state.toolHistory?.every(item => item.cueId !== input.cue.id);
+      const completionNotice: Stage3CompletionNotice | undefined = currentExecution
+        ? { ...scope, outcome: currentExecution.result.status === "SUCCEEDED" && currentExecution.result.observation.completed
+            ? "SUCCEEDED" : "UNAVAILABLE", tool: currentExecution.request.tool, callId: currentExecution.request.callId }
+        : finishedWithoutTool
+          ? { ...scope, outcome: "NO_DEMONSTRATION" } : undefined;
+      this.setState({ status: "COMPLETED", cueId: input.cue.id, completionNotice,
+        ...(completionNotice?.outcome === "SUCCEEDED" ? { presentation: this.state.presentation } : {}),
+        source: manualVisitId ? "MANUAL" : "DEFAULT", ...(manualVisitId ? { visitId: manualVisitId } : {}) });
       return;
     }
     if (result.status !== "WAITING_TOOL" || !result.effects[0]) {

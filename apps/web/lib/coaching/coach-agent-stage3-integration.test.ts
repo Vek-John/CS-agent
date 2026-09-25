@@ -20,6 +20,7 @@ import {
   type Stage3HostAdapterInput,
 } from "./coach-agent-stage3-host-adapter";
 import { CoachAgentStage3Controller } from "./coach-agent-stage3-controller";
+import { stage3StatusView } from "./coach-agent-stage3-status";
 
 import { createCoachingSession, reduceCoachingSession } from "@cs-coach/session";
 import { HostPlaybackControl, issueHostUserCommand } from "../playback/cs2d-playback-host";
@@ -274,7 +275,7 @@ describe("Stage 3 Host ↔ Coach Agent black-box integration", () => {
       events.push(event.type ?? "START_CUE");
       if (event.type === "OBSERVE_SEGMENT") return { status: "COMPLETED", effects: [] } as unknown as CoachAgentResult;
       if (event.type === "USER_TAKEOVER") return { status: "USER_TAKEOVER", effects: [] } as unknown as CoachAgentResult;
-      if (event.type === "RESUME_TOOL") return { status: "COMPLETED", effects: [] } as unknown as CoachAgentResult;
+      if (event.type === "RESUME_TOOL") return { status: "COMPLETED", effects: [], state: { trace: [], toolHistory: [], pendingToolCall: null, lastToolResult: null } } as unknown as CoachAgentResult;
       return { status: "WAITING_TOOL", effects: [request] } as unknown as CoachAgentResult;
     };
     const controller = new CoachAgentStage3Controller({
@@ -345,6 +346,37 @@ it("runs Host pause/continue through a real tool registry and Graph without reop
     controller.acceptAck(completion);
     expect(events.filter(type => type === "RESUME_TOOL")).toHaveLength(1);
     expect(finalResult!.state.toolHistory).toHaveLength(1);
+    const scope = { ...input, cueId: input.cue.id };
+    expect(stage3StatusView(controller.currentState, scope)).toMatchObject({ title: "关键动作回放已完成", showPresentation: true });
+    for (const other of [{ cueId: "other-cue" }, { runId: "other-run" }, { sessionId: "other-session" }, { visitId: "manual-visit" }, { generation: 2 }]) {
+      expect(stage3StatusView(controller.currentState, { ...scope, ...other }).showPresentation).toBe(false);
+      expect(stage3StatusView(controller.currentState, { ...scope, ...other }).title).not.toContain("回放已完成");
+    }
+    for (const status of ["FAILED", "CANCELLED", "RECOVERY_REQUIRED", "STARTING"] as const) {
+      expect(stage3StatusView({ ...controller.currentState, status }, scope).title).not.toContain("回放已完成");
+    }
+    controller.adoptRecoveredCue(input.cue.id, 0);
+    expect(stage3StatusView(controller.currentState, scope)).toMatchObject({ title: "本段讲解已就绪", showPresentation: false });
     expect(finalResult!.state.completedCueIds.filter(id => id === input.cue.id)).toHaveLength(1);
+  } finally { controller.dispose(); }
+});
+
+
+it.each(["zero-capability", "policy-finish"] as const)("renders %s as no extra demonstration through the real Graph", async mode => {
+  const base = fixtureInput();
+  const input = mode === "zero-capability"
+    ? { ...base, cue: { ...base.cue, annotations: [], action_fact_refs: [] }, evidence: {} } : base;
+  const selectCapability = vi.fn(async () => ({ action: "FINISH_CUE" as const, evidenceRefs: [], rationaleCode: "NO_EXTRA_VISUAL_VALUE" as const, confidence: 1 }));
+  const runtime = createCoachAgentRuntime({ policy: { selectCapability } });
+  const post = vi.fn();
+  const controller = new CoachAgentStage3Controller({ dispatch: event => runtime.dispatch(event), post, bridgeAvailable: () => true, isLive: () => true });
+  try {
+    const prepared = buildStage3StartCue(input);
+    expect(prepared.capabilities.length === 0).toBe(mode === "zero-capability");
+    controller.start(input);
+    await vi.waitFor(() => expect(controller.currentState.status).toBe("COMPLETED"));
+    expect(selectCapability).toHaveBeenCalledTimes(mode === "zero-capability" ? 0 : 1);
+    expect(post).not.toHaveBeenCalled();
+    expect(stage3StatusView(controller.currentState, { ...input, cueId: input.cue.id })).toMatchObject({ title: "无需额外演示", showPresentation: false });
   } finally { controller.dispose(); }
 });

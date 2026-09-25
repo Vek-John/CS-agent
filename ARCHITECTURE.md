@@ -1275,6 +1275,8 @@ priority = proximity_to_playhead
 
 Coach Agent 活动只显示简短玩家状态，例如“正在看完整处理”“正在回到决策点”“正在慢放关键动作”“正在标出补枪距离”“正在展示道具轨迹”“正在准备下一段”。UI 不显示 Prompt、chain-of-thought、candidate ID 或 tick。暂停、自由跳转、重播与“继续”是播放控制事件，不进入 Policy Prompt。
 
+Stage3的COMPLETED仅表示讲解流程收敛，不等于视觉工具执行成功。Host使用绑定session/run/cue/generation及manual visit的瞬时完成说明呈现：本次已接受且成功的工具结果显示具体完成动作；有明确无工具决策的直接结束显示“无需额外演示”；失败结果不显示成功；恢复记录不足保持中性。完成说明仅属表示层，不作为Graph、Session或Memory计数与持久化依据。
+
 ### 9.4 会后阶段
 
 最后一回合完成后，由已消费 cue、用户问答和反馈生成 `SessionSummary`。当 Memory feature 与当前 principal consent 同时开启时，Memory Service 只从已完成、可追溯且已通过 `OutcomeCompletionGate` 的 cue/Session 产出 `MemoryProposal`；`SESSION_COMPLETED` 事件只负责会话闭合元数据，不携带原始内容。proposal 经过跨 Demo 门槛或用户确认后，由桌面 `memory-sqlite` 在 single-writer 事务中幂等应用，或由 Web/Cloudflare 的 DO Outbox → `memory-postgres` consumer 幂等应用。记忆写入失败只产生待同步/fallback 状态，不阻塞 Session、Outcome Gate 或 Baseline Narration。

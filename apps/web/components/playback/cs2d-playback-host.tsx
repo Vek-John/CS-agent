@@ -140,12 +140,12 @@ import {
   SubmitReflectionEventSchema,
   reviseTeachingDiagnosis,
 } from "@cs-coach/coach-agent/client";
+import { stage3StatusView } from "../../lib/coaching/coach-agent-stage3-status";
 import {
   CoachAgentStage3HostAdapter,
   buildStage3Identity,
   createStage3HostAdapterStore,
   stage3EligibleCueIds,
-  stage3ToolStatusLabel,
   stableStage3IdentityToken,
   type Stage3HostAdapterInput,
   type Stage3IdentityInput,
@@ -2333,6 +2333,10 @@ export function Cs2dPlaybackHost({
   const stage3Cue = stage3Mode && activePlan && routeState && cue && stage3EligibleCueIds(activePlan, routeState).includes(cue.id)
     ? cue
     : undefined;
+  const stage3Notice = stage3StatusView(stage3State, cue && recoveryIdentity ? {
+    sessionId: recoveryIdentity.sessionId, runId: recoveryIdentity.runId, cueId: cue.id,
+    generation: generationRef.current, visitId: session?.manual_cue_visit?.visit_id,
+  } : undefined);
   const stage2Busy = stage2Status === "STARTING" || stage2Status === "FOCUSING" || stage2Status === "RESUMING";
   const stage3Busy = stage3State.status === "STARTING" || stage3State.status === "FOCUSING" || stage3State.status === "RESUMING";
   const agentToolBusy = stage2Busy || stage3Busy;
@@ -3370,24 +3374,12 @@ export function Cs2dPlaybackHost({
               ) : null}
               {stage3Mode && stage3Cue?.id === cue.id ? (
                 <section className={`cs2d-coach-card${stage3State.status === "FAILED" || stage3State.status === "CANCELLED" || stage3State.status === "RECOVERY_REQUIRED" ? " cs2d-coach-card--muted" : ""}`} role="status" aria-live="polite">
-                  <small>
-                    {stage3State.playback?.paused ? "演示已暂停" : stage3State.status === "FOCUSING" && stage3State.tool
-                      ? stage3ToolStatusLabel(stage3State.tool)
-                      : stage3State.status === "RESUMING"
-                        ? "正在准备下一段"
-                        : stage3State.status === "COMPLETED"
-                          ? "教学工具已完成"
-                          : stage3State.status === "RECOVERY_REQUIRED"
-                            ? "需要恢复工具状态"
-                            : stage3State.status === "FAILED" || stage3State.status === "CANCELLED"
-                              ? "教学工具暂不可用"
-                              : "准备下一段"}
-                  </small>
-                  <p>{stage3State.error ? "这段证据暂时无法展示，你仍可以继续回放。" : (stage3State.status === "COMPLETED" ? "证据已回到当前讲解卡；你可以继续下一段。" : "这里仅展示已经确认的证据。")}</p>
-                  {!stage3State.error && stage3State.presentation?.tool === "SHOW_WIN_RATE_IMPACT" ? (
+                  <small>{stage3Notice.title}</small>
+                  <p>{stage3Notice.detail}</p>
+                  {stage3Notice.showPresentation && stage3State.presentation?.tool === "SHOW_WIN_RATE_IMPACT" ? (
                     <p>{Math.round(stage3State.presentation.beforeProbability * 100)}% → {Math.round(stage3State.presentation.afterProbability * 100)}% · {stage3State.presentation.percentagePoints.toFixed(1)} 个百分点 · {stage3State.presentation.economyClass} · 相关性不等于单一行为因果</p>
                   ) : null}
-                  {!stage3State.error && stage3State.presentation?.tool === "SHOW_ECONOMY_CONTEXT" ? (
+                  {stage3Notice.showPresentation && stage3State.presentation?.tool === "SHOW_ECONOMY_CONTEXT" ? (
                     <p>{stage3State.presentation.economyClass} · {stage3State.presentation.focusLabel}</p>
                   ) : null}
                   {stage3State.status === "RECOVERY_REQUIRED" && stage3InputRef.current ? (

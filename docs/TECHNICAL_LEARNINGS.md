@@ -1618,3 +1618,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 生命周期复查：contentWindow在iframe重载后仍存在，不能作为旧工具连接身份仍有效的证明；load/error明确通知Controller进入恢复。RESULTED持久化期间取消/重连也必须在await后重新核对token和pending对象；两处已由回归复现并修复。
 - 验证：原Host门禁红测试失败后修复；额外生命周期4红→4绿。相关156项、Host TS、Web生产构建以及Viewer TS/构建的最终结果见[验证记录](validation/TEACHING_PLAYBACK_CONTROLS.md)。真实Agent runtime集成验证单次派发、单次RESUME/完成计数；两种Viewer播放工具由补丁原始helper行为测试覆盖，不等于真实UI完成。
 - 限制：实际已有Demo进入teachingDiagnostics=off、完成本地解析和CS-Net后只观察到首个静态讲解点，未确认活动播放工具；随后Mac锁屏，无法完成暂停超过旧超时后续播的UI验收。不得将零capability FINISH的“教学工具已完成”文案视为实际演示证据，不为找通过案例放松教学门或强制注入工具。原目标保留未完成。
+
+
+## 2026-09-25：流程完成不等于演示成功
+
+- 问题：实际页面首个静态讲解点显示“教学工具已完成”，但没有工具执行证据。Controller把零capability、Policy主动FINISH以及失败工具的正常Graph收敛都设为COMPLETED；Host据此统一显示成功。toolHistory缺少visit身份，也不能直接拿旧cue的tool/presentation推断本次结果。
+- 决定：仅新增瞬时completionNotice，生产结果入口绑定session/run/cue/generation/visit及已校验call结果。成功需本次SUCCEEDED且completed；失败结果即使流程收敛也显示未完成。无需工具需最近对应POLICY的无选择记录及无当前工具结果/历史，恢复信息不足保持中性。Host用同一投影函数渲染，并按身份阻止旧成功或详情泄漏。
+- 验证：4文件84相关测试、TS与Web生产构建通过；真实内存Graph测试实际零capability/主动FINISH/成功ACK后接入渲染投影，另覆盖失败、取消、回访切换与未知恢复。详见[验证记录](validation/TEACHING_COMPLETION_STATUS.md)。
+- 限制：没有启动浏览器或真实Demo；此窄文案修复不证明原暂停/继续A5已通过，不产生模型质量提升结论。不改Graph生命周期、Session门、预算/计数或持久化，保持原aria-live、布局、键盘及辅助样式。
