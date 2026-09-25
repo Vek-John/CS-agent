@@ -2,11 +2,15 @@
 
 更新时间：2026-09-25。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
-## 当前独立任务：放弃恢复的失败与迟到回调（2026-09-26）
+## 已交付：放弃恢复的失败与迟到回调（2026-09-26）
 
 - 6509747已push且owner释放；01a0d976-bf65-7ad1-a1d9-4d57c30583c7串行独占discardRecovery窄接线/必要helper/tests/docs，主控只读，继承默认配置。真实代码约1021：DISCARD_RECOVERY任意返回都会清mode/landing/checkpoint/identity，无跨review guard。
 - 目标/验收：A1生产派发入口+deferred runtime/fake IDB复现跨review迟到与REJECTED/DEGRADED误清理；A2只在当前操作且耐久删除成功清理，失败保留可恢复资料并明确状态，迟到成功/异常不影响新review；A3初始DORMANT无liveSession也能正常放弃、恢复中放弃仍能取消，旧boundary失效保持；A4相关tests/TS/build及6509747/139eb95回归；A5必要架构/学习/证据、commit/push/release。
 - 范围不扩至全Host审计、通用取消框架或Runtime/DB重写，无Demo/模型/UI/服务/用户DB/Memory/密钥/部署main。风险是照搬boundary guard要求liveSession导致DORMANT无法放弃；先5分钟小复现，15分钟窄修，10分钟验证，必要5分钟只读终审，owner清理自有进程与fake存储。无证据不造变更。
+
+- 本轮结果：实际Host discard入口＋BrowserRuntime/fakeIDB/deferred三红→绿；绑定有限记录身份和generation/history/runtime，当前重复点击合并，只有READY/null/null清理。DORMANT无session/identity可用，失败保留Host资料且固定准确提示进入实际面板。
+- 复核闭合：慢删除期间已发landing timeout原then会覆写成功提示，主控同意A3范围内窄补，1红→绿；正常current timeout和拒绝discard后timeout仍生效。独立默认只读复审无must-fix。
+- 验证/释放：5文件94项＋新增正例，最终43项runtime/Host子集通过（95不同相关用例），TS/Web build/diffcheck通过；架构/学习/[紧凑证据](validation/RECOVERY_DISCARD.md)同步，commit/push后release。自有进程退出、fakeIDB清理，无Demo/模型/UI/服务/用户DB/Memory/密钥或部署main，原UI A5未验。下一候选仅对已读chooseRecoveryDemo的REPLAY_LOADING.then直接accept做小fixture，先证实跨review影响，不自动全Host审计。
 
 ## 已交付：旧复盘迟到恢复回调（2026-09-26）
 

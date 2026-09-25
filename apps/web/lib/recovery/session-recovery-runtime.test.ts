@@ -1,3 +1,4 @@
+import { dispatchDiscardableLandingTimeout, HostRecoveryDiscard, type RecoveryDiscardOwner } from "./host-recovery-discard";
 import { captureRecoveryBoundaryOwner, dispatchHostRecoveryBoundary, recoveryBoundaryFailureResult, type RecoveryBoundaryOwner } from "./host-recovery-boundary";
 import { describe, expect, it, vi } from "vitest";
 import { indexedDB as fakeIndexedDB } from "fake-indexeddb";
@@ -391,4 +392,217 @@ it("allows a newer record snapshot of the same owner and rejects foreign stable 
   expect(accept).not.toHaveBeenCalled(); expect(onCompleted).not.toHaveBeenCalled();
   expect(onFailure).toHaveBeenCalledOnce();
   expect(recoveryBoundaryFailureResult(a, result)).toMatchObject({ status: "DEGRADED", record: a, recoveryId: a.recoveryId });
+});
+
+
+describe("Host discard with the production recovery runtime", () => {
+  it.each(["STALE_SUCCESS", "REJECTED", "DEGRADED"] as const)("does not falsely clear recovery for %s", async scenario => {
+    const databaseName = `host-discard-${scenario}`;
+    const runtime = createSessionRecoveryRuntime({ indexedDB: scenario === "DEGRADED" ? undefined : fakeIndexedDB, databaseName, now: () => 1000 });
+    const a = record("discard-a", 1000); const b = record("discard-b", 1000);
+    await runtime.dispatch({ type: "SESSION_STARTED", eventId: "start", record: a });
+    let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+    const delayed = { dispatch: async (event: import("@cs-coach/coach-agent/client").SessionRecoveryEvent) => {
+      const result = await runtime.dispatch(scenario === "REJECTED" && event.type === "DISCARD_RECOVERY" ? { ...event, recoveryId: "not-stored" } : event);
+      await gate; return result;
+    } };
+    const owner: RecoveryDiscardOwner = { generation: 1, historyEpoch: 1, runtime: delayed, record: a };
+    const host = { record: a as SessionRecoveryRecord | undefined, identity: a.sessionId as string | undefined, checkpoint: a.agentCheckpointId };
+    const onDiscarded = vi.fn(() => { host.identity = undefined; host.checkpoint = null; });
+    const accept = vi.fn((result: import("@cs-coach/coach-agent/client").SessionRecoveryResult) => { host.record = result.record ?? undefined; });
+    const onFailure = vi.fn();
+    const pending = new HostRecoveryDiscard().discard({ runtime: delayed, record: a, eventId: "discard", readOwner: () => owner, onStart: vi.fn(), onDiscarded, accept, onFailure });
+    if (scenario === "STALE_SUCCESS") { owner.historyEpoch++; owner.record = b; host.record = b; host.identity = b.sessionId; host.checkpoint = b.agentCheckpointId; }
+    release(); await pending;
+    try {
+      const expected = scenario === "STALE_SUCCESS" ? b : a;
+      expect(host).toEqual({ record: expected, identity: expected.sessionId, checkpoint: expected.agentCheckpointId });
+      expect(onDiscarded).not.toHaveBeenCalled(); expect(accept).not.toHaveBeenCalled();
+      expect(onFailure).toHaveBeenCalledTimes(scenario === "STALE_SUCCESS" ? 0 : 1);
+    } finally { if (scenario !== "DEGRADED") await deleteDatabase(databaseName); }
+  });
+});
+
+it("discards a DORMANT record without live session/identity and coalesces repeated clicks", async () => {
+  const databaseName = "host-discard-dormant";
+  const runtime = createSessionRecoveryRuntime({ indexedDB: fakeIndexedDB, databaseName, now: () => 1000 });
+  const a = record("dormant", 1000);
+  await runtime.dispatch({ type: "SESSION_STARTED", eventId: "start", record: a });
+  expect((await runtime.dispatch({ type: "BOOT", eventId: "boot" })).status).toBe("DORMANT");
+  let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+  const delayed = { dispatch: vi.fn(async (event: import("@cs-coach/coach-agent/client").SessionRecoveryEvent) => { const result = await runtime.dispatch(event); await gate; return result; }) };
+  const owner: RecoveryDiscardOwner = { generation: 1, historyEpoch: 1, runtime: delayed, record: a };
+  const onDiscarded = vi.fn(() => { owner.historyEpoch++; owner.record = undefined; });
+  const accept = vi.fn(); const onFailure = vi.fn(); const onStart = vi.fn();
+  const input = { runtime: delayed, record: a, eventId: "discard", readOwner: () => owner, onStart, onDiscarded, accept, onFailure };
+  const controller = new HostRecoveryDiscard();
+  const first = controller.discard(input);
+  owner.record = { ...a };
+  const second = controller.discard({ ...input, eventId: "repeat" });
+  expect(second).toBe(first);
+  expect(onDiscarded).not.toHaveBeenCalled(); expect(owner.record).toEqual(a);
+  release(); await first;
+  try {
+    expect(delayed.dispatch).toHaveBeenCalledOnce(); expect(onStart).toHaveBeenCalledOnce();
+    expect(onDiscarded).toHaveBeenCalledOnce(); expect(onFailure).not.toHaveBeenCalled();
+    expect(accept).toHaveBeenCalledWith(expect.objectContaining({ status: "READY", recoveryId: null, record: null }));
+    expect((await runtime.dispatch({ type: "BOOT", eventId: "after-delete" })).record).toBeNull();
+  } finally { await deleteDatabase(databaseName); }
+});
+
+it.each(["generation", "history", "runtime", "record", "session", "run", "unmount"] as const)("ignores discard success and failure after %s changes", async change => {
+  for (const rejected of [false, true]) {
+    const a = record("owner-discard", 1000);
+    let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+    const runtime = { dispatch: async () => { await gate; if (rejected) throw new Error("private failure"); return { schemaVersion: "session-recovery-runtime.v1" as const, status: "READY" as const, recoveryId: null, record: null, effects: [], reason: null }; } };
+    const owner: RecoveryDiscardOwner = { generation: 1, historyEpoch: 1, runtime, record: a };
+    const onDiscarded = vi.fn(); const accept = vi.fn(); const onFailure = vi.fn();
+    const pending = new HostRecoveryDiscard().discard({ runtime, record: a, eventId: "discard", readOwner: () => owner, onStart: vi.fn(), onDiscarded, accept, onFailure });
+    if (change === "generation") owner.generation++;
+    if (change === "history") owner.historyEpoch++;
+    if (change === "runtime") owner.runtime = { dispatch: vi.fn() };
+    if (change === "record") owner.record = record("other", 1000);
+    if (change === "session") owner.record = { ...a, sessionId: "other-session" };
+    if (change === "run") owner.record = { ...a, runId: "other-run" };
+    if (change === "unmount") owner.runtime = undefined;
+    release(); await expect(pending).resolves.toBeUndefined();
+    expect(onDiscarded).not.toHaveBeenCalled(); expect(accept).not.toHaveBeenCalled(); expect(onFailure).not.toHaveBeenCalled();
+  }
+});
+
+it("keeps failed discard retryable and never publishes exception text", async () => {
+  const { recoveryDiscardFailureResult } = await import("./host-recovery-discard");
+  const a = record("retry-discard", 1000);
+  const runtime = { dispatch: vi.fn().mockRejectedValueOnce(new Error("private failure details")).mockResolvedValue({ schemaVersion: "session-recovery-runtime.v1", status: "READY", recoveryId: null, record: null, effects: [], reason: null }) };
+  const owner: RecoveryDiscardOwner = { generation: 1, historyEpoch: 1, runtime, record: a };
+  const onDiscarded = vi.fn(); const accept = vi.fn(); const onFailure = vi.fn();
+  const input = { runtime, record: a, eventId: "discard", readOwner: () => owner, onStart: vi.fn(), onDiscarded, accept, onFailure };
+  const controller = new HostRecoveryDiscard();
+  await controller.discard(input);
+  expect(onFailure).toHaveBeenCalledWith(); expect(onDiscarded).not.toHaveBeenCalled(); expect(accept).not.toHaveBeenCalled();
+  const shown = recoveryDiscardFailureResult(a);
+  expect(shown).toMatchObject({ record: a, recoveryId: a.recoveryId, status: "DEGRADED" });
+  expect(shown.reason).toContain("尚未确认放弃成功"); expect(JSON.stringify(shown)).not.toContain("private");
+  await controller.discard({ ...input, eventId: "retry" });
+  expect(runtime.dispatch).toHaveBeenCalledTimes(2); expect(onDiscarded).toHaveBeenCalledOnce();
+});
+
+it("only accepts confirmed deletion and preserves the current record in the failure presentation", async () => {
+  const { recoveryDiscardFailureResult } = await import("./host-recovery-discard");
+  const a = record("not-deleted", 1000);
+  const result = { schemaVersion: "session-recovery-runtime.v1" as const, status: "READY" as const, recoveryId: a.recoveryId, record: a, effects: [], reason: "success-like text" };
+  const runtime = { dispatch: vi.fn().mockResolvedValue(result) };
+  const owner: RecoveryDiscardOwner = { generation: 1, historyEpoch: 1, runtime, record: a };
+  const onDiscarded = vi.fn(); const accept = vi.fn(); const onFailure = vi.fn();
+  await new HostRecoveryDiscard().discard({ runtime, record: a, eventId: "discard", readOwner: () => owner, onStart: vi.fn(), onDiscarded, accept, onFailure });
+  expect(onDiscarded).not.toHaveBeenCalled(); expect(accept).not.toHaveBeenCalled(); expect(onFailure).toHaveBeenCalledWith(result);
+  expect(recoveryDiscardFailureResult(a, result)).toMatchObject({ record: a, status: "DEGRADED", reason: expect.stringContaining("尚未确认放弃成功") });
+});
+
+it("shows the bounded discard failure in the actual status panel without exposing arbitrary runtime reasons", async () => {
+  const { hostRecoveryStatusDetail, recoveryDiscardFailureResult } = await import("./host-recovery-discard");
+  const { SessionRecoveryStatus } = await import("../../components/playback/session-recovery-status");
+  const { createElement } = await import("react"); const { renderToStaticMarkup } = await import("react-dom/server");
+  const result = recoveryDiscardFailureResult(record("panel", 1000));
+  const html = renderToStaticMarkup(createElement(SessionRecoveryStatus, { status: "DEGRADED", detail: hostRecoveryStatusDetail(result), onChooseDemo: () => {}, onDiscard: () => {} }));
+  expect(html).toContain("尚未确认放弃成功"); expect(html).toContain("已保留恢复资料");
+  expect(html).toContain("到回放区选择 Demo");
+  expect(hostRecoveryStatusDetail({ ...result, reason: "private runtime error" })).toBe("恢复过程暂未完成，请按下方操作继续。");
+});
+
+it("leaves a newer discard pending when an older switched-away request settles", async () => {
+  const a = record("first", 1000); const b = record("second", 1000);
+  const resolves: Array<(result: import("@cs-coach/coach-agent/client").SessionRecoveryResult) => void> = [];
+  const runtime = { dispatch: vi.fn(() => new Promise<import("@cs-coach/coach-agent/client").SessionRecoveryResult>(resolve => resolves.push(resolve))) };
+  const owner: RecoveryDiscardOwner = { generation: 1, historyEpoch: 1, runtime, record: a };
+  const controller = new HostRecoveryDiscard(); const onStart = vi.fn(); const onDiscarded = vi.fn(); const accept = vi.fn(); const onFailure = vi.fn();
+  const input = { runtime, record: a, eventId: "discard-a", readOwner: () => owner, onStart, onDiscarded, accept, onFailure };
+  const first = controller.discard(input);
+  owner.historyEpoch++; owner.record = b;
+  const secondInput = { ...input, record: b, eventId: "discard-b" };
+  const second = controller.discard(secondInput);
+  const success = { schemaVersion: "session-recovery-runtime.v1" as const, status: "READY" as const, recoveryId: null, record: null, effects: [], reason: null };
+  resolves[0](success); await first;
+  expect(onDiscarded).not.toHaveBeenCalled();
+  expect(controller.discard(secondInput)).toBe(second);
+  resolves[1](success); await second;
+  expect(runtime.dispatch).toHaveBeenCalledTimes(2); expect(onStart).toHaveBeenCalledTimes(2);
+  expect(onDiscarded).toHaveBeenCalledOnce(); expect(accept).toHaveBeenCalledOnce(); expect(onFailure).not.toHaveBeenCalled();
+});
+
+it("invalidates pending boundary publication and cancels recovery landing only after confirmed discard", async () => {
+  vi.useFakeTimers();
+  const a = record("landing", 1000);
+  let release!: (result: import("@cs-coach/coach-agent/client").SessionRecoveryResult) => void;
+  const runtime = { dispatch: () => new Promise<import("@cs-coach/coach-agent/client").SessionRecoveryResult>(resolve => { release = resolve; }) };
+  const owner: RecoveryDiscardOwner = { generation: 1, historyEpoch: 1, runtime, record: a };
+  const boundaryOwner: RecoveryBoundaryOwner = { ...owner, operationEpoch: 1, sessionId: a.sessionId, takenOver: false, recovering: false };
+  const boundaryIsCurrent = captureRecoveryBoundaryOwner(() => boundaryOwner);
+  const state = { mode: true, landing: a.recoveryId as string | undefined, checkpoint: a.agentCheckpointId, identity: a.sessionId as string | undefined };
+  const timeout = vi.fn(); const timer = setTimeout(timeout, 10000);
+  const startingHistoryEpoch = owner.historyEpoch;
+  const onDiscarded = vi.fn(() => { owner.historyEpoch++; state.mode = false; state.landing = undefined; clearTimeout(timer); state.checkpoint = null; state.identity = undefined; });
+  try {
+    const pending = new HostRecoveryDiscard().discard({ runtime, record: a, eventId: "discard", readOwner: () => owner,
+      onStart: () => { boundaryOwner.operationEpoch++; }, onDiscarded, accept: vi.fn(), onFailure: vi.fn() });
+    expect(boundaryIsCurrent()).toBe(false);
+    expect(state.mode).toBe(true); expect(state.landing).toBe(a.recoveryId); expect(vi.getTimerCount()).toBe(1);
+    release({ schemaVersion: "session-recovery-runtime.v1", status: "READY", recoveryId: null, record: null, effects: [], reason: null });
+    await pending;
+    expect(state).toEqual({ mode: false, landing: undefined, checkpoint: null, identity: undefined });
+    expect(owner.historyEpoch).not.toBe(startingHistoryEpoch); expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(10000); expect(timeout).not.toHaveBeenCalled();
+  } finally { vi.useRealTimers(); }
+});
+
+
+it("does not revive a timeout notice already dispatched before discard succeeded", async () => {
+  const a = record("expired-landing", 1000);
+  let releaseTimeout!: (result: import("@cs-coach/coach-agent/client").SessionRecoveryResult) => void;
+  const deleted = { schemaVersion: "session-recovery-runtime.v1" as const, status: "READY" as const, recoveryId: null, record: null, effects: [], reason: "已放弃这场未完成复盘。" };
+  const runtime = { dispatch: (event: import("@cs-coach/coach-agent/client").SessionRecoveryEvent) => event.type === "DISCARD_RECOVERY" ? Promise.resolve(deleted)
+    : new Promise<import("@cs-coach/coach-agent/client").SessionRecoveryResult>(resolve => { releaseTimeout = resolve; }) };
+  const owner: RecoveryDiscardOwner = { generation: 1, historyEpoch: 1, runtime, record: a };
+  const oldEpoch = owner.historyEpoch;
+  const accept = vi.fn();
+  const timeout = dispatchDiscardableLandingTimeout({ runtime, record: a, eventId: "timeout", isCurrent: () => owner.historyEpoch === oldEpoch, accept });
+  await new HostRecoveryDiscard().discard({ runtime, record: a, eventId: "discard", readOwner: () => owner, onStart: () => {},
+    onDiscarded: () => { owner.historyEpoch++; owner.record = undefined; }, accept, onFailure: vi.fn() });
+  releaseTimeout({ schemaVersion: "session-recovery-runtime.v1", status: "REJECTED", recoveryId: a.recoveryId, record: null, effects: [], reason: "记录不存在" });
+  await timeout;
+  expect(accept).toHaveBeenCalledOnce(); expect(accept).toHaveBeenCalledWith(deleted);
+});
+
+it.each([false, true])("keeps current landing timeout failure bounded and ignores a stale thrown timeout (stale=%s)", async stale => {
+  const a = record("timeout-error", 1000); let current = true;
+  let reject!: (error: Error) => void;
+  const runtime = { dispatch: vi.fn(() => new Promise<import("@cs-coach/coach-agent/client").SessionRecoveryResult>((_, fail) => { reject = fail; })) };
+  const accept = vi.fn();
+  const pending = dispatchDiscardableLandingTimeout({ runtime, record: a, eventId: "timeout", isCurrent: () => current, accept });
+  current = !stale; reject(new Error("private timeout details")); await pending;
+  expect(accept).toHaveBeenCalledTimes(stale ? 0 : 1);
+  if (!stale) expect(accept).toHaveBeenCalledWith(expect.objectContaining({ status: "DEGRADED", record: a, reason: "PLAYBACK_LANDING_TIMEOUT" }));
+});
+
+it("does not send an already invalidated timeout", async () => {
+  const runtime = { dispatch: vi.fn() }; const accept = vi.fn();
+  await dispatchDiscardableLandingTimeout({ runtime, record: record("cancelled-timeout", 1000), eventId: "timeout", isCurrent: () => false, accept });
+  expect(runtime.dispatch).not.toHaveBeenCalled(); expect(accept).not.toHaveBeenCalled();
+});
+
+it("still publishes a current landing timeout from the real runtime after a rejected discard", async () => {
+  const databaseName = "discard-rejected-current-timeout";
+  const runtime = createSessionRecoveryRuntime({ indexedDB: fakeIndexedDB, databaseName, now: () => 1000 });
+  const a = record("still-recoverable", 1000);
+  await runtime.dispatch({ type: "SESSION_STARTED", eventId: "start", record: a });
+  const wrapper = { dispatch: (event: import("@cs-coach/coach-agent/client").SessionRecoveryEvent) => runtime.dispatch(event.type === "DISCARD_RECOVERY" ? { ...event, recoveryId: "not-stored" } : event) };
+  const owner: RecoveryDiscardOwner = { generation: 1, historyEpoch: 1, runtime: wrapper, record: a };
+  const onDiscarded = vi.fn(); const onFailure = vi.fn(); const accept = vi.fn();
+  try {
+    await new HostRecoveryDiscard().discard({ runtime: wrapper, record: a, eventId: "discard", readOwner: () => owner, onStart: () => {}, onDiscarded, accept, onFailure });
+    expect(onDiscarded).not.toHaveBeenCalled(); expect(onFailure).toHaveBeenCalledOnce();
+    await dispatchDiscardableLandingTimeout({ runtime: wrapper, record: a, eventId: "timeout", isCurrent: () => owner.historyEpoch === 1, accept });
+    expect(accept).toHaveBeenCalledOnce();
+    expect(accept).toHaveBeenCalledWith(expect.objectContaining({ status: "DEGRADED", recoveryId: a.recoveryId, record: a, reason: "PLAYBACK_LANDING_TIMEOUT" }));
+  } finally { await deleteDatabase(databaseName); }
 });

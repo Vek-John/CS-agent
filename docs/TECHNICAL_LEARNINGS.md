@@ -1775,3 +1775,12 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：仅该effect使用小发布入口，捕获generation/history epoch/operation epoch/runtime/session/recovery/run；返回与失败均守卫，显式discard只新增失效序号，不扩大重写其流程。正常同身份record更新可放行；完成仅READY/null/null清理，真实DEGRADED可能只是内存delete，不能冒充耐久删除成功。失败保留当前记录、checkpoint和身份。
 - 验证：2红→绿；10种owner变化、当前完成/稳定点、真实拒绝/降级、抛错/迟到抛错、外来结果、同身份快照更新与139eb95总结收尾兼容。5文件74tests、TS与Web production build通过；独立默认配置只读终审无must-fix，建议的同身份快照正例已补，22项runtime/Host子集再通过。
 - 限制/后续：fake IDB不是用户SQLite或真实UI，原暂停A5仍未验证；未改runtime队列/DB/完成门，未新增自动重试。旁边discardRecovery自己的then仍无身份guard且无条件清理，是独立可复现候选，后续先用小fixture验证，不在本轮扩大Host审计。[证据](validation/STALE_RECOVERY_BOUNDARY.md)。
+
+
+## 2026-09-26：显式放弃必须区分耐久成功与迟到/失败
+
+- 问题：discard任意返回都清mode/landing/checkpoint/identity，旧请求能清新review，真实REJECTED/DEGRADED也被当成功。提取Host真实派发入口，BrowserRuntime/fake IDB/deferred三项基线红例复现。
+- 决定：以record的recovery/session/run及generation/history epoch/runtime绑定发布；不套用要求liveSession且not recovering的boundary guard。当前重复点击合并一次dispatch，旧pending结束不释放新的pending。仅READY/null/null清理且推进history epoch，失败保留Host资料；固定文案通过白名单formatter进入真实状态面板，不输出任意运行时reason。
+- 复核：独立只读发现已发landing timeout即使clearTimeout也可能迟到覆写成功提示，主控批准作为A3必要闭合；实际timeout入口1红→绿，返回/异常守卫，正常current timeout与拒绝discard后的timeout仍生效。
+- 验证：五文件94项通过，再新增真实current timeout正例，最终43项runtime/Host子集通过（合计95个不同相关用例）；TS/Web production build和diffcheck通过，复审无剩余must-fix。DORMANT无session/identity、正常恢复取消、十余身份/迟到/重复/异常分支、6509747边界与139eb95总结兼容覆盖。[证据](validation/RECOVERY_DISCARD.md)。
+- 限制/后续：无用户DB/Demo/模型/浏览器，fake IDB和SSR不是实际UI/耐久故障实测，原A5仍未验。降级后只承诺Host资料保留，不重建Runtime内存/持久记录或保证刷新恢复。此次所读相邻chooseRecoveryDemo仍把REPLAY_LOADING返回直接accept，可后续小fixture证明切换时是否覆写，不扩本轮为全Host审计。

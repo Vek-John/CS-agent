@@ -1528,6 +1528,8 @@ Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 ca
 
 Host 的会话完成与稳定点持久化回调必须与当前显示所有权绑定：派发前捕获 generation、history open epoch、该 effect 的 operation epoch、runtime 实例及 session/recovery/run 身份，返回和失败时再次核对；新导入、切换复盘、接管、恢复模式、显式放弃或卸载后的旧回调不得修改当前 record/checkpoint/identity/提示。同一身份的 record 快照替换不代表失效。Runtime 队列仅保证存储事件顺序，不授予旧 Promise 当前 UI 的写权限。`SESSION_COMPLETED` 只有 `READY` 且 recoveryId/record 均为空才清理 Host 恢复身份；`REJECTED`、`DEGRADED` 或异常保留当前内存恢复身份与 checkpoint，显示有限失败状态。完成和稳定点 dedup 沿用现状，不引入自动重试。该边界不改变 Session 的完成事实或同场总结收尾。
 
+显式放弃恢复以保存的 recovery/session/run 为身份，不要求已经存在 live Session 或临时 Agent identity，因此初始 DORMANT 仍可放弃。Host 的 discard 入口捕获 generation/history epoch/runtime 与有限记录身份，同一当前操作的重复点击合并；旧操作成功、失败或异常均不得写新 UI。只有 `READY/null/null` 才清理 mode、landing/timeout、checkpoint 和 identity，并推进 history epoch 废弃进行中的旧握手。失败保留当前 Host 恢复资料，显示固定「尚未确认放弃成功」提示；不能将 Runtime 的降级内存删除描述为耐久删除。已派发的 landing timeout 在返回和异常后也需复核 epoch/runtime/记录身份；删除失败仍属当前身份时，正常 timeout 继续生效。该窄流程不提供持久重试或重建 Runtime 中已降级删除的记录。
+
 恢复回归必须覆盖：Replay 缺失时 DORMANT 且零 LLM；同 Demo/player/route/version 在第三个 cue 后回到相同 `CUE_PAUSED`；错误 Demo/player/route/version 拒绝；工具中刷新不重复副作用；成功 callId 继续去重；takeover 回到最近合法边界；IndexedDB/DO 失败时基础回放可用；网络 envelope 不含 File、ArrayBuffer、raw Replay 或 frames。
 
 初始门槛：非法工具、route/tick 修改、决策/结果引用串线和重复副作用均为 0；是否需要工具一致率至少 90%；需要工具时首选 capability 一致率至少 80%；全场路线完成率 100%；每 cue Policy LLM 至多一次、成功视觉工具默认至多一个；`SKIP/FREEZE` Policy 调用为 0。

@@ -1,5 +1,6 @@
 "use client";
 
+import { dispatchDiscardableLandingTimeout, HostRecoveryDiscard, recoveryDiscardFailureResult, hostRecoveryStatusDetail } from "../../lib/recovery/host-recovery-discard";
 import { captureRecoveryBoundaryOwner, dispatchHostRecoveryBoundary, recoveryBoundaryFailureResult } from "../../lib/recovery/host-recovery-boundary";
 
 import {
@@ -369,6 +370,7 @@ export function Cs2dPlaybackHost({
   const preparationRef = useRef<ReturnType<typeof createReviewPreparationOrchestrator> | undefined>(undefined);
   const generationRef = useRef(0);
   const recoveryBoundaryOperationRef = useRef(0);
+  const recoveryDiscardRef = useRef(new HostRecoveryDiscard());
   const recoveryRuntimeRef = useRef<ReturnType<typeof createSessionRecoveryRuntime> | undefined>(undefined);
   const recoveryRecordRef = useRef<SessionRecoveryRecord | undefined>(undefined);
   const recoveryModeRef = useRef(false);
@@ -1019,22 +1021,25 @@ export function Cs2dPlaybackHost({
   }, [acceptRecoveryResult]);
 
   const discardRecovery = useCallback(() => {
-    recoveryBoundaryOperationRef.current += 1;
     const runtime = recoveryRuntimeRef.current;
     const record = recoveryRecordRef.current;
     if (!runtime || !record) return;
-    void runtime.dispatch({
-      type: "DISCARD_RECOVERY",
-      eventId: recoveryEventId("recovery-discard"),
-      recoveryId: record.recoveryId,
-    }).then((result) => {
-      recoveryModeRef.current = false;
-      recoveryLandingRef.current = undefined;
-      clearRecoveryLandingTimeout();
-      latestAgentCheckpointRef.current = undefined;
-      recoveryIdentityRef.current = undefined;
-      setRecoveryIdentity(undefined);
-      acceptRecoveryResult(result);
+    void recoveryDiscardRef.current.discard({ runtime, record, eventId: recoveryEventId("recovery-discard"),
+      readOwner: () => ({ generation: generationRef.current, historyEpoch: historyOpenEpochRef.current,
+        runtime: recoveryRuntimeRef.current, record: recoveryRecordRef.current }),
+      onStart: () => { recoveryBoundaryOperationRef.current += 1; },
+      onDiscarded: () => {
+        // Invalidate any replay/landing handshake already waiting on this history epoch.
+        historyOpenEpochRef.current += 1;
+        recoveryModeRef.current = false;
+        recoveryLandingRef.current = undefined;
+        storedHistoryRecoveryLandingRef.current = undefined;
+        clearRecoveryLandingTimeout();
+        latestAgentCheckpointRef.current = undefined;
+        recoveryIdentityRef.current = undefined;
+        setRecoveryIdentity(undefined);
+      }, accept: acceptRecoveryResult,
+      onFailure: (result) => setRecoveryResult(recoveryDiscardFailureResult(recoveryRecordRef.current ?? record, result)),
     });
   }, [acceptRecoveryResult, clearRecoveryLandingTimeout]);
 
@@ -1493,21 +1498,23 @@ export function Cs2dPlaybackHost({
   const beginRecoveryLanding = useCallback((landing: RecoveryLanding) => {
     const runtime = recoveryRuntimeRef.current;
     if (!runtime) return;
+    const openEpoch = historyOpenEpochRef.current;
+    const generation = generationRef.current;
+    const isCurrent = () => historyOpenEpochRef.current === openEpoch && generationRef.current === generation
+      && recoveryRuntimeRef.current === runtime
+      && recoveryRecordRef.current?.recoveryId === landing.record.recoveryId
+      && recoveryRecordRef.current.sessionId === landing.record.sessionId
+      && recoveryRecordRef.current.runId === landing.record.runId;
     recoveryLandingRef.current = landing;
     clearRecoveryLandingTimeout();
     recoveryLandingTimeoutRef.current = setTimeout(() => {
-      if (recoveryLandingRef.current !== landing) return;
+      if (recoveryLandingRef.current !== landing || !isCurrent()) return;
       recoveryLandingRef.current = undefined;
       recoveryLandingTimeoutRef.current = undefined;
       recoveryHandshakeReadyRef.current = false;
       setReviewPreparationStatus({ phase: "ERROR", detail: "回放未能落到恢复位置；基础回放仍可继续。" });
-      void runtime.dispatch({
-        type: "RECOVERY_HANDSHAKE_FAILED",
-        eventId: recoveryEventId("recovery-landing-timeout"),
-        recoveryId: landing.record.recoveryId,
-        reason: "PLAYBACK_LANDING_TIMEOUT",
-        degraded: true,
-      }).then(acceptRecoveryResult);
+      void dispatchDiscardableLandingTimeout({ runtime, record: landing.record,
+        eventId: recoveryEventId("recovery-landing-timeout"), isCurrent, accept: acceptRecoveryResult });
     }, 10_000);
     bundleRef.current = landing.analysis;
     planRef.current = landing.staged.plan;
@@ -3275,7 +3282,7 @@ export function Cs2dPlaybackHost({
           {recoveryStatusKind ? (
             <SessionRecoveryStatus
               status={recoveryStatusKind}
-              detail={recoveryResult?.reason ? "恢复过程暂未完成，请按下方操作继续。" : undefined}
+              detail={hostRecoveryStatusDetail(recoveryResult)}
               onChooseDemo={chooseRecoveryDemo}
               onDiscard={discardRecovery}
             />
