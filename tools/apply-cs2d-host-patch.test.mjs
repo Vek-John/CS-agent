@@ -18,10 +18,11 @@ const cleanBase = {
 
 describe("cs2d patched checkout seam", () => {
   it("keeps managed Demo support in the controlled patch stack", () => {
-    expect(CS2D_PATCH_FILES.at(-4)).toMatch(/0006-managed-demo-load-races\.patch$/);
-    expect(CS2D_PATCH_FILES.at(-3)).toMatch(/0007-cs2d-shot-actor\.patch$/);
-    expect(CS2D_PATCH_FILES.at(-2)).toMatch(/0008-teaching-playback\.patch$/);
-    expect(CS2D_PATCH_FILES.at(-1)).toMatch(/0009-public-round-clock\.patch$/);
+    expect(CS2D_PATCH_FILES.at(-5)).toMatch(/0006-managed-demo-load-races\.patch$/);
+    expect(CS2D_PATCH_FILES.at(-4)).toMatch(/0007-cs2d-shot-actor\.patch$/);
+    expect(CS2D_PATCH_FILES.at(-3)).toMatch(/0008-teaching-playback\.patch$/);
+    expect(CS2D_PATCH_FILES.at(-2)).toMatch(/0009-public-round-clock\.patch$/);
+    expect(CS2D_PATCH_FILES.at(-1)).toMatch(/0010-self-hurt-events\.patch$/);
     const patch = CS2D_PATCH_FILES.map((file) => readFileSync(file, "utf8")).join("\n");
     expect(patch).toMatch(/DEMO_IMPORT_REQUESTED/);
     expect(patch).toMatch(/await uploadManagedDemo[\s\S]*await parser\.parse\(pending\.file\)/);

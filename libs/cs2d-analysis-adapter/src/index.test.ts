@@ -553,7 +553,7 @@ describe("cs2d analysis adapter", () => {
   it("does not turn unattributed ShotEvent or aggregate damage into exact selected-player facts", () => {
     const bundle = buildCs2dAnalysisBundle({ replay: replayFixture(), selectedSteamId: "p-t1", demoId: "demo-fixture" });
     expect(bundle.metadata.warnings).toContain("缺少明确 shooterSteamId 的射击保持未归属；已归属射击也不能单独证明再次接触或重复探身。");
-    expect(bundle.metadata.warnings).toContain("当前 cs2d GameEvent 没有 HurtEvent；Round.damage 只有回合聚合，不能伪装成逐 tick 受击。");
+    expect(bundle.metadata.warnings).toContain("旧回放缺少逐次hurt流时，只能使用健康采样区间；事件报告伤害也不等于实际HP损失。");
     expect(bundle.metadata.warnings).toContain("GrenadePath.t is rounded to about 0.1s; utility cue boundaries use conservative canonical Frame ticks and never claim an exact throw or landing tick.");
     expect(bundle.match_timeline.match_events?.some((event) => event.event_type === "DAMAGE" && event.fact_confidence === 1)).toBe(false);
     const damage = bundle.match_timeline.match_events?.find((event) => event.event_type === "DAMAGE");
@@ -996,7 +996,7 @@ describe("return-and-fire adapter boundary", () => {
     const bundle = buildReturn({ ...input, rounds: input.rounds.map(r => ({ ...r, decidedTick: 180 })) });
     expect(bundle.candidate_set.candidates.some(c => c.source.kind === "RETURN_AND_FIRE")).toBe(false);
   });
-  it.each(["cs2d-analysis-adapter/1.5.2", "cs2d-analysis-adapter/1.6.0"] as const)("continues reading %s history without changing saved material", (version) => {
+  it.each(["cs2d-analysis-adapter/1.5.2", "cs2d-analysis-adapter/1.6.0", "cs2d-analysis-adapter/1.6.1"] as const)("continues reading %s history without changing saved material", (version) => {
     const bundle = buildCs2dAnalysisBundle({ replay: replayFixture(), selectedSteamId: "p-t1", demoId: "old-1.5.2" });
     const old = { ...bundle, metadata: { ...bundle.metadata, adapter_version: version } };
     const restored = deserializeCs2dAnalysisBundle(JSON.stringify(old));

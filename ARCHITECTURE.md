@@ -103,6 +103,16 @@ Adapter只取不晚于decisionTick、同回合且最多半秒旧的样本，不�
 
 时钟公开事实拥有当时采样来源与可用时间，不能单独批准等待、接敌或路线建议；`objectiveAllowsDelay`和缺LOS的RETURN_AND_FIRE判断门不因此放宽。模型不自行补数或复刻HUD取整。Viewer生产构建必须包含当前parser源码补丁编译的WASM，不能只更新Rust源码而使用旧parser二进制。
 
+### 2.4.2 逐次本人受击事实
+
+Parser以独立可选`Round.hurtEvents`保留`player_hurt`的canonical Demo tick、稳定事件ID、可空受害者和可空reported伤害/剩余生命护甲字段；在原ADR过滤前采集，不改变原`Round.events`顺序、索引引用或ADR规则。事件按`freezeStartTick <= tick < postEndTick`归属。报告伤害不等于实际HP损失，不自动推断overkill、攻击者、武器、方向或可见接触。
+
+受害者归属在事件发生时核对当前实体与controller：native事件handle按15位index/17位serial转换到network packed的14位index/低10位serial，要求当前CCSPlayerPawn的index和可见serial位一致、唯一当前controller的完整packed m_hPlayerPawn一致且SteamID有效。无匹配、无字段、无效或多重绑定均保持null，不按index猜人或复用tick开始缓存；不声称验证未传输的高位serial。
+
+DecisionSnapshot可选`selfHurtEvents`只投影所选玩家受击的source/sourceRef/tick，取决策严格之前10秒内最多3条不同ID，须有新鲜存活状态，已到期死亡后不再使用，已知致死报告不进决策事实。同tick/未来不进本人知识；Outcome沿已有reveal至最多4秒和round容器末尾的独立窗口消费。发生事实以一个有界陈述进入现有CoachingPackage和确定性Narration，来源ID保存在对应snapshot，结果引用保存在Outcome；不放宽专业判断或增加HP_CHANGE候选。
+
+Timeline新增精确DAMAGE发生事实，不携带攻击者或报告数值；若精确事件覆盖健康采样区间，则抑制该区间重复DAMAGE并预留旧me编号，保留其它引用稳定。缺新字段的旧Replay继续使用区间事实，旧历史按保存产物恢复而不重算。Parser generatedBy标记hurt-events.v1，Adapter/Observation/Signal 1.7.0与Timeline 1.1.0记录新派生语义；读取兼容1.6.1及原有历史版本。
+
 ### 2.5 事实、推断、建议分层
 
 - `Fact`：Demo 可直接验证；

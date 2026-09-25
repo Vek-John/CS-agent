@@ -39,6 +39,8 @@ export interface DecisionSnapshot {
   selectedPlayerId: string;
   decisionTick: number;
   sampledAtTick: number | null;
+  /** Optional for immutable legacy records. Strictly before decisionTick; no attacker or damage amounts. */
+  selfHurtEvents?: readonly { source: "DEMO_PLAYER_HURT"; sourceRef: string; tick: number }[];
   selectedPlayer: DecisionValue<{
     side: TeamSide | null; alive: boolean | null; health: number | null; armor: number | null;
     helmet: boolean | null; weapon: string | null; grenades: readonly string[] | null;

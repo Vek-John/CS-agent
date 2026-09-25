@@ -1651,3 +1651,12 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：仅这两个客户端共用20秒fetch＋JSON总期限，保留LOCAL_REQUEST_TIMEOUT原因、原确定性fallback/schema/引用门，不新增重试。父取消单独结算AbortError并传播子signal，不等fetch自觉结束；所有结算清理timer/listener，late headers不读body、late reject被处理。Controller取消后不再进入额外fallback。
 - 验证：5文件69测试通过，TypeScript和Web生产构建通过；真实prepare controller＋两个生产client timeout仍可冻结3-cue完整路线、首两cue READY_TO_START、后续继续准备；实际恢复依赖复用已存内容零请求，取消/late不发布。共享deadline19999ms headers＋1ms body边界、原HTTP/坏正文/正常映射亦覆盖。详见[验证记录](validation/PREPARATION_REQUEST_DEADLINES.md)。
 - 限制：全部为有限假transport与合成数据，不证明生产网络延迟、教学质量或整段启动SLA；没有改Jev路径，没有模型/浏览器/Demo/数据库调用。原锁屏工具A5不动。只读竞态复查无确定缺陷，测试替身类型问题已用真实Response修正，未弱化生产类型。
+
+
+## 2026-09-25：逐次本人受击必须先验证handle编码，再进入教学
+
+- 问题：player_hurt原来只入ADR聚合，Adapter只能用8Hz健康区间。事件native handle与网络packed handle编码不同，直接完整比较得到0归属，按index查又可能误认复用实体。
+- 决定：依据SDK维护者ToPackedInt/FromPackedInt及真实首事件，转换native15位index/17位serial到packed14位index/低10位serial，核对当时pawn与唯一controller绑定，未知不猜。新增独立hurt流在ADR过滤前采集，原事件索引和ADR代码保持；reported伤害不等于实际扣血。严格决策前10秒/最多3条本人发生事实，结果独立，精确事件覆盖的健康区间抑制重复。
+- 验证：最终一次真实WASM 7247ms，总消费7464ms；264hurt归属成功、本人27，23/44候选snapshot与2/4教学包/确定性Narration消费，2/4结果包消费。相同Replay去掉新流是0snapshot/0包，候选路线不变；两包仍INSUFFICIENT_EVIDENCE。182相关测试通过/1既有缺产物跳过，Rust3、TS/Web build/Viewer TS/WASM+Viewer build通过。详见[验证记录](validation/SELF_HURT_EVIDENCE.md)。
+- 学习与限度：编码一致性和当前绑定比“字段存在”更重要；只验证wire携带的serial位。事件发生/报告伤害/实际HP减少必须分开；上下文覆盖增加不等于教学准确率提高。恢复保持旧产物，不自动补新事实。没有外部模型或UI测试，原工具暂停A5未关闭。
+- 执行偏差：初次native探针后，获准首事件诊断时发生编译失败后误运行旧binary，额外全量读一次，已报告；改成build成功门后首事件即停。真实读取总计原probe、误运行旧probe、首事件诊断、最终WASM四次，不掩盖为一次。bulk均留在进程，只有小摘要；源码探针已从上游bin移走，所有进程退出。

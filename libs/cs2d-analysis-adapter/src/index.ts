@@ -1,3 +1,4 @@
+import { selfHurtEvents, selfHurtFactText, MAX_SELF_HURT_EVENTS, type Cs2dHurtEvent } from "./self-hurt";
 import type { Cs2dRoundClockSample } from "./round-clock";
 import { publicRoundClockFact } from "./round-clock";
 import { nominateReturnAndFire } from "./return-and-fire";
@@ -69,10 +70,10 @@ export const CS2D_SOURCE = {
   input_boundary: "WASM_WORKER_STRUCTURED_REPLAY_ONLY"
 } as const;
 
-export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.6.1" as const;
-export const CS2D_TIMELINE_VERSION = "zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec/timeline/1.0.0" as const;
-export const CS2D_OBSERVATION_VERSION = "cs2d-analysis-adapter/1.0.0/internal-observation" as const;
-export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.6.0/signals" as const;
+export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.7.0" as const;
+export const CS2D_TIMELINE_VERSION = "zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec/timeline/1.1.0" as const;
+export const CS2D_OBSERVATION_VERSION = "cs2d-analysis-adapter/1.7.0/internal-observation" as const;
+export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.7.0/signals" as const;
 export const CS2D_PLANNER_VERSION = "cs2d-analysis-adapter/1.6.0/planner" as const;
 
 /** MVP pacing target: a full match should feel coached, not interrupted. */
@@ -85,11 +86,11 @@ export const CS2D_LIMITATIONS = {
   shotAttribution:
     "缺少明确 shooterSteamId 的射击保持未归属；已归属射击也不能单独证明再次接触或重复探身。",
   hurtEvents:
-    "当前 cs2d GameEvent 没有 HurtEvent；Round.damage 只有回合聚合，不能伪装成逐 tick 受击。",
+    "旧回放缺少逐次hurt流时，只能使用健康采样区间；事件报告伤害也不等于实际HP损失。",
   observationBoundary:
     "内部 ObservationState 只服务于选手决策证据和 LLM 引用，不是用户视角或 renderer 输入。",
   parserExtension:
-    "逐次伤害仍需要 HurtEvent；接触与探身还需要独立的可观察接触或曝光证据。"
+    "受击事件只证明本人受击发生；伤害方向、攻击者和接触/探身仍需独立可观察证据。"
 } as const;
 
 export interface Cs2dPlayerMeta {
@@ -191,6 +192,7 @@ export interface Cs2dGrenadePath {
 
 /** Minimal structural subset of a cs2d Round. */
 export interface Cs2dRound {
+  readonly hurtEvents?: readonly Cs2dHurtEvent[];
   readonly number: number;
   readonly freezeStartTick: number;
   readonly startTick: number;
@@ -209,6 +211,7 @@ export interface Cs2dRound {
 
 /** Minimal structural subset of the cs2d replay-core Replay. */
 export interface Cs2dReplay {
+  readonly generatedBy?: string;
   readonly map: string;
   readonly demoTickRate: number;
   readonly frameRate: number;
@@ -251,7 +254,7 @@ export interface Cs2dExcludedRound {
 }
 
 export interface Cs2dAnalysisMetadata {
-  readonly adapter_version: typeof CS2D_ADAPTER_VERSION | "cs2d-analysis-adapter/1.6.0" | "cs2d-analysis-adapter/1.5.2" | "cs2d-analysis-adapter/1.5.1" | "cs2d-analysis-adapter/1.5.0" | "cs2d-analysis-adapter/1.4.0";
+  readonly adapter_version: typeof CS2D_ADAPTER_VERSION | "cs2d-analysis-adapter/1.6.1" | "cs2d-analysis-adapter/1.6.0" | "cs2d-analysis-adapter/1.5.2" | "cs2d-analysis-adapter/1.5.1" | "cs2d-analysis-adapter/1.5.0" | "cs2d-analysis-adapter/1.4.0";
   readonly source: Cs2dReplaySourceMetadata;
   readonly input_map: string;
   readonly selected_steam_id: string;
@@ -980,6 +983,9 @@ function buildCanonicalGeneratorInput(
       publicFactIds.push(id);
       facts.push({ id, kind: "DECISION_CONTEXT", roundNumber: raw.round.number, tick, text, sourceRefs, observedByPlayer: true, missingFields, limitations: [] });
     };
+    // One bounded statement, with all source references: repeated events do not amplify prose.
+    if (sourceSnapshot.selfHurtEvents?.length) addPublicFact("self-hurt", selfHurtFactText(),
+      sourceSnapshot.selfHurtEvents.map(event => event.sourceRef), Math.max(...sourceSnapshot.selfHurtEvents.map(event => event.tick)), ["damage_source", "damage_direction", "actual_hp_loss"]);
     const sampledAt = decisionSnapshot.sampledAtTick ?? raw.decisionTick;
     const counts = decisionSnapshot.aliveCounts.value;
     if (counts) addPublicFact("alive-counts", `当时己方 ${counts.allies} 人存活${decisionSnapshot.selectedPlayer.value?.alive ? "（包括你）" : ""}，对方 ${counts.enemies} 人存活。`, sourceSnapshot.aliveCounts.evidenceRefs, sampledAt);
@@ -1003,7 +1009,14 @@ function buildCanonicalGeneratorInput(
       missingFields: raw.decisionAction ? ["contact_visibility", "tactical_intent"] : ["exact_action_start"],
       limitations: raw.decisionAction ? [raw.timingLimitation!] : ["只能确认动作发生或完成，不能推定其起始时刻和战术目的。"]
     });
-    if (raw.kind !== "WIN_RATE_DROP" && (raw.kind !== "RETURN_AND_FIRE" || raw.outcomeState)) facts.push({
+    const outcomeHurts = selfHurtEvents(raw.round.source, selectedSteamId).filter(event => event.tick >= raw.revealTick && event.tick <= Math.min(raw.round.endTick, raw.revealTick + OUTCOME_WINDOW_SECONDS * tickRate)).slice(0, MAX_SELF_HURT_EVENTS);
+    const hurtOutcomeId = `fact-${raw.sourceRef}-hurt-outcome`;
+    const keepSampleOutcome = !(raw.kind === "HP_CHANGE" && outcomeHurts.length > 0);
+    if (outcomeHurts.length) facts.push({ id: hurtOutcomeId, kind: "OUTCOME", roundNumber: raw.round.number,
+      tick: Math.max(...outcomeHurts.map(event => event.tick)), text: "结果窗口记录到本人受击；不据事件报告值推算实际扣血或伤害方向。",
+      sourceRefs: outcomeHurts.map(event => event.id), observedByPlayer: true, outcomeKind: "HP_CHANGE",
+      missingFields: ["damage_source", "damage_direction", "actual_hp_loss"], limitations: ["受击事件不证明攻击者或可见接触；致死同tick不推定先后。"] });
+    if (keepSampleOutcome && raw.kind !== "WIN_RATE_DROP" && (raw.kind !== "RETURN_AND_FIRE" || raw.outcomeState)) facts.push({
       id: outcomeFactId,
       kind: "OUTCOME",
       roundNumber: raw.round.number,
@@ -1061,7 +1074,7 @@ function buildCanonicalGeneratorInput(
       sourceRefs: [raw.sourceRef],
       factRefs: [...(state ? [stateFactId] : []), ...publicFactIds],
       actionRefs: hasVerifiedAction ? [actionFactId] : [],
-      outcomeRefs: raw.kind === "WIN_RATE_DROP" || raw.kind === "RETURN_AND_FIRE" && !raw.outcomeState ? [] : [outcomeFactId],
+      outcomeRefs: [...(keepSampleOutcome && raw.kind !== "WIN_RATE_DROP" && !(raw.kind === "RETURN_AND_FIRE" && !raw.outcomeState) ? [outcomeFactId] : []), ...(outcomeHurts.length ? [hurtOutcomeId] : [])],
       observableClaimRefs: observableState?.claims.map((claim) => claim.id) ?? [],
       evidenceRefs: [raw.sourceRef],
       playerSide: side,
@@ -1148,12 +1161,23 @@ function buildSelectedMatchEvents(
     }
   }
 
+  for (const round of rounds) {
+    for (const hurt of selfHurtEvents(round.source, selectedSteamId)) {
+      events.push({ id: hurt.id, tick: hurt.tick, event_type: "DAMAGE", target_player_id: selectedSteamId,
+        payload: { source: "cs2d-player-hurt", occurrence_only: true }, source_parser_event: "cs2d:player_hurt",
+        fact_confidence: 1, fact_refs: [hurt.id], missing_fields: ["damage_source", "damage_direction", "actual_hp_loss"] });
+    }
+  }
+
   for (let stateIndex = 1; stateIndex < states.length; stateIndex += 1) {
     const previous = states[stateIndex - 1];
     const current = states[stateIndex];
     if (current.roundNumber !== previous.roundNumber || current.sample.health >= previous.sample.health || current.sample.tick <= previous.sample.tick || current.sample.tick >= (rounds.find((round) => round.number === current.roundNumber)?.officialEndTick ?? Number.MAX_SAFE_INTEGER)) continue;
+    const intervalEventId = `me${index++}`; // Reserve legacy IDs even when an exact event replaces this interval.
+    const sourceRound = rounds.find(round => round.number === current.roundNumber)?.source;
+    if (sourceRound && selfHurtEvents(sourceRound, selectedSteamId).some(event => event.tick > previous.sample.tick && event.tick <= current.sample.tick)) continue;
     events.push({
-      id: `me${index++}`,
+      id: intervalEventId,
       tick: current.sample.tick,
       event_type: "DAMAGE",
       target_player_id: selectedSteamId,
@@ -1260,7 +1284,7 @@ function failedBundle(input: Cs2dAnalysisInput, metadata: Cs2dAnalysisMetadata, 
     cues: [],
     habit_clusters: [],
     generation_manifest: {
-      parser_version: `${CS2D_SOURCE.repository}@${CS2D_SOURCE.commit}`,
+      parser_version: `${CS2D_SOURCE.repository}@${CS2D_SOURCE.commit}${input.replay.generatedBy?.endsWith("+cs-coach.hurt-events.v1") ? "/hurt-events.v1" : ""}`,
       observation_version: CS2D_OBSERVATION_VERSION,
       signal_version: CS2D_SIGNAL_VERSION,
       planner_version: CS2D_PLANNER_VERSION,
@@ -1398,7 +1422,7 @@ export function buildCs2dAnalysisBundle(input: Cs2dAnalysisInput): Cs2dAnalysisB
     observationVersion: CS2D_OBSERVATION_VERSION,
     signalVersion: CS2D_SIGNAL_VERSION,
     plannerVersion: CS2D_PLANNER_VERSION,
-    parserVersion: `${CS2D_SOURCE.repository}@${CS2D_SOURCE.commit}`,
+    parserVersion: `${CS2D_SOURCE.repository}@${CS2D_SOURCE.commit}${input.replay.generatedBy?.endsWith("+cs-coach.hurt-events.v1") ? "/hurt-events.v1" : ""}`,
     promptVersion: "cs2d-decision-template/1.3.0",
     limitations
   });
@@ -1531,7 +1555,7 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
     throw new Error("cs2d win-probability contract is invalid.");
   }
   if (
-    ![CS2D_ADAPTER_VERSION, "cs2d-analysis-adapter/1.6.0", "cs2d-analysis-adapter/1.5.2", "cs2d-analysis-adapter/1.5.1", "cs2d-analysis-adapter/1.5.0", "cs2d-analysis-adapter/1.4.0"].includes(bundle.metadata.adapter_version) ||
+    ![CS2D_ADAPTER_VERSION, "cs2d-analysis-adapter/1.6.1", "cs2d-analysis-adapter/1.6.0", "cs2d-analysis-adapter/1.5.2", "cs2d-analysis-adapter/1.5.1", "cs2d-analysis-adapter/1.5.0", "cs2d-analysis-adapter/1.4.0"].includes(bundle.metadata.adapter_version) ||
     bundle.metadata.source.repository !== CS2D_SOURCE.repository ||
     bundle.metadata.source.commit !== CS2D_SOURCE.commit ||
     bundle.metadata.renderer_input !== false ||

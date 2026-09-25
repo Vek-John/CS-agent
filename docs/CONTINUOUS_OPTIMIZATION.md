@@ -35,18 +35,21 @@
 | 已push | 决策时公开回合时钟 | 01a0d7bb-d7ea-7e21-864f-54e7e2e17049，完成并释放写入 | 9150d51；44候选/38个有效时钟、4cue/3个教学包消费，148测试通过/1个既有缺产物跳过，TS/Web/Viewer构建通过；暂停补偿未知仍null，不据时间单独判错，见PUBLIC_ROUND_CLOCK.md |
 | 已push | 新解析器构建工具链配置 | 01a0d7ce-5686-7d33-84f4-717bae0a8401，完成并释放写入/进程 | 355e3f7；CI补WASM target/固定CLI0.2.125，保持Rust1.89；本地同toolchain预检和一次编译接线完成，21测试/真实parser与Viewer构建/TS/Web build通过；CI及1.89实际编译未运行，见PARSER_TOOLCHAIN.md |
 | 已push | 准备阶段本地请求期限 | 01a0d7e0-5597-7bf1-bc85-832b767654a7，完成并释放写入/进程 | 413f15a；两个client fetch＋JSON共用20秒期限，父取消立即退出；4红复现后69相关测试/TS/build通过，真实prepare集成证明fallback后READY_TO_START/后续准备与保存恢复零请求；见PREPARATION_REQUEST_DEADLINES.md |
-
-| 待执行 | 逐次受击事实与决策前本人证据 | 01a0d7f1-0580-7910-abbd-554dcd9a55de，交接后独占当前实现树 | parser已接收player_hurt但仅保留回合聚合；先核实canonical事件/受害者/字段语义，保留逐次事实并接入有引用的本人受击事实，不提升敌情精度或教学判断 |
+| 已push、本地验收完成 | 逐次受击事实与决策前本人证据 | 01a0d7f1-0580-7910-abbd-554dcd9a55de；已完成，释放写入与进程 | 264 hurt/本人27，23/44 snapshot和2/4教学包/确定性讲解实际消费；182测试+Rust3/TS/Web与Viewer构建通过；仍不证明专业判断提升，见SELF_HURT_EVIDENCE.md |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
 
 ## 本轮任务卡：逐次受击事实与决策前本人证据（2026-09-25）
 
-- 基线413f15a；主控已读准备期限关键diff/69测试验证记录，旧任务明确完成push并释放写入/进程。新任务01a0d7f1-0580-7910-abbd-554dcd9a55de独占本轮parser补丁、Adapter/contract/planner与相关文档测试；串行复用已具备WASM工具链和真实样本的当前树，避免重复大数据移动与并发写入。
+- 基线65deea8（实现413f15a＋交接）；主控已读准备期限关键diff/69测试验证记录，旧任务明确完成push并释放写入/进程。新任务01a0d7f1-0580-7910-abbd-554dcd9a55de独占本轮parser补丁、Adapter/contract/planner与相关文档测试；串行复用已具备WASM工具链和真实样本的当前树，避免重复大数据移动与并发写入。
 - 真实缺口：parser collector的player_hurt已接收tick/dmg_health/attacker_pawn/userid_pawn，只保留(tick,attacker,damage,weapon)用于回合ADR并丢弃受害者及逐次事件。Adapter明确记录无HurtEvent，以前后8Hz健康采样生成区间事实，不能精确定位受击。下一步是补parser-owned事实，而非继续同一Jev拒判集合。
 - 目标与验收：A1核实一手源码和已有真实Demo事件字段；A2以可选兼容数据保留canonical tick及受害者归属，未知不猜；A3实际决策前CoachingPackage仅消费所选玩家本人受击的可知事实，结果另入Outcome，攻击者/敌人命中数值/坐标/武器类别不得凭hurt泄入可知信息，不推断LOS/重复peek/伤害方向；A4同tick/未来/不同人/缺字段/自伤或世界伤/旧Replay及历史往返回归，避免精确事件与帧掉血重复计数；A5一次最终真实WASM解析到教学包的小摘要、相关测试/TS/Web与Viewer/parser构建、架构/学习日志/验证记录、commit/push。
 - 契约注意：优先可选独立hurt事实流，避免插入既有events数组改变按索引引用；不得默认补零/按位置猜actor，不改变旧ADR规则或把dmg_health直接声称为实际HP减少而未核实overkill语义。若无法验证精确损失，仅提供受击发生事实；无可靠来源则维持未知。已保存旧记录继续可读，新派生语义应有版本provenance；不重写历史。
 - 边界/风险/阶段：前10分钟局部源码与小probe；必要时现有native样本探针120秒上限，一次最终WASM消费120秒；bulk留在拥有它的进程，只回summary。实现与局部测试30分钟，构建10分钟阶段上限；已有工具不足不安装。禁止浏览器/服务/外部模型/用户DB/发布/旧锁屏A5。当前默认模型/推理；独立边界审查若需要限5分钟只读。当前执行者负责parser/probe/build资源、临时源文件清理，保留用户Demo和共享缓存。第一次验证失败先定位，连续两次同一基础设施失败简化工具，不叠加harness。
+
+- 最终证据：一次最终WASM解析7247ms、至双Adapter消融和教学消费7464ms；264hurt均有受害者，本人27，23/44候选和2/4正式讲解消费，2/4结果包消费，旧字段消融0→23/0→2且路线不变。健康区间事件25→3，新增27精确事件不作伤害总量统计；两教学判断仍证据不足。
+- 验证/分工：182相关测试通过/1既有缺WebGPU产物跳过；Rust3、TS/Web build、Viewer TS/WASM与Viewer构建通过。hurt_source_review继承默认配置负责只读source核实、独占新增self-hurt.test.ts（13项）和5分钟只读终审；无blocker，补齐1.6.1历史类型和测试。根任务唯一生产写入负责人。
+- 执行/清理：native初probe1次＋诊断编译失败误运行旧binary全读1次（已报告）＋修正后首事件早停1次＋最终WASM1次；bulk不出进程。所有测试/build/probe已退出，临时Rust probe从上游bin移走；无服务/浏览器/模型/用户DB/部署/安装，原UI A5不动。源码与文档同次提交push后释放写入，细节见[验证记录](validation/SELF_HURT_EVIDENCE.md)。
 
 ## 本轮任务卡：准备阶段本地请求期限（2026-09-25）
 

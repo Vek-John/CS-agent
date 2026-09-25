@@ -1,0 +1,213 @@
+diff --git a/packages/parser/src/assemble.rs b/packages/parser/src/assemble.rs
+--- a/packages/parser/src/assemble.rs
++++ b/packages/parser/src/assemble.rs
+@@ -47,6 +47,7 @@
+             utility_damage: HashMap::new(),
+             frames: Vec::new(),
+             events: Vec::new(),
++            hurt_events: Vec::new(),
+             bomb: Vec::new(),
+             grenade_paths: Vec::new(),
+             blinds: Vec::new(),
+@@ -204,6 +205,7 @@
+                 utility_damage: HashMap::new(),
+                 frames: Vec::new(),
+                 events: Vec::new(),
++            hurt_events: Vec::new(),
+                 bomb: Vec::new(),
+                 grenade_paths: Vec::new(),
+                 blinds: Vec::new(),
+@@ -549,6 +551,13 @@
+         });
+     }
+ 
++    // Independent stream: existing GameEvent indices and ADR rules stay unchanged.
++    for hurt in &c.hurt_events {
++        if let Some(round) = rounds.iter_mut().find(|round| hurt.tick >= round.freeze_start_tick && hurt.tick < round.post_end_tick) {
++            round.hurt_events.push(hurt.clone());
++        }
++    }
++
+     // Damage per round and player (for ADR/DMG on the scoreboard). Utility damage
+     // (HE + molotov/incendiary) is also tallied separately for the impact view.
+     for (tick, steam, dmg, weapon) in &c.hurts {
+diff --git a/packages/parser/src/collector.rs b/packages/parser/src/collector.rs
+--- a/packages/parser/src/collector.rs
++++ b/packages/parser/src/collector.rs
+@@ -2,7 +2,7 @@
+ //! and events, later assembled into the `Replay` by `crate::assemble`.
+ 
+ use crate::props::*;
+-use crate::schema::{PlayerMeta, PlayerState, RoundClockSample};
++use crate::schema::{PlayerMeta, PlayerState, RoundClockSample, HurtEvent};
+ use crate::weapons::*;
+ use source2_demo::prelude::*;
+ use source2_demo::proto::{
+@@ -84,6 +84,7 @@
+ 
+ #[derive(Default)]
+ pub(crate) struct Collector {
++    pub(crate) hurt_events: Vec<HurtEvent>,
+     clock_tick_interval: Option<f32>,
+     previous_clock_ticks: Option<(u32, u32)>,
+     clock_pause_observed: bool,
+@@ -575,6 +576,18 @@
+                 self.final_names = Some(team_names(ctx));
+             }
+             "player_hurt" => {
++                // Capture separately BEFORE ADR's self/world/zero-damage filters.
++                // No attacker, weapon, direction or coordinates enter this fact stream.
++                if tick != u32::MAX {
++                    self.hurt_events.push(HurtEvent {
++                        id: format!("cs2d-hurt-{}-{}", tick, self.hurt_events.len() + 1), tick,
++                        victim_steam_id: hurt_victim_steam(ctx, ev_i32(ge, "userid_pawn")),
++                        reported_health_damage: ev_i32(ge, "dmg_health"),
++                        reported_armor_damage: ev_i32(ge, "dmg_armor"),
++                        reported_health_after: ev_i32(ge, "health"),
++                        reported_armor_after: ev_i32(ge, "armor"),
++                    });
++                }
+                 let dmg = ev_i32(ge, "dmg_health").unwrap_or(0);
+                 if dmg <= 0 {
+                     return Ok(());
+diff --git a/packages/parser/src/lib.rs b/packages/parser/src/lib.rs
+--- a/packages/parser/src/lib.rs
++++ b/packages/parser/src/lib.rs
+@@ -21,7 +21,7 @@
+ use collector::Collector;
+ 
+ const DEMO_TICK_RATE: f64 = 64.0;
+-const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0";
++const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1";
+ 
+ /// Parses the bytes of a `.dem` in a single pass and returns `(Replay JSON, voice
+ /// blob)`. The `Replay` matches `replay-schema 2D`; the blob follows the `CLV2`
+diff --git a/packages/parser/src/props.rs b/packages/parser/src/props.rs
+--- a/packages/parser/src/props.rs
++++ b/packages/parser/src/props.rs
+@@ -216,3 +216,72 @@
+     let proxy = ctx.entities().get_by_class_name("CCSGameRulesProxy").ok()?;
+     match proxy.get_property_by_name(name) { Ok(FieldValue::Float(v)) if v.is_finite() => Some(*v), _ => None }
+ }
++
++
++// Game-event pawn IDs are native CS2 handles (15-bit index/17-bit serial).
++// Network CHandle properties carry the packed 14-bit index/low-10-bit serial.
++// Match that documented packed identity, never just a reused entity index.
++pub(crate) fn event_pawn_to_packed(handle: i32) -> Option<u32> {
++    let native = handle as u32;
++    if native == u32::MAX { return None; }
++    let index = native & 0x7fff;
++    if index >= 0x4000 { return None; }
++    let packed = index | (((native >> 15) & 0x3ff) << 14);
++    (packed != 0xffffff).then_some(packed)
++}
++
++fn hurt_packed_owner(packed: u32, class: &str, index: u32, serial: u32, bindings: impl IntoIterator<Item = (u32, u64)>) -> Option<u64> {
++    if class != "CCSPlayerPawn" || index != packed & 0x3fff || (serial & 0x3ff) != packed >> 14 { return None; }
++    let mut owner = None;
++    for (handle, steam) in bindings {
++        if handle != packed { continue; }
++        if steam == 0 || steam == u64::MAX || owner.is_some() { return None; }
++        owner = Some(steam);
++    }
++    owner
++}
++
++pub(crate) fn hurt_victim_steam(ctx: &Context, handle: Option<i32>) -> Option<String> {
++    let packed = event_pawn_to_packed(handle?)?;
++    let pawn = ctx.entities().get_by_index((packed & 0x3fff) as usize).ok()?;
++    let bindings = ctx.entities().iter().filter(|e| e.class().name() == "CCSPlayerController").filter_map(|controller| {
++        match controller.get_property_by_name("m_hPlayerPawn") {
++            Ok(FieldValue::Unsigned32(h)) => Some((*h, prop_u64(controller, "m_steamID"))),
++            _ => None,
++        }
++    });
++    hurt_packed_owner(packed, pawn.class().name(), pawn.index(), pawn.serial(), bindings).map(|steam| steam.to_string())
++}
++
++#[cfg(test)]
++mod hurt_handle_tests {
++    use super::{event_pawn_to_packed, hurt_packed_owner};
++    #[test]
++    fn converts_native_event_handle_without_dropping_serial() {
++        // Source probe: native event, packed controller field and packet entity agree.
++        assert_eq!(event_pawn_to_packed(-269811578), Some(16089222));
++        assert_ne!(event_pawn_to_packed(-269811578), event_pawn_to_packed((-269811578_i32 as u32 + (1 << 15)) as i32));
++        assert_eq!(event_pawn_to_packed(-1), None);
++        assert_eq!(event_pawn_to_packed(0x7fff), None);
++    }
++    #[test]
++    fn validates_current_binding_and_only_the_serial_bits_on_the_wire() {
++        let packed = 16089222;
++        let owner = 76561198000000001;
++        let resolve = |class, index, serial, bindings: Vec<(u32, u64)>| hurt_packed_owner(packed, class, index, serial, bindings);
++        assert_eq!(event_pawn_to_packed((3 << 15) | 134), Some((3 << 14) | 134));
++        assert_eq!(event_pawn_to_packed(0xffffff), None);
++        assert_eq!(resolve("CCSPlayerPawn", 134, 982, vec![(packed, owner)]), Some(owner));
++        assert_eq!(resolve("CCSPlayerPawn", 134, 982 + 1024, vec![(packed, owner)]), Some(owner));
++        assert_eq!(resolve("CCSPlayerPawn", 134, 981, vec![(packed, owner)]), None);
++        assert_eq!(resolve("CCSPlayerPawn", 135, 982, vec![(packed, owner)]), None);
++        assert_eq!(resolve("CCSObserverPawn", 134, 982, vec![(packed, owner)]), None);
++        assert_eq!(resolve("CCSPlayerPawn", 134, 982, vec![(0xffffff, owner)]), None);
++        assert_eq!(resolve("CCSPlayerPawn", 134, 982, vec![(packed + (1 << 14), owner)]), None);
++        assert_eq!(resolve("CCSPlayerPawn", 134, 982, vec![(packed, 0)]), None);
++        assert_eq!(resolve("CCSPlayerPawn", 134, 982, vec![(packed, u64::MAX)]), None);
++        assert_eq!(resolve("CCSPlayerPawn", 134, 982, vec![(packed, owner), (packed, owner + 1)]), None);
++        assert_eq!(resolve("CCSPlayerPawn", 134, 982, vec![(packed, owner), (packed, owner)]), None);
++    }
++
++}
+diff --git a/packages/parser/src/schema.rs b/packages/parser/src/schema.rs
+--- a/packages/parser/src/schema.rs
++++ b/packages/parser/src/schema.rs
+@@ -78,6 +78,7 @@
+     pub(crate) utility_damage: HashMap<String, i32>,
+     pub(crate) frames: Vec<Frame>,
+     pub(crate) events: Vec<Event>,
++    pub(crate) hurt_events: Vec<HurtEvent>,
+     pub(crate) bomb: Vec<BombKeyframe>,
+     pub(crate) grenade_paths: Vec<GrenadePath>,
+     pub(crate) blinds: Vec<Blind>,
+@@ -87,6 +88,19 @@
+     /// Items picked up during the buy window. Omitted when empty (older replays).
+     #[serde(skip_serializing_if = "Vec::is_empty")]
+     pub(crate) purchases: Vec<Purchase>,
++}
++
++/// Raw player_hurt event fields. Reported damage is not actual HP lost.
++#[derive(Serialize, Clone)]
++#[serde(rename_all = "camelCase")]
++pub(crate) struct HurtEvent {
++    pub(crate) id: String,
++    pub(crate) tick: u32,
++    pub(crate) victim_steam_id: Option<String>,
++    pub(crate) reported_health_damage: Option<i32>,
++    pub(crate) reported_armor_damage: Option<i32>,
++    pub(crate) reported_health_after: Option<i32>,
++    pub(crate) reported_armor_after: Option<i32>,
+ }
+ 
+ /// An item picked up during the buy window (a buy, a ground pickup, or a
+diff --git a/packages/replay-core/src/schema.ts b/packages/replay-core/src/schema.ts
+--- a/packages/replay-core/src/schema.ts
++++ b/packages/replay-core/src/schema.ts
+@@ -60,7 +60,18 @@
+   compColor?: number
+ }
+ 
++export interface HurtEvent {
++  id: string
++  tick: number
++  victimSteamId: string | null
++  reportedHealthDamage: number | null
++  reportedArmorDamage: number | null
++  reportedHealthAfter: number | null
++  reportedArmorAfter: number | null
++}
++
+ export interface Round {
++  hurtEvents?: HurtEvent[]
+   /** Round number starting at 1 (in played order). */
+   number: number
+   /** Freeze/buy-period start. The round timeline (`Frame.t` and every event's

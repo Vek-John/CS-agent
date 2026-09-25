@@ -1,3 +1,4 @@
+import { decisionSelfHurtEvents, selfHurtFactText, MAX_SELF_HURT_EVENTS } from "./self-hurt";
 import { readRoundClock, publicRoundClockFact } from "./round-clock";
 import type { DecisionSnapshot, DecisionValue, DecisionCheck, ObservableDecisionContext, ObservableState } from "@cs-coach/contracts";
 import { MAX_DECISION_SNAPSHOT_BYTES, MAX_DECISION_SNAPSHOT_PLAYERS } from "@cs-coach/contracts";
@@ -31,6 +32,7 @@ export function buildDecisionSnapshot(input: {
   const teammates = allies.filter((player) => player.steamId !== selectedPlayerId);
   const noTeammates = complete && side !== null && teammates.length === 0;
   const missingFields = ["enemy_visibility", "observer_audibility", "team_communication", "trade_window", "safe_reachable_cover", "bomb_timer", "damage_source", "utility_purpose"];
+  if (!Array.isArray(round.hurtEvents)) missingFields.push("self_hurt_events");
   if (!complete) missingFields.push("complete_current_roster");
   if (!fresh) missingFields.push("fresh_player_state");
   if (!side) missingFields.push("current_side");
@@ -77,6 +79,7 @@ export function buildDecisionSnapshot(input: {
   if (!hasRoundClock) missingFields.push("round_timer");
   const snapshot: DecisionSnapshot = {
     version: "decision-snapshot.v1", snapshotId, roundNumber: round.number, selectedPlayerId, decisionTick, sampledAtTick: frame?.tick ?? null,
+    ...(Array.isArray(round.hurtEvents) ? { selfHurtEvents: decisionSelfHurtEvents(round, selectedPlayerId, decisionTick, tickRate, Boolean(fresh && selected?.alive === true)) } : {}),
     selectedPlayer: value(fresh && selected ? { side, alive: boolOrNull(selected.alive), health: numberOrNull(selected.health), armor: numberOrNull(selected.armor), helmet: boolOrNull(selected.helmet), weapon: textOrNull(selected.weapon), grenades: Array.isArray(selected.grenades) ? selected.grenades.slice(0, 8).map((name) => textOrNull(name) ?? "未知道具") : null, money: numberOrNull(selected.money), equipmentValue: numberOrNull(selected.equipValue), hasDefuseKit: boolOrNull(selected.defuser), callout: mirageChineseCallout(selected.lastPlaceName) ?? null } : null, "OBSERVABLE", fresh ? [] : ["决策前缺少足够新的玩家状态。"]),
     aliveCounts: value(complete && side ? { allies: allies.length, enemies: all.filter((player) => player.side !== side && player.alive === true).length, includesSelectedPlayer: true } : null, "OBSERVABLE"),
     players: all.slice(0, MAX_DECISION_SNAPSHOT_PLAYERS).map((player: Cs2dPlayerState) => ({ playerId: player.steamId, side: sideOrNull(player.side), alive: boolOrNull(player.alive), health: numberOrNull(player.health), boundary: "APPLICABILITY_ONLY" })),
@@ -96,6 +99,7 @@ export function buildDecisionSnapshot(input: {
 export function buildObservableDecisionContext(snapshot: DecisionSnapshot, state: ObservableState): ObservableDecisionContext {
   const claims = state.claims.filter((claim) => claim.evidence_tick <= snapshot.decisionTick && claim.available_from_tick <= snapshot.decisionTick && (claim.expires_at_tick === undefined || snapshot.decisionTick < claim.expires_at_tick));
   const publicFacts: string[] = [];
+  if (snapshot.selfHurtEvents?.length) publicFacts.push(selfHurtFactText());
   const self = snapshot.selectedPlayer.value;
   if (self) publicFacts.push(`你的血量${self.health === null ? "未知" : `为 ${self.health}`}，护甲${self.armor === null ? "未知" : `为 ${self.armor}`}，手持${self.weapon ?? "未知"}。`);
   if (snapshot.aliveCounts.value) publicFacts.push(`当时己方 ${snapshot.aliveCounts.value.allies} 人存活${self?.alive ? "（包括你）" : ""}，对方 ${snapshot.aliveCounts.value.enemies} 人存活。`);
@@ -127,7 +131,7 @@ function exactKeys(value: unknown, keys: readonly string[], label: string): asse
 
 /** Validate nested information boundaries before accepting a persisted or worker packet. */
 export function assertDecisionContextShape(snapshot: DecisionSnapshot): void {
-  exactKeys(snapshot, ["version", "snapshotId", "roundNumber", "selectedPlayerId", "decisionTick", "sampledAtTick", "selectedPlayer", "aliveCounts", "players", "score", "clock", "bomb", "supportChecks", "pressureChecks", "spatialChecks", "missingFields", "limitations"], "DecisionSnapshot");
+  exactKeys(snapshot, ["version", "snapshotId", "roundNumber", "selectedPlayerId", "decisionTick", "sampledAtTick", "selectedPlayer", "aliveCounts", "players", "score", "clock", "bomb", "supportChecks", "pressureChecks", "spatialChecks", "missingFields", "limitations", ...(snapshot.selfHurtEvents === undefined ? [] : ["selfHurtEvents"])], "DecisionSnapshot");
   if (typeof snapshot.snapshotId !== "string" || typeof snapshot.selectedPlayerId !== "string" || !Number.isSafeInteger(snapshot.roundNumber)) throw new Error("DecisionSnapshot identity is invalid.");
   const values: [DecisionValue<unknown>, readonly string[]][] = [
     [snapshot.selectedPlayer, ["side", "alive", "health", "armor", "helmet", "weapon", "grenades", "money", "equipmentValue", "hasDefuseKit", "callout"]],
@@ -140,6 +144,14 @@ export function assertDecisionContextShape(snapshot: DecisionSnapshot): void {
     exactKeys(field, ["value", "boundary", "evidenceRefs", "limitations"], "DecisionValue");
     if (field.value !== null) exactKeys(field.value, keys, "DecisionValue payload");
     assertStrings(field.evidenceRefs); assertStrings(field.limitations);
+  }
+  if (snapshot.selfHurtEvents !== undefined) {
+    if (!Array.isArray(snapshot.selfHurtEvents) || snapshot.selfHurtEvents.length > MAX_SELF_HURT_EVENTS || new Set(snapshot.selfHurtEvents.map(event => event.sourceRef)).size !== snapshot.selfHurtEvents.length) throw new Error("Decision self-hurt evidence is unbounded or duplicated.");
+    for (const event of snapshot.selfHurtEvents) {
+      exactKeys(event, ["source", "sourceRef", "tick"], "Decision self-hurt event");
+      if (event.source !== "DEMO_PLAYER_HURT" || typeof event.sourceRef !== "string" || !event.sourceRef.trim() || event.sourceRef.length > 160 || typeof event.tick !== "number" || !Number.isSafeInteger(event.tick) || event.tick < 0 || event.tick >= snapshot.decisionTick) throw new Error("Decision self-hurt event has invalid or non-prior evidence.");
+    }
+    if (snapshot.selfHurtEvents.length && snapshot.selectedPlayer.value?.alive !== true) throw new Error("Decision self-hurt evidence requires a live selected player.");
   }
   const selected = snapshot.selectedPlayer.value;
   if (selected) {
