@@ -2,6 +2,14 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：合法长异议修订（2026-09-26）
+
+- 基线7a32699 clean；原任务01a0daba-7e7c-7fd2-a199-fc23c43bd643启动认证401、未产生改动。2026-09-26主控核实systemError/真实clean后接管写入，不重复启动同失败路径。主控有限goal：保留两段合法USER原文与来源，修复内部拼接和限制追加的实际失败，相关tests/TS/build后commit/push。
+- 沿原完整模板任务卡与边界：纯diagnosis/必要兼容输出/tests/docs，先真实diagnose→revise红例；不截断否定、不扩单条500字或限制12条上限；一次异议预算、stable case/thread/历史恢复保持。前端如需修改沿emil/Apple技能；无UI服务/Demo/模型/用户DB。原文本与补充组合需明确来源，必要窄契约变化同步架构，不能偷偷改变旧数据。
+- 完成：真实长文本/满限制2红→绿；optional previousReflection分别保留500字USER来源，新类型优先且保留旧origin，限制无空位时新增说明进入verdict解释，rule/thread同步低置信度。独立revision_semantics_review发现旧目标/问题类型继承的2项语义缺口，针对性红→绿后复核无must-fix。
+- 验证：相关7文件168tests、TS、Web production build通过；真实Graph异议不fallback、重复/第二次异议不重跑，actual append→内存restore保留两段来源。见[证据](validation/LONG_DIAGNOSIS_DISAGREEMENT.md)。无需DB迁移；旧记录读兼容，不承诺旧客户端读新可选字段；关键词/hinge不是通用语义撤回理解。测试/build全部退出，无服务/真实用户数据，原UI A5独立保留。
+- 后继已知入口：完整修订结果使用DISAGREED，但当前追问gate允许状态未含DISAGREED；下一轮先用实际修订→当前问答入口确认是否误隐藏，再补最小状态资格，不能拿本轮作为已修复证据。当前交付commit/push后主控释放本轮写入。
+
 ## 已交付：一手教学材料的条件与接入边界（2026-09-26）
 
 - 主控01a0c8ea-9dca-7332-b03d-3b38b88ed630有限goal，前owner3c84d55已push/clean/RELEASE后独占本板/学习日志；研究期间只读，与来源可达性任务无并发写入。默认配置，不派额外代理。

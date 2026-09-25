@@ -11,6 +11,7 @@ import type {
 import {
   buildUserClaims,
   createTransferRule,
+  CueCaseSchema,
   diagnoseCue,
   TeachingDiagnosisInputSchema,
   reviseDiagnosis,
@@ -97,6 +98,77 @@ function input(overrides: Partial<TeachingDiagnosisInput> = {}): TeachingDiagnos
 }
 
 describe("teaching diagnosis trust and evidence boundaries", () => {
+  it("accepts separately valid long original and disagreement reflections", () => {
+    const original = input({ reflection: reflection({ rawText: "原思路".repeat(160) + "我当时没有看到敌人。" }) });
+    const previous = diagnoseCue(original);
+    const disagreement = reflection({ rawText: "补充说明".repeat(120) + "末尾没有确认队友位置。" });
+    expect(original.reflection.rawText!.length).toBeLessThanOrEqual(500);
+    expect(disagreement.rawText!.length).toBeLessThanOrEqual(500);
+    const revised = reviseDiagnosis({ previous, input: original, disagreement });
+    expect(revised.cueCase.status).toBe("DISAGREED");
+    expect(revised.cueCase.previousReflection?.rawText).toBe(original.reflection.rawText);
+    expect(revised.cueCase.reflection?.rawText).toBe(disagreement.rawText);
+    expect(CueCaseSchema.parse(JSON.parse(JSON.stringify(revised.cueCase)))).toEqual(revised.cueCase);
+    expect(CueCaseSchema.parse(previous.cueCase).previousReflection).toBeUndefined();
+    expect(revised.cueCase.caseId).toBe(previous.cueCase.caseId);
+    expect(revised.learningThread.threadId).toBe(previous.learningThread.threadId);
+    expect(reviseDiagnosis({ previous: revised, input: original, disagreement })).toEqual(revised);
+  });
+
+  it("accepts one disagreement when the production diagnosis has twelve limitations", () => {
+    const original = input({ limitations: Array.from({ length: 10 }, (_, i) => `现场条件${i}尚未核实。`),
+      decisionResources: { health: 100, armor: 100, evidenceRefs: [] } });
+    const previous = diagnoseCue(original);
+    expect(previous.cueCase.diagnosticResult!.limitations).toHaveLength(12);
+    const revised = reviseDiagnosis({ previous, input: original, disagreement: reflection({ rawText: "我想再确认一下。", limitations: Array.from({ length: 12 }, (_, i) => `补充限制${i}。`) }) });
+    expect(revised.cueCase.verdict!.limitations).toEqual(revised.cueCase.diagnosticResult!.limitations);
+    expect(original.limitations!.every(value => revised.cueCase.limitations.includes(value))).toBe(true);
+    expect(revised.cueCase.reflection!.limitations).toHaveLength(12);
+    expect(revised.cueCase.verdict!.explanation).toMatch(/置信度已下调.*异议内容没有被写入 Demo 事实/);
+    expect(revised.cueCase.verdict!.explanation).toContain("仍需结合回放确认");
+    expect(revised.cueCase.transferRule!.confidence).toBe(revised.cueCase.verdict!.confidence);
+    expect(revised.learningThread.transferRule).toEqual(revised.cueCase.transferRule);
+  });
+
+  it("keeps two 500-character sources and lets a new claim correct only its own type", () => {
+    const original = input({ reflection: reflection({ rawText: "原".repeat(480) + "时间来不及，我看到敌人在A。" }) });
+    original.reflection.rawText = original.reflection.rawText!.padEnd(500, "原");
+    const rawText = "补".repeat(484) + "我没有看到敌人，只是猜测。";
+    const disagreement = reflection({ rawText: rawText.padEnd(500, "补") });
+    const revised = reviseDiagnosis({ previous: diagnoseCue(original), input: original, disagreement });
+    expect(revised.cueCase.previousReflection!.rawText).toHaveLength(500);
+    expect(revised.cueCase.reflection!.rawText).toBe(disagreement.rawText);
+    const enemy = revised.cueCase.claims.filter(c => c.type === "ENEMY_BELIEF");
+    expect(enemy).toHaveLength(1);
+    expect(enemy[0].content).toContain("我没有看到敌人，只是猜测。");
+    expect(enemy[0].content).not.toContain("我看到敌人在A。");
+    const time = revised.cueCase.claims.find(c => c.type === "TIME_BELIEF")!;
+    expect(time.content).toContain("时间来不及");
+    expect(time.originReflectionId).toBe(revised.cueCase.previousReflection!.reflectionId);
+    expect(enemy[0].originReflectionId).toBe(revised.cueCase.reflection!.reflectionId);
+    expect(revised.cueCase.claims.every(c => c.source === "USER")).toBe(true);
+  });
+
+  it("lets a new stated goal override the earlier selected goal", () => {
+    const original = input({ reflection: reflection({ selectedGoal: "TRADE", rawText: "我想帮队友补枪。" }) });
+    const revised = reviseDiagnosis({ previous: diagnoseCue(original), input: original,
+      disagreement: reflection({ selectedGoal: undefined, rawText: "我其实是保枪。" }) });
+    expect(revised.cueCase.claims.find(c => c.type === "GOAL")?.content).toContain("保枪");
+    expect(revised.cueCase.reflection?.selectedGoal).toBe("SAVE");
+  });
+
+  it("keeps the old voice claim without relabeling new resources as tactical context", () => {
+    const original = input({ reflection: reflection({ rawText: "队友语音让我执行战术。", questionType: "TACTICAL_CONTEXT" }) });
+    const previous = diagnoseCue(original);
+    const revised = reviseDiagnosis({ previous, input: original,
+      disagreement: reflection({ rawText: "我当时没有头盔和道具。" }) });
+    const tactical = revised.cueCase.claims.find(c => c.type === "TACTICAL_CONTEXT")!;
+    expect(tactical.content).toContain("队友语音让我执行战术。");
+    expect(tactical.content).not.toContain("没有头盔");
+    expect(tactical.originReflectionId).toBe(previous.cueCase.reflection!.reflectionId);
+    expect(revised.cueCase.claims.find(c => c.type === "RESOURCE_BELIEF")?.content).toContain("没有头盔和道具");
+  });
+
   it.each([
     { name: "risk", selectedGoal: "OTHER" as const },
     { name: "voice", selectedGoal: "EXECUTE_PLAN" as const, rawText: "队友语音让我执行战术" },

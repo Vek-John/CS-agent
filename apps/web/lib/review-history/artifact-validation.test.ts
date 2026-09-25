@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { SessionWrapUpResult, SessionWrapUpRequest } from "@cs-coach/coach-agent/client";
-import { diagnoseTeachingCue } from "@cs-coach/coach-agent/client";
+import { diagnoseTeachingCue, reviseTeachingDiagnosis } from "@cs-coach/coach-agent/client";
 import { TeachingDiagnosisPanel } from "../../components/playback/teaching-diagnosis-panel";
 import type { ReviewPlan, NarrationBundle } from "@cs-coach/contracts";
 import { completeAndSaveSessionWrapUp } from "../coaching/session-wrap-up-completion";
@@ -173,6 +173,30 @@ function fixture(): { loaded: LoadedReview; head: CommitRuntimeHeadInput } {
 }
 
 describe("Review artifact domain validation", () => {
+  it("saves and restores both separately bounded USER sources after a long disagreement", () => {
+    const { loaded, head } = fixture();
+    const plan = loaded.artifacts.find(a => a.artifactType === "REVIEW_PLAN")!.payload as unknown as ReviewPlan;
+    const cue = plan.cues[0];
+    const input = { cueId: cue.id, reflection: { cueId: cue.id, selectedGoal: "OTHER" as const,
+      rawText: "原".repeat(488) + "我当时没有看到敌人。", response: "ANSWERED" as const, source: "USER" as const, limitations: [] },
+      decisionFacts: [], playerActionFacts: [], outcomeFacts: [],
+    };
+    const initial = diagnoseTeachingCue(input);
+    const correctionText = "补".repeat(486) + "没有确认队友能够参与。";
+    const output = reviseTeachingDiagnosis({ previous: initial, input,
+      disagreement: { ...input.reflection, rawText: correctionText } });
+    const artifact = { artifactType: "CUE_CASE" as const, artifactKey: cue.id, schemaVersion: "cue-case.v1", payload: json(output.cueCase) };
+    validateReviewArtifactAppend(loaded, { ...artifact, reviewRevisionId: "revision-a", artifactRevision: 1, idempotencyKey: cue.id });
+    const restored = restoreHistoryControlPlane({ review: { id: "review-a", demoId: "managed-demo-a", title: "saved", status: "COMPLETED", selectedPlayerId: "player-a" },
+      revision: { id: "revision-a", status: "READY", artifactContractVersion: 2, routeId: head.routeId, routeHash: head.routeHash },
+      artifacts: [...loaded.artifacts, artifact].map(a => ({ kind: a.artifactType, key: a.artifactKey, payload: a.payload })), runtimeHead: null });
+    const validated = validateStoredReviewArtifacts({ ...restored, selectedPlayerId: "player-a", demoContentHash: HASH, routeId: head.routeId, routeHash: head.routeHash });
+    expect(validated.cueCases[cue.id]).toEqual(output.cueCase);
+    expect(validated.cueCases[cue.id].previousReflection?.rawText).toBe(input.reflection.rawText);
+    expect(validated.cueCases[cue.id].reflection?.rawText).toBe(correctionText);
+    expect(loaded.artifacts.some(a => a.artifactType === "CUE_CASE")).toBe(false);
+  });
+
   it.each([false, true])("preserves saturated transfer artifacts through existing save/restore validators and Panel, legacy=%s", legacy => {
     const { loaded, head } = fixture();
     const plan = loaded.artifacts.find(a => a.artifactType === "REVIEW_PLAN")!.payload as unknown as ReviewPlan;

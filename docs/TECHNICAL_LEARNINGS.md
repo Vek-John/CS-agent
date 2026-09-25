@@ -1956,3 +1956,12 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 可执行结论（项目推论）：检索材料应先明确游戏/地图版本、局面阶段、角色、本人资源、队友参与与可知信息、动作目的和未知前提；缺少队友视线/同步证据时保持条件化，不能用“距离近”补成可补枪，也不能用全知地图证明当时知道敌人。先对单条具来源的材料核对这些字段，材料与当前局面缺项时不得进入判错或替代动作确定性门。
 - 接入决定：本轮两篇只作学习参考，没有配对Demo、canonical tick、逐场玩家知识或教练gold；不生成PRO_SCENE、不产生样本比例或冒充n>=5案例集。只记录链接与简短自述结论，不复制文章/图片/视频入语料，不将网页公开可读视为可再分发许可。现有职业样本门、默认模型和专业质量结论保持。
 - 验证/限制：主控读原发布页并核实日期、直接选手引述与作者说明的区别；核对默认追问、规则producer、旧Session问答与架构检索边界。无下载、Demo解析、模型或产品变更，未重跑TS/build。不能据旧版教程证明当前CS2投掷覆盖，也不声称已接通职业案例；后续取得带明确来源/授权与版本的对应Demo后再做单例匹配，不以教程替代缺失资料。
+
+
+## 2026-09-26：合法反思与补充不能拼接后套单条上限
+
+- 问题：Panel初次/异议输入各500字，reviseDiagnosis却连接后再套rawText500；两段各合法也会抛异常。满12条诊断的verdict/case追加提示后各13条，同样在OutputSchema失败。真实diagnose→revise两红，Graph捕获后会退回基础讲解。
+- 决定：CueCase可选previousReflection保留原USER记录，reflection保存当前有效补充，两段分别守500/12上限；分别构建claims、同type采用新陈述，其余旧type保留origin。新增目标优先原目标，但没有假装具备通用否定理解。限制满额时保留原数组，将修订提示放已有verdict说明；rule/thread置信度跟随修订结果。没有新增输入格式、DB迁移或界面改动。
+- 独审：默认revision_semantics_review只读发现旧selectedGoal压过新“保枪”、旧TACTICAL_CONTEXT误把资源补充当战术的两项语义问题；各加红例修复，新问题类型只从本次原文确定。再查无must-fix；主控负责全部写入和验证。
+- 验证：两段500字、末尾否定、两源origin/旧类型保留、12条限制及新增提示、一次预算和稳定身份；真实runtime→异议不再fallback且重复事件/第二次异议不重跑Policy；实际append validator→内存restore→stored validator保留新旧来源。相关7文件168tests、TypeScript通过，生产build结果见本轮[验证](validation/LONG_DIAGNOSIS_DISAGREEMENT.md)。
+- 限制：分类/hinge仍沿既有规则，未证明自然语言理解或专业判断质量提升。previousReflection为新代码向后读兼容，不保证旧客户端可读新字段；旧已保存合并文本不会还原成两条。SSR/内存不等于真实UI/DB。原子任务因认证401未执行，主控接管后不重复同路径；无真实Demo、模型、服务、用户DB/Memory/密钥或安装部署操作。

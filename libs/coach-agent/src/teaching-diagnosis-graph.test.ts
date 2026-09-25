@@ -72,6 +72,28 @@ function disagreementEvent(eventId: string, rawText: string): CoachAgentEvent {
 }
 
 describe("Coach Agent teaching diagnosis bootstrap", () => {
+  it("revises two separately bounded long reflections through the real runtime without fallback or duplicate attempts", async () => {
+    const policy = new FakePolicyAdapter({ failure: new Error("must not call Policy") });
+    const runtime = createCoachAgentRuntime({ policy });
+    const originalText = "原思路".repeat(160) + "我当时没有看到敌人。";
+    const newText = "补充说明".repeat(120) + "没有确认队友位置。";
+    const first = await runtime.dispatch(reflectionEvent("long-first", { rawText: originalText }));
+    const event = disagreementEvent("long-revision", newText);
+    const revised = await runtime.dispatch(event);
+    const c = revised.state.cueCases[cueId];
+    expect(c.status).toBe("DISAGREED");
+    expect(c.previousReflection?.rawText).toBe(originalText);
+    expect(c.reflection?.rawText).toBe(newText);
+    expect(c.caseId).toBe(first.state.cueCases[cueId].caseId);
+    expect(c.attemptBudget.disagreement).toBe(1);
+    expect(revised.state.learningThreads).toHaveLength(1);
+    const duplicate = await runtime.dispatch(event);
+    expect(duplicate.state.cueCases[cueId]).toEqual(c);
+    const second = await runtime.dispatch(disagreementEvent("second-revision", "不再执行第二次复核"));
+    expect(second.state.cueCases[cueId]).toEqual(c);
+    expect(policy.calls).toHaveLength(0);
+  });
+
   it("bootstraps the first reflection without route/tick state or visual Policy", async () => {
     const policy = new FakePolicyAdapter({ failure: new Error("diagnosis must not call visual Policy") });
     const runtime = createCoachAgentRuntime({ policy });

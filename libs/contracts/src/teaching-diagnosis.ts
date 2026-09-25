@@ -258,6 +258,8 @@ export interface CueCase {
   pedagogyMode: PedagogyMode;
   status: CueCaseStatus;
   reflection?: UserReflection;
+  /** Original USER reflection retained separately after the one allowed revision. */
+  previousReflection?: UserReflection;
   claims: readonly UserClaim[];
   hinge?: HingeCondition;
   capabilities: readonly DiagnosticCapability[];

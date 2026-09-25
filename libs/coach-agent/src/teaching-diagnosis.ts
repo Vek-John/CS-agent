@@ -231,6 +231,7 @@ const CueCaseSchema = z.object({
   pedagogyMode: z.enum(["INTRODUCE", "CLARIFY", "CONTRAST", "CHECK_TRANSFER", "REINFORCE", "BRIEF_REPEAT", "DEFER"]),
   status: z.enum(CUE_CASE_STATUSES),
   reflection: UserReflectionSchema.optional(),
+  previousReflection: UserReflectionSchema.optional(),
   claims: z.array(UserClaimSchema).max(16),
   hinge: HingeSchema.optional(),
   capabilities: z.array(CapabilitySchema).max(8),
@@ -906,7 +907,11 @@ function normalizedInput(input: TeachingDiagnosisInput): TeachingDiagnosisInput 
 export function diagnoseCue(rawInput: TeachingDiagnosisInput): TeachingDiagnosisOutput {
   const input = normalizedInput(rawInput);
   const reflection = normalizedReflectionForInput(input.reflection, input);
-  const claims = buildUserClaims(reflection, input);
+  return diagnoseReflection(input, reflection, buildUserClaims(reflection, input));
+}
+
+/** Revision may combine separately bounded USER claims without joining their source texts. */
+function diagnoseReflection(input: TeachingDiagnosisInput, reflection: UserReflection, claims: UserClaim[]): TeachingDiagnosisOutput {
   const hinge = selectHingeCondition(input, claims);
   const capabilities = buildDiagnosticCapabilities(input, hinge, claims);
   const selected = capabilities[0];
@@ -969,33 +974,50 @@ export function reviseDiagnosis(raw: ReviseTeachingDiagnosisInput): TeachingDiag
     source: "USER",
   });
   if (previous.cueCase.attemptBudget.disagreement >= 1) return previous;
-  const mergedText = [input.reflection.rawText, disagreement.rawText].filter(Boolean).join("；");
-  const mergedReflection = parseUserReflection({
-    ...input.reflection,
-    cueId: input.cueId,
-    reflectionId: `${input.reflection.reflectionId ?? "reflection"}-revision`,
-    rawText: mergedText || undefined,
-    selectedGoal: disagreement.selectedGoal ?? input.reflection.selectedGoal,
-    questionType: disagreementQuestionType(disagreement) ?? input.reflection.questionType,
-    source: "USER",
-    response: "ANSWERED",
-    limitations: unique([...input.reflection.limitations, ...disagreement.limitations, "这是你补充的不同看法，仍需结合回放确认。"]),
+  const revisionNotice = "这是你补充的不同看法，仍需结合回放确认。";
+  const reflectionLimitations = unique([...disagreement.limitations, revisionNotice]);
+  const currentReflection = parseUserReflection({
+    ...disagreement,
+    reflectionId: `reflection-revision-${stableToken(`${input.reflection.reflectionId}|${disagreement.reflectionId}`)}`,
+    rawText: disagreement.rawText?.trim() ? disagreement.rawText : input.reflection.rawText,
+    selectedGoal: disagreement.selectedGoal ?? inferGoalFromText(disagreement.rawText) ?? input.reflection.selectedGoal,
+    questionType: disagreement.rawText?.trim()
+      ? disagreementQuestionType(disagreement) ?? questionTypeFor(undefined, disagreement)
+      : disagreement.questionType ?? input.reflection.questionType,
+    limitations: reflectionLimitations.length <= MAX_DIAGNOSIS_LIMITATIONS ? reflectionLimitations : disagreement.limitations,
   });
-  const revised = diagnoseCue({ ...input, reflection: mergedReflection, existingThreads: [raw.previous.learningThread, ...(input.existingThreads ?? [])] });
-  if (!revised.cueCase.verdict) return previous;
+  const currentClaims = buildUserClaims(currentReflection, input);
+  const revisedTypes = new Set(currentClaims.map(item => item.type));
+  const claims = [...currentClaims, ...buildUserClaims(input.reflection, input).filter(item => !revisedTypes.has(item.type))];
+  const revisedInput = { ...input, reflection: currentReflection, existingThreads: [previous.learningThread, ...(input.existingThreads ?? [])] };
+  const revised = diagnoseReflection(revisedInput, currentReflection, claims);
+  if (!revised.cueCase.verdict || !revised.cueCase.hinge || !revised.cueCase.diagnosticResult) return previous;
+  const verdictNotice = "用户异议后的置信度已下调。";
+  const caseNotice = "异议内容没有被写入 Demo 事实。";
+  const verdictLimitations = unique([...revised.cueCase.verdict.limitations, verdictNotice]);
+  const caseLimitations = unique([...revised.cueCase.limitations, caseNotice]);
+  const overflowNotices = [
+    ...(reflectionLimitations.length > MAX_DIAGNOSIS_LIMITATIONS ? [revisionNotice] : []),
+    ...(verdictLimitations.length > MAX_DIAGNOSIS_LIMITATIONS ? [verdictNotice] : []),
+    ...(caseLimitations.length > MAX_DIAGNOSIS_LIMITATIONS ? [caseNotice] : []),
+  ];
   const loweredVerdict: CoachVerdict = {
     ...revised.cueCase.verdict,
     revision: 1,
     confidence: Math.max(0.15, revised.cueCase.verdict.confidence - 0.12),
-    limitations: unique([...revised.cueCase.verdict.limitations, "用户异议后的置信度已下调。"]),
+    explanation: revised.cueCase.verdict.explanation + overflowNotices.join(""),
+    limitations: verdictLimitations.length <= MAX_DIAGNOSIS_LIMITATIONS ? verdictLimitations : revised.cueCase.verdict.limitations,
   };
+  const revisedTransferRule = createTransferRule(revisedInput, revised.cueCase.hinge, revised.cueCase.diagnosticResult, loweredVerdict);
   const revisedCase: CueCase = {
     ...revised.cueCase,
     caseId: previous.cueCase.caseId,
     status: "DISAGREED",
+    previousReflection: input.reflection,
     verdict: loweredVerdict,
+    transferRule: revisedTransferRule,
     attemptBudget: { ...revised.cueCase.attemptBudget, disagreement: 1, alternateDiagnostic: revised.cueCase.selectedCapabilityId === previous.cueCase.selectedCapabilityId ? 0 : 1 },
-    limitations: unique([...revised.cueCase.limitations, "异议内容没有被写入 Demo 事实。"]),
+    limitations: caseLimitations.length <= MAX_DIAGNOSIS_LIMITATIONS ? caseLimitations : revised.cueCase.limitations,
   };
   // A revised hinge is still the same cue-level learning thread. Keep its
   // identity and historical evidence so the Session reducer replaces the
@@ -1003,6 +1025,7 @@ export function reviseDiagnosis(raw: ReviseTeachingDiagnosisInput): TeachingDiag
   // diagnosis summary/confidence must follow the lowered revised verdict.
   const mergedLearningThread = ThreadSchema.parse({
     ...revised.learningThread,
+    transferRule: revisedTransferRule,
     threadId: previous.learningThread.threadId,
     diagnosis: {
       ...revised.learningThread.diagnosis,

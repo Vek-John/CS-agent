@@ -1500,6 +1500,14 @@ Memory Brief 的 structured recall 优先于语义召回，最多返回 2 个 ac
 
 ## 12. 问答与生成约束
 
+### 12.0 一次异议的有界 USER 来源
+
+`CueCase` 的可选 `previousReflection` 保留异议前的 USER 反思；`reflection` 是本次有效补充（只改目标而未给新原文时沿用原文）。两者分别沿用 UserReflection 的500字与12条限制，不拼成一个超长 rawText，不修改 Demo 事实。旧记录缺少 previousReflection 仍可按 cue-case.v1 读取；旧版本程序不保证认识新可选字段，不能据此承诺降级客户端兼容。
+
+修订分别生成两段用户陈述，按类型采用新陈述、保留本次未提及的旧类型，并保留各自 originReflectionId。目标优先级为新显式选项、新原文的既有目标识别、旧目标；新原文不继承旧问题类型以伪造新 claim。这是有界关键词分类，不是对自然语言隐含撤回、否定或矛盾的完整理解。
+
+一次异议预算和 case/thread 身份保持。增加修订提示不得挤掉满12条来源限制；无空位时将必要提示放入现有800字 verdict 说明，完整结果仍过 schema。TransferRule 和 LearningThread 同步修订后的低置信度。恢复只读取保存结果，不重新计算；不增加模型或长期记忆执行次数。
+
 ### 12.1 默认Host的本地有据追问
 
 当前默认cs2d Host先提供不调用模型的只读解释投影，与legacy `answerCurrentCueQuestion`及未来生成式Question Adapter分开。默认路线或合法ManualCueVisit均须同Session/plan/cue/segment、PAUSED、匹配outcome end且实际完成的OutcomeCompletionGate、现代可信观察者上下文及已呈现完整诊断/讲解才开放。默认路线仍要求global revealed且未被自由接管；manual要求非空实际visit_id及visit.cue_id匹配当前cue，允许该visit的takeover状态，但只依Session本次visit完成门，不借global曾看过标记。BEGIN_MANUAL_CUE_VISIT清空gate，完整播放结束才可问；工具/诊断忙碌、普通自由查看、未可信历史和反思未提交不提供入口。输入300字以内，接受三类明确问法及有限同义表达（部分判断依据、当时已知事实、仍未知条件），以及本人血量/护甲/道具数量/决策前最近弹匣记录四类明确数值核对；不将短语路由称为通用语义理解。
