@@ -1946,3 +1946,13 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 验证：先Controller/API改动使5红通过，单独Host epoch（Controller代未变）仍红；补Host门后全部通过。新增29项含三mode当前HTTP/timeout与切B晚成功/失败、父取消、不合作transport、late headers不读body、body晚reject及timer/listener清理。相关7文件99tests、TS/Web production build通过；默认viewer_source_race_review只读与主控真实diff复核无must-fix。[证据](validation/HISTORY_VIEWER_SOURCE_LIFETIME.md)。
 - 限制：20秒是本地等待政策，不是端到端保障或服务端回滚。source route不materialize外置大产物；VIEW token默认60秒、首次尝试消费，超时可能已签发，未使用按原规则过期。无真实浏览器/桌面/数据库/Demo/模型，原UI A5不变。
 - 研究衔接：主控已核实real-cue-resources/replayed-projections.json只保存资源/roster；本轮旁证verify-jev-real-smoke.ts逐候选校验packet后只报告统计。因此目前没有已核实可直接打包的新完整标注材料，不为纸面包重复解析旧Demo；不将聚合摘要当专业gold。
+
+
+## 2026-09-26：一手教学指南提供条件，不提供当前玩家的判错标签
+
+- 问题：职业来源可达性核实后，继续区分可学习的教学方法与可入库的职业场景。当前规则producer输出RULE；默认追问没有职业检索接线，ARCHITECTURE6.10定义ProCorpus方向，不代表已有可用数据集。
+- 一手材料：[Dignitas对GeT_RiGhT的Mirage A防守访谈](https://dignitas.gg/articles/a-guide-on-defending-a-site-on-mirage-like-get_right)（2021-02-19，CS:GO）包含选手本人对Ticket/Shadow支援与回防的解释：协同、闪光时机及人员/道具条件会改变处理，理想回防并非固定套路。它是具名职业观点，不是某场CS2逐tick决策标签；不迁移其中坐标、配比或道具投法为当前版本的硬规则。
+- 版本对照：[Dignitas的CS2 Mirage道具指南](https://dignitas.gg/articles/an-essential-mirage-utility-guide-for-cs2)（2024-03-19，作者esarwhy）把道具用途与队伍计划联系起来，例如烟的作用需与计划经过的路线相容，并指出部分燃烧区域不覆盖全部位置。属于作者教学指南，不能仅因发布在战队网站就标成职业选手证言；本轮未在当前游戏构建实测任何投法。
+- 可执行结论（项目推论）：检索材料应先明确游戏/地图版本、局面阶段、角色、本人资源、队友参与与可知信息、动作目的和未知前提；缺少队友视线/同步证据时保持条件化，不能用“距离近”补成可补枪，也不能用全知地图证明当时知道敌人。先对单条具来源的材料核对这些字段，材料与当前局面缺项时不得进入判错或替代动作确定性门。
+- 接入决定：本轮两篇只作学习参考，没有配对Demo、canonical tick、逐场玩家知识或教练gold；不生成PRO_SCENE、不产生样本比例或冒充n>=5案例集。只记录链接与简短自述结论，不复制文章/图片/视频入语料，不将网页公开可读视为可再分发许可。现有职业样本门、默认模型和专业质量结论保持。
+- 验证/限制：主控读原发布页并核实日期、直接选手引述与作者说明的区别；核对默认追问、规则producer、旧Session问答与架构检索边界。无下载、Demo解析、模型或产品变更，未重跑TS/build。不能据旧版教程证明当前CS2投掷覆盖，也不声称已接通职业案例；后续取得带明确来源/授权与版本的对应Demo后再做单例匹配，不以教程替代缺失资料。

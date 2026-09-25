@@ -2,6 +2,13 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：一手教学材料的条件与接入边界（2026-09-26）
+
+- 主控01a0c8ea-9dca-7332-b03d-3b38b88ed630有限goal，前owner3c84d55已push/clean/RELEASE后独占本板/学习日志；研究期间只读，与来源可达性任务无并发写入。默认配置，不派额外代理。
+- 目标与流程：核实具名选手材料和CS2作者教程→对照现有PRO_SCENE/规则/默认问答→记录可执行条件与不能接入的部分。A1两篇原发布页/时代/作者归属明确；A2协同/资源/路线意图等前提不冒充gold；A3既有样本和信息门保持；A4docs commit/push。采用两篇一手材料，10分钟内收敛，无批量下载/模型/视频或Demo解析，未启动进程。
+- 结果：2021 GeT_RiGhT访谈是CS:GO具名职业观点，2024 CS2教程是作者指导；均无对应完整决策资料，不生成职业样本或默认判错。具体链接/可执行字段与限制见TECHNICAL_LEARNINGS同日条目。资料可用于设计条件核对，不代表当前版本投法实测或职业判断质量改善。
+- 接续实际问题：reviseDiagnosis把两段各最多500字的rawText连接后再次parseUserReflection(max500)，Panel两个输入各允许500，合法长补充存在失败风险；同时满12条诊断在修订追加限制时可能超限。下一有限任务先走真实诊断→异议生产链复现，再决定如何保留原思路/新增信息且不截断语义；不做全项目长度审计。当前只交学习记录，未重跑TS/build，原UI A5保持独立等待。
+
 ## 已核实：Memory evidence 误标路径当前不可达（2026-09-26）
 
 - 基线402c584已push/clean；01a0dab3-4810-76a2-a23d-d7e278972014串行核查，主控只读。原任务怀疑RULE经material.evidence误标PRO_EVIDENCE；适配器内部代码确有该问题，但严格输入不包含evidence，不能用cast拼接fixture宣称产品红例。
