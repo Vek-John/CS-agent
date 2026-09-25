@@ -2,7 +2,14 @@
 
 更新时间：2026-09-25。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
-## 当前独立任务：封闭整场总结本地完成（2026-09-26）
+## 当前独立任务：总结失败状态恢复（2026-09-26）
+
+- 上轮04e6b71已push、工作树干净、owner释放；93相关测试/TS/build通过。新任务01a0d964-7dcf-7062-8e43-7b08d87bfa18串行复用当前实现树，默认配置；独占总结Host/展示/必要历史artifact接线、tests及本轮docs，主控只读。
+- 真实依据：Host仅正常返回分支保存SESSION_SUMMARY，MISSING_SESSION_SUMMARY与INVALID_PRESENTABLE_INPUT只更新内存；历史restore有summary一律READY，无summary则IDLE，可能把失败/缺失错误显示成无重复主题。先通过生产恢复入口和隔离artifact复现，再做最小修复。
+- 目标/验收：A1失败、正常无主题、成功三者恢复可区分；A2失败记录当前身份绑定且恢复保留准确原因/完成回看能力，不冒充教学结论；A3旧保存正文不改写，无模型/分析/Memory副作用，取消/过期generation不写入；A4实际生产保存→validator→restore→展示路径、相关tests/TS/build；A5架构契约必要更新、学习/紧凑证据、commit/push/release。
+- 边界与风险：优先既有artifact/result契约，不扩大为DB重构，不改用户SQLite/Demo/密钥，不改判断与播放门；无浏览器/模型/服务/安装部署main。重点失败语义、旧缺失记录诚实提示、artifact写失败与迟到写入。8分钟复现、20分钟实现、10分钟检查，必要5分钟只读终审；owner负责自有测试/build及临时资源退出。
+
+## 已交付：封闭整场总结本地完成（2026-09-26）
 
 - 基线0b806b9，01a0d94b-3e01-7003-bd26-8043799d4dc0独占wrap-up客户端/必要Host窄接线/tests/docs，主控只读，有限goal已建。A1生产builder/fake provider确认固定正文与调用成本；A2本地域重建并过原主题/完成/refs/closed校验，保留完整主题和限定；A3确定性来源/取消/恢复不改写；A4实际Host或严格controller完成链、长包/旧HTTP兼容与tests/TS/build；A5架构/学习/证据/commit/push/release。
 - refs及limitations允许合法子集，不能称所有bundle完全唯一。保留兼容Provider入口；不做单候选Director跳过（其selected=[]等自由仍存在）。无Demo/模型/UI浏览器/服务/用户DB/Memory/密钥/部署main。Host完成提示如需窄调沿emil/apple技能，不改布局；8分钟诊断、20分钟实现、10分钟检查，必要5分钟只读终审，主控负责进程退出。
