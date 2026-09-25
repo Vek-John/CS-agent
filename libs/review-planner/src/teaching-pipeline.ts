@@ -180,8 +180,12 @@ function allCandidateRefs(candidate: TeachingCandidate): Set<string> {
   ]);
 }
 
+function hasRankingAction(candidate: TeachingCandidate, material: CandidateMaterial | undefined): boolean {
+  return candidate.actionRefs.some(ref => !material?.playerActionFacts.some(fact => fact.id === ref && fact.presentationOnly));
+}
+
 export function buildDirectorRequest(set: CandidateSet, maxSelected = DEFAULT_MAX_CUES): DirectorRequest {
-  const valueOf = (candidate: TeachingCandidate): number => candidate.deterministicScore + (candidate.resultSummary.selectedPlayerDeath ? 100 : candidate.source.kind === "KILL" ? 80 : 0) + (candidate.winRateSignalRefs.length > 0 ? 80 : 0) + (candidate.actionRefs.length > 0 && candidate.factRefs.length > 0 ? 10 : 0) + Math.min(6, candidate.evidenceRefs.length);
+  const valueOf = (candidate: TeachingCandidate): number => candidate.deterministicScore + (candidate.resultSummary.selectedPlayerDeath ? 100 : candidate.source.kind === "KILL" ? 80 : 0) + (candidate.winRateSignalRefs.length > 0 ? 80 : 0) + (hasRankingAction(candidate, materials.get(candidate.candidateId)) && candidate.factRefs.length > 0 ? 10 : 0) + Math.min(6, candidate.evidenceRefs.length);
   const materials = materialById(set);
   const practicalCandidates = legalCandidates(set);
   const byRound = new Map<number, TeachingCandidate[]>();
@@ -264,7 +268,7 @@ function legalCandidates(set: CandidateSet): TeachingCandidate[] {
     const hasOutcomeFact = Boolean(material?.outcomeFacts.some((fact) => candidate.outcomeRefs.includes(fact.id)));
     return candidate.factRefs.length > 0 && (candidate.outcomeRefs.length > 0 || candidate.winRateSignalRefs.length > 0) && hasDecisionFact && (hasPlayerAction || Boolean(material && assessCandidateTeaching(candidate, material).kind === "INSUFFICIENT_EVIDENCE")) && (hasOutcomeFact || candidate.winRateSignalRefs.length > 0);
   };
-  const rank = (candidate: TeachingCandidate): number => candidate.deterministicScore + (candidate.resultSummary.selectedPlayerDeath ? 100 : candidate.source.kind === "KILL" ? 80 : 0) + (candidate.winRateSignalRefs.length > 0 ? 80 : 0) + (candidate.factRefs.length > 0 && candidate.actionRefs.length > 0 ? 10 : 0) + Math.min(6, candidate.evidenceRefs.length);
+  const rank = (candidate: TeachingCandidate): number => candidate.deterministicScore + (candidate.resultSummary.selectedPlayerDeath ? 100 : candidate.source.kind === "KILL" ? 80 : 0) + (candidate.winRateSignalRefs.length > 0 ? 80 : 0) + (candidate.factRefs.length > 0 && hasRankingAction(candidate, materials.get(candidate.candidateId)) ? 10 : 0) + Math.min(6, candidate.evidenceRefs.length);
   const byRound = new Map<number, TeachingCandidate[]>();
   for (const candidate of set.candidates.filter((candidate) => isPracticalTeachingCandidate(candidate, materials.get(candidate.candidateId)) && canCompile(candidate))) byRound.set(candidate.roundNumber, [...(byRound.get(candidate.roundNumber) ?? []), candidate]);
   const accepted: TeachingCandidate[] = [];

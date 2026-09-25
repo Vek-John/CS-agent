@@ -1007,7 +1007,7 @@ describe("return-and-fire adapter boundary", () => {
     const bundle = buildReturn({ ...input, rounds: input.rounds.map(r => ({ ...r, decidedTick: 180 })) });
     expect(bundle.candidate_set.candidates.some(c => c.source.kind === "RETURN_AND_FIRE")).toBe(false);
   });
-  it.each(["cs2d-analysis-adapter/1.5.2", "cs2d-analysis-adapter/1.6.0", "cs2d-analysis-adapter/1.6.1"] as const)("continues reading %s history without changing saved material", (version) => {
+  it.each(["cs2d-analysis-adapter/1.5.2", "cs2d-analysis-adapter/1.6.0", "cs2d-analysis-adapter/1.6.1", "cs2d-analysis-adapter/1.7.0"] as const)("continues reading %s history without changing saved material", (version) => {
     const bundle = buildCs2dAnalysisBundle({ replay: replayFixture(), selectedSteamId: "p-t1", demoId: "old-1.5.2" });
     const old = { ...bundle, metadata: { ...bundle.metadata, adapter_version: version } };
     const restored = deserializeCs2dAnalysisBundle(JSON.stringify(old));

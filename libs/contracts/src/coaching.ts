@@ -58,6 +58,8 @@ export type CanonicalFactKind = "DECISION_CONTEXT" | "PLAYER_ACTION" | "OUTCOME"
 
 /** Parser-neutral fact DTO. Parser adapters can populate it without coaching conclusions. */
 export interface CanonicalAnalysisFact {
+  /** Supplemental occurrence only: excluded from nomination ranking and process judgments. */
+  presentationOnly?: true;
   /** Optional action-producer output; must have an explicit actor and independent source refs. */
   actionActorPlayerId?: string;
   decisionAction?: PlayerActionFact["decisionAction"];
@@ -200,6 +202,8 @@ export interface CandidateSet {
 
 /** A verified player action is separate from an ObservableClaim. */
 export interface PlayerActionFact {
+  /** Supplemental occurrence only: excluded from nomination ranking and process judgments. */
+  presentationOnly?: true;
   /** Strict action-only window; never inferred from free text or outcome events. */
   decisionAction?: {
     version: "decision-action.v1";

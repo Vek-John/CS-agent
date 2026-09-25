@@ -195,3 +195,11 @@ describe("trusted teaching and advice gates", () => {
     expect(buildGatedAdviceOptions(pair.candidate, pair.material)[0].applicability?.status).toBe("UNVERIFIABLE");
   });
 });
+
+it("cannot promote a presentation-only occurrence into a verified process judgment", () => {
+  const pair = process(window(), "AIM_EXECUTION_FAILURE");
+  expect(assessCandidateTeaching(pair.candidate, pair.material).kind).toBe("EXECUTION_ISSUE");
+  pair.material.playerActionFacts = pair.material.playerActionFacts.map(f => ({ ...f, presentationOnly: true }));
+  expect(assessCandidateTeaching(pair.candidate, pair.material).kind).toBe("INSUFFICIENT_EVIDENCE");
+  expect(verifiedHabitKey(pair.candidate, pair.material)).toBeUndefined();
+});

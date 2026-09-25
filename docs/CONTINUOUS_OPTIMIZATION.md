@@ -22,12 +22,16 @@
 
 大型Demo或浏览器测试先smoke，bulk留在所属Worker/页面，由一个控制器负责整个进程生命周期；超时有退出和清理。同一基础设施边界失败两次先简化harness。保护未提交工作、真实Demo、SQLite/Memory及密钥；不force push，不擅自部署、发布或安装用户应用。缺信息时完成独立可做项；无新信息的失败路径不无限重试。
 
-## 当前独立任务：处理窗口内本人开火事实（2026-09-25）
+## 本轮独立任务：处理窗口内本人开火事实（2026-09-25）
 
 - 基线6ef784a干净已push，真实慢放资格任务已release；01a0d92a-c3dd-7143-9894-d5eaadcec0a8独占Adapter动作事实生产/必要窄引用接线、相关tests/验证工具/docs。主控只读，默认配置，串行复用已有树，不碰锁屏UI。
 - 已见路径：hasVerifiedAction只覆盖RETURN_AND_FIRE/UTILITY/非爆炸BOMB；普通明确shooter的shot只进WEAPON_FIRE。上一轮15/16自然cue无PlayerActionFact，尚未证明这些窗口有shot。本轮先fixture区分真正没动作与已存在本人事件未传递，不把覆盖数当教学质量。
 - 目标/验收：A1实际Adapter/Compiler/Narrator在DEATH或HP_CHANGE处理窗口有独立本人shot但action缺失先红；A2仅绑定当前同回合、明确本人、合法canonical且在已有处理窗口的shot，时间语义清楚，未知actor/未来/他人/死亡后或同tick顺序不明拒绝；A3独立PLAYER_ACTION只说已记录本人开火，不猜目标/命中/接敌/重复peek/意图，最多有界事实/refs，不借结果造动作，现有选点/decisionTick/assessment/门不变；A4真实生产Narrator/Host自然资格、旧历史兼容及相关tests/TS/Web build，必要一次最终WASM同进程消融验消费（先smoke，无Parser重建）；A5架构/学习日志/证据/任务板commit/push并release与下一建议。
 - 风险/阶段：8分钟复现/时间契约，25分钟实现回归，10分钟验证构建；最多一次真实解析、120秒进程组deadline，bulk单owner，阶段小摘要先落位。范围先DEATH/HP_CHANGE两类，不为更多case扩选点/延长窗口或再提名事件。引用event稳定、source refs可追溯，死亡tick不推定事件次序；同一事件在既有动作事实内不重复放大。没有合法shot则仍无action/FINISH，不强制工具。无模型/UI/服务/用户DB/Memory/密钥/安装发布main，原A5单独待恢复。必要5分钟只读信息边界终审，执行者清理全部进程。
+
+- 本轮完成：实际基线f747eca；Adapter→Compiler→Narrator两类2红→绿。严格决策后/揭示前/已知死亡前，仅已有DEATH/HP_CHANGE一条presentationOnly发生事实（最多3源ref），不重复现有动作。发现原动作排序加分会潜在漂移，窄标记贯通canonical/material/strict诊断并排除rank与专业过程判断，旧动作缺省不变。Adapter/signals1.8、Generator2.4，旧1.7可读。
+- 真实/验收：一次Dog WASM6395ms/总6795ms、0fetch；44候选10窗口=9独立shot，四正式cue由0自然effect变2（c2/R5 shot31185、c3/R7 shot44510），全部candidate assessment/Director摘要/路线ID与窗口消融一致。326相关tests通过/1既有缺WebGPU产物skip，项目与脚本TS、Web build通过。只读window_fire_boundary_review发现非法死亡frame/hurt tick边界，3红→绿并闭合；见[验证](validation/WINDOW_SELF_FIRE.md)。
+- 清理/release：无第二次解析、其他玩家、模型/UI/服务/用户DB/Memory/密钥/Parser或Viewer修改及安装发布main；所有进程退出，同分支commit/push后释放写入，原A5保持。新增供后续UI定位的Dog自然case也只经模拟进度/ACK，不能当作真实播放。下一独立建议为假provider下生成式Narrator的presentationOnly事实不扩写边界测试，不默认live调用或重读。
 
 ## 用户纠正与当前独立工作线（2026-09-25）
 

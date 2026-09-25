@@ -1,3 +1,4 @@
+import { windowSelfFire } from "./window-self-fire";
 import { selfHurtEvents, selfHurtFactText, MAX_SELF_HURT_EVENTS, type Cs2dHurtEvent } from "./self-hurt";
 import type { Cs2dRoundClockSample } from "./round-clock";
 import { publicRoundClockFact } from "./round-clock";
@@ -78,10 +79,10 @@ function parserVersion(replay: Cs2dReplay): string {
   return base;
 }
 
-export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.7.0" as const;
+export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.8.0" as const;
 export const CS2D_TIMELINE_VERSION = "zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec/timeline/1.1.0" as const;
 export const CS2D_OBSERVATION_VERSION = "cs2d-analysis-adapter/1.7.0/internal-observation" as const;
-export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.7.0/signals" as const;
+export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.8.0/signals" as const;
 export const CS2D_PLANNER_VERSION = "cs2d-analysis-adapter/1.6.0/planner" as const;
 
 /** MVP pacing target: a full match should feel coached, not interrupted. */
@@ -262,7 +263,7 @@ export interface Cs2dExcludedRound {
 }
 
 export interface Cs2dAnalysisMetadata {
-  readonly adapter_version: typeof CS2D_ADAPTER_VERSION | "cs2d-analysis-adapter/1.6.1" | "cs2d-analysis-adapter/1.6.0" | "cs2d-analysis-adapter/1.5.2" | "cs2d-analysis-adapter/1.5.1" | "cs2d-analysis-adapter/1.5.0" | "cs2d-analysis-adapter/1.4.0";
+  readonly adapter_version: typeof CS2D_ADAPTER_VERSION | "cs2d-analysis-adapter/1.7.0" | "cs2d-analysis-adapter/1.6.1" | "cs2d-analysis-adapter/1.6.0" | "cs2d-analysis-adapter/1.5.2" | "cs2d-analysis-adapter/1.5.1" | "cs2d-analysis-adapter/1.5.0" | "cs2d-analysis-adapter/1.4.0";
   readonly source: Cs2dReplaySourceMetadata;
   readonly input_map: string;
   readonly selected_steam_id: string;
@@ -1017,6 +1018,19 @@ function buildCanonicalGeneratorInput(
       missingFields: raw.decisionAction ? ["contact_visibility", "tactical_intent"] : ["exact_action_start"],
       limitations: raw.decisionAction ? [raw.timingLimitation!] : ["只能确认动作发生或完成，不能推定其起始时刻和战术目的。"]
     });
+    const fire = raw.kind === "DEATH" || raw.kind === "HP_CHANGE" ? windowSelfFire({
+      round: raw.round.source, roundNumber: raw.round.number, startTick: raw.round.freezeEndTick, endTick: raw.round.officialEndTick,
+      selectedPlayerId: selectedSteamId, decisionTick: raw.decisionTick, revealTick: raw.revealTick,
+      aliveAtDecision: sourceSnapshot.selectedPlayer.value?.alive === true,
+    }) : undefined;
+    const fireFactId = `fact-${raw.sourceRef}-window-self-fire`;
+    if (fire) facts.push({
+      id: fireFactId, kind: "PLAYER_ACTION", presentationOnly: true, actionActorPlayerId: selectedSteamId,
+      roundNumber: raw.round.number, tick: fire.tick, text: "该处理窗口记录到本人开火。",
+      sourceRefs: fire.refs, observedByPlayer: true,
+      missingFields: ["shot_target", "hit_result", "contact_visibility", "tactical_intent"],
+      limitations: ["仅采集决策之后、结果揭示之前且严格早于已知死亡时刻的本人开火事件；不推定目标、命中、接敌或战术意图。", ...(fire.truncated ? ["仅保留窗口内最早三条开火事件引用，不代表完整开火次数。"] : [])],
+    });
     const outcomeHurts = selfHurtEvents(raw.round.source, selectedSteamId).filter(event => event.tick >= raw.revealTick && event.tick <= Math.min(raw.round.endTick, raw.revealTick + OUTCOME_WINDOW_SECONDS * tickRate)).slice(0, MAX_SELF_HURT_EVENTS);
     const hurtOutcomeId = `fact-${raw.sourceRef}-hurt-outcome`;
     const keepSampleOutcome = !(raw.kind === "HP_CHANGE" && outcomeHurts.length > 0);
@@ -1081,7 +1095,7 @@ function buildCanonicalGeneratorInput(
       revealTick: raw.revealTick,
       sourceRefs: [raw.sourceRef],
       factRefs: [...(state ? [stateFactId] : []), ...publicFactIds],
-      actionRefs: hasVerifiedAction ? [actionFactId] : [],
+      actionRefs: hasVerifiedAction ? [actionFactId] : fire ? [fireFactId] : [],
       outcomeRefs: [...(keepSampleOutcome && raw.kind !== "WIN_RATE_DROP" && !(raw.kind === "RETURN_AND_FIRE" && !raw.outcomeState) ? [outcomeFactId] : []), ...(outcomeHurts.length ? [hurtOutcomeId] : [])],
       observableClaimRefs: observableState?.claims.map((claim) => claim.id) ?? [],
       evidenceRefs: [raw.sourceRef],
@@ -1563,7 +1577,7 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
     throw new Error("cs2d win-probability contract is invalid.");
   }
   if (
-    ![CS2D_ADAPTER_VERSION, "cs2d-analysis-adapter/1.6.1", "cs2d-analysis-adapter/1.6.0", "cs2d-analysis-adapter/1.5.2", "cs2d-analysis-adapter/1.5.1", "cs2d-analysis-adapter/1.5.0", "cs2d-analysis-adapter/1.4.0"].includes(bundle.metadata.adapter_version) ||
+    ![CS2D_ADAPTER_VERSION, "cs2d-analysis-adapter/1.7.0", "cs2d-analysis-adapter/1.6.1", "cs2d-analysis-adapter/1.6.0", "cs2d-analysis-adapter/1.5.2", "cs2d-analysis-adapter/1.5.1", "cs2d-analysis-adapter/1.5.0", "cs2d-analysis-adapter/1.4.0"].includes(bundle.metadata.adapter_version) ||
     bundle.metadata.source.repository !== CS2D_SOURCE.repository ||
     bundle.metadata.source.commit !== CS2D_SOURCE.commit ||
     bundle.metadata.renderer_input !== false ||

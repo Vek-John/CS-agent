@@ -1,0 +1,553 @@
+{
+  "schemaVersion": "window-self-fire-validation.v1",
+  "date": "2026-09-25",
+  "baseline": "f747eca",
+  "versions": {
+    "adapter": "1.8.0",
+    "signals": "1.8.0",
+    "candidateGenerator": "2.4.0",
+    "oldAdapterReadable": "1.7.0"
+  },
+  "source": "existing authorized test_demo.dem; original preferred player; no identity retained",
+  "processDeadlineSeconds": 120,
+  "processDeadlineOwner": "external Python subprocess process group",
+  "uniqueShotRefs": 9,
+  "ablation": "Remove only presentationOnly action facts from the same derived CandidateSet, reassemble and recompile with identical timeline/observations; not a second parser or old binary benchmark.",
+  "real": {
+    "mode": "REAL_RULE_ROUTE_FACT_ABLATION_SIMULATED_TRANSPORT",
+    "demoReads": 1,
+    "parsePasses": 1,
+    "parseMs": 6395,
+    "totalMs": 6795,
+    "fetchCalls": 0,
+    "result": {
+      "candidates": 44,
+      "formalCues": 4,
+      "addedFacts": [
+        {
+          "candidate": "candidate-r1-hp_change-cs2d-r1-frame-health-4505-4513",
+          "kind": "HP_CHANGE",
+          "round": 1,
+          "window": {
+            "decision": 4505,
+            "reveal": 4513
+          },
+          "action": {
+            "id": "fact-cs2d-r1-frame-health-4505-4513-window-self-fire",
+            "at": 4510,
+            "refs": [
+              "cs2d-r1-event-57"
+            ],
+            "presentationOnly": true
+          },
+          "selectedCue": null
+        },
+        {
+          "candidate": "candidate-r2-hp_change-cs2d-r2-frame-health-12161-12169",
+          "kind": "HP_CHANGE",
+          "round": 2,
+          "window": {
+            "decision": 12161,
+            "reveal": 12169
+          },
+          "action": {
+            "id": "fact-cs2d-r2-frame-health-12161-12169-window-self-fire",
+            "at": 12162,
+            "refs": [
+              "cs2d-r2-event-62"
+            ],
+            "presentationOnly": true
+          },
+          "selectedCue": null
+        },
+        {
+          "candidate": "candidate-r3-hp_change-cs2d-r3-frame-health-19386-19394",
+          "kind": "HP_CHANGE",
+          "round": 3,
+          "window": {
+            "decision": 19386,
+            "reveal": 19394
+          },
+          "action": {
+            "id": "fact-cs2d-r3-frame-health-19386-19394-window-self-fire",
+            "at": 19387,
+            "refs": [
+              "cs2d-r3-event-64"
+            ],
+            "presentationOnly": true
+          },
+          "selectedCue": null
+        },
+        {
+          "candidate": "candidate-r3-hp_change-cs2d-r3-frame-health-19394-19402",
+          "kind": "HP_CHANGE",
+          "round": 3,
+          "window": {
+            "decision": 19394,
+            "reveal": 19402
+          },
+          "action": {
+            "id": "fact-cs2d-r3-frame-health-19394-19402-window-self-fire",
+            "at": 19400,
+            "refs": [
+              "cs2d-r3-event-69"
+            ],
+            "presentationOnly": true
+          },
+          "selectedCue": null
+        },
+        {
+          "candidate": "candidate-r3-hp_change-cs2d-r3-frame-health-19418-19426",
+          "kind": "HP_CHANGE",
+          "round": 3,
+          "window": {
+            "decision": 19418,
+            "reveal": 19426
+          },
+          "action": {
+            "id": "fact-cs2d-r3-frame-health-19418-19426-window-self-fire",
+            "at": 19419,
+            "refs": [
+              "cs2d-r3-event-76"
+            ],
+            "presentationOnly": true
+          },
+          "selectedCue": null
+        },
+        {
+          "candidate": "candidate-r4-death-cs2d-r4-event-75",
+          "kind": "DEATH",
+          "round": 4,
+          "window": {
+            "decision": 24723,
+            "reveal": 24730
+          },
+          "action": {
+            "id": "fact-cs2d-r4-event-75-window-self-fire",
+            "at": 24728,
+            "refs": [
+              "cs2d-r4-event-74"
+            ],
+            "presentationOnly": true
+          },
+          "selectedCue": null
+        },
+        {
+          "candidate": "candidate-r4-hp_change-cs2d-r4-frame-health-24723-24731",
+          "kind": "HP_CHANGE",
+          "round": 4,
+          "window": {
+            "decision": 24723,
+            "reveal": 24731
+          },
+          "action": {
+            "id": "fact-cs2d-r4-frame-health-24723-24731-window-self-fire",
+            "at": 24728,
+            "refs": [
+              "cs2d-r4-event-74"
+            ],
+            "presentationOnly": true
+          },
+          "selectedCue": null
+        },
+        {
+          "candidate": "candidate-r5-hp_change-cs2d-r5-frame-health-31179-31187",
+          "kind": "HP_CHANGE",
+          "round": 5,
+          "window": {
+            "decision": 31179,
+            "reveal": 31187
+          },
+          "action": {
+            "id": "fact-cs2d-r5-frame-health-31179-31187-window-self-fire",
+            "at": 31185,
+            "refs": [
+              "cs2d-r5-event-232"
+            ],
+            "presentationOnly": true
+          },
+          "selectedCue": "c2"
+        },
+        {
+          "candidate": "candidate-r7-hp_change-cs2d-r7-frame-health-44507-44515",
+          "kind": "HP_CHANGE",
+          "round": 7,
+          "window": {
+            "decision": 44507,
+            "reveal": 44515
+          },
+          "action": {
+            "id": "fact-cs2d-r7-frame-health-44507-44515-window-self-fire",
+            "at": 44510,
+            "refs": [
+              "cs2d-r7-event-99"
+            ],
+            "presentationOnly": true
+          },
+          "selectedCue": "c3"
+        },
+        {
+          "candidate": "candidate-r8-hp_change-cs2d-r8-frame-health-49019-49027",
+          "kind": "HP_CHANGE",
+          "round": 8,
+          "window": {
+            "decision": 49019,
+            "reveal": 49027
+          },
+          "action": {
+            "id": "fact-cs2d-r8-frame-health-49019-49027-window-self-fire",
+            "at": 49021,
+            "refs": [
+              "cs2d-r8-event-69"
+            ],
+            "presentationOnly": true
+          },
+          "selectedCue": null
+        }
+      ],
+      "sameRoute": true,
+      "sameDirectorPacket": true,
+      "sameAssessments": true,
+      "baseline": {
+        "effects": 0,
+        "player": 1,
+        "candidates": 44,
+        "cues": 4,
+        "ticks": 23,
+        "ordinarySkips": 9,
+        "sessionCompleted": true,
+        "rows": [
+          {
+            "cue": "c1",
+            "round": 3,
+            "window": {
+              "decision": 19426,
+              "reveal": 19429,
+              "end": 19685
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c1",
+              "outcomeEndTick": 19685,
+              "status": "COMPLETE",
+              "completedAtTick": 19685
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          },
+          {
+            "cue": "c2",
+            "round": 5,
+            "window": {
+              "decision": 31179,
+              "reveal": 31187,
+              "end": 31443
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c2",
+              "outcomeEndTick": 31443,
+              "status": "COMPLETE",
+              "completedAtTick": 31443
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          },
+          {
+            "cue": "c3",
+            "round": 7,
+            "window": {
+              "decision": 44507,
+              "reveal": 44515,
+              "end": 44771
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c3",
+              "outcomeEndTick": 44771,
+              "status": "COMPLETE",
+              "completedAtTick": 44771
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          },
+          {
+            "cue": "c4",
+            "round": 7,
+            "window": {
+              "decision": 45091,
+              "reveal": 45092,
+              "end": 45348
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c4",
+              "outcomeEndTick": 45348,
+              "status": "COMPLETE",
+              "completedAtTick": 45348
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          }
+        ]
+      },
+      "enriched": {
+        "effects": 2,
+        "player": 1,
+        "candidates": 44,
+        "cues": 4,
+        "ticks": 23,
+        "ordinarySkips": 9,
+        "sessionCompleted": true,
+        "rows": [
+          {
+            "cue": "c1",
+            "round": 3,
+            "window": {
+              "decision": 19426,
+              "reveal": 19429,
+              "end": 19685
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c1",
+              "outcomeEndTick": 19685,
+              "status": "COMPLETE",
+              "completedAtTick": 19685
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          },
+          {
+            "cue": "c2",
+            "round": 5,
+            "window": {
+              "decision": 31179,
+              "reveal": 31187,
+              "end": 31443
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c2",
+              "outcomeEndTick": 31443,
+              "status": "COMPLETE",
+              "completedAtTick": 31443
+            },
+            "actionAudit": {
+              "candidateActionCount": 1,
+              "cueActionRefs": [
+                "fact-cs2d-r5-frame-health-31179-31187-window-self-fire"
+              ],
+              "narrationActionRefs": [
+                "fact-cs2d-r5-frame-health-31179-31187-window-self-fire"
+              ],
+              "actions": [
+                {
+                  "id": "fact-cs2d-r5-frame-health-31179-31187-window-self-fire",
+                  "at": 31185,
+                  "demoSource": true,
+                  "selectedActor": true,
+                  "inWindow": true,
+                  "candidateBound": true,
+                  "cueBound": true,
+                  "factBound": true,
+                  "narrated": true
+                }
+              ]
+            },
+            "capabilities": [
+              {
+                "tool": "REPLAY_CUE_SLOW",
+                "purpose": "ACTION_FACT_REPLAY",
+                "refs": [
+                  "fact-cs2d-r5-frame-health-31179-31187-state",
+                  "fact-cs2d-r5-frame-health-31179-31187-alive-counts",
+                  "fact-cs2d-r5-frame-health-31179-31187-score",
+                  "fact-cs2d-r5-frame-health-31179-31187-clock",
+                  "fact-cs2d-r5-frame-health-31179-31187-window-self-fire",
+                  "fact-cs2d-r5-frame-health-31179-31187-outcome",
+                  "e2",
+                  "evidence-candidate-r5-hp_change-cs2d-r5-frame-health-31179-31187"
+                ]
+              }
+            ],
+            "graphStatus": "WAITING_TOOL",
+            "effectCount": 1,
+            "fallbackReasons": [],
+            "command": {
+              "tool": "REPLAY_CUE_SLOW",
+              "startCanonicalTick": 31115,
+              "decisionCanonicalTick": 31179,
+              "outcomeEndCanonicalTick": 31443,
+              "speed": 0.5,
+              "callIdFromGraph": true,
+              "duplicateSuppressed": true
+            },
+            "simulatedAckClosed": true
+          },
+          {
+            "cue": "c3",
+            "round": 7,
+            "window": {
+              "decision": 44507,
+              "reveal": 44515,
+              "end": 44771
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c3",
+              "outcomeEndTick": 44771,
+              "status": "COMPLETE",
+              "completedAtTick": 44771
+            },
+            "actionAudit": {
+              "candidateActionCount": 1,
+              "cueActionRefs": [
+                "fact-cs2d-r7-frame-health-44507-44515-window-self-fire"
+              ],
+              "narrationActionRefs": [
+                "fact-cs2d-r7-frame-health-44507-44515-window-self-fire"
+              ],
+              "actions": [
+                {
+                  "id": "fact-cs2d-r7-frame-health-44507-44515-window-self-fire",
+                  "at": 44510,
+                  "demoSource": true,
+                  "selectedActor": true,
+                  "inWindow": true,
+                  "candidateBound": true,
+                  "cueBound": true,
+                  "factBound": true,
+                  "narrated": true
+                }
+              ]
+            },
+            "capabilities": [
+              {
+                "tool": "REPLAY_CUE_SLOW",
+                "purpose": "ACTION_FACT_REPLAY",
+                "refs": [
+                  "fact-cs2d-r7-frame-health-44507-44515-state",
+                  "fact-cs2d-r7-frame-health-44507-44515-alive-counts",
+                  "fact-cs2d-r7-frame-health-44507-44515-score",
+                  "fact-cs2d-r7-frame-health-44507-44515-clock",
+                  "fact-cs2d-r7-frame-health-44507-44515-window-self-fire",
+                  "fact-cs2d-r7-frame-health-44507-44515-outcome",
+                  "e3",
+                  "evidence-candidate-r7-hp_change-cs2d-r7-frame-health-44507-44515"
+                ]
+              }
+            ],
+            "graphStatus": "WAITING_TOOL",
+            "effectCount": 1,
+            "fallbackReasons": [],
+            "command": {
+              "tool": "REPLAY_CUE_SLOW",
+              "startCanonicalTick": 44443,
+              "decisionCanonicalTick": 44507,
+              "outcomeEndCanonicalTick": 44771,
+              "speed": 0.5,
+              "callIdFromGraph": true,
+              "duplicateSuppressed": true
+            },
+            "simulatedAckClosed": true
+          },
+          {
+            "cue": "c4",
+            "round": 7,
+            "window": {
+              "decision": 45091,
+              "reveal": 45092,
+              "end": 45348
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c4",
+              "outcomeEndTick": 45348,
+              "status": "COMPLETE",
+              "completedAtTick": 45348
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          }
+        ]
+      }
+    }
+  },
+  "smoke": {
+    "mode": "SYNTHETIC_FACT_ABLATION_SMOKE",
+    "demoReads": 0,
+    "effectsBefore": 0,
+    "effectsAfter": 1
+  },
+  "limitations": [
+    "Rules/Director fallback only, no CS-Net or model, not the previous browser route.",
+    "TICK and ACK are simulated; no Viewer, pause >=12s, seek or reconnect acceptance.",
+    "No professional judgment quality claim; assessments unchanged.",
+    "Candidate-scoped facts may share an original event reference; ten facts are nine distinct source events.",
+    "Session completion was tested; Graph tail observers and COMPLETE_SESSION were not.",
+    "Only selected player derived; no other players or second Demo parse."
+  ]
+}

@@ -19,7 +19,7 @@ import type {
 } from "@cs-coach/contracts";
 import { assembleCandidateSet } from "./teaching-pipeline";
 
-export const CANDIDATE_GENERATOR_VERSION = "review-planner/candidate-generator/2.3.0";
+export const CANDIDATE_GENERATOR_VERSION = "review-planner/candidate-generator/2.4.0";
 const OUTCOME_WINDOW_SECONDS = 4;
 const PRE_ROLL_SECONDS = 1;
 const WIN_RATE_DROP_THRESHOLD = 0.12;
@@ -203,7 +203,7 @@ function mergeSignals(input: CandidateGeneratorInput): CanonicalSignal[] {
 /** Forward existing structured evidence only; this is not an action detector. */
 function boundDecisionAction(fact: CanonicalAnalysisFact, signal: CanonicalSignal, input: CandidateGeneratorInput): PlayerActionFact["decisionAction"] | undefined {
   const action = fact.decisionAction;
-  if (fact.kind !== "PLAYER_ACTION" || !action || fact.actionActorPlayerId !== input.playerId || !fact.observedByPlayer || fact.sourceRefs.length === 0) return undefined;
+  if (fact.presentationOnly || fact.kind !== "PLAYER_ACTION" || !action || fact.actionActorPlayerId !== input.playerId || !fact.observedByPlayer || fact.sourceRefs.length === 0) return undefined;
   if (action.version !== "decision-action.v1") return undefined;
   const returnAndFire = action.kind === "RETURN_AND_FIRE";
   if (returnAndFire ? action.source !== "SELF_MOVEMENT_FIRE_V1" : !["RECONTACT", "REPEEK"].includes(action.kind) || !["REPLAY_GEOMETRY_V1", "SYNTHETIC_REGRESSION"].includes(action.source)) return undefined;
@@ -232,7 +232,7 @@ function materializeSignal(input: CandidateGeneratorInput, signal: CanonicalSign
   const decisionFacts: Fact[] = decisionSourceFacts.map((fact) => ({ id: fact.id, text: fact.text, availability: "DECISION", available_at_tick: fact.tick, source: "DEMO", observed_by_player: fact.observedByPlayer }));
   const actionFacts: PlayerActionFact[] = actionSourceFacts.map((fact) => {
     const decisionAction = boundDecisionAction(fact, signal, input);
-    return { id: fact.id, text: fact.text, actorPlayerId: input.playerId, availableAtTick: fact.tick, source: "DEMO", evidenceRefs: [...fact.sourceRefs], limitations: [...fact.limitations, ...fact.missingFields], ...(decisionAction ? { decisionAction } : {}) };
+    return { ...(fact.presentationOnly ? { presentationOnly: true as const } : {}), id: fact.id, text: fact.text, actorPlayerId: input.playerId, availableAtTick: fact.tick, source: "DEMO", evidenceRefs: [...fact.sourceRefs], limitations: [...fact.limitations, ...fact.missingFields], ...(decisionAction ? { decisionAction } : {}) };
   });
   const outcomeFacts: OutcomeFact[] = outcomeSourceFacts.map((fact) => ({ id: fact.id, text: fact.text, availableAtTick: fact.tick, source: "DEMO", outcomeKind: fact.outcomeKind ?? "OTHER", evidenceRefs: [...fact.sourceRefs], limitations: [...fact.limitations, ...fact.missingFields] }));
   const evidence: Evidence[] = [{ id: `evidence-${id}`, source: "DEMO", label: `结构化 ${signal.kind} 信号`, fact_refs: decisionFacts.map((fact) => fact.id) }];

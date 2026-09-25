@@ -84,7 +84,7 @@ export function buildGatedAdviceOptions(candidate: TeachingCandidate, material: 
 
 function verifiedHypotheses(candidate: TeachingCandidate, material: CandidateMaterial): BehaviorHypothesis[] {
   const decisionRefs = new Set(observableDecisionRefs(material, candidate.decisionTick));
-  const actionRefs = new Set(material.playerActionFacts.filter((fact) => fact.availableAtTick <= candidate.revealTick).map((fact) => fact.id));
+  const actionRefs = new Set(material.playerActionFacts.filter((fact) => !fact.presentationOnly && fact.availableAtTick <= candidate.revealTick).map((fact) => fact.id));
   const snapshot = material.decisionSnapshot ?? candidate.decisionSnapshot;
   const checks = [...(snapshot?.supportChecks ?? []), ...(snapshot?.pressureChecks ?? []), ...(snapshot?.spatialChecks ?? [])];
   return (material.behaviorHypotheses ?? candidate.behaviorHypotheses ?? []).filter((hypothesis) =>

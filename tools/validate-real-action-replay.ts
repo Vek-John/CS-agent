@@ -1,7 +1,8 @@
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { initSync, parse_demo } from "../.local-data/upstream/cs2d/apps/app/src/viewer/parser/demo_parser.js";
 import { buildCs2dAnalysisBundle, type Cs2dReplay } from "../libs/cs2d-analysis-adapter/src/index";
 import { createSyntheticMirageTimeline } from "../libs/demo-domain/src/index";
 import { assembleCandidateSet, compileReviewPlan, deterministicDirectorFallback, buildCoachingPackage, buildOutcomePackage, deterministicNarrationBundle } from "../libs/review-planner/src/index";
@@ -16,12 +17,10 @@ import type { CandidateSet, CandidateMaterial, TeachingCandidate, ReviewPlan, Ob
 // a JS timer cannot interrupt synchronous WASM. This tool never calls a model.
 const began = performance.now();
 let demoReads = 0, parsePasses = 0, fetchCalls = 0;
-const originalFetch = globalThis.fetch;
-globalThis.fetch = async () => { fetchCalls++; throw Error("NETWORK_FORBIDDEN"); };
 let redact = (value: unknown): unknown => value;
 const stage = (value: unknown) => process.stderr.write(JSON.stringify(redact(value)) + "\n");
 
-type RouteInput = { plan: ReviewPlan; set: CandidateSet; observations: readonly ObservableState[]; tickRate: number; hash: string; player: number };
+export type RouteInput = { plan: ReviewPlan; set: CandidateSet; observations: readonly ObservableState[]; tickRate: number; hash: string; player: number };
 
 // Diagnostic mirror only: production Host and Policy make all authorization decisions.
 function actionAudit(input: Stage3HostAdapterInput) {
@@ -43,7 +42,7 @@ function actionAudit(input: Stage3HostAdapterInput) {
   };
 }
 
-async function consumeRoute(source: RouteInput) {
+export async function consumeRoute(source: RouteInput) {
   const { plan, set } = source;
   const narrations: Record<string, NarrationBundle> = {};
   const preparationErrors: Record<string, string> = {};
@@ -179,48 +178,54 @@ function smokeInput(): RouteInput {
   return { plan, set, observations: [], tickRate: timeline.tick_rate, hash: "a".repeat(64), player: 1 };
 }
 
-try {
-  const [path, preferredName] = process.argv.slice(2);
-  if (path === "--smoke") {
-    const result = await consumeRoute(smokeInput());
-    assert(result.ordinarySkips > 0);
-    assert(result.rows.every(row => !row.failure));
-    assert.equal(result.rows.filter(row => row.effectCount === 1).length, 1);
-    assert.equal(result.rows.filter(row => row.effectCount === 0).length, 1);
-    console.log(JSON.stringify({ mode: "SYNTHETIC_SMOKE", demoReads, parsePasses, fetchCalls, result }, null, 2));
-  } else {
-    assert(path && preferredName, "Usage: --smoke | <existing.dem> <preferred-player-name>");
-    initSync({ module: readFileSync(".local-data/upstream/cs2d/apps/app/src/viewer/parser/demo_parser_bg.wasm") });
-    // Compute the normal Host identity from the same single read, not a separate audit.
-    let bytes: Buffer | undefined = readFileSync(path); demoReads++;
-    const hash = createHash("sha256").update(bytes).digest("hex");
-    const parsed = parse_demo(bytes, 8, undefined); parsePasses++; bytes = undefined;
-    let replay: Cs2dReplay;
-    try { replay = JSON.parse(parsed.replay); } finally { parsed.free(); }
-    const parseMs = Math.round(performance.now() - began);
-    const preferred = replay.players.find(p => p.name === preferredName);
-    assert(preferred, "PREFERRED_PLAYER_MISSING");
-    const players = [preferred, ...replay.players.filter(p => p.steamId !== preferred.steamId)].slice(0, 10);
-    redact = value => {
-      let text = JSON.stringify(value);
-      for (const [i, player] of players.entries()) text = text.replaceAll(player.steamId, `player-${i + 1}`);
-      return JSON.parse(text);
-    };
-    stage({ stage: "PARSED", demoReads, parsePasses, parseMs, players: players.length, rounds: replay.rounds.length });
-    const results = [];
-    for (const [i, player] of players.entries()) {
-      try {
-        const bundle = buildCs2dAnalysisBundle({ replay, selectedSteamId: player.steamId, demoId: "real-action-validation", demoContentHash: hash });
-        stage({ stage: "DERIVED", player: i + 1, candidates: bundle.candidate_set.candidates.length, cues: bundle.review_plan.cues.length });
-        const result = await consumeRoute({ plan: bundle.review_plan, set: bundle.candidate_set, observations: bundle.observation_evidence, tickRate: bundle.match_timeline.tick_rate, hash, player: i + 1 });
-        results.push(result);
-        // The preferred player's full route is always consumed. Only derive other
-        // players if no legal case has been found; never retain their bundles.
-        if (result.rows.some(row => row.effectCount === 1 && !row.failure)) break;
-      } catch (error) { results.push({ player: i + 1, failure: String(error).slice(0, 500) }); stage(results.at(-1)); }
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { fetchCalls++; throw Error("NETWORK_FORBIDDEN"); };
+  try {
+    const [path, preferredName] = process.argv.slice(2);
+    if (path === "--smoke") {
+      const result = await consumeRoute(smokeInput());
+      assert(result.ordinarySkips > 0);
+      assert(result.rows.every(row => !row.failure));
+      assert.equal(result.rows.filter(row => row.effectCount === 1).length, 1);
+      assert.equal(result.rows.filter(row => row.effectCount === 0).length, 1);
+      console.log(JSON.stringify({ mode: "SYNTHETIC_SMOKE", demoReads, parsePasses, fetchCalls, result }, null, 2));
+    } else {
+      assert(path && preferredName, "Usage: --smoke | <existing.dem> <preferred-player-name>");
+      const { initSync, parse_demo } = await import("../.local-data/upstream/cs2d/apps/app/src/viewer/parser/demo_parser.js");
+      initSync({ module: readFileSync(".local-data/upstream/cs2d/apps/app/src/viewer/parser/demo_parser_bg.wasm") });
+      // Compute the normal Host identity from the same single read, not a separate audit.
+      let bytes: Buffer | undefined = readFileSync(path); demoReads++;
+      const hash = createHash("sha256").update(bytes).digest("hex");
+      const parsed = parse_demo(bytes, 8, undefined); parsePasses++; bytes = undefined;
+      let replay: Cs2dReplay;
+      try { replay = JSON.parse(parsed.replay); } finally { parsed.free(); }
+      const parseMs = Math.round(performance.now() - began);
+      const preferred = replay.players.find(p => p.name === preferredName);
+      assert(preferred, "PREFERRED_PLAYER_MISSING");
+      const players = [preferred, ...replay.players.filter(p => p.steamId !== preferred.steamId)].slice(0, 10);
+      redact = value => {
+        let text = JSON.stringify(value);
+        for (const [i, player] of players.entries()) text = text.replaceAll(player.steamId, `player-${i + 1}`);
+        return JSON.parse(text);
+      };
+      stage({ stage: "PARSED", demoReads, parsePasses, parseMs, players: players.length, rounds: replay.rounds.length });
+      const results = [];
+      for (const [i, player] of players.entries()) {
+        try {
+          const bundle = buildCs2dAnalysisBundle({ replay, selectedSteamId: player.steamId, demoId: "real-action-validation", demoContentHash: hash });
+          stage({ stage: "DERIVED", player: i + 1, candidates: bundle.candidate_set.candidates.length, cues: bundle.review_plan.cues.length });
+          const result = await consumeRoute({ plan: bundle.review_plan, set: bundle.candidate_set, observations: bundle.observation_evidence, tickRate: bundle.match_timeline.tick_rate, hash, player: i + 1 });
+          results.push(result);
+          // The preferred player's full route is always consumed. Only derive other
+          // players if no legal case has been found; never retain their bundles.
+          if (result.rows.some(row => row.effectCount === 1 && !row.failure)) break;
+        } catch (error) { results.push({ player: i + 1, failure: String(error).slice(0, 500) }); stage(results.at(-1)); }
+      }
+      assert.equal(fetchCalls, 0);
+      console.log(JSON.stringify(redact({ mode: "REAL_DEMO_RULE_ROUTE_SIMULATED_TRANSPORT", demoReads, parsePasses, parseMs, totalMs: Math.round(performance.now() - began), fetchCalls, route: "Adapter deterministic Director fallback; no CS-Net or model; not the earlier UI route", results }), null, 2));
+      if (results.some(result => "failure" in result || result.rows.some(row => row.failure))) process.exitCode = 1;
     }
-    assert.equal(fetchCalls, 0);
-    console.log(JSON.stringify(redact({ mode: "REAL_DEMO_RULE_ROUTE_SIMULATED_TRANSPORT", demoReads, parsePasses, parseMs, totalMs: Math.round(performance.now() - began), fetchCalls, route: "Adapter deterministic Director fallback; no CS-Net or model; not the earlier UI route", results }), null, 2));
-    if (results.some(result => "failure" in result || result.rows.some(row => row.failure))) process.exitCode = 1;
-  }
-} finally { globalThis.fetch = originalFetch; }
+  } finally { globalThis.fetch = originalFetch; }
+
+}

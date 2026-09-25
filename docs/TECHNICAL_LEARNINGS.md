@@ -1735,3 +1735,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：单 Node owner 一次读/解析原 Demo，顺序派生原玩家及必要其他玩家，复用生产 Compiler/Narrator/Session/Host/默认 Graph。先用两 cue/普通 SKIP smoke 验证编排；Session 自动冻结跳过与 Graph observer 分别处理，不手写结果 gate。只保存匿名小摘要。
 - 验证：6255 ms 解析、7053 ms 总计，6 玩家/356 候选/16 自然 cue；P6/R1/8257–8515 的本人动作事实被 Narrator 引用，自然得到一条 0.5 倍慢放命令；15 个 cue 无 PlayerActionFact，正确 FINISH。0 网络/模型调用，外部 120 秒期限，真实阶段一次成功。Script smoke、项目/脚本 TS 与 production build 通过；构建过期 dev 类型缓存移走后恢复。独立只读复核无 must-fix。
 - 限制：规则路线未运行 CS-Net/模型，与旧 UI 选点不同；ACK/进度模拟不验证真实渲染、暂停/seek/重连。Session 完成不等于 Graph 尾段/整场完成。本轮没有产品缺陷或代码修复，也没有专业质量提升结论。下一步可用现有射击小材料调查死亡/受击候选的动作绑定覆盖：Adapter 普通 shot 已进入 WEAPON_FIRE，但 hasVerifiedAction 仅 RETURN_AND_FIRE/UTILITY/非爆炸 BOMB；先证明确有合法 shot 时是否丢失传递，再决定后续工作；不把缺动作直接判成来源遗漏。[证据](validation/REAL_ACTION_REPLAY.md)。
+
+
+## 2026-09-25：把已归属 shot 作为处理窗口发生事实
+
+- 问题：DEATH/HP_CHANGE 原处理窗口有独立本人 shot，时间线已识别，却没有动作事实进入讲解。实际 Adapter→Compiler→Narrator 两类2红复现，未把15个空动作cue当成15个遗漏。
+- 决定：严格 decision<shot<reveal 且早于同回合已知死亡，要求决策时存活/明确本人，不扩窗口和提名；单候选一事实、最多3原事件refs。presentationOnly标记排除两处动作排序加分及过程/结构化决策/不可回撤判断，保持旧动作缺省语义，诊断strict传输保留。Adapter/signals1.8、Generator2.4，旧1.7可读。
+- 验证：326相关用例通过/1既有WebGPU产物缺失skip，TS/脚本TS/Web build通过；独立复核非法死亡时间3红→绿并闭合。原Demo一次解析6395ms、总6795ms；44候选10窗口补事实=9独立shot，四正式cue自然effect0→2（R5/c2、R7/c3），消融全部候选assessment/Director摘要/路线选点窗口不变。旧无actor和序列化恢复对照通过。
+- 限制：发生事实不证明专业质量；规则路线与模型UI路线不同，ACK/进度模拟不关闭原A5，未跑新模型/浏览器/Parser重建。下一独立方向可用假provider检查Narrator是否把仅发生事实误扩写为接触/命中/错误，先合同验证而非live调用。[证据](validation/WINDOW_SELF_FIRE.md)。

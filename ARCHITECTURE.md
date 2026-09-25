@@ -119,6 +119,13 @@ Timeline新增精确DAMAGE发生事实，不携带攻击者或报告数值；若
 
 合法shot格式与排序保持；删除旧错误shot可能改变新版解析的后续数组索引引用，不能把不同parser版本的索引互换。Parser以hurt-events.v1.shot-identity.v2记录生成语义，Adapter manifest同时保留hurt与shot来源版本；旧Replay缺actor继续未知，旧保存产物直接恢复，不重写引用。可确认本人开枪只证明开枪，不证明目标、LOS、再次接触或重复探身，不提升RETURN_AND_FIRE专业判断资格。
 
+Adapter 1.8.0 只为已有 DEATH / HP_CHANGE 候选补充处理窗口本人开火事实，不新增候选或移动窗口。仅当前回合、明确 `shooterSteamId` 等于本人、决策快照明确存活、整数 canonical `decisionTick < shotTick < revealTick` 的事件可用；还必须严格早于当前回合内已知本人 kill、dead/health=0 样本或 reportedHealthAfter=0 的 hurt 时间。同 tick 不推定先后；明确本人死亡但时间不可用时保守拒绝。不得读 tracer 坐标猜 actor、把媒体时间当 tick，或从阵亡/掉血结果制造开火事实。
+
+每个候选最多补一条聚合 `PLAYER_ACTION`，保留最早最多 3 个原 parser event 数组索引引用 `cs2d-rN-event-K`，availableAtTick 为所保留事件的最晚 tick；截断必须声明，不据引用数报告命中或完整开火次数。不同候选可引用同一事件，不能据候选事实条数重复计算发生次数。已有 RETURN_AND_FIRE / UTILITY / BOMB 动作不叠加这类事实。文本仅陈述窗口记录到本人开火，不证明目标、命中、LOS、再次接触、peek、意图或动作起始时刻。
+
+`CanonicalAnalysisFact` 与 `PlayerActionFact` 的可选 `presentationOnly: true` 表示这种补充发生事实。它可进入 CoachingPackage、Narrator、cue action_facts 及 Stage3 既有动作回看资格，但不获得 Director 两处有动作排序加分，不充当 verified behavior hypothesis 的过程证据、不进入结构化决策评估动作，也不触发不可回撤动作文本推断。诊断严格传输 schema 保留该标记。旧动作缺省字段继续沿用旧语义，旧包不回填或重写；Adapter 解码保留 1.7.0 及既有兼容版本，新增来源由 Adapter/signals 1.8.0 和 CandidateGenerator 2.4.0 标识。专业判断、建议适用性和引用/未来边界保持原门禁。
+
+
 ### 2.5 事实、推断、建议分层
 
 - `Fact`：Demo 可直接验证；

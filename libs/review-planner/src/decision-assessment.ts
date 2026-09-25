@@ -127,7 +127,7 @@ export function buildDecisionAssessmentPacket(
   const counts = snapshot.aliveCounts;
   if (counts.boundary !== "OBSERVABLE" || !counts.value || !legalRefs(counts.evidenceRefs) || !counts.evidenceRefs.every(r => allowedFacts.has(r)) || !Number.isInteger(counts.value.allies) || !Number.isInteger(counts.value.enemies) || counts.value.allies < 1 || counts.value.allies > 5 || counts.value.enemies < 0 || counts.value.enemies > 5 || !counts.value.includesSelectedPlayer) return reject("MISSING_PUBLIC_COUNTS");
   if (counts.value.enemies === 0 || counts.value.allies <= counts.value.enemies) return reject("UNSUPPORTED_SCENARIO");
-  const actions = material.playerActionFacts.filter(f => candidate.actionRefs.includes(f.id) && f.actorPlayerId === options.playerId && f.decisionAction);
+  const actions = material.playerActionFacts.filter(f => !f.presentationOnly && candidate.actionRefs.includes(f.id) && f.actorPlayerId === options.playerId && f.decisionAction);
   if (actions.length !== 1) return reject("MISSING_OR_AMBIGUOUS_STRUCTURED_ACTION");
   const action = actions[0]!, detail = action.decisionAction!;
   const returnAndFire = detail.kind === "RETURN_AND_FIRE";

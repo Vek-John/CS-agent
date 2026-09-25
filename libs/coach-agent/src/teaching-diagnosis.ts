@@ -90,6 +90,7 @@ const FactSchema = z.object({
   observed_by_player: z.boolean(),
 }).strict();
 const ActionFactSchema = z.object({
+  presentationOnly: z.literal(true).optional(),
   id: IdSchema,
   text: TextSchema,
   actorPlayerId: IdSchema,
@@ -699,6 +700,7 @@ export function executeDiagnostic(
 
 function explicitIrreversibleAction(input: TeachingDiagnosisInput): boolean {
   return input.playerActionFacts.some((fact) => {
+    if (fact.presentationOnly) return false;
     const text = fact.text.replace(/\s+/g, "");
     return /不可回撤|强行(?:接触|开火|对枪)|主动(?:拉|开火|接触)|拉出掩体|前压|继续(?:接了|留在).*(?:枪线|对枪)/.test(text);
   });
