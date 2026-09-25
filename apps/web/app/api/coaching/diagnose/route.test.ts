@@ -100,3 +100,14 @@ describe("GET /api/coaching/diagnose", () => {
     expect(GET().status).toBe(405);
   });
 });
+
+it("keeps legacy totals readable while rejecting invalid new counts and rich resource fields", async () => {
+  const base = { health: 100, armor: 100, hasHelmet: true, evidenceRefs: ["decision-route"] };
+  const legacy = await (await POST(request({ mode: "START", outcomeGateStatus: "COMPLETE", input: { ...validInput, decisionResources: { ...base, inventoryCount: 1.5 } } }))).json();
+  expect(legacy.status).toBe("SUCCEEDED");
+  expect(legacy.cueCase.diagnosticResult.measurements.some((item: { label: string }) => item.label === "决策时道具数量")).toBe(false);
+  for (const extra of [{ utilityCount: -1 }, { utilityCount: 0.5 }, { utilityCount: 65 }, { utilityCount: 1, inventory: [] }, { utilityCount: 1, player_id: "unexpected" }]) {
+    const response = await POST(request({ mode: "START", outcomeGateStatus: "COMPLETE", input: { ...validInput, decisionResources: { ...base, ...extra } } }));
+    expect((await response.json()).status).toBe("FALLBACK");
+  }
+});

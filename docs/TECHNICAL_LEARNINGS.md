@@ -1668,3 +1668,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：0011只迁移weapon_fire到共用verified_event_pawn，返回同一有效pawn和可空当前owner。无效pawn不出shot，有效pawn/未知owner保留几何和null；hurt wrapper语义等价，其它共享旧归属调用方及network m_hThrower不动。只核对wire低10位serial。新shot-identity.v2与hurt-events.v1并存，不把版本后删除事件导致的索引变化伪装成跨版稳定。
 - 验证：同一原7测试变绿，加2项连续生命周期/signed handle后9通过；parser Rust3、相关186测试/1既有缺产物跳过、Host/Viewer TS、Web与真实WASM/Viewer构建通过。一次真实WASM解析6141ms、消费6311ms；1242shot有actor、本人152入时间线、2 RETURN_AND_FIRE、44候选4cue；hurt264/本人27/23snapshot/2包及clock38snapshot/3包保持。见[紧凑记录](validation/CURRENT_SHOT_IDENTITY.md)。
 - 限制与清理：相同计数只证明样本兼容，不是actor准确率或专业教学质量提升；unknown由生产路径fixture覆盖，实际Demo无null。无native探针/模型/UI/用户DB/安装/发布，不检查全部事件生命周期，旧A5不动。独立默认配置5分钟只读终审无阻断；编译成功门后才消费WASM，所有进程退出、临时目录自动清理，push后释放写入。
+
+
+## 2026-09-25：道具数量必须独立于全库存总数与未知库存
+
+- 问题：Host和rich诊断均对inventory全量求和，WEAPON AK-47被标为1颗道具；Adapter无grenades时inventory为空但missing_fields含inventory，旧计数却报0。两条真实消费者4红/20旧测试绿，明确复现。
+- 决定：共用projectDecisionUtilityCount，只认明确UTILITY/GRENADE，已知非道具不计，未知类别或部分/缺失/不支持数量使计数整体未知。新增optional utilityCount与0..64整数strict schema；32条/64数量只是已有诊断传输边界。legacy inventoryCount保持可读且不重新解释，新诊断显示未知，已存测量原样恢复。未知说明有界，不改风险阈值/判决资格。
+- 验证：6文件79测试、TypeScript、Web生产build通过。Host→strict事件/remote envelope→真实内存Graph→确定性POST与本地rich一致；重复dispatch无额外attempt/trace，真实保存结果恢复0/2和legacy1.5原样、零fetch；组件SSR显示0/2或未知并保留继续。原4红已绿，风险status/Verdict除新增limitations外保持。见[验证记录](validation/DIAGNOSTIC_UTILITY_COUNT.md)。
+- 限制：上游若先过滤坏项却没标缺失，本层不能恢复其完整性；本轮只修诊断，不拓展Parser或其它资源语义。没有模型/Demo/浏览器/DB/Memory/发布操作，原锁屏工具A5不动。按两项UI技能保持既有布局/辅助入口，SSR不冒充浏览器验收；所有测试/build退出，主任务自行复查，无代理，push后释放写入。

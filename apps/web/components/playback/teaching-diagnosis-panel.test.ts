@@ -46,3 +46,15 @@ it("does not render legacy saved diagnosis tactics and preserves a continue cont
   expect(html).not.toContain("让高血量队友");
   expect(html).not.toContain("USER claim");
 });
+
+it.each([0, 2, undefined])("renders a known utility count or explicit unknown without inventing zero: %s", (utilityCount) => {
+  const output = diagnoseTeachingCue({ cueId: "cue-utility", reflection: { cueId: "cue-utility", selectedGoal: "OTHER", response: "ANSWERED", source: "USER", limitations: [] }, decisionFacts: [], playerActionFacts: [], outcomeFacts: [], decisionResources: { health: 100, armor: 100, hasHelmet: true, ...(utilityCount === undefined ? { inventoryCount: 1 } : { utilityCount }), evidenceRefs: [] } });
+  const html = renderToStaticMarkup(createElement(TeachingDiagnosisPanel, { cue: { id: "cue-utility", title: "处理复盘", question: "你的目标是什么？" }, decisionFacts: [], cueCase: output.cueCase, hasTrustedDecisionContext: true, onSubmit() {}, onSkip() {}, onConfirm() {}, onDisagree() {} }));
+  if (utilityCount === undefined) {
+    expect(html).toContain("道具数量未知");
+    expect(html).not.toContain("决策时道具数量</b>");
+  } else {
+    expect(html).toContain(`决策时道具数量</b><span>${utilityCount}颗`);
+  }
+  expect(html).toContain("懂了，继续");
+});

@@ -54,3 +54,58 @@ it("projects teammate count only from the same decision's observable public rost
   snapshot.decisionTick += 1;
   expect(buildTeachingDiagnosisInput(context, reflection).decisionResources?.aliveTeammates).toBeUndefined();
 });
+
+
+it.each([false, true])("Host resource diagnosis does not count weapons or missing inventory (missing=%s)", async (missing) => {
+  const { runTeachingDiagnosis } = await import("./teaching-diagnosis-host");
+  const { createSyntheticMirageTimeline } = await import("@cs-coach/demo-domain");
+  const { createFixtureReviewPlan } = await import("@cs-coach/review-planner");
+  const timeline = createSyntheticMirageTimeline();
+  const plan = createFixtureReviewPlan(timeline);
+  const cue = plan.cues[0];
+  const state = { player_id: timeline.selected_player_id, tick: cue.decision_tick, side: "T" as const, world_position: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0, alive: true, health: 100, armor: 100, has_helmet: true, inventory: missing ? [] : [{ item_id: "ak47", item_class: "WEAPON", count: 1 }], fact_refs: cue.observable_fact_refs, missing_fields: missing ? ["inventory"] : [] };
+  const output = runTeachingDiagnosis({ plan, cue, timeline: { ...timeline, player_state_tracks: [state] }, selectedPlayerId: timeline.selected_player_id }, { cueId: cue.id, selectedGoal: "OTHER", response: "ANSWERED", source: "USER", limitations: [] });
+  const measurement = output.cueCase.diagnosticResult?.measurements.find(item => item.label === "决策时道具数量");
+  expect(measurement?.value).toBe(missing ? undefined : 0);
+});
+
+it.each([
+  { name: "mixed", inventory: [{ item_id: "ak47", item_class: "WEAPON", count: 1 }, { item_id: "flash", item_class: "UTILITY", count: 2 }], missing: [], expected: 2 },
+  { name: "known empty", inventory: [], missing: [], expected: 0 },
+  { name: "partial", inventory: [{ item_id: "flash", item_class: "UTILITY", count: 1 }], missing: ["inventory"], expected: undefined },
+  { name: "unsupported", inventory: [{ item_id: "smokegrenade", item_class: "UNKNOWN", count: 1 }], missing: [], expected: undefined },
+  { name: "fractional", inventory: [{ item_id: "flash", item_class: "UTILITY", count: 0.5 }], missing: [], expected: undefined },
+])("keeps Host, strict Graph packet and deterministic API utility counts aligned: $name", async ({ inventory, missing, expected }) => {
+  const { buildTeachingDiagnosisSubmissionEvent, runTeachingDiagnosis } = await import("./teaching-diagnosis-host");
+  const { createSyntheticMirageTimeline } = await import("@cs-coach/demo-domain");
+  const { createFixtureReviewPlan } = await import("@cs-coach/review-planner");
+  const { createCoachAgentRuntime, createRemoteCoachAgentDispatchEnvelope, parseRemoteCoachAgentDispatchEnvelope } = await import("@cs-coach/coach-agent");
+  const { fixtureIdentity } = await import("../../../../libs/coach-agent/src/test-fixtures");
+  const { POST } = await import("../../app/api/coaching/diagnose/route");
+  const timeline = createSyntheticMirageTimeline();
+  const plan = createFixtureReviewPlan(timeline);
+  const cue = plan.cues[0];
+  const state = { player_id: timeline.selected_player_id, tick: cue.decision_tick, side: "T" as const, world_position: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0, alive: true, health: 100, armor: 100, has_helmet: true, inventory, fact_refs: cue.observable_fact_refs, missing_fields: missing };
+  const context = { plan, cue, timeline: { ...timeline, player_state_tracks: [state] }, selectedPlayerId: timeline.selected_player_id };
+  const reflection = { cueId: cue.id, selectedGoal: "OTHER" as const, response: "ANSWERED" as const, source: "USER" as const, limitations: [] };
+  const event = buildTeachingDiagnosisSubmissionEvent(context, reflection, { eventType: "SUBMIT_REFLECTION", eventId: "utility-reflection", identity: { ...fixtureIdentity, selectedPlayerId: timeline.selected_player_id } });
+  expect(event.input.decisionResources?.utilityCount).toBe(expected);
+  expect(event.input.decisionResources).not.toHaveProperty("inventoryCount");
+  expect(event.input).not.toHaveProperty("decisionState");
+  expect(JSON.stringify(event.input.decisionResources)).not.toMatch(/item_id|player_id|position|tick|inventory/);
+  const envelope = parseRemoteCoachAgentDispatchEnvelope(JSON.parse(JSON.stringify(createRemoteCoachAgentDispatchEnvelope(event))));
+  const runtime = createCoachAgentRuntime({ checkpoint: "memory" });
+  const dispatched = await runtime.dispatch(envelope.event);
+  const local = runTeachingDiagnosis(context, reflection);
+  const body = await (await POST(new Request("http://localhost/api/coaching/diagnose", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode: "START", outcomeGateStatus: "COMPLETE", input: { ...event.input, reflection } }) }))).json();
+  expect(body.status).toBe("SUCCEEDED");
+  expect(dispatched.status).toBe("COMPLETED");
+  for (const result of [local.cueCase.diagnosticResult, dispatched.state.cueCases[cue.id]?.diagnosticResult, body.cueCase.diagnosticResult]) {
+    expect(result?.measurements.find((item: { label: string }) => item.label === "决策时道具数量")?.value).toBe(expected);
+    expect(result?.status).toBe(local.cueCase.diagnosticResult?.status);
+  }
+  const duplicate = await runtime.dispatch(envelope.event);
+  expect(duplicate.state.cueCases).toEqual(dispatched.state.cueCases);
+  expect(duplicate.state.cueCases[cue.id]?.attemptBudget.reflection).toBe(1);
+  expect(duplicate.state.trace).toEqual(dispatched.state.trace);
+});

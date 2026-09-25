@@ -586,3 +586,30 @@ it("reuses saved preparation without opening either bounded client request", asy
     expect(fetcher).not.toHaveBeenCalled();
   } finally { vi.unstubAllGlobals(); }
 });
+
+it.each(["legacy", "zero", "known"])("restores %s saved utility measurements unchanged without requesting diagnosis", async kind => {
+  const { restoreCheckpointTeachingCase } = await import("./cs2d-session-recovery");
+  const { reduceCoachingSession } = await import("@cs-coach/session");
+  const { diagnoseTeachingCue, TeachingDiagnosisOutputSchema } = await import("@cs-coach/coach-agent/client");
+  const input = fixture();
+  const plan = input.analysis.review_plan;
+  const cue = plan.cues[0];
+  let session = reduceCoachingSession(plan, input.session, { type: "START" });
+  for (let step = 0; step < plan.segments.length + 2 && session.phase !== "PAUSED_FOR_COACHING"; step++) {
+    session = session.phase === "SKIPPING" ? reduceCoachingSession(plan, session, { type: "ADVANCE_SEGMENT" }) : reduceCoachingSession(plan, session, { type: "TICK", tick: Math.max(plan.segments[session.current_segment_index].end_tick, cue.outcome_end_tick) });
+  }
+  const produced = diagnoseTeachingCue({ cueId: cue.id, reflection: { cueId: cue.id, selectedGoal: "OTHER", source: "USER", response: "ANSWERED", limitations: [] }, decisionFacts: [], playerActionFacts: [], outcomeFacts: [], decisionResources: { health: 100, armor: 100, hasHelmet: true, utilityCount: kind === "zero" ? 0 : 2, evidenceRefs: [] } });
+  // Historical fixture: older versions labeled inventoryCount as utility, even for fractional totals.
+  const saved = JSON.parse(JSON.stringify(produced));
+  if (kind === "legacy") saved.cueCase.diagnosticResult.measurements.find((item: { label: string }) => item.label === "决策时道具数量").value = 1.5;
+  const parsed = TeachingDiagnosisOutputSchema.parse(saved);
+  const fetcher = vi.fn(() => { throw Error("restoring stored diagnosis must not request transport"); });
+  vi.stubGlobal("fetch", fetcher);
+  try {
+    const restored = restoreCheckpointTeachingCase(plan, session, parsed.cueCase, parsed.learningThread);
+    expect(restored.cue_cases?.[cue.id]?.diagnosticResult).toEqual(saved.cueCase.diagnosticResult);
+    expect(restored.phase).toBe(session.phase);
+    expect(restored.outcome_completion).toEqual(session.outcome_completion);
+    expect(fetcher).not.toHaveBeenCalled();
+  } finally { vi.unstubAllGlobals(); }
+});

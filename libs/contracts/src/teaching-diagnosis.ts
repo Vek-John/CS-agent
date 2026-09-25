@@ -306,7 +306,10 @@ export interface DecisionResources {
   hasHelmet: boolean;
   money?: number;
   equipmentValue?: number;
+  /** Legacy total inventory count; never reinterpret as a verified utility count. */
   inventoryCount?: number;
+  /** Known utility count from a complete valid inventory; absent means unknown. */
+  utilityCount?: number;
   /** Decision-time public roster count, excluding the selected player; absent means unknown. */
   aliveTeammates?: number;
   evidenceRefs: readonly string[];

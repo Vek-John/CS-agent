@@ -42,6 +42,7 @@ export {
   UserReflectionSchema,
   UserClaimSchema,
   DecisionResourcesSchema,
+  projectDecisionUtilityCount,
   TeachingDiagnosisInputSchema,
   TeachingDiagnosisOutputSchema,
   LearningThreadSchema,

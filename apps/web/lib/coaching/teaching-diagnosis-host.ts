@@ -19,6 +19,7 @@ import {
   CueCaseSchema,
   diagnoseTeachingCue,
   parseUserReflection,
+  projectDecisionUtilityCount,
   reviseTeachingDiagnosis,
 } from "@cs-coach/coach-agent/client";
 import type { CoachAgentIdentity, CoachAgentEvent } from "@cs-coach/coach-agent/client";
@@ -114,7 +115,7 @@ export function buildTeachingDiagnosisInput(
     hasHelmet: state.has_helmet,
     ...(state.money !== undefined ? { money: state.money } : {}),
     ...(state.equipment_value !== undefined ? { equipmentValue: state.equipment_value } : {}),
-    inventoryCount: state.inventory.reduce((sum, item) => sum + Math.max(0, item.count), 0),
+    ...projectDecisionUtilityCount(state),
     evidenceRefs: unique([
       ...(aliveTeammates === undefined ? [] : snapshot?.aliveCounts.evidenceRefs ?? []),
       ...(state.fact_refs ?? []),

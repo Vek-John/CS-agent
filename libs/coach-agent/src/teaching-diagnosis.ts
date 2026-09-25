@@ -1,3 +1,5 @@
+import { MAX_DIAGNOSTIC_UTILITY_COUNT, projectDecisionUtilityCount } from "./decision-utilities";
+export { projectDecisionUtilityCount } from "./decision-utilities";
 import { z } from "zod";
 import type {
   CoachVerdict,
@@ -125,6 +127,7 @@ export const DecisionResourcesSchema = z.object({
   money: z.number().finite().nonnegative().max(10_000_000).optional(),
   equipmentValue: z.number().finite().nonnegative().max(10_000_000).optional(),
   inventoryCount: z.number().finite().nonnegative().max(64).optional(),
+  utilityCount: z.number().int().min(0).max(MAX_DIAGNOSTIC_UTILITY_COUNT).optional(),
   aliveTeammates: z.number().int().min(0).max(4).optional(),
   evidenceRefs: z.array(IdSchema).max(32),
 }).strict();
@@ -519,7 +522,7 @@ function resourceSnapshot(input: TeachingDiagnosisInput): DecisionResources | un
       hasHelmet: state.has_helmet,
       ...(state.money !== undefined ? { money: state.money } : {}),
       ...(state.equipment_value !== undefined ? { equipmentValue: state.equipment_value } : {}),
-      inventoryCount: state.inventory.reduce((sum, item) => sum + Math.max(0, item.count), 0),
+      ...projectDecisionUtilityCount(state),
       evidenceRefs: unique([...(state.fact_refs ?? []), ...factRefs(input)]).slice(0, 32),
     };
   }
@@ -535,7 +538,7 @@ function resourceMeasurements(input: TeachingDiagnosisInput, snapshot = resource
   ];
   if (snapshot.money !== undefined) measurements.push({ id: `measurement-${input.cueId}-money`, label: "决策时存款", value: snapshot.money, unit: "$", evidenceRefs: refs });
   if (snapshot.equipmentValue !== undefined) measurements.push({ id: `measurement-${input.cueId}-equipment`, label: "决策时装备价值", value: snapshot.equipmentValue, unit: "$", evidenceRefs: refs });
-  if (snapshot.inventoryCount !== undefined) measurements.push({ id: `measurement-${input.cueId}-utility`, label: "决策时道具数量", value: snapshot.inventoryCount, unit: "颗", evidenceRefs: refs });
+  if (snapshot.utilityCount !== undefined) measurements.push({ id: `measurement-${input.cueId}-utility`, label: "决策时道具数量", value: snapshot.utilityCount, unit: "颗", evidenceRefs: refs });
   return measurements;
 }
 
@@ -688,9 +691,9 @@ export function executeDiagnostic(
     hingeId: hinge.hingeId,
     status,
     evidenceRefs: refs,
-    measurements: resourceMeasurements(input),
+    measurements: resourceMeasurements(input, resources),
     explanation,
-    limitations: unique([...commonLimitations, "资源状态能说明风险背景，但不能单独证明某个动作造成结果。"]),
+    limitations: unique([...(resources?.utilityCount === undefined ? ["决策时道具数量未知，现有库存信息不足以确认。"] : []), ...commonLimitations, "资源状态能说明风险背景，但不能单独证明某个动作造成结果。"]).slice(0, MAX_DIAGNOSIS_LIMITATIONS),
   });
 }
 

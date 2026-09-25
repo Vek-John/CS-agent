@@ -96,6 +96,63 @@ function input(overrides: Partial<TeachingDiagnosisInput> = {}): TeachingDiagnos
 }
 
 describe("teaching diagnosis trust and evidence boundaries", () => {
+  it("keeps unknown-count explanations bounded and does not assume completeness in legacy rich state", () => {
+    const state = decisionState();
+    delete (state as Partial<PlayerStateSample>).missing_fields;
+    const output = diagnoseCue(input({ decisionState: state, limitations: Array.from({ length: 12 }, (_, i) => `existing limitation ${i}`) }));
+    expect(output.cueCase.diagnosticResult?.measurements.some(item => item.label === "决策时道具数量")).toBe(false);
+    expect(output.cueCase.diagnosticResult?.limitations[0]).toContain("道具数量未知");
+    expect(output.cueCase.diagnosticResult?.limitations).toHaveLength(12);
+  });
+
+  it.each([
+    { name: "mixed", inventory: [{ item_id: "ak47", item_class: "WEAPON", count: 1 }, { item_id: "flash", item_class: "UTILITY", count: 2 }, { item_id: "smoke", item_class: "grenade", count: 1 }], expected: 3 },
+    { name: "known empty", inventory: [], expected: 0 },
+    { name: "known zero", inventory: [{ item_id: "flash", item_class: "UTILITY", count: 0 }], expected: 0 },
+    { name: "unsupported class", inventory: [{ item_id: "smokegrenade", item_class: "OTHER", count: 1 }], expected: undefined },
+    { name: "no name inference", inventory: [{ item_id: "smokegrenade", item_class: "WEAPON", count: 1 }], expected: 0 },
+    { name: "partial", inventory: [{ item_id: "flash", item_class: "UTILITY", count: 1 }], missing: ["inventory.count"], expected: undefined },
+    { name: "fractional", inventory: [{ item_id: "flash", item_class: "UTILITY", count: 0.5 }], expected: undefined },
+    { name: "unsupported count", inventory: [{ item_id: "flash", item_class: "UTILITY", count: 65 }], expected: undefined },
+    { name: "unsupported total", inventory: [{ item_id: "flash", item_class: "UTILITY", count: 33 }, { item_id: "smoke", item_class: "UTILITY", count: 32 }], expected: undefined },
+    { name: "invalid nonutility count", inventory: [{ item_id: "ak47", item_class: "WEAPON", count: 0.5 }], expected: undefined },
+    { name: "same-type entries", inventory: [{ item_id: "flash", item_class: "UTILITY", count: 1 }, { item_id: "flash", item_class: "UTILITY", count: 1 }], expected: 2 },
+  ])("counts only complete supported utility inventory: $name", ({ inventory, missing, expected }) => {
+    const baseline = diagnoseCue(input({ decisionState: decisionState() }));
+    const output = diagnoseCue(input({ decisionState: decisionState({ inventory, missing_fields: missing ?? [] }) }));
+    const result = output.cueCase.diagnosticResult!;
+    expect(result.measurements.find(item => item.label === "决策时道具数量")?.value).toBe(expected);
+    expect(result.status).toBe(baseline.cueCase.diagnosticResult?.status);
+    const { limitations: _currentLimitations, ...currentVerdict } = output.cueCase.verdict!;
+    const { limitations: _baselineLimitations, ...baselineVerdict } = baseline.cueCase.verdict!;
+    expect(currentVerdict).toEqual(baselineVerdict);
+    if (expected === undefined) expect(result.limitations.join(" ")).toContain("道具数量未知");
+  });
+
+  it("accepts legacy totals without reinterpreting them and validates the new count strictly", () => {
+    const resources = { health: 100, armor: 100, hasHelmet: true, evidenceRefs: ["decision-1"] };
+    const legacy = diagnoseCue(input({ decisionResources: { ...resources, inventoryCount: 1.5 } }));
+    expect(legacy.cueCase.diagnosticResult?.measurements.some(item => item.label === "决策时道具数量")).toBe(false);
+    expect(legacy.cueCase.diagnosticResult?.limitations.join(" ")).toContain("道具数量未知");
+    for (const utilityCount of [0, 3, 64]) {
+      const output = diagnoseCue(input({ decisionResources: { ...resources, inventoryCount: 9, utilityCount } }));
+      expect(output.cueCase.diagnosticResult?.measurements.find(item => item.label === "决策时道具数量")?.value).toBe(utilityCount);
+    }
+    for (const utilityCount of [-1, 0.5, 65, Infinity, NaN]) {
+      expect(() => diagnoseCue(input({ decisionResources: { ...resources, utilityCount } }))).toThrow();
+    }
+    for (const count of [-1, Infinity, NaN]) {
+      expect(() => diagnoseCue(input({ decisionState: decisionState({ inventory: [{ item_id: "flash", item_class: "UTILITY", count }] }) }))).toThrow();
+    }
+  });
+
+  it.each([false, true])("does not report a weapon or unknown inventory as utility (missing=%s)", (missing) => {
+    const state = decisionState(missing ? { inventory: [], missing_fields: ["inventory"] } : {});
+    const output = diagnoseCue(input({ decisionState: state }));
+    const measurement = output.cueCase.diagnosticResult?.measurements.find(item => item.label === "决策时道具数量");
+    expect(measurement?.value).toBe(missing ? undefined : 0);
+  });
+
   it("keeps a skipped TRADE reflection as a USER goal claim and falls back without upgrading it", () => {
     const output = diagnoseCue(input({
       reflection: reflection({ cueId: "cue-trade-skip", selectedGoal: "TRADE", response: "SKIPPED" }),
