@@ -21,6 +21,7 @@ export function CurrentCueQuestionsPanel({ state, onDraft, onAsk }: CurrentCueQu
       <div className={styles.quickGrid} role="group" aria-label="当前教学点的快捷问题">
         {CURRENT_CUE_QUESTIONS.map(question => <button key={question} className={styles.secondary} type="button" onClick={() => onAsk(question)}>{question}</button>)}
       </div>
+      <p className={styles.muted}>也可核对血量、护甲、道具数量和决策前弹匣记录，例如“我当时多少血？”。</p>
       <form onSubmit={event => { event.preventDefault(); onAsk(); }}>
         <label className={styles.label} htmlFor="current-cue-question">你的问题（最多300字）</label>
         <textarea id="current-cue-question" value={state.draft} maxLength={MAX_CUE_QUESTION_LENGTH} rows={2}

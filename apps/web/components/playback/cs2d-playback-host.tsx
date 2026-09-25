@@ -135,6 +135,7 @@ import {
 import { requestTeachingDiagnosisReplay } from "../../lib/coaching/diagnosis-replay";
 import { buildCurrentCueQuestionContext, currentCueQuestionState, updateCurrentCueQuestions, type CurrentCueQuestionState } from "../../lib/coaching/current-cue-questions";
 import { CurrentCueQuestionsPanel } from "./current-cue-questions-panel";
+import { CurrentCueResourceCache } from "../../lib/coaching/current-cue-resource-source";
 import { TeachingDiagnosisPanel } from "./teaching-diagnosis-panel";
 import {
   baselineCueCase,
@@ -397,6 +398,7 @@ export function Cs2dPlaybackHost({
   const [teachingCases, setTeachingCases] = useState<Readonly<Record<string, CueCase>>>({});
   const [teachingThreads, setTeachingThreads] = useState<readonly LearningThread[]>([]);
   const [cueQuestions, setCueQuestions] = useState<CurrentCueQuestionState>();
+  const questionResourceCacheRef = useRef(new CurrentCueResourceCache());
   const [diagnosticBusyCueId, setDiagnosticBusyCueId] = useState<string>();
   const [diagnosticError, setDiagnosticError] = useState<string>();
   const [diagnosticsEnabled, setDiagnosticsEnabled] = useState(true);
@@ -2318,6 +2320,10 @@ export function Cs2dPlaybackHost({
   const questionInput = {
     plan: activePlan, session, generation: generationRef.current, diagnosticsEnabled, cueCase: activeTeachingCase,
     presentableNarration, busy: agentToolBusy || diagnosticBusyCueId === cue?.id, takenOver: userTookOver,
+    resourceSource: questionResourceCacheRef.current.read(activePlan && cue && bundle ? {
+      plan: activePlan, cue, material: candidateMaterial, timeline: bundle.match_timeline,
+      selectedPlayerId: selected?.playerId ?? activePlan.player_id,
+    } : undefined),
   };
   const questionInputRef = useRef(questionInput);
   questionInputRef.current = questionInput;
@@ -2325,9 +2331,18 @@ export function Cs2dPlaybackHost({
   const changeCueQuestion = useCallback((key: string, action: Parameters<typeof updateCurrentCueQuestions>[3]) => {
     setCueQuestions(previous => {
       const live = questionInputRef.current;
+      const plan = planRef.current;
+      const session = liveSessionRef.current;
+      const cue = plan && session ? getCurrentCue(plan, session) : undefined;
+      const analysis = bundleRef.current;
       return updateCurrentCueQuestions(previous, key, buildCurrentCueQuestionContext({
-        ...live, plan: planRef.current, session: liveSessionRef.current, generation: generationRef.current,
-        cueCase: liveSessionRef.current?.current_cue_id ? teachingCasesRef.current[liveSessionRef.current.current_cue_id] : undefined,
+        ...live, plan, session, generation: generationRef.current,
+        cueCase: cue ? teachingCasesRef.current[cue.id] : undefined,
+        resourceSource: questionResourceCacheRef.current.read(plan && cue && analysis ? {
+          plan, cue, timeline: analysis.match_timeline,
+          material: analysis.candidate_set.materials.find(material => material.candidateId === cue.candidate_id),
+          selectedPlayerId: selectedPlayerIdRef.current ?? plan.player_id,
+        } : undefined),
         busy: live.busy || Boolean(stage3ControllerRef.current?.busy), takenOver: userTookOverRef.current,
       }), action);
     });

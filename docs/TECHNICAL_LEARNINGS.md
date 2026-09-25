@@ -1864,3 +1864,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 交互/保存：300字草稿+最近4条只存Host页面状态，稳定来源key与live回调复核隔离session/cue/generation/revision，重播保留，快捷问题不覆盖草稿。manual首版无入口；文本不发播放/反思/异议/Graph/Memory命令，无新持久schema，不声称跨重启恢复或通用语义能力。
 - 验证：旧生产函数三种缺口小fixture、三类smoke及实际Panel callback/SSR，新增38项；最终5文件81tests、TypeScript/Web production build通过。默认cue_question_boundary_review只读信息边界审查无must-fix，主控真实diff复核后空事实文案修正已复验。[验收记录](validation/CURRENT_CUE_QUESTIONS.md)。
 - 限制：只支持明确有限问法，不完整解释数值测量、专业建议、职业案例或条件化战术反事实；无法匹配时给具体范围。未挂载完整Host或运行浏览器/iframe/辅助技术检查，未读Demo/用户DB/密钥或调用模型；原UI A5不变，不证明专业质量或性能提升。
+
+
+## 2026-09-26：资源追问同时核对已展示数值和当前合法来源
+
+- 问题：当前Panel已有血量/护甲/道具/此前弹匣measurement，但有限问答拒绝这些直接核对；只按label找数值会信任错引用或旧数据。
+- 决定：Host单条identity cache复用currentDiagnosisWindow/Resources，核对plan/cue/player/demo/material，opaque WeakMap token只关联合法compact。当前完整诊断还需唯一规范measurement ID、number值、label/unit、非空refs集合全匹配；缺失/矛盾unknown，原health0与alive矛盾门不变。ammo保持strict-prior/entity/变化失效，回答最近记录＋非瞬间精确/备弹未知，不延伸建议。
+- 验证：生产资源→diagnose→真实Panel已显示而问答拒绝4红→绿；新增43项，最终5文件210tests、TypeScript/Web production build通过。spy证明初次投影后20次编辑/replay零额外投影，同cue新timeline/material分别重新计算并使旧token/key失效；真实Panel submit callback/SSR数值及来源通过。主控真实diff复核无must-fix。[证据](validation/CURRENT_CUE_RESOURCE_QUESTIONS.md)。
+- 限制：cache依赖源对象不可变替换，不宣称大Demo速度基准；明确整句匹配不是通用语义理解。没有专业判断、诊断/provider/Memory新调用，不接manual/跨重启保存。未做真实浏览器或完整Host/iframe验收，0Demo/模型/UI服务/用户DB密钥，原UI A5保留。
