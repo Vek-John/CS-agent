@@ -6,7 +6,7 @@
 > - 产品目标与范围以 [PRD.md](../PRD.md) 和 [MVP_SCOPE.md](../MVP_SCOPE.md) 为准。
 > - 本文记录「为什么做这个选择」「实际踩到了什么问题」「如何验证」；它可以解释架构，但不能覆盖架构契约。
 >
-> 最后更新：2026-09-25
+> 最后更新：2026-09-26
 
 ## 1. 维护规则
 
@@ -1889,3 +1889,16 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 审查发现：free seek同步reset而CANCEL仅排队，旧live Session短暂仍合法；补渲染时transport epoch→实时请求比较，旧意图在副作用前拒绝。epoch不进领域action/存储，pause重渲染后新按钮仍合法。独立manual_replay_boundary_review与主控实际diff复核后无其他must-fix。
 - 验证：实际诊断Panel callback的default/manual链、basic生产入口、Session/directive/transport、artifact append/ready兼容、QA草稿答案与默认cursor保持；10文件234tests、TS/Web production build通过。随后同visit再次明确重播/同key断言及受影响29tests、TS再次通过。详见[验收](validation/MANUAL_VISIT_REPLAY.md)。
 - 限制：完整Host/basic内联区为源接线复核，SSR/回调不是浏览器/iframe实测；原UI A5保持。同visit多次合法播放复用同一逻辑操作记录，不是跨visit/重启草稿持久化。无新工具/模型/Demo/UI服务/用户DB密钥/安装部署，未扩confirm或其他ID扫描。
+
+
+## 2026-09-26：职业轨迹和自动描述不能替代教练判断标注
+
+- 问题：现有9例语义集明确是 `AGENT_AUTHORED_PROXY`，没有专家标签；真实 `RETURN_AND_FIRE` 的 contact 仍未验证，生产 validator 要求 UNKNOWN/UNKNOWN/INSUFFICIENT。新增弹药消费并不改变这个约束，重复调用旧集合不能证明 Jev 专业判断改善。
+- 一手来源（2026-09-26核实）：
+  - [CSKnow / MLMove论文](https://arxiv.org/html/2408.13934v1)研究职业移动轨迹和“像人”的评价，不是决策对错 gold；可见性/团队沟通用派生特征近似。作者区域 mistake 规则只能当规则代理。[官方获取说明](https://davidbdurst.com/mlmove/)有小样本与大规模全集，代码 MIT 不自动覆盖独立数据许可，本轮未下载。
+  - [EgoCS-400K论文§4.3](https://arxiv.org/html/2606.18180v1#S4.SS3)明确 captions 是 VLM 注释而非人工 gold；§3.3区分输入和实际发生的动作，可借鉴动作证据整理。[项目页](https://egocs-400k.github.io/)与[仓库](https://github.com/EgoCS-400K/Dataset)对数据发布状态表述不一致，完整访问和独立数据许可未确认；论文许可不等于数据许可。
+  - [OpenCS2作者说明](https://huggingface.co/spaces/blanchon/opencs2-dataset-viewer/blob/main/README.md)提供 POV、输入、世界状态和音频，声明数据 CC BY 4.0；没有三原子专家判断标签。子代理访问所链数据返回401、GitHub为空，本轮未证实可取。1Hz preview不能证明精确接触时刻，音频/callouts不能当作完整战队语音。
+- 决定：三个来源先作为候选素材/方法参考，不引入默认教练、训练或评估 gold。职业动作、胜负、全知世界状态、VLM描述及作者规则分别保留 provenance，不能相互升级；本轮“未找到”仅限这三个来源。
+- 可执行下一步：先检查本地是否保存了一个未用于旧9例的新候选的完整受限材料；能取得时只制作一个待标注包，明确 Demo/玩家/回合/决策截点、可知事实及 refs、contact/语音/掩体/资源缺口。标签保持 UNLABELED；输入不足记 UNLABELABLE，不让 Agent 自填专家答案。不为做材料包重新运行旧拒判集，也不把结果摘要还原成原始证据。
+- 评估设计建议（项目推论）：先在隐藏结果的决策资料上独立标注风险、可行替代和上下文充分性，再另看结果；记录证据、缺失条件和多种可接受判断。可先6–8例与两位真实合格标注者验证流程并裁决分歧，不能据小样本宣称准确率；按 Demo/回合/战术家族隔离开发与评估。建议借鉴[Baron与Hershey原始研究](https://bear.warrington.ufl.edu/brenner/mar7588/Papers/baron-hershey-jpsp1988.pdf)的结果偏差发现，研究不是CS专项验证；标注盲法不改变产品“先完整播放、再回决策点讲解”的契约。
+- 验证：主控核对生产 packet/validator、语义 fixtures/eval 的真实标签来源；子代理 expert_eval_sources 默认配置只读核实三源，主控复核论文原文。仅学习与任务板更新，无产品/架构契约变化，未重跑既有测试/TS/build；没有新 Demo 解析、模型调用、数据下载、安装或服务。现有本地证据文件是聚合/消费摘要，尚未证明存在可直接交付标注的完整新案例；专业质量仍未验证，UI A5独立保留。

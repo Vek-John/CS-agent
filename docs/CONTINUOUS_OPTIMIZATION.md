@@ -2,6 +2,14 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：专业判断评估来源与最小标注路径（2026-09-26）
+
+- 基线1f7c091 clean且原owner RELEASE；主控01a0c8ea-9dca-7332-b03d-3b38b88ed630有限goal负责一手来源/本地评估契约，独占本板与TECHNICAL_LEARNINGS。expert_eval_sources默认模型/推理只读核实最多3源，已交付，无写入/进程/下载；主控复核关键原文。
+- 任务：当前没有专业教练gold，先区分可学习素材和能证明判断质量的标签。流程为真实packet/validator核实→一手资料来源与可知边界→可执行小验证；A1三源标签类别/访问许可清楚，A2对照当前三原子与contact门，A3记录不重复拒判集合的下一步，A4 docs commit/push。排除产品门槛修改、模型调用、大数据下载、联系他人、桌面A5重试。
+- 风险/阶段：来源自称expert或caption易误当gold，论文许可易误当数据许可；先官方论文/仓库，15分钟内收敛，有访问失败据实记录，不扩全网搜索/变通下载。主控本地只读对照，资料不送模型，结束释放文件所有权；不因数据标注未解就停止其他功能工作。
+- 结果：CSKnow人类相似度/轨迹与作者规则、EgoCS VLM captions、OpenCS2动作/世界状态均不提供本项目可直接用的三原子专业gold；没有改默认模型或复跑旧拒判。具体链接、访问限制和结果盲法建议见学习日志同日条目。现有真实RETURN contact门及9例AGENT_AUTHORED_PROXY保持。
+- 衔接：先核实本地新候选是否有可交付完整决策资料，不能把消费摘要或职业胜负伪装专家答案；可做时限一包、保持UNLABELED/UNLABELABLE，输入充分性先行。若仅有聚合摘要，不为此重复解析旧Demo；同时继续定位无需桌面的实际恢复/等待缺口。只有记录更新，本轮未重跑TS/build，不冒称新产品验证。
+
 ## 已交付：手动回访中的同次重播（2026-09-26）
 
 - 1bb88e2已push/clean且owner release；01a0da66-e866-7c11-a7d8-aa863864691b串行独占Session重播动作的visit绑定、Host/诊断/基础面板窄入口及tests/docs，主控只读，默认配置。
