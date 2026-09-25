@@ -59,7 +59,17 @@
 | 已push、本地验收完成 | 可信部分资源的独立测量 | 01a0d870-79b9-7d22-ae10-fc28ec2ceb6b；完成并释放写入/进程 | 70HP/80甲与未知helmet两红→绿，partial compact和三值资源背景落地；177测试/TS/build通过，见PARTIAL_DIAGNOSTIC_RESOURCES.md |
 | 已push、本地验收完成 | 真实教学点诊断消费验证 | 01a0d88c-619b-7e72-8133-40fae1e40057；完成并释放写入/进程 | 实际4cue均age0，partial库存未知/独立人数/8输出恢复通过；发现正人数被文案说未知并窄修，180测试/TS/build通过；首次harness失败后获准补读，总2次，见REAL_CUE_RESOURCE_CONSUMPTION.md |
 
+| 待执行 | 现行教学主题与证据工具接线 | 01a0d8c0-2ca6-71e2-a54c-d210097d46b3；交接后独占当前树 | 真实4cue空工具后发现新assessment focus与旧工具focus规则可能脱节；先最小复现，按证据和实际演示目的窄对齐，不为A5放松门 |
+
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
+
+## 本轮任务卡：现行教学主题与证据工具接线（2026-09-25）
+
+- 基线a35614d干净已push，原A5负责人已关闭专用窗口/服务并release。新任务01a0d8c0-2ca6-71e2-a54c-d210097d46b3独占capability builder/必要Host接线/相关tests和docs；默认配置，串行复用当前树，主控只读。原A5仍未通过，不改其验收记录。
+- 新证据：teaching-gates.allowedTeachingFocusCodes产VERIFIED_DECISION_REVIEW/EXECUTION_REVIEW/POSITIVE_PROCESS/FORCED_CHOICE/REVIEW_UNCERTAINTY；capability-builder的timing/map/utility/impact旧枚举与regex基本不识别它们，Host economy白名单也是旧focus。真实4cue空capability证明症状，但具体新旧主题映射仍需独立复现。
+- 目标/验收：A1由当前Compiler产生真实现行focus，并用具有实际合法action/annotation/trajectory等的fixture通过生产Host→builder证明资格断层；A2明确现行focus（判断类别）和工具展示目的的关系，不把所有新focus简单加入所有工具白名单，不伪造refs或专业判断；A3每工具仍要求现有动作/空间/道具/量化来源及结果门，未知/空证据/错scope继续零工具，旧合法路径兼容；A4实际Graph默认Policy能消费合法候选而非仅builder非空，取消/暂停/旧调用边界保持，相关tests/TS/build；A5架构/学习日志/记录/任务板commit/push，release后才由原owner补A5。
+- 边界：不改route/assessment/引用强度/接触LOS门，不以INSUFFICIENT自动禁止事实回看，也不以不确定自动允许所有演示。需要对照展示的动作必须有可验证事实、工具用途明确且文案不暗示已判错；已有事实不足的cue仍FINISH。不能以本轮UI验收凑数为目标，不强制Policy或任意callId，不新增model调用。
+- 风险/阶段：10分钟复现和契约、25分钟实现/局部检查、10分钟TS/build；无新Demo解析/浏览器/服务/用户DB，复用已有小证据/fixture。必要独立只读边界审查5分钟，单写owner。若无法证明合理工具因旧focus被拒，交研究证据停止，不制造资格放宽。执行者负责全部进程清理；不改Viewer/Parser或安装发布main，不关闭原A5。
 
 ## 本轮任务卡：真实教学点诊断消费验证（2026-09-25）
 
