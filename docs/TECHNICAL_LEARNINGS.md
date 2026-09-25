@@ -1751,3 +1751,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：当前approved协议客户端从两份领域包独立重建，不信任传入approved/request/aliases；共享原pure wire validator后映射/领域assert。本地DISABLED/DETERMINISTIC/CLOSED_SEMANTIC_PROJECTION沿既有FALLBACK就绪。缺approved旧HTTP/Provider保留，匿名服务器不具独立重建依据，不盲信approved跳过校验。
 - 验证：2红→绿，单cue客户端/Provider调用1+1→0+0，三cue首窗/后续零Narrator请求和计时器、同文输出；旧prepared正文复用不改写，取消零发布。独立复核长讲解超wire但domain有效会卡PENDING，1红→绿后走原domain fallback并如实标记LOCAL_WIRE_VALIDATION_FAILED。130相关tests/TS/build通过，未重复全仓测试。
 - 限制：没有真实网络/模型/Demo/UI或用户DB测量，不能外推整场启动秒数/费用/专业质量。旧匿名兼容入口仍可能调用Provider，恢复不自动迁移旧产物。下一步可先fixture核实单候选Director是否真有选择自由，仅等价时才省请求。[记录](validation/CLOSED_NARRATION_FAST_PATH.md)。
+
+
+## 2026-09-26：封闭整场总结本地完成与代表来源
+
+- 问题：总结固定正文仍请求模型复制；实际Graph每主题只给1代表，而Host把代表当全部support，合法重复主题被清空。Provider可选择合法refs/限制子集，不能称所有bundle唯一。
+- 决定：默认本地builder→deterministic→原closed/归属门，DISABLED/DETERMINISTIC/CLOSED_SESSION_PROJECTION正常READY，保留显式HTTP/Provider兼容。Host仅从Graph已完成theme.cueRefs复核同habit与合法advice，最后只传原代表；不将prepared-only、presentationOnly或不确定cue升格。
+- 修复/验证：真实内存Graph2完成→1代表/2support基线1红，新Host→local总结1主题；独立复核代表ref错位、主题/代表限制丢失2红→绿。限制>8明确typed拒绝、兼容HTTP400，实际Host SSR+Session完成/自由seek保持可用，旧gen/旧summary恢复边界保留。93相关tests/TS/build通过，当前总结HTTP+Provider1+1→0+0，未做真实延迟测量。
+- 限制/下一步：无新模型/Demo/UI/DB，原A5未验；本轮失败UI明确，但失败分支尚不保存SESSION_SUMMARY，可后续用隔离artifact fixture核实恢复是否丢失失败说明，不自动重生成或迁移旧正文。[记录](validation/LOCAL_SESSION_WRAP_UP.md)。

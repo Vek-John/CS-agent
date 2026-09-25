@@ -141,3 +141,29 @@ describe("Session Wrap-Up domain seam", () => {
     }, request)).toThrow(/ref/i);
   });
 });
+
+it("cites the actual representative and retains qualifications attached to its fixed text", () => {
+  const input = validInput();
+  input.summary.themes[0].cueRefs.reverse(); // Representative is no longer first.
+  input.summary.themes[0].limitations = ["仅在这些已确认条件下成立。"];
+  input.presentableCues["cue-a-1"].coreIssue.limitations = ["不能推及未观察到的选择。"];
+  input.presentableCues["cue-a-1"].betterPlay.limitations = ["建议需满足已验证的行动条件。"];
+  const request = buildSessionWrapUpRequest(input);
+  const result = deterministicSessionWrapUpResult(request, "TEST");
+  expect(result.bundle.themes[0].summary.refs).toEqual(["cue-a-1"]);
+  expect(result.bundle.limitations).toEqual(["仅在这些已确认条件下成立。", "不能推及未观察到的选择。", "建议需满足已验证的行动条件。"]);
+});
+
+it("preserves source limitations even when the Graph top-level limitations are empty", () => {
+  const input = validInput();
+  input.presentableCues["cue-a-1"].coreIssue.limitations = ["不能推及未观察到的选择。"];
+  expect(deterministicSessionWrapUpResult(buildSessionWrapUpRequest(input), "TEST").bundle.limitations).toContain("不能推及未观察到的选择。");
+});
+
+it("does not silently truncate source qualifications beyond the existing output limit", () => {
+  const input = validInput();
+  input.summary.limitations = Array.from({ length: 8 }, (_, i) => `原限制${i + 1}`);
+  input.presentableCues["cue-a-1"].coreIssue.limitations = ["额外的必要来源限定"];
+  const request = buildSessionWrapUpRequest(input);
+  expect(() => deterministicSessionWrapUpResult(request, "TEST")).toThrow();
+});

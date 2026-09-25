@@ -1,3 +1,4 @@
+import { assertPreparationActive } from "./preparation-transport";
 import {
   assertValidSessionWrapUpBundle,
   buildSessionWrapUpRequest,
@@ -167,7 +168,13 @@ export function parseSessionWrapUpRequest(value: unknown, byteLength = 0): Sessi
   if (byteLength > MAX_REQUEST_BYTES) throw new SessionWrapUpProviderValidationError("Session wrap-up request is too large.");
   const parsed = SessionWrapUpRequestSchema.safeParse(value);
   if (!parsed.success) throw new SessionWrapUpProviderValidationError("Session wrap-up request shape is invalid.");
-  return assertAnonymousPacket(parsed.data);
+  const request = assertAnonymousPacket(parsed.data);
+  try {
+    deterministicSessionWrapUpResult(request, "REQUEST_VALIDATION");
+  } catch {
+    throw new SessionWrapUpProviderValidationError("Session wrap-up source qualifications cannot fit the output contract.");
+  }
+  return request;
 }
 
 function assertClosedWrapUpBundle(rawBundle: unknown, request: SessionWrapUpRequest) {
@@ -313,12 +320,36 @@ export async function directSessionWrapUp(
   }
 }
 
+/** Current closed protocol: choose the existing deterministic projection locally. */
 export async function requestSessionWrapUp(
   input: SessionWrapUpBuildInput,
   options: { endpoint?: string; fetcher?: FetchLike; signal?: AbortSignal } = {},
 ): Promise<SessionWrapUpResult> {
+  assertPreparationActive(options.signal);
+  const request = buildSessionWrapUpRequest(input);
+  if (request.themes.length === 0) return deterministicSessionWrapUpResult(request, "NO_REPEATED_THEME");
+  // Keep the same ownership/ref checks as the anonymous provider boundary.
+  assertAnonymousPacket(buildAnonymousPacket(request).request);
+  const projection = deterministicSessionWrapUpResult(request, "CLOSED_SESSION_PROJECTION");
+  const bundle = assertClosedWrapUpBundle(projection.bundle, request);
+  assertPreparationActive(options.signal);
+  return SessionWrapUpResultSchema.parse({
+    status: "DISABLED", bundle,
+    manifest: { status: "DISABLED", provider: "DETERMINISTIC", reason: "CLOSED_SESSION_PROJECTION", limitations: [] },
+  });
+}
+
+/** Explicit compatibility transport. Default Host summaries do not call this path. */
+export async function requestSessionWrapUpFromProvider(
+  input: SessionWrapUpBuildInput,
+  options: { endpoint?: string; fetcher?: FetchLike; signal?: AbortSignal } = {},
+): Promise<SessionWrapUpResult> {
+  assertPreparationActive(options.signal);
   const realRequest = buildSessionWrapUpRequest(input);
   if (realRequest.themes.length === 0) return deterministicSessionWrapUpResult(realRequest, "NO_REPEATED_THEME");
+  // Fail with the domain's explicit error before any compatibility request if
+  // all source qualifications cannot be represented without dropping one.
+  deterministicSessionWrapUpResult(realRequest, "COMPATIBILITY_VALIDATION");
   const packet = buildAnonymousPacket(realRequest);
   try {
     const response = await (options.fetcher ?? fetch)(options.endpoint ?? "/api/coaching/wrap-up", {

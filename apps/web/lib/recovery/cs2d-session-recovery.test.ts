@@ -614,3 +614,15 @@ it.each(["legacy", "zero", "known", "partial"])("restores %s saved utility measu
     expect(fetcher).not.toHaveBeenCalled();
   } finally { vi.unstubAllGlobals(); }
 });
+
+it.each(["DISABLED", "SUCCEEDED"] as const)("restores %s wrap-up artifacts without rewriting text or invoking providers", async status => {
+  const input = fixture();
+  const summary = { status, bundle: { schemaVersion: "coach-agent-session-wrap-up.v1", themes: [{ focus: "saved-focus", summary: { text: "已保存总结正文", refs: [input.analysis.review_plan.cues[0].id] }, trainingAdvice: { text: "已保存训练建议", refs: ["saved-advice"] } }], limitations: ["保存时的限定"] }, manifest: { status, provider: status === "SUCCEEDED" ? "DEEPSEEK" : "DETERMINISTIC", reason: status === "DISABLED" ? "CLOSED_SESSION_PROJECTION" : undefined, limitations: [] } };
+  const saved = JSON.parse(JSON.stringify(summary));
+  const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);
+  try {
+    const restored = validateStoredReviewArtifacts({ analysis: input.analysis, candidateSet: input.analysis.candidate_set, plan: input.analysis.review_plan, narrationByCue: input.narrationByCue, cueCases: {}, learningThreads: [], summary: saved, selectedPlayerId: "dog", demoContentHash: HASH });
+    expect(restored.summary).toEqual(saved);
+    expect(fetcher).not.toHaveBeenCalled();
+  } finally { vi.unstubAllGlobals(); }
+});

@@ -694,6 +694,15 @@ Memory 在桌面与 Web 都默认关闭并要求当前 principal consent。桌�
 
 总结只使用本次用户实际经历或主动跳过确认的讲解内容、问答和当前场习惯聚类。不得把未展示的检测结果突然作为主要结论。总结生成后可成为未来个人记忆的候选输入。
 
+当前整场总结是封闭正文协议：每个主题的 summary 取已完成代表 cue 的 coreIssue，trainingAdvice 取该代表的首条合法建议。refs 和 limitations 可存在合法子集选择，因此不能称所有可接受 bundle 完全唯一。默认 `requestSessionWrapUp` 从本地 `SessionWrapUpBuildInput` 经原 builder 的来源、主题归属和引用检查，生成确定性版本并通过原 closed 校验；无需 HTTP 或 Provider 复制。非空总结标记既有 `DISABLED / DETERMINISTIC / CLOSED_SESSION_PROJECTION`，Host 将其作为正常 READY 呈现。空主题保持 `NO_REPEATED_THEME`。匿名 HTTP 与显式 `requestSessionWrapUpFromProvider` 兼容入口仍保留原 Provider 能力及校验，不将本地输入权威赋予匿名调用方。
+
+Graph `sessionSummaryInput.themes[*].cueRefs` 是实际已完成的主题支持集合，`completedCues` 是每主题一个合法代表，二者不可混用。Host 只在该主题支持集合内复核当前 plan/candidate/material/narration 绑定、DECISION_ERROR、verifiedHabitKey 和合法 advice；至少两条同 habit、无冲突的有效支持才保留主题。仅有 prepared narration、未列入 Graph 支持 refs、缺来源、不同 habit 或 presentationOnly 发生事实不增加习惯证据。过滤后 occurrence/round/evidence refs 重新收窄；传给原 builder 的 completedCues/presentableCues 仍仅为 Graph 选中的有效代表，保持最多三代表与 exact source identity 契约。
+
+确定性正文必须引用实际代表 cueId，不能引用主题数组的另一个首项。顶层、主题以及所用代表 coreIssue/betterPlay 的来源限定去重保留，并在总结面板呈现，不重新表述或静默截断。输出仍最多八条、每条 200 字符；不能完整表示时抛既有类型 `SessionWrapUpValidationError`，reason 为 `SOURCE_LIMITATIONS_EXCEED_OUTPUT_LIMIT`。匿名 Provider 请求在调用前预检并返回原受控 INVALID_REQUEST 路径，不裸抛内部 schema 异常。Host 明确显示总结未生成，保留 WRAP_UP 的完成按钮、COMPLETED 会话和自由回看，不将失败误报为无重复主题或成功总结。
+
+Host 只发布匹配 run、捕获 generation 且 Graph/sessionStatus 均 COMPLETED 的总结；完成 Graph 请求前捕获 generation，返回后仍检查 generation/接管，防止迟到结果沿新 generation 写入。旧保存总结仍按原正文/manifest 恢复，不迁移引用或重算限制，不触发新分析/模型/Memory。该约束不改变 Session/Graph 完成门或单 cue 专业判断。
+
+
 ### 6.14 VideoWeakAnnotation（离线启动管线）
 
 已授权的看 Demo 教学视频只用于学习“真人教练如何主持复盘”的行为结构，不作为精确比赛事实来源。离线工具按视频原始时间轴检测播放、暂停、回放、快进、讲解起止、ASR 文本、问题类型、讲解结构、习惯复查和 HUD OCR，输出 `VideoTeachingEvent`。每个检测结果保留模型/规则版本、来源片段、置信度和人工校订状态。

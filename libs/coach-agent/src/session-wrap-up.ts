@@ -295,15 +295,17 @@ function representativeCue(request: SessionWrapUpRequest, theme: SessionWrapUpRe
 
 /** Deterministic fallback only reuses source coreIssue/betterPlay/advice text. */
 export function deterministicSessionWrapUpBundle(request: SessionWrapUpRequest): SessionWrapUpBundle {
+  const sourceLimitations: string[] = [...request.limitations];
   const themes = request.themes.map((theme) => {
     const cue = representativeCue(request, theme);
+    sourceLimitations.push(...theme.limitations, ...cue.coreIssue.limitations, ...cue.betterPlay.limitations);
     const advice = cue.advice.find((item) => theme.adviceRefs.includes(item.id));
     if (!advice) fail(`Theme ${theme.focus} has no source advice for fallback.`);
     return {
       focus: theme.focus,
       summary: {
         text: cue.coreIssue.text,
-        refs: [theme.cueRefs[0] ?? theme.evidenceRefs[0]],
+        refs: [cue.cueId],
       },
       trainingAdvice: {
         text: advice.text,
@@ -311,11 +313,9 @@ export function deterministicSessionWrapUpBundle(request: SessionWrapUpRequest):
       },
     };
   });
-  return SessionWrapUpBundleSchema.parse({
-    schemaVersion: SESSION_WRAP_UP_SCHEMA_VERSION,
-    themes,
-    limitations: request.themes.length === 0 ? ["NO_REPEATED_THEME"] : request.limitations,
-  });
+  const limitations = request.themes.length === 0 ? ["NO_REPEATED_THEME"] : unique(sourceLimitations);
+  if (limitations.length > 8) fail("SOURCE_LIMITATIONS_EXCEED_OUTPUT_LIMIT");
+  return SessionWrapUpBundleSchema.parse({ schemaVersion: SESSION_WRAP_UP_SCHEMA_VERSION, themes, limitations });
 }
 
 export function deterministicSessionWrapUpResult(

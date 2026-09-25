@@ -2,7 +2,12 @@
 
 更新时间：2026-09-25。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
-## 当前独立任务：封闭整场总结本地完成（2026-09-25）
+## 当前独立任务：封闭整场总结本地完成（2026-09-26）
+
+- 基线0b806b9，01a0d94b-3e01-7003-bd26-8043799d4dc0独占wrap-up客户端/必要Host窄接线/tests/docs，主控只读，有限goal已建。A1生产builder/fake provider确认固定正文与调用成本；A2本地域重建并过原主题/完成/refs/closed校验，保留完整主题和限定；A3确定性来源/取消/恢复不改写；A4实际Host或严格controller完成链、长包/旧HTTP兼容与tests/TS/build；A5架构/学习/证据/commit/push/release。
+- refs及limitations允许合法子集，不能称所有bundle完全唯一。保留兼容Provider入口；不做单候选Director跳过（其selected=[]等自由仍存在）。无Demo/模型/UI浏览器/服务/用户DB/Memory/密钥/部署main。Host完成提示如需窄调沿emil/apple技能，不改布局；8分钟诊断、20分钟实现、10分钟检查，必要5分钟只读终审，主控负责进程退出。
+
+## 原始交接：封闭整场总结（2026-09-25）
 
 - 基线4bf1eac已push干净，Narrator快路径owner已release；01a0d94b-3e01-7003-bd26-8043799d4dc0独占本轮wrap-up客户端/必要共享纯校验、相关tests/docs。主控只读，默认配置，串行复用当前树，无Demo/UI/模型。
 - 选择依据：单候选Director仍允许selected=[]，保有真实选取/拒绝自由，不能照搬Narrator跳过。wrap-up则要求全部给定主题，summary/trainingAdvice逐字取既有已完成cue，当前requestSessionWrapUp仅零theme免请求，有theme仍请求模型复制。refs/limitations可能有合法子集，不能冒称所有可接受bundle逐字段唯一；目标是领域确定性完整内容、有效refs/限制保留，减少无收益收尾等待。
@@ -29,6 +34,10 @@
 同一工作树同一时间只有一个写任务负责人；独立任务优先使用隔离工作树，共享契约由主控协调。需要新对话时填写模板的目标、预期流程、验收、不做项、交付终点，并附所有权、依赖、风险、阶段检查、超时和清理。新任务先核实最新已验证基线，不能把旧main当最新成果。
 
 大型Demo或浏览器测试先smoke，bulk留在所属Worker/页面，由一个控制器负责整个进程生命周期；超时有退出和清理。同一基础设施边界失败两次先简化harness。保护未提交工作、真实Demo、SQLite/Memory及密钥；不force push，不擅自部署、发布或安装用户应用。缺信息时完成独立可做项；无新信息的失败路径不无限重试。
+
+- 本轮结果：默认当前总结本地完成，HTTP/Provider1+1→0+0；固定正文/完整主题与合法引用、来源限定保持，refs/限制子集自由未被宣称唯一。协调批准的Host窄修：真实Graph2同主题cue完成→1代表/2support，原Host基线1红、修复后产生1主题且仍仅1代表，不扩完成/专业门。
+- 复核与边界：local_wrap_up_review发现正文ref未指实际代表及遗漏来源限定，2红→绿；去重合并限定，>8 typed失败且兼容HTTP400/0fetch，不截断/不扩schema。真实Host面板SSR+生产Session完成及自由seek验证失败保留回看/完成，正常本地不报模型失败，捕获旧generation并只发布COMPLETED结果。旧summary原文restore0fetch。
+- 验收/释放：8文件93tests、TS/Web build通过；架构/学习/验证已同步，无Demo/模型/UI浏览器/服务/用户DB/Memory/密钥/Parser Viewer或发布main，全部进程退出，commit/push后release；见[记录](validation/LOCAL_SESSION_WRAP_UP.md)。原A5保持未验。下一独立建议：隔离artifact fixture核实总结失败后恢复是否丢失说明（当前仅成功分支保存摘要），不自动重生成旧内容。
 
 ## 当前独立任务：封闭讲解本地快路径（2026-09-25）
 
@@ -119,7 +128,7 @@
 
 | 已push，验收完成 | 封闭讲解本地快路径 | 01a0d93c-fe09-7401-8afc-6a05fea80a91；已release | 4bf1eac；当前语义等价、Narrator client/provider 1+1→0+0，130tests/TS/build；legacy provider保留 |
 
-| 执行中 | 封闭整场总结本地完成 | 01a0d94b-3e01-7003-bd26-8043799d4dc0；独占本轮写入 | 从已完成cue确定总结与建议，验证可本地完成并省去复制请求；不省Director真实决策 |
+| 已完成本地验收，同分支交付 | 封闭整场总结本地完成 | 01a0d94b-3e01-7003-bd26-8043799d4dc0；push后release | 当前请求1+1→0+0；真实Graph支持/代表分离及引用/限定修复，93tests/TS/build；不省Director真实决策 |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
 

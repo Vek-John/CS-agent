@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { deterministicSessionWrapUpResult } from "@cs-coach/coach-agent/client";
+import { buildSessionWrapUpRequest, assertValidSessionWrapUpBundle, deterministicSessionWrapUpResult } from "@cs-coach/coach-agent/client";
 import type { SessionWrapUpBuildInput, SessionWrapUpRequest } from "@cs-coach/coach-agent";
 import {
   directSessionWrapUp,
   requestSessionWrapUp,
+  requestSessionWrapUpFromProvider,
 } from "./deepseek-wrap-up";
 
 function buildInput(): SessionWrapUpBuildInput {
@@ -99,7 +100,7 @@ afterEach(() => {
 describe("DeepSeek Session Wrap-Up adapter", () => {
   it("anonymizes the strict packet, maps a legal provider result, and hides control-plane fields", async () => {
     let requestBody: Record<string, unknown> | undefined;
-    const result = await requestSessionWrapUp(buildInput(), {
+    const result = await requestSessionWrapUpFromProvider(buildInput(), {
       fetcher: async (_url, init) => {
         requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
         return new Response(JSON.stringify({
@@ -123,7 +124,7 @@ describe("DeepSeek Session Wrap-Up adapter", () => {
     ["network failure", async () => { throw new Error("offline"); }],
     ["invalid JSON", async () => new Response("not-json", { status: 200 })],
   ])("returns deterministic fallback for %s", async (_label, fetcher) => {
-    const result = await requestSessionWrapUp(buildInput(), { fetcher: fetcher as never });
+    const result = await requestSessionWrapUpFromProvider(buildInput(), { fetcher: fetcher as never });
     expect(result.status).toBe("FALLBACK");
     expect(result.manifest.provider).toBe("DETERMINISTIC");
     expect(result.bundle.themes[0]?.trainingAdvice.refs).toEqual(["advice-a"]);
@@ -137,7 +138,7 @@ describe("DeepSeek Session Wrap-Up adapter", () => {
       { ...successBundle(), themes: successBundle().themes.map((theme, index) => index === 0 ? { ...theme, summary: { ...theme.summary, refs: ["e99"] } } : theme) },
     ];
     for (const bundle of invalidBundles) {
-      const result = await requestSessionWrapUp(buildInput(), {
+      const result = await requestSessionWrapUpFromProvider(buildInput(), {
         fetcher: async () => new Response(JSON.stringify({
           status: "SUCCEEDED",
           bundle,
@@ -165,4 +166,88 @@ it.each(["summary", "trainingAdvice"] as const)("rejects newly invented %s even 
   expect(result.status).toBe("FALLBACK");
   expect(result.manifest.reason).toBe("UPSTREAM_SCHEMA");
   expect(result.bundle.themes[0][field].text).not.toContain("高血量队友");
+});
+
+
+it("locally completes the fixed text for all production-built themes without copying requests", async () => {
+  const input = buildInput();
+  input.summary.limitations = ["仅依据本场已确认的重复条件。"];
+  const request = buildSessionWrapUpRequest(input);
+  const provider = vi.fn(async (_url: string | URL, init?: RequestInit) => {
+    const payload = JSON.parse(String(init?.body));
+    const anonymous = JSON.parse(payload.messages[1].content);
+    return completion(deterministicSessionWrapUpResult(anonymous, "TEST").bundle);
+  });
+  const client = vi.fn(async (_url: string | URL, init?: RequestInit) => new Response(JSON.stringify(await directSessionWrapUp(JSON.parse(String(init?.body)), { DEEPSEEK_ALLOW_EMPTY_KEY: true, DEEPSEEK_URL: "http://fake.invalid" }, provider))));
+  const result = await requestSessionWrapUp(input, { fetcher: client });
+  expect(assertValidSessionWrapUpBundle(result.bundle, request)).toEqual(result.bundle);
+  expect(result.bundle.themes.map(theme => [theme.summary.text, theme.trainingAdvice.text])).toEqual(request.themes.map(theme => {
+    const cue = request.completedCues.find(cue => cue.focus === theme.focus)!;
+    return [cue.coreIssue.text, cue.advice.find(advice => theme.adviceRefs.includes(advice.id))!.text];
+  }));
+  expect(result.bundle.limitations).toEqual(request.limitations);
+  expect(client).not.toHaveBeenCalled();
+  expect(provider).not.toHaveBeenCalled();
+  expect(result.manifest).toMatchObject({ status: "DISABLED", provider: "DETERMINISTIC", reason: "CLOSED_SESSION_PROJECTION" });
+});
+
+it("finishes local summaries without waiting for a hanging transport", async () => {
+  vi.useFakeTimers();
+  const fetcher = vi.fn(() => new Promise<Response>(() => {}));
+  try {
+    const pending = requestSessionWrapUp(buildInput(), { fetcher });
+    await vi.advanceTimersByTimeAsync(0);
+    expect((await pending).manifest.reason).toBe("CLOSED_SESSION_PROJECTION");
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally { vi.useRealTimers(); }
+});
+
+it("rejects already cancelled local work even when there are no themes", async () => {
+  const controller = new AbortController(); controller.abort();
+  const fetcher = vi.fn();
+  for (const input of [buildInput(), { summary: { schemaVersion: "coach-agent-session-summary.v1" as const, themes: [], completedCues: [], limitations: [] }, presentableCues: {} }]) {
+    await expect(requestSessionWrapUp(input, { fetcher, signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
+  }
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+it("keeps empty themes disabled and accepts long text within the unchanged domain bound", async () => {
+  const empty = await requestSessionWrapUp({ summary: { schemaVersion: "coach-agent-session-summary.v1", themes: [], completedCues: [], limitations: [] }, presentableCues: {} });
+  expect(empty.manifest.reason).toBe("NO_REPEATED_THEME");
+  const input = buildInput(); input.presentableCues["cue-a-1"].coreIssue.text = "长".repeat(800);
+  expect((await requestSessionWrapUp(input)).bundle.themes[0].summary.text).toHaveLength(800);
+  input.presentableCues["cue-a-1"].coreIssue.text += "长";
+  await expect(requestSessionWrapUp(input)).rejects.toThrow();
+});
+
+it.each(["advice", "ownership"])("rejects %s violations before any local result or network", async kind => {
+  const input = buildInput();
+  if (kind === "advice") input.presentableCues["cue-a-1"].advice = [];
+  else input.presentableCues["cue-a-1"].focus = "THEME_B";
+  const fetcher = vi.fn();
+  await expect(requestSessionWrapUp(input, { fetcher })).rejects.toThrow();
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+it("retains provider freedom to choose legal ref and limitation subsets without changing fixed text", async () => {
+  const request = anonymousRequest(); request.limitations = ["一条已有的限定"];
+  const alternate = deterministicSessionWrapUpResult(request, "TEST").bundle;
+  alternate.themes.forEach((theme, index) => { theme.summary.refs = [request.themes[index].evidenceRefs[0]]; });
+  alternate.limitations = [];
+  const result = await directSessionWrapUp(request, { DEEPSEEK_ALLOW_EMPTY_KEY: true, DEEPSEEK_URL: "http://fake.invalid" }, async () => completion(alternate));
+  expect(result.status).toBe("SUCCEEDED");
+  expect(result.bundle).toEqual(alternate);
+});
+
+it("fails over-capacity qualifications explicitly in both local and provider compatibility paths", async () => {
+  const input = buildInput(); input.summary.limitations = Array.from({ length: 8 }, (_, i) => `限定${i}`);
+  input.presentableCues["cue-a-1"].coreIssue.limitations = ["必须保留的第九条限定"];
+  const fetcher = vi.fn();
+  await expect(requestSessionWrapUp(input, { fetcher })).rejects.toMatchObject({ name: "SessionWrapUpValidationError", message: "SOURCE_LIMITATIONS_EXCEED_OUTPUT_LIMIT" });
+  await expect(requestSessionWrapUpFromProvider(input, { fetcher })).rejects.toMatchObject({ name: "SessionWrapUpValidationError" });
+  const request = anonymousRequest(); request.limitations = [...input.summary.limitations];
+  request.completedCues[0].coreIssue.limitations = ["必须保留的第九条限定"];
+  await expect(directSessionWrapUp(request, { DEEPSEEK_ALLOW_EMPTY_KEY: true }, fetcher)).rejects.toMatchObject({ name: "SessionWrapUpProviderValidationError" });
+  expect(fetcher).not.toHaveBeenCalled();
 });

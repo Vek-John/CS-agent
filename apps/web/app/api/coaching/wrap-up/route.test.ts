@@ -86,3 +86,14 @@ describe("POST /api/coaching/wrap-up", () => {
     expect(await response.json()).toMatchObject({ status: "FALLBACK", manifest: { provider: "DETERMINISTIC", reason: "UPSTREAM_JSON" } });
   });
 });
+
+it("returns a bounded validation failure instead of a raw exception when source qualifications exceed capacity", async () => {
+  const body = structuredClone(validBody);
+  body.limitations = Array.from({ length: 8 }, (_, i) => `限定${i}`) as never;
+  body.completedCues[0].coreIssue.limitations = ["必须保留的额外限定"] as never;
+  const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);
+  const response = await POST(request(body));
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ status: "FALLBACK", reason: "INVALID_REQUEST" });
+  expect(fetcher).not.toHaveBeenCalled();
+});

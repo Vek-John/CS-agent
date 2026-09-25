@@ -1,0 +1,52 @@
+import type { CoachAgentResult, SessionWrapUpResult } from "@cs-coach/coach-agent/client";
+
+export function canPublishSessionWrapUp(result: CoachAgentResult, generation: number, currentGeneration: number, runId: string, takenOver: boolean): boolean {
+  return generation === currentGeneration && !takenOver && result.identity.runId === runId
+    && result.status === "COMPLETED" && result.state.sessionStatus === "COMPLETED";
+}
+
+export function sessionWrapUpPresentation(result: SessionWrapUpResult): { status: "READY" | "FALLBACK"; error?: string } {
+  const local = result.status === "DISABLED" && result.manifest.provider === "DETERMINISTIC" && result.manifest.reason === "CLOSED_SESSION_PROJECTION";
+  return {
+    status: result.status === "SUCCEEDED" || local ? "READY" : "FALLBACK",
+    error: result.status === "SUCCEEDED" || local || result.manifest.reason === "NO_REPEATED_THEME"
+      ? undefined : "智能总结暂不可用，下面保留已确认的复盘结论。",
+  };
+}
+
+export function SessionWrapUpNotice({ error }: { error?: string }) {
+  return error ? <p>{error}</p> : null;
+}
+
+export function sessionWrapUpFailureMessage(error: unknown): string {
+  return error instanceof Error && error.message === "SOURCE_LIMITATIONS_EXCEED_OUTPUT_LIMIT"
+    ? "总结需要保留的限定超过当前上限，未生成总结；已完成的复盘和回看不受影响。"
+    : "全场总结暂时未能准备好，仍可完成这次复盘。";
+}
+
+export function SessionWrapUpPanel({ status, result, request, plan, phase, error, onComplete }: {
+  status: string; result?: SessionWrapUpResult;
+  request?: import("@cs-coach/coach-agent/client").SessionWrapUpRequest;
+  plan?: import("@cs-coach/contracts").ReviewPlan;
+  phase: string; error?: string; onComplete: () => void;
+}) {
+  return <section className="cs2d-coach-summary" aria-live="polite">
+    <small>本场复盘总结</small>
+    {status === "LOADING" ? <p>正在整理已完成且可呈现的讲解点。</p> : null}
+    <SessionWrapUpNotice error={error} />
+    {(result?.bundle.themes.length ?? 0) > 0 ? <div>{result?.bundle.themes.slice(0, 3).map((theme, index) => {
+      const requestTheme = request?.themes.find(candidate => candidate.focus === theme.focus);
+      const roundLabels = [...new Set((requestTheme?.cueRefs ?? []).map(cueId => {
+        const cue = plan?.cues.find(cue => cue.id === cueId);
+        const segment = plan?.segments.find(segment => segment.id === cue?.segment_id);
+        return segment?.round_number ? `第 ${segment.round_number} 回合` : "准备阶段";
+      }))];
+      return <article key={`${theme.focus}-${index}`} className="cs2d-coach-card">
+        <small>主题 {index + 1} · {roundLabels.join("、") || "已完成讲解点"}</small>
+        <p>{theme.summary.text}</p><p><b>训练建议：</b>{theme.trainingAdvice.text}</p>
+      </article>;
+    })}</div> : status !== "LOADING" && !error ? <p>本场没有足够重复且条件明确的证据，暂不归纳为习惯。</p> : null}
+    {(result?.bundle.themes.length ?? 0) > 0 ? result?.bundle.limitations.map((limitation, index) => <p key={`limitation-${index}`}>{limitation}</p>) : null}
+    {phase === "WRAP_UP" ? <button className="cs2d-coach-primary" type="button" onClick={onComplete}>完成本次复盘</button> : null}
+  </section>;
+}

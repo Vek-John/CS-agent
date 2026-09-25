@@ -117,6 +117,7 @@ import {
 import { resolveItemPresentation } from "../../lib/assets/game-asset-display";
 import { loadLocalGameAssetCatalog } from "../../lib/assets/local-game-asset-catalog";
 import { requestSessionWrapUp } from "../../lib/coaching/deepseek-wrap-up";
+import { canPublishSessionWrapUp, sessionWrapUpPresentation, sessionWrapUpFailureMessage, SessionWrapUpPanel } from "../../lib/coaching/session-wrap-up-presentation";
 import { buildStage3WrapUpInput } from "../../lib/coaching/coach-agent-stage3-wrap-up";
 import { buildSessionWrapUpRequest } from "@cs-coach/coach-agent/client";
 import {
@@ -3058,7 +3059,7 @@ export function Cs2dPlaybackHost({
   }, [activePlan, segment, session, stage3IdentityContext, stage3Mode]);
 
   const requestStage3WrapUp = useCallback(async (agentResult: import("@cs-coach/coach-agent/client").CoachAgentResult, generation: number, runId: string) => {
-    if (!stage3Mode || !activePlan || generation !== generationRef.current || agentResult.identity.runId !== runId) return;
+    if (!stage3Mode || !activePlan || !canPublishSessionWrapUp(agentResult, generation, generationRef.current, runId, userTookOverRef.current)) return;
     if (stage3WrapUpGenerationRef.current === generation) return;
     stage3WrapUpGenerationRef.current = generation;
     setStage3WrapUpStatus("LOADING");
@@ -3085,12 +3086,11 @@ export function Cs2dPlaybackHost({
       if (generation !== generationRef.current || userTookOverRef.current || result === undefined) return;
       setStage3WrapUpResult(result);
       void historyPersistenceControllerRef.current?.artifact("SESSION_SUMMARY", "session-summary", result, "session-wrap-up.v1").catch(() => setHistoryError("全场总结保存失败。"));
-      setStage3WrapUpStatus(result.status === "SUCCEEDED" ? "READY" : "FALLBACK");
-      setStage3WrapUpError(result.status === "SUCCEEDED" || result.manifest.reason === "NO_REPEATED_THEME"
-        ? undefined
-        : "智能总结暂不可用，下面保留已确认的复盘结论。");
+      const presentation = sessionWrapUpPresentation(result);
+      setStage3WrapUpStatus(presentation.status);
+      setStage3WrapUpError(presentation.error);
     } catch (error) {
-      if (generation !== generationRef.current) return;
+      if (generation !== generationRef.current || userTookOverRef.current) return;
       const fallbackRequest = SessionWrapUpRequestSchema.parse({
         schemaVersion: "coach-agent-session-wrap-up.v1",
         themes: [],
@@ -3100,15 +3100,16 @@ export function Cs2dPlaybackHost({
       setStage3WrapUpRequest(fallbackRequest);
       setStage3WrapUpResult(deterministicSessionWrapUpResult(fallbackRequest, "INVALID_PRESENTABLE_INPUT"));
       setStage3WrapUpStatus("FALLBACK");
-      setStage3WrapUpError("全场总结暂时未能准备好，仍可完成这次复盘。");
+      setStage3WrapUpError(sessionWrapUpFailureMessage(error));
     }
   }, [activePlan, bundle?.candidate_set, narrationByCue, stage3Mode]);
 
   useEffect(() => {
     if (historyPlaybackOnlyRef.current || !stage3Mode || !stage3IdentityContext || !session || userTookOverRef.current) return;
     if (session.phase !== "WRAP_UP" && session.phase !== "COMPLETED") return;
+    const requestedGeneration = generationRef.current;
     void stage3ControllerRef.current?.completeSession(stage3IdentityContext).then((result) => {
-      if (result) void requestStage3WrapUp(result, generationRef.current, stage3IdentityContext.runId);
+      if (result) void requestStage3WrapUp(result, requestedGeneration, stage3IdentityContext.runId);
     });
   }, [requestStage3WrapUp, session, stage3IdentityContext, stage3Mode]);
 
@@ -3423,33 +3424,9 @@ export function Cs2dPlaybackHost({
           ) : null}
 
           {session && !userTookOver && stage3Mode && ["WRAP_UP", "COMPLETED"].includes(session.phase) ? (
-            <section className="cs2d-coach-summary" aria-live="polite">
-              <small>本场复盘总结</small>
-              {stage3WrapUpStatus === "LOADING" ? <p>正在整理已完成且可呈现的讲解点。</p> : null}
-              {stage3WrapUpError ? <p>{stage3WrapUpError}</p> : null}
-              {(stage3WrapUpResult?.bundle.themes.length ?? 0) > 0 ? (
-                <div>
-                  {stage3WrapUpResult?.bundle.themes.slice(0, 3).map((theme, index) => {
-                    const requestTheme = stage3WrapUpRequest?.themes.find((candidateTheme) => candidateTheme.focus === theme.focus);
-                    const roundLabels = [...new Set((requestTheme?.cueRefs ?? []).map((cueId) => {
-                      const referencedCue = activePlan?.cues.find((candidateCue) => candidateCue.id === cueId);
-                      const referencedSegment = referencedCue ? activePlan?.segments.find((candidateSegment) => candidateSegment.id === referencedCue.segment_id) : undefined;
-                      return referencedSegment?.round_number ? `第 ${referencedSegment.round_number} 回合` : "准备阶段";
-                    }))];
-                    return (
-                      <article key={`${theme.focus}-${index}`} className="cs2d-coach-card">
-                        <small>主题 {index + 1} · {roundLabels.join("、") || "已完成讲解点"}</small>
-                        <p>{theme.summary.text}</p>
-                        <p><b>训练建议：</b>{theme.trainingAdvice.text}</p>
-                      </article>
-                    );
-                  })}
-                </div>
-              ) : stage3WrapUpStatus !== "LOADING" ? (
-                <p>本场没有足够重复且条件明确的证据，暂不归纳为习惯。</p>
-              ) : null}
-              {session.phase === "WRAP_UP" ? <button className="cs2d-coach-primary" type="button" onClick={() => transition({ type: "COMPLETE_SESSION" })}>完成本次复盘</button> : null}
-            </section>
+            <SessionWrapUpPanel status={stage3WrapUpStatus} result={stage3WrapUpResult} request={stage3WrapUpRequest}
+              plan={activePlan} phase={session.phase} error={stage3WrapUpError}
+              onComplete={() => transition({ type: "COMPLETE_SESSION" })} />
           ) : null}
 
           {session && !userTookOver && !stage3Mode && ["WRAP_UP", "COMPLETED"].includes(session.phase) ? (

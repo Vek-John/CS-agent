@@ -78,7 +78,7 @@ it("keeps only repeated verified conditions with freshly applicable advice", asy
     };
   });
   const set = assembleCandidateSet({ id: "set", version: "test", demoId: base.demo_id, playerId: base.player_id, candidates, materials, generationManifest: { timelineVersion: "test", sceneIndexVersion: "test", observationVersion: "test", signalVersion: "test", candidateGeneratorVersion: "test" } });
-  const plan = { ...base, cues: base.cues.map((cue, index) => ({ ...cue, candidate_id: candidates[index].candidateId })) };
+  const plan = { ...base, cues: base.cues.map((cue, index) => ({ ...cue, candidate_id: candidates[index].candidateId, primary_focus_code: "VERIFIED_DECISION_REVIEW" })) };
   const completedCues = plan.cues.map((cue, index) => ({ cueId: cue.id, roundId: `round-${index}`, focus: "VERIFIED_DECISION_REVIEW", evidenceRefs: candidates[index].factRefs, adviceRefs: buildGatedAdviceOptions(candidates[index], materials[index]).filter((item) => item.applicability?.allowedIntoNarrator).map((item) => item.id) }));
   const summary: SessionSummaryInput = {
     schemaVersion: "coach-agent-session-summary.v1", completedCues, limitations: [],
@@ -90,6 +90,45 @@ it("keeps only repeated verified conditions with freshly applicable advice", asy
   expect(projected.summary.themes[0].occurrence).toBe(2);
   expect(Object.values(projected.presentableCues).every((cue) => cue.advice[0].text.includes("已确认能够安全到达的掩体"))).toBe(true);
   expect(JSON.stringify(projected)).not.toMatch(/不信任存储|未来结果不能/);
+  // Graph retains all supporting cueRefs but only one representative per theme.
+  const { createCoachAgentRuntime } = await import("@cs-coach/coach-agent");
+  const { startCueEvent, fixtureIdentity } = await import("../../../../libs/coach-agent/src/test-fixtures");
+  const { buildSessionWrapUpRequest } = await import("@cs-coach/coach-agent/client");
+  const { requestSessionWrapUp } = await import("./deepseek-wrap-up");
+  const runtime = createCoachAgentRuntime({ checkpoint: "memory" });
+  for (const [index, completed] of completedCues.entries()) {
+    const event = startCueEvent({ eventId: `completed-${index}`, cueId: completed.cueId, segmentId: `segment-${index}`, routeSegmentIndex: index, capabilities: [] });
+    event.focus = completed.focus;
+    event.sessionThemes = [];
+    event.allowedEvidenceSummary = [{ namespace: "DECISION", refs: [...completed.evidenceRefs] }, { namespace: "ADVICE", refs: [...completed.adviceRefs] }];
+    event.presentableSummary = { ...event.presentableSummary!, cueId: completed.cueId, roundId: completed.roundId, focus: completed.focus, evidenceRefs: [...completed.evidenceRefs], adviceRefs: [...completed.adviceRefs] };
+    const result = await runtime.dispatch(event);
+    expect(result.state.runStatus).toBe("CUE_COMPLETED");
+    expect(result.state.sessionSummaryInput).toBeNull();
+  }
+  const finished = await runtime.dispatch({ version: "coach-agent-event.v2", type: "COMPLETE_SESSION", eventId: "full-session-complete", identity: fixtureIdentity });
+  const graphShape = finished.state.sessionSummaryInput!;
+  expect(graphShape.completedCues).toHaveLength(1);
+  expect(graphShape.themes[0].cueRefs).toHaveLength(2);
+  const projectedGraph = buildStage3WrapUpInput(plan, graphShape, narration, set);
+  expect(projectedGraph.summary.themes).toHaveLength(1);
+  expect(Object.keys(projectedGraph.presentableCues)).toEqual(graphShape.completedCues.map(cue => cue.cueId));
+  expect(buildSessionWrapUpRequest(projectedGraph).completedCues).toHaveLength(1);
+  const local = await requestSessionWrapUp(projectedGraph, { fetcher: async () => { throw Error("No wrap-up network expected"); } });
+  expect(local.bundle.themes).toHaveLength(1);
+  expect(local.manifest.reason).toBe("CLOSED_SESSION_PROJECTION");
+  expect(buildStage3WrapUpInput(plan, { ...graphShape, themes: [{ ...graphShape.themes[0], cueRefs: [completedCues[0].cueId] }] }, narration, set).summary.themes).toEqual([]);
+  expect(buildStage3WrapUpInput(plan, graphShape, { [completedCues[0].cueId]: narration[completedCues[0].cueId] }, set).summary.themes).toEqual([]);
+  expect(buildStage3WrapUpInput(plan, { ...graphShape, themes: [{ ...graphShape.themes[0], conflictEvidence: true }] }, narration, set).summary.themes).toEqual([]);
+  const noRepresentativeAdvice = { ...graphShape, completedCues: graphShape.completedCues.map(cue => ({ ...cue, adviceRefs: [] })) };
+  expect(buildStage3WrapUpInput(plan, noRepresentativeAdvice, narration, set).summary.themes).toEqual([]);
+
+  const mismatchedHabit = structuredClone(set);
+  mismatchedHabit.materials[1].behaviorHypotheses![0].kind = "DELAYED_OBJECTIVE_ACTION";
+  mismatchedHabit.materials[1].decisionSnapshot!.spatialChecks = mismatchedHabit.materials[1].decisionSnapshot!.spatialChecks.map(check => check.code.startsWith("behavior:") ? { ...check, code: "behavior:DELAYED_OBJECTIVE_ACTION" } : check);
+  expect(buildStage3WrapUpInput(plan, graphShape, narration, mismatchedHabit).summary.themes).toEqual([]);
+  const presentationOnly = { ...set, materials: set.materials.map(material => ({ ...material, playerActionFacts: material.playerActionFacts.map(fact => ({ ...fact, presentationOnly: true as const })) })) };
+  expect(buildStage3WrapUpInput(plan, graphShape, narration, presentationOnly).summary.themes).toEqual([]);
   const denied = { ...set, materials: set.materials.map((material) => ({ ...material, decisionSnapshot: { ...material.decisionSnapshot!, spatialChecks: [] } })) };
   expect(buildStage3WrapUpInput(plan, summary, narration, denied).summary.themes).toEqual([]);
 });
