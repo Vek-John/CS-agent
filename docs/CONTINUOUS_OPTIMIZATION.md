@@ -38,7 +38,17 @@
 | 已push、本地验收完成 | 逐次受击事实与决策前本人证据 | 01a0d7f1-0580-7910-abbd-554dcd9a55de；已完成，释放写入与进程 | 264 hurt/本人27，23/44 snapshot和2/4教学包/确定性讲解实际消费；182测试+Rust3/TS/Web与Viewer构建通过；仍不证明专业判断提升，见SELF_HURT_EVIDENCE.md |
 | 已push、本地验收完成 | 射击事件即时身份归属 | 01a0d81c-bee6-7161-9cae-58ff2eea392b；完成并释放写入与进程 | 旧生产路径6红→绿，最终Rust夹具9＋parser3、186相关测试/TS/Web和Viewer构建通过；一次WASM1242shot/本人152、hurt与clock保持，见CURRENT_SHOT_IDENTITY.md |
 
+| 待执行 | 纠正诊断道具数量与未知库存 | 01a0d837-aff5-7560-a4b1-ba553cd77ba6；交接后独占当前树 | Host与诊断模块把全inventory计数显示为道具颗数，忽略missing_fields.inventory；先复现，再统一明确道具计数与未知语义，兼容旧投影 |
+
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
+
+## 本轮任务卡：诊断道具数量与未知库存（2026-09-25）
+
+- 基线e90493b干净且已push，射击任务结束并释放写入/进程；01a0d837-aff5-7560-a4b1-ba553cd77ba6独占本轮诊断contracts/module/Host投影、相关tests/docs，主控只读。使用默认模型/推理；小串行修复复用当前树，无需额外代理或Demo复制。
+- 证据：teaching-diagnosis-host.ts约117行和coach-agent/teaching-diagnosis.ts约522行对state.inventory所有item.count求和；后者约538行一律标为“决策时道具数量/颗”。契约InventoryItem允许WEAPON，已有fixture仅一把AK；Adapter在grenades缺失时产inventory:[]并标missing_fields.inventory，当前投影却给0。
+- 目标/验收：A1用生产Host→诊断及rich DecisionState入口先红复现枪械计入道具、未知当0；A2明确只统计有依据的道具，缺失/部分/不合法数量不伪造0，已知空库存仍能0，远端不泄漏完整inventory/身份；A3两路径一致，旧inventoryCount-only投影不得不经说明当作已校验道具数，新恢复/Graph/API兼容；A4相关tests/TS/production build；A5架构/学习日志/紧凑验证与任务板、commit/push及释放所有权。
+- 范围：准确资源measurement与窄投影，不改风险阈值/专业判断/选点/Parser/Viewer，不重写历史，不新增模型或真实Demo解析。先核实inventory分类/缺字段语义；不靠道具名字模糊匹配猜分类。必要新增可选utility字段需区分legacy总物品数和真实道具数，不能悄悄重解释旧值。
+- 风险/阶段：5分钟复现、20分钟实现兼容、10分钟局部验证/构建。风险是缺失与真0混淆、Host/rich路径口径不一致、旧checkpoint/schema误拒或重解释；用小fixture/Graph/API测，不启动浏览器/服务/真实DB/模型，不碰旧UI A5。若修改前端呈现按AGENTS读两UI技能；不改布局交互。执行者负责进程退出/临时清理，无安装/发布/main合并/完整性审计。
 
 ## 本轮任务卡：射击事件即时身份归属（2026-09-25）
 
