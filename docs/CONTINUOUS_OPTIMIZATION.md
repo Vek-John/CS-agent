@@ -40,7 +40,17 @@
 | 已push、本地验收完成 | 诊断道具数量与未知库存 | 01a0d837-aff5-7560-a4b1-ba553cd77ba6；完成并释放写入/进程 | 生产双入口4红→绿，共享utilityCount，不重解释legacy总数；79测试/TS/build通过，Graph/API/恢复/SSR已验证，见DIAGNOSTIC_UTILITY_COUNT.md |
 | 已push、本地验收完成 | 诊断资源时效与回合绑定 | 01a0d850-9c52-7803-85ca-03c7c8f5576e；完成并释放写入/进程 | 过期/跨回合2红→绿，同回合半秒门与独立可信decisionRoster落地；147测试/TS/build通过，见DIAGNOSTIC_RESOURCE_FRESHNESS.md |
 
+| 待执行 | 可信部分资源的独立测量 | 01a0d870-79b9-7d22-ae10-fc28ec2ceb6b；交接后独占当前树 | 当前资源required三字段导致缺helmet也丢health/armor；先复现，再字段级unknown和三值资源背景，保留刚完成的时效/身份门 |
+
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
+
+## 本轮任务卡：可信部分资源的独立测量（2026-09-25）
+
+- 基线aad0732已push干净，前任务release；本轮01a0d870-79b9-7d22-ae10-fc28ec2ceb6b独占Host资源投影/窄诊断contracts/helper/执行器及tests/docs。默认配置，串行复用当前树，主控只读。
+- 新证据：当前fresh selector对helmet缺失一律整份return，DecisionResources又要求health/armor/hasHelmet齐备；真实parser省略false helmet，Snapshot保守保留null，所以新鲜已知血量/护甲可因无关头盔unknown全部丢失。不能撤掉新鲜度门或将unknown补false来救显示；需分离整体样本可信性与字段可用性。
+- 目标/验收：A1生产Host/local/remote复现helmet unknown使known health/armor消失；A2保持同round/player/decision/半秒/死亡/绑定门后逐字段保留可靠值，不制造新rich假默认，字段missing/null/非法仅使该字段unknown；A3只显示已知测量，unknown不是0/false；低资源背景仅由明确已知条件支持，部分高值不能推出资源足够，维持既有数值阈值与Verdict INCONCLUSIVE；A4旧完整投影/legacy utility/roster/已保存恢复兼容，Graph/API与Host结果一致、相关tests/TS/build；A5架构/学习日志/验证/任务板及commit/push。
+- 边界：此轮明确允许窄partial DecisionResources契约及资源背景三值处理，不升级专业判断，不修改Parser/Viewer/原始PlayerState全域类型、不重写历史。不借schema变更吞掉未来/身份错误/过期数据；总体可信门失败仍无资源。只恢复已有可知字段，未知头盔不冒称没头盔。
+- 风险/阶段：8分钟复现设计、25分钟实现/接线、10分钟相关构建；重点!undefined隐式false、undefined数值比较、empty对象误认为SUPPORTED、rich回退、已知false/0与缺失区别。纯fixture/真实Host-Graph-API入口，无Demo/模型/浏览器/服务/用户DB；必要5分钟只读终审。执行者负责所有测试/build退出，不改旧A5或发布安装main。
 
 ## 本轮任务卡：诊断资源时效与回合绑定（2026-09-25）
 
