@@ -22,6 +22,13 @@
 
 大型Demo或浏览器测试先smoke，bulk留在所属Worker/页面，由一个控制器负责整个进程生命周期；超时有退出和清理。同一基础设施边界失败两次先简化harness。保护未提交工作、真实Demo、SQLite/Memory及密钥；不force push，不擅自部署、发布或安装用户应用。缺信息时完成独立可做项；无新信息的失败路径不无限重试。
 
+## 当前独立任务：处理窗口内本人开火事实（2026-09-25）
+
+- 基线6ef784a干净已push，真实慢放资格任务已release；01a0d92a-c3dd-7143-9894-d5eaadcec0a8独占Adapter动作事实生产/必要窄引用接线、相关tests/验证工具/docs。主控只读，默认配置，串行复用已有树，不碰锁屏UI。
+- 已见路径：hasVerifiedAction只覆盖RETURN_AND_FIRE/UTILITY/非爆炸BOMB；普通明确shooter的shot只进WEAPON_FIRE。上一轮15/16自然cue无PlayerActionFact，尚未证明这些窗口有shot。本轮先fixture区分真正没动作与已存在本人事件未传递，不把覆盖数当教学质量。
+- 目标/验收：A1实际Adapter/Compiler/Narrator在DEATH或HP_CHANGE处理窗口有独立本人shot但action缺失先红；A2仅绑定当前同回合、明确本人、合法canonical且在已有处理窗口的shot，时间语义清楚，未知actor/未来/他人/死亡后或同tick顺序不明拒绝；A3独立PLAYER_ACTION只说已记录本人开火，不猜目标/命中/接敌/重复peek/意图，最多有界事实/refs，不借结果造动作，现有选点/decisionTick/assessment/门不变；A4真实生产Narrator/Host自然资格、旧历史兼容及相关tests/TS/Web build，必要一次最终WASM同进程消融验消费（先smoke，无Parser重建）；A5架构/学习日志/证据/任务板commit/push并release与下一建议。
+- 风险/阶段：8分钟复现/时间契约，25分钟实现回归，10分钟验证构建；最多一次真实解析、120秒进程组deadline，bulk单owner，阶段小摘要先落位。范围先DEATH/HP_CHANGE两类，不为更多case扩选点/延长窗口或再提名事件。引用event稳定、source refs可追溯，死亡tick不推定事件次序；同一事件在既有动作事实内不重复放大。没有合法shot则仍无action/FINISH，不强制工具。无模型/UI/服务/用户DB/Memory/密钥/安装发布main，原A5单独待恢复。必要5分钟只读信息边界终审，执行者清理全部进程。
+
 ## 用户纠正与当前独立工作线（2026-09-25）
 
 用户再次明确“怎么停了，继续”：锁屏只阻塞原UI A5，不代表项目整体应等待。主控继续推进不依赖桌面的真实数据、接线、恢复与学习；阶段交付后选择下一项有实际收益的独立工作。不能把无新UI条件当作停掉全部工作的依据，也不制造无价值变更或重复审计。heartbeat同样遵守这条纠正。
@@ -84,7 +91,9 @@
 
 | 已push，本地验收完成 | 现行教学主题与证据工具接线 | 01a0d8c0-2ca6-71e2-a54c-d210097d46b3；已release | b5da690；当前Compiler→Host红→绿，唯一ACTION_FACT_REPLAY保持动作/引用/完整结果窗口门，默认Graph自然effect；257相关用例/TS/build通过，真实UI待原A5 |
 
-| 已完成本地验收，同分支交付 | 真实路线自然慢放资格 | 01a0d91d-29b6-7b80-b935-ef39ee0d0966；push后release | 一次解析6玩家16cue：1自然慢放、15无动作正确FINISH；生产Session门/Graph/Host接线通过，模拟ACK不关闭UI A5；见REAL_ACTION_REPLAY.md |
+| 已push，验收完成 | 真实路线自然慢放资格 | 01a0d91d-29b6-7b80-b935-ef39ee0d0966；已release | 6ef784a；一次解析6玩家/16cue，1个P6 C4类自然慢放及15个无动作正确FINISH，0fetch；模拟ACK不关闭A5 |
+
+| 执行中 | 处理窗口内本人开火事实 | 01a0d92a-c3dd-7143-9894-d5eaadcec0a8；独占本轮写入 | 先证明既有shot向DEATH/HP_CHANGE动作事实传递缺口，只补事实不改判断或选点 |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
 
