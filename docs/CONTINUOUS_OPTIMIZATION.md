@@ -33,9 +33,19 @@
 | 阶段已push，真实验收未完成 | 教学演示暂停与继续 | 01a0d77e-085f-7880-9331-c01becde48cd；已释放写入，服务已停 | 214d743；156测试/Host与Viewer TS/Web与Viewer构建通过；锁屏阻塞原A5，不自动唤醒重试UI；解锁后先协调所有权再补验，见TEACHING_PLAYBACK_CONTROLS.md |
 | 实现与本地验收完成 | 区分无需演示与实际工具完成 | 01a0d795-539b-7421-afbd-64e3f0e5c42a；阶段push后释放写入，无服务/浏览器 | 当前身份完成说明接入真实渲染；无演示、具体成功、失败与未知恢复准确区分；84测试/TS/production build通过，详见TEACHING_COMPLETION_STATUS.md；不关闭原工具暂停A5 |
 | 已push | 决策时公开回合时钟 | 01a0d7bb-d7ea-7e21-864f-54e7e2e17049，完成并释放写入 | 9150d51；44候选/38个有效时钟、4cue/3个教学包消费，148测试通过/1个既有缺产物跳过，TS/Web/Viewer构建通过；暂停补偿未知仍null，不据时间单独判错，见PUBLIC_ROUND_CLOCK.md |
-| 实现与本地验收完成 | 新解析器构建工具链配置 | 01a0d7ce-5686-7d33-84f4-717bae0a8401，独占当前树本轮写入 | CI补WASM target/固定CLI0.2.125，保持Rust1.89；本地同toolchain预检和一次编译接线完成，21测试/真实parser与Viewer构建/TS/Web build通过；CI及1.89实际编译未运行，见PARSER_TOOLCHAIN.md |
+| 已push | 新解析器构建工具链配置 | 01a0d7ce-5686-7d33-84f4-717bae0a8401，完成并释放写入/进程 | 355e3f7；CI补WASM target/固定CLI0.2.125，保持Rust1.89；本地同toolchain预检和一次编译接线完成，21测试/真实parser与Viewer构建/TS/Web build通过；CI及1.89实际编译未运行，见PARSER_TOOLCHAIN.md |
+
+| 待执行 | 准备阶段本地请求期限 | 01a0d7e0-5597-7bf1-bc85-832b767654a7，交接后独占当前树写入 | Director/Narrator客户端仅传signal，没有transport/JSON截止时间；先确定性复现，再有界回退与取消/晚到回归，不运行模型或浏览器 |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
+
+## 本轮任务卡：准备阶段本地请求期限（2026-09-25）
+
+- 基线355e3f7，工作树干净；上一任务已完成并释放所有进程/写入，故串行复用当前实现树，避免另起旧main。新任务01a0d7e0-5597-7bf1-bc85-832b767654a7独占本轮代码/测试/架构/日志/任务板写入；主控仅只读协调。
+- 证据：`requestTeachingDirector`和`requestNarrationBundle`客户端分别等待fetch和response.json，没有自己的deadline。服务端15秒provider timeout不覆盖本地入口/正文卡住，Controller会一直等route或前两条narration。已有取消测试只验证fetch主动抛AbortError，未验证忽略abort的transport。
+- 目标与验收：A1用有限计时假transport复现headers/body永久等待；A2限定单次请求的fetch+JSON总期限，超时返回已有经过校验的确定性route/五字段讲解；A3父取消立即退出、不生成新fallback、不发迟到事件，清理timer/listener，不重试；A4真实Controller与客户端接线证明前两cue仍可READY_TO_START、背景准备可继续、恢复已保存内容零调用；A5相关tests/TS/production build、架构/学习日志/证据记录并commit/push功能分支。
+- 范围：当前两个Host客户端、窄transport helper和相关测试/文档；不改教学阈值、Jev实验、提示词/模型、持久化schema、播放器UI或Viewer，不延伸成全项目HTTP重构。默认客户端期限须容纳现有15秒provider预算和有界本地开销，记录选择理由；deadline不是端到端启动性能承诺。
+- 风险与阶段：先8分钟以内小复现，20分钟实现与局部回归，再最多10分钟检查/构建；无真实Demo/模型/数据库/浏览器，不碰锁屏A5或残留Edge窗口。若无可复现功能缺口则报告证据并停止，不为制造改动推进。当前任务默认模型/推理，无需为小模块强行分工；若确需独立审查只读、5分钟上限。执行者负责测试/构建进程退出、临时文件清理与写入释放。
 
 ## 本轮任务卡：Parser WASM构建工具链（2026-09-25）
 
