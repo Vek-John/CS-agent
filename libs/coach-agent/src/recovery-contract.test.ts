@@ -81,6 +81,20 @@ function record(overrides: Record<string, unknown> = {}) {
 }
 
 describe("schema-only Session Recovery contracts", () => {
+  it.each(["RULE_BASELINE", "JEV_SHADOW", "JEV_EXPERIMENT"])("preserves the %s frozen audit with strict bounds and recursive guards", mode => {
+    const audit = { version: "decision-assessment-run.v1", mode, calls: 1, accepted: 0,
+      records: [{ candidateId: "candidate-1", reason: "FALLBACK", artifact: { status: "FALLBACK", rejectionReasons: ["UNAVAILABLE"] } }],
+    };
+    const parsed = SessionRecoveryRecordSchema.parse(record({ frozenReviewPlan: plan({ decision_assessment_run: audit }) }));
+    expect(JSON.parse(JSON.stringify(parsed)).frozenReviewPlan.decision_assessment_run).toEqual(audit);
+    for (const bad of [
+      { ...audit, calls: 11 }, { ...audit, mode: "UNKNOWN" }, { ...audit, extra: true },
+      { ...audit, records: Array.from({ length: 513 }, () => audit.records[0]) },
+      { ...audit, records: [{ ...audit.records[0], artifact: { apiKey: "forbidden" } }] },
+      { ...audit, records: [{ ...audit.records[0], artifact: { frames: [] } }] },
+    ]) expect(FrozenReviewPlanSchema.safeParse(plan({ decision_assessment_run: bad })).success).toBe(false);
+    expect(FrozenReviewPlanSchema.safeParse(plan({ unexpected: true })).success).toBe(false);
+  });
   it("accepts the bounded v2 record and strict reconnect lifecycle effects", () => {
     const initial = SessionRecoveryRecordSchema.parse(record());
     expect(initial).toMatchObject({

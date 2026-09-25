@@ -1921,18 +1921,30 @@ export function Cs2dPlaybackHost({
                 identity.sessionId,
                 preparationEvent.routeState,
               );
-              const record = buildSessionRecoveryRecord({
-                identity,
-                demoContentHash: nextBundle.metadata.demo_content_hash ?? replayHashRef.current ?? "",
-                selectedPlayerId: nextBundle.selected_steam_id,
-                plan: preparationEvent.plan,
-                routeState: preparationEvent.routeState,
-                session: initialSession,
-                boundaryKind: "ROUTE_START",
-                narrationByCue: narrationByCueRef.current,
-                analysis: nextBundle,
-                agentCheckpointId: null,
-              });
+              let record: SessionRecoveryRecord;
+              try {
+                record = buildSessionRecoveryRecord({
+                  identity,
+                  demoContentHash: nextBundle.metadata.demo_content_hash ?? replayHashRef.current ?? "",
+                  selectedPlayerId: nextBundle.selected_steam_id,
+                  plan: preparationEvent.plan,
+                  routeState: preparationEvent.routeState,
+                  session: initialSession,
+                  boundaryKind: "ROUTE_START",
+                  narrationByCue: narrationByCueRef.current,
+                  analysis: nextBundle,
+                  agentCheckpointId: null,
+                });
+              } catch {
+                preparation.cancel(); // Later narration must not overwrite this terminal preparation error.
+                setReviewPreparationStatus({ phase: "ERROR", detail: "可恢复起点校验失败，请刷新页面后重新选择 Demo。" });
+                if (desktopLibraryEnabled) {
+                  void historyPersistenceControllerRef.current?.markFailed()
+                    .then(refreshReviewHistory)
+                    .catch(() => setHistoryError("复盘准备失败，且失败状态未能保存。"));
+                }
+                return;
+              }
               recoveryRecordRef.current = record;
               const activateSession = () => activatePreparedCoachingSession({
                 plan: preparationEvent.plan,

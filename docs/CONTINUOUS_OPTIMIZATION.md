@@ -28,10 +28,25 @@
 |---|---|---|---|
 | 已push | Jev受限评估与准备性能修复 | 原任务 01a0c914-96d1-72c0-b00d-f1b02ed6f4a4（空闲，不再派发写工作） | da640a6；1039 tests、TS、Web/Viewer/desktop构建和sidecar通过 |
 | 已push | 观察语义与联合证据协议 | 同上 | 6ba9e31；1073 tests/TS/Web/Viewer通过；27次live未证明Jev判断质量提高 |
-| 已分配 | 真实整场复盘体验与可靠性改进 | 新任务 01a0d72c-d1b6-7d31-9b5a-8705470ff0be；接管原工作树全部本轮写入 | 从现有真实Demo和完整用户路径找最有价值的问题，最多选2个相关目标，复现后修复验证push |
-| 待选择 | 下一轮产品优化 | heartbeat统筹 | 先消费上一个任务结果，再选有证据支持的目标；不要重复已完成工作 |
+| 已push | 真实整场复盘体验与可靠性改进 | 新任务 01a0d72c-d1b6-7d31-9b5a-8705470ff0be；接管原工作树全部本轮写入 | 修复实际编排产物被恢复schema拒绝的启动阻塞、已看cue回访跳过结果门；真实9回合/4cue到完成、刷新恢复、相关测试/TS/build通过；详见FULL_REVIEW_RELIABILITY.md |
+| 有证据待安排 | 暂停/播放应保留带看意图 | heartbeat统筹 | 真实R2暂停立即进入自由查看，再播放仍不恢复教练；需额外回默认顺序。下一轮只建议修复并验证这一条控制语义 |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
+
+## 本轮任务卡：真实带看控制可靠性（2026-09-25）
+
+- 基线：a1d5858，分支codex/jev-decision-assessment启动时干净；写入负责人为01a0d72c-d1b6-7d31-9b5a-8705470ff0be。goal已通过工具建立。
+- 本轮固定两项：①真实默认入口准备完成后无法启动；②回访已讲过的教学点跳过本次结果完成门。暂停/播放接管行为留下一轮。
+- 第一项真实复现：静态Viewer解析现有9回合Demo、本地CS-Net完成、Director及两段Narrator均200后，页面持续“正在提交可恢复起点”；浏览器Zod错误定位frozenReviewPlan拒绝decision_assessment_run。真实prepareRoute总附加该字段，恢复严格schema未同步。验收为实际编排产物可序列化/恢复、旧记录兼容、页面正常进入带看，失败有明确状态。
+- 第二项前置与最小复现：正常完成一个cue→自由查看→点播同一已揭示cue→播放到结果末。合成计划内存复现显示仍PLAYING、无完成门，段末跳到下一cue但manual visit仍绑定旧cue。根因为本次visit错误复用全局revealed标记；红测试与真实页面均复现，修复后两者通过。
+- 验收：已看/首次点播都完整播放后回决策点；不会越入下一cue；取消回默认游标；呈现/习惯/模型调用不重复；暂停/自由跳转相关操作保持可用。真实页面未通过前不以单元测试声称UI通过。
+- 验证安排：主控唯一拥有Edge InPrivate窗口、页面/Worker与localhost服务；原Demo只读。CUA浏览器连接失败后采用原生Edge控制；Vite两次按需依赖重载中断启动后改用已构建静态Viewer，不改用户应用。模型provider为空，使用实际本地解析/CS-Net与确定性教练回退。
+- 范围限制：普通localhost没有桌面历史库；浏览器刷新恢复已通过，隔离SQLite/Host历史46测试与desktop runtime14测试通过，完整桌面历史UI及打包sidecar smoke未运行。
+- 所有权：playback_path_review负责只读定位/随后指定回归测试；主控负责UI与集成、任务卡、验证和push。其他工作树不改。阶段日志仅在本工作树忽略目录.local-data/full-review-ux。
+
+- 收尾：真实9回合、4个教学点完成；已看cue回访、默认重播、取消回默认、刷新恢复后继续均实际验证。相关274测试通过，补充错误取消后编排集成16测试通过；额外重连/客户端打包检查通过，TS与production build通过。详细证据见[验证记录](validation/FULL_REVIEW_RELIABILITY.md)。provider为空，无新Jev质量结论。
+- 资源已释放：自建Edge InPrivate窗口关闭、唯一服务控制器退出，3000/5174无监听；无遗留测试/构建进程，无主工作树改动。成果提交到当前分支，不合并main、不部署。
+
 
 ## 已知判断，避免重复试错
 

@@ -6,7 +6,7 @@
 > - 产品目标与范围以 [PRD.md](../PRD.md) 和 [MVP_SCOPE.md](../MVP_SCOPE.md) 为准。
 > - 本文记录「为什么做这个选择」「实际踩到了什么问题」「如何验证」；它可以解释架构，但不能覆盖架构契约。
 >
-> 最后更新：2026-09-24
+> 最后更新：2026-09-25
 
 ## 1. 维护规则
 
@@ -1587,3 +1587,13 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - [ADR-0002：采用 cs2d 回放底座](./adr/ADR-0002-adopt-cs2d-localhost-playback-substrate.md)
 - [PixiJS 回放 PoC 实验记录](./experiments/pixi-playback-poc-2026-08-13.md)
 - [第三方来源与权利记录](../THIRD_PARTY_NOTICES.md)
+
+
+## 2026-09-25：真实带看启动与已看教学点回访
+
+- **问题**：真实9回合Demo在默认RULE_BASELINE完成本地CS-Net、Director和前两段Narrator后卡在“正在提交可恢复起点”。实际prepareRoute添加decision_assessment_run，但FrozenReviewPlan的严格schema仍拒绝该字段；旧恢复测试直接使用Adapter计划，漏掉生产编排边界。
+- **决定**：显式加入可选、有界的audit投影，保留旧记录兼容与严格未知字段/Replay/secret拦截；不删除新产物、不使用passthrough。Host捕获同步构造失败并给出准备失败状态。新增测试经过实际prepareRoute→buildSessionRecoveryRecord→JSON→restore，而非只验证手写旧计划。
+- **第二个问题**：首cue讲解后自由后退15秒→“讲解最近教练点”，真实页面旧逻辑从R1直接跑进R2且没有返回讲解。ManualCueVisit重置了完成门，但TICK复用了全局revealed标记，跳过本次结果生命周期。
+- **决定**：每次匹配当前cue的manual visit重新进入结果门；复用已有讲解，保持默认游标、全局消费/呈现/习惯去重。没有新增播放控制体系。
+- **验证**：两个回归先红后绿；恢复用例原始失败为frozenReviewPlan.decision_assessment_run unrecognized key，回访用例原始失败为PLAYING而非REVEALING。相关28文件274测试、历史库及Host恢复7文件46测试通过；TypeScript通过。真实Edge localhost已观察正常启动、首cue结果后停靠、修复前跨cue、修复后停回同一决策点、返回默认顺序与重播完成。
+- **限制与教训**：本轮provider凭据为空，只有本地确定性回退，不构成Jev教学质量提升证据。CUA浏览器连接失败后使用原生Edge；Vite两次依赖优化热重载中断Demo后改用现有静态Viewer，避免混入测试基础设施故障。普通localhost浏览器恢复与桌面SQLite历史UI需分别报告。刷新重选Demo已恢复原暂停点并继续至R9，四个教学点全部经过后到达“复盘完成”；生产build通过，详见[完整验证记录](validation/FULL_REVIEW_RELIABILITY.md)。补充准备失败时取消本代编排，防止晚到讲解覆盖错误状态；编排集成16测试通过。

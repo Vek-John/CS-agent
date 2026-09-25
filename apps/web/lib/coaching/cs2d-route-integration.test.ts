@@ -553,6 +553,27 @@ describe("Host frozen route integration", () => {
     expect(events).toEqual([]);
   });
 
+  it("stops later narration when the Host rejects the recoverable start", async () => {
+    const plan = planWithThirdCue();
+    const prepared: string[] = [];
+    const events: string[] = [];
+    const controller = createReviewPreparationOrchestrator("invalid-recovery-start", plan, {}, {
+      prepareRoute: async ({ inputPlan }) => inputPlan,
+      prepareNarration: async ({ cueId, candidateId }) => {
+        prepared.push(cueId);
+        return { readiness: "READY", narration: narration(cueId, candidateId),
+          manifest: { status: "SUCCEEDED", provider: "DETERMINISTIC", limitations: [] } };
+      },
+    });
+    await controller.run(event => {
+      events.push(event.type);
+      // The Host cancels this generation if building its recovery record fails.
+      if (event.type === "READY_TO_START") controller.cancel();
+    });
+    expect(events.at(-1)).toBe("READY_TO_START");
+    expect(prepared).toEqual(plan.cues.slice(0, 2).map(cue => cue.id));
+  });
+
   it("does not publish narration or READY_TO_START after cancellation during the first window", async () => {
     const plan = compiledPlan();
     const resolvers: Array<(value: {

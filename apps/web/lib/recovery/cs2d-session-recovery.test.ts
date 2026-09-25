@@ -4,12 +4,14 @@ import {
   type Cs2dReplay,
 } from "@cs-coach/cs2d-analysis-adapter";
 import { createCoachingSession } from "@cs-coach/session";
-import { buildInitialCoachingRouteState } from "../coaching/cs2d-route-integration";
+import { requestDecisionAssessments } from "../coaching/decision-assessment-host";
+import { buildInitialCoachingRouteState, createCs2dReviewPreparationDependencies } from "../coaching/cs2d-route-integration";
 import {
   buildCoachingPackage,
   buildOutcomeImpactForCue,
   buildOutcomePackage,
   deterministicNarrationBundle,
+  deterministicDirectorFallback,
   stableFingerprint,
 } from "@cs-coach/review-planner";
 import {
@@ -125,6 +127,44 @@ function fixture() {
 }
 
 describe("cs2d recovery Host Adapter", () => {
+  it("persists and restores the actual prepared route, including its assessment audit", async () => {
+    const input = fixture();
+    const dependencies = createCs2dReviewPreparationDependencies({
+      candidateSet: input.analysis.candidate_set,
+      observationEvidence: input.analysis.observation_evidence,
+      matchTimeline: input.analysis.match_timeline,
+      winProbabilityTimeline: input.analysis.win_probability_timeline,
+      selectedPlayerId: "dog",
+    }, {
+      assessDecisions: (set, options) => requestDecisionAssessments(set, {
+        ...options,
+        fetcher: async () => Response.json({ mode: "RULE_BASELINE", acceptance: "DISABLED" }),
+      }),
+      director: async (set) => deterministicDirectorFallback(set, "TEST_LOCAL_PROVIDER"),
+    });
+    const plan = await dependencies.prepareRoute({
+      generationId: "test-preparation", inputPlan: input.analysis.review_plan, signal: new AbortController().signal,
+    });
+    expect(plan.decision_assessment_run).toEqual({
+      version: "decision-assessment-run.v1", mode: "RULE_BASELINE", calls: 0, accepted: 0, records: [],
+    });
+    const narrationByCue = Object.fromEntries(plan.cues.map(cue => [cue.id, deterministicNarrationBundle(
+      buildCoachingPackage(cue, input.analysis.candidate_set, input.analysis.observation_evidence),
+      buildOutcomePackage(cue, input.analysis.candidate_set, buildOutcomeImpactForCue(cue, input.analysis.candidate_set,
+        input.analysis.win_probability_timeline, input.analysis.match_timeline, "dog")),
+    )]));
+    const routeState = buildInitialCoachingRouteState(plan, { narrationByCue,
+      readiness: Object.fromEntries(plan.cues.map(cue => [cue.id, "READY" as const])),
+    });
+    const record = buildSessionRecoveryRecord({ ...input, plan, routeState, narrationByCue,
+      session: createCoachingSession(plan, input.identity.sessionId, routeState),
+      boundaryKind: "ROUTE_START", demoContentHash: HASH, selectedPlayerId: "dog", agentCheckpointId: null,
+    });
+    const restored = restoreRecoveryArtifacts(SessionRecoveryRecordSchema.parse(JSON.parse(JSON.stringify(record))));
+    expect(restored.plan).toEqual(plan);
+    expect(restored.routeState.startable).toBe(true);
+  });
+
   it("restores legacy wording as an artifact without weakening live narration or reference validation", () => {
     const input = fixture();
     const analysis = JSON.parse(JSON.stringify(input.analysis));

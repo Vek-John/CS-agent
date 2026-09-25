@@ -481,7 +481,11 @@ function reduceCoachingSessionInner(
           }
           return { ...state, current_tick: Math.max(segment.start_tick, action.tick) };
         }
-        const cueNeedsReveal = cue && !state.revealed_cue_ids.includes(cue.id);
+        // Every manual visit owns a fresh outcome gate, even when the default
+        // route already revealed this cue. Global progress remains unchanged.
+        const cueNeedsReveal = cue && (
+          state.manual_cue_visit?.cue_id === cue.id || !state.revealed_cue_ids.includes(cue.id)
+        );
         if (cueNeedsReveal && action.tick >= cue.decision_tick) {
           if (action.tick >= cue.outcome_end_tick) {
             return finishOutcome(state, segment, cue);

@@ -91,6 +91,62 @@ describe("ManualCueVisit separates temporary presentation from the default route
     expect(manual.revealed_cue_ids).not.toContain(cue4.id);
   });
 
+  it("revisits an already presented default cue through a fresh outcome gate without advancing the route", () => {
+    const plan = planWithManualTargets();
+    const cue = plan.cues[0]!;
+    const segment = plan.segments.find((candidate) => candidate.id === cue.segment_id)!;
+    const paused = reduceCoachingSession(plan, firstCuePaused(plan), {
+      type: "CUE_PRESENTED", cueId: cue.id,
+    });
+    expect(paused.presented_cue_ids).toEqual([cue.id]);
+
+    // Free viewing leaves the reducer-owned default cursor untouched. The
+    // Host starts this visit when "讲解最近教练点" targets the same viewed cue.
+    let state = reduceCoachingSession(plan, paused, {
+      type: "BEGIN_MANUAL_CUE_VISIT", cueId: cue.id, visitId: "revisit-presented-cue",
+    });
+    expect(state.outcome_completion).toBeUndefined();
+    state = reduceCoachingSession(plan, state, { type: "TICK", tick: cue.decision_tick });
+    expect(state).toMatchObject({
+      phase: "REVEALING",
+      current_cue_id: cue.id,
+      outcome_completion: { cueId: cue.id, status: "LOCKED" },
+    });
+
+    state = reduceCoachingSession(plan, state, { type: "TICK", tick: cue.outcome_end_tick });
+    expect(state).toMatchObject({
+      phase: "PAUSED_FOR_COACHING",
+      current_cue_id: cue.id,
+      current_tick: cue.decision_tick,
+      outcome_completion: { cueId: cue.id, status: "COMPLETE" },
+      manual_cue_visit: { visit_id: "revisit-presented-cue", cue_id: cue.id },
+    });
+    const completedVisit = state;
+    state = reduceCoachingSession(plan, state, { type: "TICK", tick: segment.end_tick });
+    state = reduceCoachingSession(plan, state, {
+      type: "CUE_PRESENTED", cueId: cue.id, visitId: "revisit-presented-cue",
+    });
+    expect(state).toEqual(completedVisit);
+    expect(state.default_route_cursor).toEqual(paused.default_route_cursor);
+    expect(state.revealed_cue_ids).toEqual(paused.revealed_cue_ids);
+    expect(state.consumed_cue_ids).toEqual(paused.consumed_cue_ids);
+    expect(state.presented_cue_ids).toEqual(paused.presented_cue_ids);
+    expect(state.user_events.filter((entry) => entry.type === "CUE_PRESENTED")).toHaveLength(1);
+    expect(state.user_events.filter((entry) => entry.type === "OUTCOME_REVEALED")).toHaveLength(1);
+    expect(state.user_events.filter((entry) => entry.type === "OUTCOME_REPLAYED")).toHaveLength(1);
+
+    const returned = reduceCoachingSession(plan, state, { type: "CANCEL_MANUAL_CUE_VISIT" });
+    expect(returned).toMatchObject({
+      phase: paused.phase,
+      current_cue_id: paused.current_cue_id,
+      current_tick: paused.current_tick,
+      outcome_completion: paused.outcome_completion,
+      default_route_cursor: paused.default_route_cursor,
+    });
+    expect(returned.manual_cue_visit).toBeUndefined();
+    expect(returned.user_events).toEqual(state.user_events);
+  });
+
   it("rejects a PENDING manual target before it can enter a playback or policy-capable state", () => {
     const plan = planWithManualTargets();
     const cue4 = plan.cues.at(-1)!;

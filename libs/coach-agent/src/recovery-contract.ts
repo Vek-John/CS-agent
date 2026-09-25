@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_ANALYSIS_CANDIDATES } from "@cs-coach/contracts";
 import {
   AgentToolResultSchema,
   NarrationPolicySummarySchema,
@@ -69,6 +70,20 @@ export const FrozenReviewPlanSchema = z
     candidate_set_generation_manifest: z.unknown().optional(),
     director_decision_set: z.unknown().optional(),
     compiler_provenance: z.unknown().optional(),
+    // Optional for legacy v2 records; keep the frozen audit without reevaluation.
+    // Nested inference artifacts are owned by the contracts/planner validators,
+    // like the cue artifacts above, and retain the envelope's recursive guards.
+    decision_assessment_run: z.object({
+      version: z.literal("decision-assessment-run.v1"),
+      mode: z.enum(["RULE_BASELINE", "JEV_SHADOW", "JEV_EXPERIMENT"]),
+      calls: z.number().int().nonnegative().max(10),
+      accepted: z.number().int().nonnegative().max(MAX_ANALYSIS_CANDIDATES),
+      records: z.array(z.object({
+        candidateId: Id,
+        reason: z.string().max(4096),
+        artifact: z.unknown().optional(),
+      }).strict()).max(MAX_ANALYSIS_CANDIDATES),
+    }).strict().optional(),
   })
   .strict()
   .superRefine((plan, context) => {
