@@ -2,6 +2,13 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 最新交付：弹药真实教学消费已闭合（2026-09-26）
+
+- f9d9cbd已push，主控核对真实diff与PRIOR_TICK_AMMO_EVIDENCE.json；工作树干净、owner01a0d9c5-a6c6-78d3-9b79-acc3620a154e完成goal并release。3/4正式cue消费此前一tick弹匣记录，c1同decision tick开火继续未知，不追求4/4；原9092a71阶段A4缺口已被新证据闭合，已通知原owner仅更新goal。
+- 真实本轮1读/1parse（整个弹药工作累计4次），frame7239不变，cache max实测10，来源2970；11/12/14发为此前采样，不是决策瞬间精确余量。44评估、全路线、4诊断判决/建议消融不变；不声称专业质量或稳定性能改善。
+- parser9/vendor33、相关180tests、TypeScript、Web/WASM/Viewer构建与ViewerTS通过，clean13patches和0012到0013升级通过；自有进程/临时worktree退出。源码已释放，其他worktree及用户数据保留。
+- 后续继续以完整带看、真实教学收益为准，不自动增加稀有字段、不重复此Demo/Jev集合或完整性审查；当前原UI暂停A5仍仅待明确桌面可用条件，由原owner接续，不能把它扩大成全项目等待。新实施任务须先有具体证据并按模板登记。
+
 ## 已交付：决策前最近弹药缓存（2026-09-26）
 
 - 实现f9d9cbd已push，01a0d9c5-a6c6-78d3-9b79-acc3620a154e本轮goal完成并release。源任务01a0d9ad-f238-7392-aa56-746b60afd5d6在9092a71的0/4真实消费缺口由本轮3/4证据闭合，历史失败结果保留；主控负责回传旧goal。串行独占实现，默认配置只读ammo_lifecycle_review完成生命周期与时间边界复核，无must-fix。
