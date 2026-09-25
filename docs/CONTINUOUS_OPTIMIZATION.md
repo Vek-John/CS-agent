@@ -37,7 +37,17 @@
 | 已push | 准备阶段本地请求期限 | 01a0d7e0-5597-7bf1-bc85-832b767654a7，完成并释放写入/进程 | 413f15a；两个client fetch＋JSON共用20秒期限，父取消立即退出；4红复现后69相关测试/TS/build通过，真实prepare集成证明fallback后READY_TO_START/后续准备与保存恢复零请求；见PREPARATION_REQUEST_DEADLINES.md |
 | 已push、本地验收完成 | 逐次受击事实与决策前本人证据 | 01a0d7f1-0580-7910-abbd-554dcd9a55de；已完成，释放写入与进程 | 264 hurt/本人27，23/44 snapshot和2/4教学包/确定性讲解实际消费；182测试+Rust3/TS/Web与Viewer构建通过；仍不证明专业判断提升，见SELF_HURT_EVIDENCE.md |
 
+| 待执行 | 射击事件即时身份归属 | 01a0d81c-bee6-7161-9cae-58ff2eea392b，交接后独占当前树 | 根据已核实native/packed差异，先复现旧index缓存的stale/rebind风险，再窄接当前pawn/controller验证；不扩大为全部事件归属重构 |
+
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
+
+## 本轮任务卡：射击事件即时身份归属（2026-09-25）
+
+- 基线618c33b干净且已push；前负责人明确完成并释放写入/进程。本轮01a0d81c-bee6-7161-9cae-58ff2eea392b独占相关parser patch/helper/tests与必要provenance/docs，继续串行使用现有已构建工具链，不复制大Demo，不触及其他工作树。
+- 新证据：hurt任务已核实native事件handle与network packed编码不同，只有当前pawn可见serial和controller绑定共同校验才提供归属。现有weapon_fire仍调用get_by_handle(index-only)和steam_from_pawn_handle→tick_start建立的pawn_to_steam[index]，未验证serial/class/当前绑定。此为可复现风险，不声称真实样本已发生错归属。
+- 目标/验收：A1小fixture复现旧缓存对同index不同serial、当tick controller换绑/解绑/冲突的错误或陈旧归属；A2只修weapon_fire，复用正确native→packed与当前实体/唯一controller校验，未知null，不按位置猜人；A3已验证pawn的几何与actor使用一致身份，不能因actor改好却保留错误实体坐标；现有合法shot、缺actor兼容、RETURN_AND_FIRE与未知contact门保持；A4相关Rust/patch/Adapter/回归、Host与Viewer TS/Web/WASM+Viewer build，一次最终120秒内真实WASM汇总shot/归属/未归属及hurt/clock回归，不再native probe或模型调用；A5架构/学习日志/验证/任务板、commit/push和释放资源。
+- 边界：不要改共享steam_from_pawn_handle的所有调用方；grenade使用network字段、其他事件的生命周期不在本轮，不能未经证明套用native转换。也不变更kill/ADR/bomb/道具归属、教学阈值、旧保存数据或UI。先明确不合法native handle/pawn无几何与actor未知的不同降级，保留事件引用稳定或说明不可避免的正确变化。
+- 风险/阶段：10分钟复现、20分钟实现局部检查、10分钟构建，最终只一次WASM且raw留单进程摘要；编译成功门后才执行，禁止重现旧probe误跑。当前默认模型/推理，若独立终审仅5分钟只读；执行者负责全部临时资源退出。不访问用户DB/密钥/浏览器/锁屏A5，不安装/发布。不证实问题就交证据停止，不制造重构或新增多轮实测。
 
 ## 本轮任务卡：逐次受击事实与决策前本人证据（2026-09-25）
 
