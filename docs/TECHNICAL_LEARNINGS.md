@@ -1711,3 +1711,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：用户续跑后只用一个可操作Edge窗口/服务控制器和原Demo一次解析，走最新4fffe02的自然4-cue路线；用Agent返回处去身份小摘要核对capabilities/effects，不注入工具、改Policy、降门或切模型。
 - 验证：c1–c4均START_CUE→COMPLETED、capabilities/effects空、RESUME_TOOL为0，UI均“无需额外演示”和静态播放禁用。每cue停靠位置和摘要见[原A5续跑证据](validation/TEACHING_PLAYBACK_CONTROLS.md#2117续跑完整样本没有合法工具a5仍未通过)。该轮实际只检查工具资格，没有产品修改，不重复既有156/180测试或构建。
 - 限制：桌面已恢复，但此样本无合法活动工具，所以≥12秒暂停/同次续播/工具中seek与重连仍未验收；不外推所有路线都无工具。下一步先独立复现新版teaching focus与工具旧白名单是否接线不一致，不能直接将空能力归因于事实不足；需要真实合法工具，不拿静态COMPLETED或普通Session重播代替。专用窗口和服务均清理，临时日志代码移除，原goal不标完成。
+
+
+## 2026-09-25：判断类别与动作事实演示分离
+
+- 问题：当前 Compiler 的判断类别未匹配旧战术工具规则；有本人动作且被讲解引用的 REVIEW_UNCERTAINTY 被错误地零工具结束。真实四 cue 为空只提供线索，独立 Compiler fixture 才确认这一机制。
+- 决定：新增单一 ACTION_FACT_REPLAY 用途，以当前候选/冻结窗口/本人动作/讲解引用和实际结果完成边界授权。用途不升级 INSUFFICIENT_EVIDENCE，不由结果倒推动作；其他四种新展示用途暂不开放。保持旧 focus 与单工具/暂停/取消身份门。
+- 验证：原主链 1 红→绿；复核发现结果末端门遗漏，2 红→绿。默认内存 Graph 自然返回真实 effect，再由 Host 绑定命令并去重；共 257 个不同相关测试、TypeScript 和 Web production build 通过。独立复核闭合。
+- 限制：无真实 Demo/模型/UI 新结果，不能宣布原 A5 或专业质量提升。[详细记录](validation/CURRENT_FOCUS_ACTION_REPLAY.md)；契约以 ARCHITECTURE.md 为准。

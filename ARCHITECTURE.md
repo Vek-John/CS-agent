@@ -595,6 +595,10 @@ FINISH_CUE
 
 LLM 只能选择 `capabilityId`；速度、cue 范围、actor/annotation/callout refs、投掷物轨迹、measurement ref 与经济语境都由代码绑定。`SHOW_WIN_RATE_IMPACT` 只有在 outcome gate 完成、模型 AVAILABLE、存在合法 measurement ref 且有意义负向摆动时可出现；地图和道具工具同样要求对应空间或轨迹证据。`FINISH_CUE` 始终合法，并且在额外视觉不能明显提高理解时应优先结束。
 
+现行 Compiler 的 `VERIFIED_DECISION_REVIEW / EXECUTION_REVIEW / POSITIVE_PROCESS / FORCED_CHOICE / REVIEW_UNCERTAINTY` 是判断类别，不直接赋予战术演示资格。Stage3 通过可选 `presentationPurpose` 区分展示目的；当前只开放 `ACTION_FACT_REPLAY`，绑定 `REPLAY_CUE_SLOW`。Host 必须核对 candidate/material/narration/冻结 cue 身份与窗口、结果 gate 的末端和已完成位置，动作必须为本人 DEMO 来源、发生于当前决策至结果窗口，且同时由 candidate、cue、冻结 cue 和当前 playerAction 讲解引用。只存在决策/阵亡/胜负结果不能生成这一用途。它只回看已记录动作，不证明处理正确或错误，也不升级 assessment。
+
+该用途通过 capability、严格事件、Policy 输入和 TeachingMove 传播；默认 Policy 要求匹配的用途及 ACTION 命名空间，使用 `RECORDED_ACTION_NEEDS_REPLAY` 理由。缺用途的现行判断类别、错用途、缺动作或未完成结果继续 FINISH；旧无用途的合法 focus 沿用既有规则。当前判断类别下地图/轨迹/胜率/经济的新用途尚未开放，需要各自来源与贯通验证。用途元数据不进入 Viewer 参数，不改变单工具预算、路线、暂停、取消或恢复身份门。
+
 工具请求使用稳定 `callId = runId + cueId + graphStep + capabilityId` 的确定性派生值。`interrupt` 前不得发生外部副作用；Host 保存 capability registry、拒绝列表外参数、去重同一 callId，执行后用 `Command resume` 返回 `AgentToolResult`。由于恢复会从节点开头重执行，任何节点都必须先读取当前 Playback/Session 事实，不能盲目重复播放。首版不提供网页搜索、Shell、raw Replay 查询、任意 seek、任意坐标、职业案例生成或 Critic/反思 Agent。
 
 ### 6.8 Playback

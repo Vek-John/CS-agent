@@ -124,3 +124,6 @@ export type {
 } from "./recovery-contract";
 
 export { projectDecisionResources } from "./decision-resources";
+
+export { isCurrentTeachingFocus, presentationPurposeForTool } from "./teaching-purpose";
+export type { TeachingPresentationPurpose } from "./teaching-purpose";

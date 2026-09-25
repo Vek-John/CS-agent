@@ -225,6 +225,7 @@ function withWaitingTool(
     boundArgs: capability.boundArgs,
     evidenceRefs: capability.evidenceRefs,
     estimatedDurationMs: capability.estimatedDurationMs,
+    ...(capability.presentationPurpose ? { presentationPurpose: capability.presentationPurpose } : {}),
     source,
   });
   const pendingToolCall = AgentToolRequestSchema.parse({
@@ -339,11 +340,12 @@ function policyInputFor(
     phase: event.currentSessionPhase,
     outcomeGateStatus: event.outcomeGateStatus,
     capabilities: capabilities.map(
-      ({ capabilityId, tool, evidenceRefs, estimatedDurationMs }) => ({
+      ({ capabilityId, tool, evidenceRefs, estimatedDurationMs, presentationPurpose }) => ({
         capabilityId,
         tool,
         evidenceRefs,
         estimatedDurationMs,
+        ...(presentationPurpose ? { presentationPurpose } : {}),
       }),
     ),
     toolObservations: state.toolHistory,
@@ -394,11 +396,12 @@ function policyInputForState(
     allowedEvidenceSummary: state.activeAllowedEvidenceSummary,
     phase: state.currentSessionPhase,
     outcomeGateStatus: state.outcomeGateStatus,
-    capabilities: capabilities.map(({ capabilityId, tool, evidenceRefs, estimatedDurationMs }) => ({
+    capabilities: capabilities.map(({ capabilityId, tool, evidenceRefs, estimatedDurationMs, presentationPurpose }) => ({
       capabilityId,
       tool,
       evidenceRefs,
       estimatedDurationMs,
+      ...(presentationPurpose ? { presentationPurpose } : {}),
     })),
     toolObservations: state.toolHistory,
     themes: state.sessionThemes,

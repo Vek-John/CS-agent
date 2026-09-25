@@ -1,3 +1,4 @@
+import { isCurrentTeachingFocus, presentationPurposeForTool } from "./teaching-purpose";
 import {
   PolicyInputSchema,
   type PolicyInput,
@@ -107,9 +108,13 @@ export function deterministicPolicyOutput(rawInput: PolicyInput): PolicyOutput {
   }
 
   const family = focusFamily(`${input.narrationSummary.primaryFocusCode} ${input.focus}`);
+  const current = isCurrentTeachingFocus(input.narrationSummary.primaryFocusCode);
   const scored = input.capabilities.map((capability) => {
+    const purposeMatches = current && capability.presentationPurpose !== undefined && capability.presentationPurpose === presentationPurposeForTool(capability.tool);
+    if ((current && !purposeMatches) || (capability.presentationPurpose && !purposeMatches)) return { capability, score: 0 };
     const namespaces = evidenceNamespaces(input, capability.evidenceRefs);
-    const focusScore = family === familyForTool(capability.tool) ? 4 : 0;
+    if (purposeMatches && !namespaces.has("ACTION")) return { capability, score: 0 };
+    const focusScore = purposeMatches || family === familyForTool(capability.tool) ? 4 : 0;
     const score = focusScore + evidenceScore(capability.tool, namespaces) + memorySignalScore(input, capability.tool);
     return { capability, score };
   });
@@ -126,7 +131,7 @@ export function deterministicPolicyOutput(rawInput: PolicyInput): PolicyOutput {
     action: "SELECT_CAPABILITY",
     capabilityId: selected.capabilityId,
     evidenceRefs,
-    rationaleCode: rationaleForTool(selected.tool),
+    rationaleCode: selected.presentationPurpose === "ACTION_FACT_REPLAY" ? "RECORDED_ACTION_NEEDS_REPLAY" : rationaleForTool(selected.tool),
     confidence: bestScore >= 5 ? 0.95 : 0.7,
   };
 }

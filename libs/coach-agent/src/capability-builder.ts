@@ -1,3 +1,4 @@
+import { isCurrentTeachingFocus, presentationPurposeForTool } from "./teaching-purpose";
 import {
   CapabilityBuilderInputSchema,
   TeachingCapabilitySchema,
@@ -73,12 +74,19 @@ export function buildTeachingCapabilities(rawInput: CapabilityBuilderInput): Tea
   const baseRefs = commonRefs(input);
   const focus = normalizedFocus(input);
 
+  const current = isCurrentTeachingFocus(focus);
+  const qualifies = (tool: string, legacy: boolean) => current
+    ? input.outcomeGateStatus === "COMPLETE" && (input.presentationPurposes ?? []).some(purpose => purpose === presentationPurposeForTool(tool))
+    : input.presentationPurposes === undefined && legacy;
+  const purpose = (tool: string) => current ? { presentationPurpose: presentationPurposeForTool(tool) } : {};
+
   // A decision/outcome fact alone is not a replayable teaching opportunity.
   // The verified player action must exist before a slow replay is legal.
-  if (input.actionRefs.length > 0 && isTimingFocus(focus)) {
+  if (input.actionRefs.length > 0 && qualifies("REPLAY_CUE_SLOW", isTimingFocus(focus))) {
     capabilities.push(
       TeachingCapabilitySchema.parse({
         capabilityId: capabilityId(input.cueId, "slow-replay"),
+        ...purpose("REPLAY_CUE_SLOW"),
         tool: "REPLAY_CUE_SLOW",
         boundArgs: { tool: "REPLAY_CUE_SLOW", cueId: input.cueId, speed: 0.5 },
         evidenceRefs: baseRefs,
@@ -87,10 +95,11 @@ export function buildTeachingCapabilities(rawInput: CapabilityBuilderInput): Tea
     );
   }
 
-  if (input.annotationRefs.length > 0 && isMapFocus(focus)) {
+  if (input.annotationRefs.length > 0 && qualifies("FOCUS_MAP_EVIDENCE", isMapFocus(focus))) {
     capabilities.push(
       TeachingCapabilitySchema.parse({
         capabilityId: capabilityId(input.cueId, "map-focus"),
+        ...purpose("FOCUS_MAP_EVIDENCE"),
         tool: "FOCUS_MAP_EVIDENCE",
         boundArgs: {
           tool: "FOCUS_MAP_EVIDENCE",
@@ -105,10 +114,11 @@ export function buildTeachingCapabilities(rawInput: CapabilityBuilderInput): Tea
     );
   }
 
-  if (isUtilityFocus(focus) && input.grenadeTrajectoryRefs.length > 0 && input.grenadeLandingRefs.length > 0) {
+  if (qualifies("SHOW_GRENADE_TRACE", isUtilityFocus(focus)) && input.grenadeTrajectoryRefs.length > 0 && input.grenadeLandingRefs.length > 0) {
     capabilities.push(
       TeachingCapabilitySchema.parse({
         capabilityId: capabilityId(input.cueId, "grenade-trace"),
+        ...purpose("SHOW_GRENADE_TRACE"),
         tool: "SHOW_GRENADE_TRACE",
         boundArgs: {
           tool: "SHOW_GRENADE_TRACE",
@@ -130,7 +140,7 @@ export function buildTeachingCapabilities(rawInput: CapabilityBuilderInput): Tea
   if (
     input.outcomeGateStatus === "COMPLETE" &&
     input.modelStatus === "AVAILABLE" &&
-    isImpactFocus(focus) &&
+    qualifies("SHOW_WIN_RATE_IMPACT", isImpactFocus(focus)) &&
     input.measurementRefs.length > 0 &&
     negativeSwing !== null &&
     negativeSwing <= -1
@@ -138,6 +148,7 @@ export function buildTeachingCapabilities(rawInput: CapabilityBuilderInput): Tea
     capabilities.push(
       TeachingCapabilitySchema.parse({
         capabilityId: capabilityId(input.cueId, "win-rate-impact"),
+        ...purpose("SHOW_WIN_RATE_IMPACT"),
         tool: "SHOW_WIN_RATE_IMPACT",
         boundArgs: {
           tool: "SHOW_WIN_RATE_IMPACT",
@@ -151,10 +162,11 @@ export function buildTeachingCapabilities(rawInput: CapabilityBuilderInput): Tea
   }
 
   const economy = input.economyContext;
-  if (isEconomyFocus(focus) && economy.reliable && economy.relevant && economy.ref && economy.economyClass !== "UNKNOWN") {
+  if (qualifies("SHOW_ECONOMY_CONTEXT", isEconomyFocus(focus)) && economy.reliable && economy.relevant && economy.ref && economy.economyClass !== "UNKNOWN") {
     capabilities.push(
       TeachingCapabilitySchema.parse({
         capabilityId: capabilityId(input.cueId, "economy-context"),
+        ...purpose("SHOW_ECONOMY_CONTEXT"),
         tool: "SHOW_ECONOMY_CONTEXT",
         boundArgs: {
           tool: "SHOW_ECONOMY_CONTEXT",

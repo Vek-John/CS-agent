@@ -1,3 +1,4 @@
+import { TEACHING_PRESENTATION_PURPOSES, presentationPurposeForTool } from "./teaching-purpose";
 import { z } from "zod";
 import {
   CueCaseSchema,
@@ -228,7 +229,10 @@ export const TeachingBoundArgsSchema = z.discriminatedUnion("tool", [
 ]);
 export type TeachingBoundArgs = z.infer<typeof TeachingBoundArgsSchema>;
 
+export const TeachingPresentationPurposeSchema = z.enum(TEACHING_PRESENTATION_PURPOSES);
+
 const TeachingCapabilityBaseSchema = z.object({
+  presentationPurpose: TeachingPresentationPurposeSchema.optional(),
   capabilityId: TeachingCapabilityIdSchema,
   evidenceRefs: z.array(EvidenceRef).max(16),
   estimatedDurationMs: z.number().int().positive().max(300_000),
@@ -257,6 +261,7 @@ export const TeachingCapabilitySchema = z
     }),
   ])
   .superRefine((capability, context) => {
+    if (capability.presentationPurpose && capability.presentationPurpose !== presentationPurposeForTool(capability.tool)) context.addIssue({ code: "custom", message: "presentationPurpose must match tool" });
     if (capability.boundArgs.tool !== capability.tool) {
       context.addIssue({ code: "custom", message: "boundArgs.tool must match tool" });
     }
@@ -437,6 +442,7 @@ export type AllowedEvidenceSummary = z.infer<typeof AllowedEvidenceSummarySchema
 
 export const CapabilityBuilderInputSchema = z
   .object({
+    presentationPurposes: z.array(TeachingPresentationPurposeSchema).max(1).optional(),
     cueId: Id,
     primaryFocusCode: Id,
     decisionRefs: z.array(EvidenceRef).max(16),
@@ -1054,6 +1060,7 @@ export const PolicyInputSchema = z
       .array(
         z
           .object({
+            presentationPurpose: TeachingPresentationPurposeSchema.optional(),
             capabilityId: TeachingCapabilityIdSchema,
             tool: TeachingToolNameSchema,
             evidenceRefs: z.array(EvidenceRef).max(16),
@@ -1073,6 +1080,7 @@ export const PolicyInputSchema = z
 export type PolicyInput = z.infer<typeof PolicyInputSchema>;
 
 export const RationaleCodeSchema = z.enum([
+  "RECORDED_ACTION_NEEDS_REPLAY",
   "TIMING_NEEDS_SLOW_REPLAY",
   "POSITION_NEEDS_MAP_FOCUS",
   "UTILITY_NEEDS_TRAJECTORY",

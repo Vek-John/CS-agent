@@ -145,3 +145,21 @@ describe("buildTeachingCapabilities", () => {
     })).toThrow();
   });
 });
+
+describe("current judgment focus and bounded presentation purpose", () => {
+  it.each(["VERIFIED_DECISION_REVIEW", "EXECUTION_REVIEW", "POSITIVE_PROCESS", "FORCED_CHOICE", "REVIEW_UNCERTAINTY"])("requires an explicit factual purpose for %s", primaryFocusCode => {
+    expect(buildTeachingCapabilities(input({ primaryFocusCode }))).toEqual([]);
+    expect(buildTeachingCapabilities(input({ primaryFocusCode, presentationPurposes: ["ACTION_FACT_REPLAY"] }))).toMatchObject([{ tool: "REPLAY_CUE_SLOW", presentationPurpose: "ACTION_FACT_REPLAY" }]);
+  });
+  it("retains action and outcome gates", () => {
+    const baseline = input({ primaryFocusCode: "REVIEW_UNCERTAINTY", presentationPurposes: ["ACTION_FACT_REPLAY"] });
+    expect(buildTeachingCapabilities({ ...baseline, actionRefs: [] })).toEqual([]);
+    expect(buildTeachingCapabilities({ ...baseline, outcomeGateStatus: "LOCKED" })).toEqual([]);
+  });
+  it("does not interpret an unknown focus or malformed purpose as permission", () => {
+    expect(buildTeachingCapabilities(input({ primaryFocusCode: "UNKNOWN_TIMING", presentationPurposes: ["ACTION_FACT_REPLAY"] }))).toEqual([]);
+    expect(() => buildTeachingCapabilities(input({ presentationPurposes: ["UNKNOWN" as never] }))).toThrow();
+    const capability = buildTeachingCapabilities(input({ primaryFocusCode: "OBJECTIVE_TIMING" }))[0];
+    expect(() => TeachingCapabilitySchema.parse({ ...capability, presentationPurpose: "UNKNOWN" })).toThrow();
+  });
+});

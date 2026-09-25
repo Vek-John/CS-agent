@@ -71,6 +71,10 @@
 - 边界：不改route/assessment/引用强度/接触LOS门，不以INSUFFICIENT自动禁止事实回看，也不以不确定自动允许所有演示。需要对照展示的动作必须有可验证事实、工具用途明确且文案不暗示已判错；已有事实不足的cue仍FINISH。不能以本轮UI验收凑数为目标，不强制Policy或任意callId，不新增model调用。
 - 风险/阶段：10分钟复现和契约、25分钟实现/局部检查、10分钟TS/build；无新Demo解析/浏览器/服务/用户DB，复用已有小证据/fixture。必要独立只读边界审查5分钟，单写owner。若无法证明合理工具因旧focus被拒，交研究证据停止，不制造资格放宽。执行者负责全部进程清理；不改Viewer/Parser或安装发布main，不关闭原A5。
 
+- 交付结果：实际起始基线 c6265b1。Compiler→Narrator→Host→builder 原 1 红→绿；只开放 ACTION_FACT_REPLAY，默认内存 Graph 自然 effect→Host command，判断仍 INSUFFICIENT_EVIDENCE。其他新用途缩出本轮，不将当前 focus 加入通用工具白名单。
+- 边界复核：purpose_boundary_review 只读 5 分钟上限及 1 分钟闭合，指出冻结窗口/实际完成末端门遗漏；2 红→绿修复并闭合。合计 257 个不同相关测试、TypeScript/Web production build 通过，详见 [验证记录](validation/CURRENT_FOCUS_ACTION_REPLAY.md)。
+- 限制/释放：未运行 Demo/模型/UI/服务或修改用户 DB，未改 Viewer/Parser、原 A5 证据。所有测试/build 退出，同分支 commit/push 后释放写入。后续交原 A5 owner 验证真实自然工具，不声称四 cue 已有工具或 Jev 专业质量提高。
+
 ## 本轮任务卡：真实教学点诊断消费验证（2026-09-25）
 
 - 基线43746ce（41799f6＋交接）已push干净，partial任务release；01a0d88c-619b-7e72-8133-40fae1e40057独占本轮小验证工具/证据/docs及真实发现的必要窄修复，主控只读。默认配置，无需额外子代理或数据复制；使用现有WASM和授权Demo。

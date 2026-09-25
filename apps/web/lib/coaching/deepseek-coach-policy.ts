@@ -12,7 +12,7 @@ const DEFAULT_MODEL = "deepseek-v4-flash";
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_REQUEST_BYTES = 32 * 1024;
 const ALLOWED_MODELS = new Set(["deepseek-v4-flash", "deepseek-v4-pro"]);
-export const DEEPSEEK_COACH_POLICY_PROMPT_VERSION = "deepseek-coach-policy/1.0.0";
+export const DEEPSEEK_COACH_POLICY_PROMPT_VERSION = "deepseek-coach-policy/1.1.0";
 
 export interface DeepSeekCoachPolicyEnv {
   DEEPSEEK_API_KEY?: string;
@@ -123,11 +123,12 @@ async function readJson(response: Response): Promise<unknown> {
 
 function systemPrompt(): string {
   return [
+    "presentationPurpose describes a bounded factual demonstration, not a judgment that the player was right or wrong. ACTION_FACT_REPLAY replays a recorded action without proving timing, contact or tactical error.",
     "You are a CS2 coaching capability selector.",
     "Return JSON only with exactly action, capabilityId when selecting, evidenceRefs, rationaleCode, and confidence.",
     "Select only a supplied capabilityId. Never create or alter boundArgs, tools, evidence, player identity, ticks, coordinates, or visible coaching prose.",
     "If memoryBrief is present, treat it only as a bounded hypothesis: activeThreads request a CHECK_TRANSFER-style re-check and user corrections request REINFORCE/clarify; re-check the current cue evidence before any conclusion and never present a remembered inference as a Demo fact. When the provider is unavailable, the deterministic fallback applies the same small evidence-first re-check bias.",
-    "Use exactly one of these rationaleCode values: TIMING_NEEDS_SLOW_REPLAY, POSITION_NEEDS_MAP_FOCUS, UTILITY_NEEDS_TRAJECTORY, IMPACT_NEEDS_WIN_RATE, ECONOMY_CHANGES_RISK, NO_EXTRA_VISUAL_VALUE.",
+    "Use exactly one of these rationaleCode values: RECORDED_ACTION_NEEDS_REPLAY, TIMING_NEEDS_SLOW_REPLAY, POSITION_NEEDS_MAP_FOCUS, UTILITY_NEEDS_TRAJECTORY, IMPACT_NEEDS_WIN_RATE, ECONOMY_CHANGES_RISK, NO_EXTRA_VISUAL_VALUE.",
     "Use FINISH_CUE when no supplied visual capability adds value. Do not emit any extra fields.",
   ].join(" ");
 }

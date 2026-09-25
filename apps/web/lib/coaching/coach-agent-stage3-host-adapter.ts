@@ -5,6 +5,8 @@ import {
   CoachAgentIdentitySchema,
   TeachingCapabilitySchema,
   buildTeachingCapabilities,
+  isCurrentTeachingFocus,
+  type TeachingPresentationPurpose,
   type AgentToolRequest,
   type AgentToolResult,
   type CoachAgentEvent,
@@ -282,6 +284,36 @@ function economyFocusLabel(focus: string, economyClass: EconomyClass): string {
   return "当前处理的经济语境";
 }
 
+/** A current judgment label conveys no tool permission by itself. */
+function currentEvidenceBound(input: Stage3HostAdapterInput): boolean {
+  const candidate = input.evidence.candidate;
+  const material = input.evidence.material;
+  const frozen = input.plan.cues.find(cue => cue.id === input.cue.id);
+  return Boolean(candidate && material && frozen &&
+    candidate.candidateId === input.cue.candidate_id && material.candidateId === candidate.candidateId &&
+    frozen.candidate_id === candidate.candidateId && frozen.primary_focus_code === input.cue.primary_focus_code &&
+    input.narration.candidateId === candidate.candidateId &&
+    frozen.decision_tick === input.cue.decision_tick && frozen.reveal_tick === input.cue.reveal_tick && frozen.outcome_end_tick === input.cue.outcome_end_tick &&
+    input.outcomeGate.outcomeEndTick === input.cue.outcome_end_tick &&
+    Number.isSafeInteger(input.outcomeGate.completedAtTick) && input.outcomeGate.completedAtTick! >= input.cue.outcome_end_tick &&
+    candidate.decisionTick === input.cue.decision_tick && candidate.revealTick === input.cue.reveal_tick && candidate.outcomeEnd === input.cue.outcome_end_tick &&
+    [candidate.decisionTick, candidate.revealTick, candidate.outcomeEnd].every(tick => Number.isSafeInteger(tick) && tick >= 0) &&
+    candidate.decisionTick < candidate.revealTick && candidate.revealTick <= candidate.outcomeEnd &&
+    Number.isFinite(input.tickRate) && input.tickRate > 0);
+}
+
+function currentActionRefs(input: Stage3HostAdapterInput): string[] {
+  if (!currentEvidenceBound(input)) return [];
+  const candidate = input.evidence.candidate!;
+  const frozen = input.plan.cues.find(cue => cue.id === input.cue.id)!;
+  return unique(input.evidence.material!.playerActionFacts.filter(fact =>
+    fact.source === "DEMO" && fact.actorPlayerId === input.selectedPlayerId && Number.isSafeInteger(fact.availableAtTick) &&
+    fact.availableAtTick >= input.cue.decision_tick && fact.availableAtTick <= input.cue.outcome_end_tick &&
+    candidate.actionRefs.includes(fact.id) && input.cue.action_fact_refs?.includes(fact.id) && frozen.action_fact_refs?.includes(fact.id) &&
+    input.cue.action_facts?.some(bound => bound.id === fact.id && bound.actorPlayerId === fact.actorPlayerId && bound.availableAtTick === fact.availableAtTick) &&
+    input.narration.playerAction.refs.includes(fact.id)).map(fact => fact.id));
+}
+
 function utilityRefs(input: Stage3HostAdapterInput): string[] {
   const candidate = input.evidence.candidate;
   if (candidate?.source.kind !== "UTILITY") return [];
@@ -364,11 +396,16 @@ function stage3CapabilityInput(input: Stage3HostAdapterInput, points: readonly W
   const measurementRef = measurementFor(input);
   const economy = economyFor(input);
   const trajectoryRefs = utilityRefs(input);
+  const current = isCurrentTeachingFocus(input.cue.primary_focus_code ?? "");
+  const purposes: TeachingPresentationPurpose[] | undefined = current
+    ? currentActionRefs(input).length ? ["ACTION_FACT_REPLAY"] : []
+    : undefined;
   return {
+    ...(purposes ? { presentationPurposes: purposes } : {}),
     cueId: input.cue.id,
     primaryFocusCode: input.cue.primary_focus_code ?? "",
     decisionRefs: unique(input.cue.observable_fact_refs),
-    actionRefs: unique(input.cue.action_fact_refs ?? []),
+    actionRefs: current ? currentActionRefs(input) : unique(input.cue.action_fact_refs ?? []),
     outcomeRefs: unique(input.cue.outcome_fact_refs ?? []),
     evidenceRefs: unique(input.cue.evidence.map((evidence) => evidence.id)),
     annotationRefs: points.map((point) => point.id),
@@ -398,7 +435,7 @@ function allowedEvidence(input: Stage3HostAdapterInput, points: readonly WorldPo
   const economy = economyFor(input);
   const refs = [
     { namespace: "DECISION" as const, refs: unique(input.cue.observable_fact_refs) },
-    { namespace: "ACTION" as const, refs: unique(input.cue.action_fact_refs ?? []) },
+    { namespace: "ACTION" as const, refs: isCurrentTeachingFocus(input.cue.primary_focus_code ?? "") ? currentActionRefs(input) : unique(input.cue.action_fact_refs ?? []) },
     { namespace: "OUTCOME" as const, refs: unique(input.cue.outcome_fact_refs ?? []) },
     { namespace: "EVIDENCE" as const, refs: unique([...input.cue.evidence.map((item) => item.id), ...points.map((point) => point.id), ...utilityRefs(input)]) },
     { namespace: "ADVICE" as const, refs: unique(input.cue.advice.map((item) => item.id)) },
@@ -460,7 +497,7 @@ export function buildStage3StartCue(input: Stage3HostAdapterInput): Stage3Prepar
     narrationReadiness: checked.narrationReadiness,
     narrationSummary: summary,
     allowedEvidenceSummary,
-    limitations: input.cue.limitations.slice(0, 8),
+    limitations: unique([...(isCurrentTeachingFocus(input.cue.primary_focus_code ?? "") ? ["展示仅用于核对已记录事实，不表示已判定处理正确或错误。"] : []), ...input.cue.limitations]).slice(0, 8),
     sessionThemes: [],
     capabilities,
     presentableSummary: {
