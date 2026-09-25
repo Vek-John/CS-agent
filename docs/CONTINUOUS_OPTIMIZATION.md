@@ -2,6 +2,14 @@
 
 更新时间：2026-09-25。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 当前独立任务：封闭整场总结本地完成（2026-09-25）
+
+- 基线4bf1eac已push干净，Narrator快路径owner已release；01a0d94b-3e01-7003-bd26-8043799d4dc0独占本轮wrap-up客户端/必要共享纯校验、相关tests/docs。主控只读，默认配置，串行复用当前树，无Demo/UI/模型。
+- 选择依据：单候选Director仍允许selected=[]，保有真实选取/拒绝自由，不能照搬Narrator跳过。wrap-up则要求全部给定主题，summary/trainingAdvice逐字取既有已完成cue，当前requestSessionWrapUp仅零theme免请求，有theme仍请求模型复制。refs/limitations可能有合法子集，不能冒称所有可接受bundle逐字段唯一；目标是领域确定性完整内容、有效refs/限制保留，减少无收益收尾等待。
+- 目标/验收：A1用实际SessionWrapUpBuildInput证明主题/教学正文封闭且当前有重复请求；A2从真实本地域输入重建并通过原主题归属/refs/closed语义门，本地确定性完成，禁止信任任意匿名approved或扩大主题/创造建议；A3准确provider/manifest，完成会话后才总结、取消/过期generation不写入、空theme/旧保存复用/多主题兼容；A4生产Host总结触发与内存Graph/恢复实际入口计数及相关tests/TS/build；A5架构/学习日志/紧凑证据/任务板commit/push/release及下一独立建议。
+- 边界：不跳过Director/Jev/Policy，不改变会话完成门/记忆写入/训练建议，不删除兼容HTTP provider或放松校验，不把新本地产物伪报模型成功，不重写旧总结。不复测同一Demo或Jev，无浏览器服务/用户DB/Memory/密钥/安装发布main合并。原A5不动。
+- 风险/阶段：8分钟语义/调用复现、20分钟实现/接线、10分钟相关检查；重点已完成来源、主题全集/引用映射、信息未知、取消和strict兼容、过长领域有效包不误卡。纯fixture/fake transport；必要5分钟只读终审，单写owner，负责test/build退出与自有临时清理。
+
 ## 用户授权与优先级
 
 用户授权持续自主学习、思考、实现、安排新任务，在有实际收益且验证通过时提交并 push；每个新对话使用项目更新模板。审查聚焦真实功能、教学判断、信息边界、恢复和用户体验，避免反复完整性检查、哈希审计、无收益重构或为了消耗额度运行测试。
@@ -109,7 +117,9 @@
 
 | 已push，验收完成 | 处理窗口内本人开火事实 | 01a0d92a-c3dd-7143-9894-d5eaadcec0a8；已release | 69ca18e；10窗口/9shot，4cue路线与判断不变，0→2自然慢放；326tests/1旧skip/TS/build通过，模拟ACK不关闭A5 |
 
-| 已完成本地验收，同分支交付 | 封闭讲解本地快路径 | 01a0d93c-fe09-7401-8afc-6a05fea80a91；push后release | 本地重建/原门校验，当前cue HTTP/Provider1+1→0+0；三cue准备/恢复/旧兼容通过，130tests/TS/build，见CLOSED_NARRATION_FAST_PATH.md |
+| 已push，验收完成 | 封闭讲解本地快路径 | 01a0d93c-fe09-7401-8afc-6a05fea80a91；已release | 4bf1eac；当前语义等价、Narrator client/provider 1+1→0+0，130tests/TS/build；legacy provider保留 |
+
+| 执行中 | 封闭整场总结本地完成 | 01a0d94b-3e01-7003-bd26-8043799d4dc0；独占本轮写入 | 从已完成cue确定总结与建议，验证可本地完成并省去复制请求；不省Director真实决策 |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
 
