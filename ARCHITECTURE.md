@@ -180,11 +180,17 @@ utilityCount的strict schema只接受0..64整数；缺字段表示未知并在�
 
 ### 2.12.2 当前决策资源的时间与来源门
 
-Host诊断资源必须绑定cue所属计划segment、timeline唯一当前round和selectedPlayer。回合start_tick包含freeze，end_tick为半开边界；decision/sample tick是非负安全整数，tickRate为正安全整数。只取同回合本人不晚于decision的最新样本，最多ceil(tickRate/2)旧；乱序不改变选择，最新tick重复或最新状态无效时保持未知，不向前无限回退。明确死亡/已到期死亡事件、必需资源或其缺失标记不满足时，不把旧血量、库存或默认零当当前资源。
+Host诊断资源必须绑定cue所属计划segment、timeline唯一当前round和selectedPlayer。回合start_tick包含freeze，end_tick为半开边界；decision/sample tick是非负安全整数，tickRate为正安全整数。只取同回合本人不晚于decision的最新样本，最多ceil(tickRate/2)旧；乱序不改变选择，最新tick重复或整体身份/生命状态无效时保持未知，不向前无限回退。明确死亡/已到期死亡事件不允许沿用死前资源；明确raw 0HP与alive=true矛盾整体拒绝，缺失字段的默认0不作为死亡证据。独立资源字段缺失不再使整个有效样本失效。
 
-已有DecisionSnapshot时，必须核对player/round/decision/sample时间与OBSERVABLE边界及missing信息；不得用另一个raw分支绕过失效快照。合法同一state才可同时进入本地rich和远端DecisionResources；未知可选数值省略，旧资源不可由当前facts或未来outcomes背书。资源measurement只引用样本自身来源，其他合法事实与独立经济语境继续按原规则参与诊断。
+已有DecisionSnapshot时，必须核对player/round/decision/sample时间与OBSERVABLE边界及missing信息；不得用另一个raw分支绕过失效快照。通过整体门后只按字段生成DecisionResources，Host本地与远端共用这份compact投影，不再传诊断rich state；未知字段省略，旧资源不可由当前facts或未来outcomes背书。资源measurement只引用样本自身来源，其他合法事实与独立经济语境继续按原规则参与诊断。
 
-公共队友人数以可选无身份decisionRoster（aliveTeammates及evidenceRefs）独立于必需health/armor/helmet。只允许当前cue/player/round/decision绑定、sampledAtTick同回合非未来且半秒内、OBSERVABLE且阵营/存活/完整名单已知的snapshot提供人数；本人资源不可用不妨碍独立可信人数，人数不可信也不借用。新decisionRoster优先于legacy decisionResources.aliveTeammates，结果、Verdict和Transfer使用相同选择规则；0存活队友仍只否定补枪条件，维持原INCONCLUSIVE判决边界。人数引用与本人资源引用分离，远端不新增玩家身份/时间/位置。旧保存诊断原样恢复，不自动重算或追溯修正。
+公共队友人数以可选无身份decisionRoster（aliveTeammates及evidenceRefs）独立于本人health/armor/helmet。只允许当前cue/player/round/decision绑定、sampledAtTick同回合非未来且半秒内、OBSERVABLE且阵营/存活/完整名单已知的snapshot提供人数；本人资源不可用不妨碍独立可信人数，人数不可信也不借用。新decisionRoster优先于legacy decisionResources.aliveTeammates，结果、Verdict和Transfer使用相同选择规则；0存活队友仍只否定补枪条件，维持原INCONCLUSIVE判决边界。人数引用与本人资源引用分离，远端不新增玩家身份/时间/位置。旧保存诊断原样恢复，不自动重算或追溯修正。
+
+### 2.12.3 部分资源的字段可用性与三值背景
+
+DecisionResources.health/armor/hasHelmet为可选字段，缺失是unknown，不是0/false。整体时间/身份/生命状态门通过后，每个资源字段独立保留：raw missing或非法值使该字段未知；有当前同tick snapshot时，primitive字段必须与其明确值一致，snapshot的unknown/missing/冲突不能用raw默认值补回。库存继续原utilityCount完整性规则，snapshot只提供数组可用性否决，不扩展为库存内容一致性推断。measurement只输出已知值与对应当前样本refs，不改变全域PlayerState类型。
+
+诊断执行器优先显式compact，包括空投影；legacy rich仅在没有compact时按同一字段规则投影，不能合并填补缺项。strict schema保留数值边界和额外键拒绝，旧完整投影兼容。风险背景保持原health<=45、armor<=0、已知helmet=false、ECO/FORCE条件：任何明确低预算条件可说明受限；否则只有health/armor/helmet全部已知才可说明未触发原低预算门；缺项或空对象为UNVERIFIABLE，FULL/PISTOL单独不证明全部资源充足。风险Verdict仍INCONCLUSIVE，已知/未知在解释中分开，旧保存产物不重算不改写。
 
 ### 2.13 托管 Demo 与会话恢复
 

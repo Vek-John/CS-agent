@@ -123,3 +123,16 @@ it("accepts independently verified public counts without self resources, with a 
     expect(invalid.status).toBe("FALLBACK");
   }
 });
+
+it.each([
+  { resources: { health: 70, armor: 80 }, status: "UNVERIFIABLE" },
+  { resources: { health: 30 }, status: "PARTIALLY_SUPPORTED" },
+  { resources: {}, status: "UNVERIFIABLE" },
+  { resources: { health: 100, armor: 100, hasHelmet: true }, status: "SUPPORTED" },
+])("accepts strict partial resource packets without completing them: $resources", async ({ resources, status }) => {
+  const output = await (await POST(request({ mode: "START", outcomeGateStatus: "COMPLETE", input: { ...validInput, decisionResources: { ...resources, evidenceRefs: ["current-resource"] } } }))).json();
+  expect(output.status).toBe("SUCCEEDED");
+  expect(output.cueCase.diagnosticResult.status).toBe(status);
+  expect(output.cueCase.verdict.type).toBe("INCONCLUSIVE");
+  expect(output.cueCase.diagnosticResult.explanation).not.toMatch(/无头盔|没头盔|undefined/);
+});

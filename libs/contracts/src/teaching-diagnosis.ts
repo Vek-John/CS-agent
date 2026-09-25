@@ -301,9 +301,10 @@ export type MemoryPedagogyMode = Extract<PedagogyMode, "CHECK_TRANSFER" | "REINF
  * bounded diagnosis packet.
  */
 export interface DecisionResources {
-  health: number;
-  armor: number;
-  hasHelmet: boolean;
+  /** Absent fields are unknown; known zero and false remain meaningful. */
+  health?: number;
+  armor?: number;
+  hasHelmet?: boolean;
   money?: number;
   equipmentValue?: number;
   /** Legacy total inventory count; never reinterpret as a verified utility count. */

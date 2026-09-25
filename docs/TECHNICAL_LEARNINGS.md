@@ -1685,3 +1685,12 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 复查：默认只读代理发现结果已读新roster而Verdict/Transfer仍读旧字段，2个新旧0/2冲突回归先红后绿，统一selector保持原INCONCLUSIVE与规则；补unknown side门。新增未知说明触发GET_INFO/DELAY限制数组超12的2红，预留执行器说明容量后修复，不改变专业判断阈值。
 - 验证：7文件147测试、TypeScript及Web build通过；实际Host→strict event/remote envelope→内存Graph及确定性POST与local rich的result/verdict/transfer一致，合法facts保留、引用分离、重复事件幂等，旧保存测量恢复零fetch原样。SSR有未知说明和继续按钮；详见[记录](validation/DIAGNOSTIC_RESOURCE_FRESHNESS.md)。fixture共享round数组导致的3个假失败已用独立克隆修复，未改生产来迁就测试。
 - 限制/清理：Host拥有时间可信门，低层rich调用仍依赖调用方可信输入；旧历史不追溯修正。无Demo/模型/浏览器/服务/用户DB/发布，Parser/Viewer与原工具A5不动，不以测试声称专业准确率提升。所有检查进程退出，忽略目录仅小日志，commit/push后释放写入。
+
+
+## 2026-09-25：整体样本可信性不等于所有资源字段齐备
+
+- 问题：新鲜正确身份的70HP/80甲样本因snapshot helmet=null/missing被整份丢弃；实际Host两例先红。不能撤掉时效门或补false来救显示。
+- 决定：保留整体round/player/时间/唯一采样/死亡/snapshot门，随后按字段保留已知值，primitive与同tick snapshot不一致或显式unknown则只省略该字段。H/A/helmet改optional，Host本地与远端共用compact，不再传rich；显式compact不被legacy rich默认值补全。资源背景沿原45/0/false与ECO/FORCE阈值做受限/未受限/未知三值，partial高值和FULL-only不能证成充分，Verdict保持INCONCLUSIVE。
+- 复查：默认只读终审发现raw明确0HP被snapshot冲突降为unknown后可绕过旧死亡矛盾门，组合先1红/1绿，检查前置后闭合；缺失标记的默认0仍不当死亡。库存只沿既有数组可用性/分类规则，不泛称全部资源冲突已审计。
+- 验证：7文件177测试/TS/Web build通过；Host→strict事件/envelope→内存Graph及确定性POST的partial/full/all-unknown/known-false与本地结果一致，旧utility/roster规则保持；partial及旧保存测量恢复原样零fetch，SSR显示70HP/80甲与头盔未知并保留继续。见[记录](validation/PARTIAL_DIAGNOSTIC_RESOURCES.md)。
+- 限制/清理：无Parser/Viewer/全域类型重构或Demo/模型/浏览器/用户DB/安装发布，原A5未验，不以测试声称专业质量提升。原历史不追溯修正，库存跨视图内容未检查，低层rich仍由调用方保证上下文。所有检查进程退出，仅忽略目录小日志，commit/push后release。

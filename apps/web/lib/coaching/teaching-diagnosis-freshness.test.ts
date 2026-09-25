@@ -41,7 +41,8 @@ it.each([
   state.tick = sample;
   const output = runTeachingDiagnosis(context, reflection);
   expect(output.cueCase.diagnosticResult?.measurements.find(m => m.label === "决策时血量")?.value).toBe(known ? 100 : undefined);
-  expect(buildTeachingDiagnosisInput(context, reflection).decisionState?.tick).toBe(known ? sample : undefined);
+  expect(buildTeachingDiagnosisInput(context, reflection).decisionResources?.health).toBe(known ? 100 : undefined);
+  expect(buildTeachingDiagnosisInput(context, reflection).decisionState).toBeUndefined();
 });
 
 it("finds the latest preceding sample in unordered data without using future state", () => {
@@ -85,17 +86,11 @@ it.each(["missing-segment", "wrong-round", "overlap", "invalid-freeze", "round-e
   expect(runTeachingDiagnosis(context, reflection).cueCase.diagnosticResult?.measurements).toEqual([]);
 });
 
-it.each(["dead", "zero-alive", "missing-health", "missing-helmet", "bad-health", "bad-armor", "bad-helmet", "duplicate", "latest-invalid", "death-after-sample"])("does not revive or fabricate current resources: %s", kind => {
+it.each(["dead", "zero-alive", "duplicate", "death-after-sample"])("does not revive or fabricate current resources: %s", kind => {
   const { context, reflection, state } = fixture();
   if (kind === "dead") state.alive = false;
   if (kind === "zero-alive") state.health = 0;
-  if (kind === "missing-health") state.missing_fields = ["health"];
-  if (kind === "missing-helmet") state.missing_fields = ["helmet"];
-  if (kind === "bad-health") state.health = NaN;
-  if (kind === "bad-armor") state.armor = 101;
-  if (kind === "bad-helmet") (state as unknown as Record<string, unknown>).has_helmet = undefined;
   if (kind === "duplicate") context.timeline!.player_state_tracks = [state, { ...state, health: 1 }];
-  if (kind === "latest-invalid") context.timeline!.player_state_tracks = [{ ...state, tick: 1990 }, { ...state, health: NaN }];
   if (kind === "death-after-sample") {
     state.tick = 1990;
     context.timeline!.match_events = [{ id: "self-death", tick: 1995, event_type: "PLAYER_DEATH", target_player_id: context.selectedPlayerId, payload: {}, fact_confidence: 1, fact_refs: [], source_parser_event: "synthetic-death", missing_fields: [] }];
@@ -164,11 +159,13 @@ it("honors snapshot missing information instead of recovering the same field fro
   const { context, reflection } = fixture();
   const snapshot = await bindRoster(context);
   snapshot.missingFields = ["health"];
-  expect(buildTeachingDiagnosisInput(context, reflection).decisionState).toBeUndefined();
-  expect(runTeachingDiagnosis(context, reflection).cueCase.diagnosticResult?.measurements).toEqual([]);
+  const packet = buildTeachingDiagnosisInput(context, reflection);
+  expect(packet.decisionState).toBeUndefined();
+  expect(packet.decisionResources?.health).toBeUndefined();
+  expect(packet.decisionResources?.armor).toBe(100);
 });
 
-it.each(["fresh", "stale", "independent-roster", "invalid-roster"])("keeps Host rich, compact Graph and API consistent for %s", async kind => {
+it.each(["fresh", "partial", "low-partial", "all-unknown", "known-false", "stale", "independent-roster", "invalid-roster"])("keeps Host rich, compact Graph and API consistent for %s", async kind => {
   const { buildTeachingDiagnosisSubmissionEvent } = await import("./teaching-diagnosis-host");
   const { createCoachAgentRuntime, createRemoteCoachAgentDispatchEnvelope, parseRemoteCoachAgentDispatchEnvelope } = await import("@cs-coach/coach-agent");
   const { fixtureIdentity } = await import("../../../../libs/coach-agent/src/test-fixtures");
@@ -176,7 +173,15 @@ it.each(["fresh", "stale", "independent-roster", "invalid-roster"])("keeps Host 
   const { context, reflection, state } = fixture();
   context.cue.facts.push({ id: "current-legal-fact", text: "可验证的决策事实。", availability: "DECISION", available_at_tick: 1990, source: "DEMO", observed_by_player: true });
   context.cue.observable_fact_refs.push("current-legal-fact");
-  if (kind !== "fresh") state.tick = 1900;
+  if (["stale", "independent-roster", "invalid-roster"].includes(kind)) state.tick = 1900;
+  if (kind === "partial") {
+    state.health = 70; state.armor = 80; state.has_helmet = false;
+    const snapshot = await bindRoster(context);
+    snapshot.selectedPlayer.value!.health = 70; snapshot.selectedPlayer.value!.armor = 80; snapshot.selectedPlayer.value!.helmet = null;
+  }
+  if (kind === "all-unknown") state.missing_fields = ["health", "armor", "helmet", "money", "equipment_value", "inventory"];
+  if (kind === "low-partial") { state.health = 30; state.missing_fields = ["armor", "helmet", "money", "equipment_value", "inventory"]; }
+  if (kind === "known-false") state.has_helmet = false;
   if (kind.includes("roster")) {
     reflection.selectedGoal = "TRADE";
     const snapshot = await bindRoster(context);
@@ -184,7 +189,9 @@ it.each(["fresh", "stale", "independent-roster", "invalid-roster"])("keeps Host 
   }
   const event = buildTeachingDiagnosisSubmissionEvent(context, reflection, { eventType: "SUBMIT_REFLECTION", eventId: "freshness-reflection", identity: { ...fixtureIdentity, selectedPlayerId: context.selectedPlayerId } });
   expect(event.input).not.toHaveProperty("decisionState");
-  if (kind !== "fresh") expect(event.input).not.toHaveProperty("decisionResources");
+  if (["stale", "independent-roster", "invalid-roster"].includes(kind)) expect(event.input).not.toHaveProperty("decisionResources");
+  if (kind === "partial") expect(event.input.decisionResources).toMatchObject({ health: 70, armor: 80 });
+  if (kind === "partial" || kind === "all-unknown") expect(event.input.decisionResources).not.toHaveProperty("hasHelmet");
   expect(event.input.decisionFacts.map(f => f.id)).toContain("current-legal-fact");
   expect(JSON.stringify({ resources: event.input.decisionResources, roster: event.input.decisionRoster })).not.toMatch(/player_id|tick|position|inventory/);
   const envelope = parseRemoteCoachAgentDispatchEnvelope(JSON.parse(JSON.stringify(createRemoteCoachAgentDispatchEnvelope(event))));
@@ -228,9 +235,9 @@ it("uses the existing ceil(tickRate / 2) discrete age boundary", () => {
   const { context, reflection, state } = fixture();
   context.timeline!.tick_rate = 65;
   state.tick = 1967;
-  expect(buildTeachingDiagnosisInput(context, reflection).decisionState?.tick).toBe(1967);
+  expect(buildTeachingDiagnosisInput(context, reflection).decisionResources?.health).toBe(100);
   state.tick = 1966;
-  expect(buildTeachingDiagnosisInput(context, reflection).decisionState).toBeUndefined();
+  expect(buildTeachingDiagnosisInput(context, reflection).decisionResources).toBeUndefined();
 });
 
 it("renders missing current resources without old measurements and keeps the continue control", async () => {
@@ -253,4 +260,87 @@ it.each(["GET_INFO", "DELAY"] as const)("does not overflow bounded limitations w
   reflection.selectedGoal = goal;
   context.cue.limitations = Array.from({ length: 10 }, (_, i) => `existing limitation ${i}`);
   expect(runTeachingDiagnosis(context, reflection).cueCase.diagnosticResult?.limitations.length).toBeLessThanOrEqual(12);
+});
+
+it.each(["missing", "null"])("keeps current 70HP/80 armor when helmet is %s", async kind => {
+  const { context, reflection, state } = fixture();
+  state.health = 70; state.armor = 80; state.has_helmet = false;
+  const snapshot = await bindRoster(context);
+  snapshot.selectedPlayer.value!.health = 70;
+  snapshot.selectedPlayer.value!.armor = 80;
+  snapshot.selectedPlayer.value!.helmet = null;
+  if (kind === "missing") { snapshot.missingFields = ["helmet"]; state.missing_fields = ["helmet"]; }
+  const output = runTeachingDiagnosis(context, reflection);
+  const result = output.cueCase.diagnosticResult!;
+  expect(result.measurements.find(m => m.label === "决策时血量")?.value).toBe(70);
+  expect(result.measurements.find(m => m.label === "决策时护甲")?.value).toBe(80);
+  expect(result.status).toBe("UNVERIFIABLE");
+  expect(result.explanation).not.toMatch(/无头盔|没头盔|资源并未落入/);
+  expect(buildTeachingDiagnosisInput(context, reflection).decisionState).toBeUndefined();
+});
+
+it.each(["missing-health", "invalid-health", "invalid-armor", "unknown-helmet", "bad-inventory", "latest-partial"])("preserves independent current fields for %s", kind => {
+  const { context, reflection, state } = fixture();
+  if (kind === "missing-health") state.missing_fields = ["health"];
+  if (kind === "invalid-health") state.health = NaN;
+  if (kind === "invalid-armor") state.armor = 101;
+  if (kind === "unknown-helmet") (state as unknown as Record<string, unknown>).has_helmet = null;
+  if (kind === "bad-inventory") state.inventory = [{ item_id: "flash", item_class: "UTILITY", count: -1 }];
+  if (kind === "latest-partial") context.timeline!.player_state_tracks = [{ ...state, tick: 1990 }, { ...state, health: NaN }];
+  const packet = buildTeachingDiagnosisInput(context, reflection);
+  expect(packet.decisionState).toBeUndefined();
+  expect(packet.decisionResources?.evidenceRefs).toEqual(["resource-source"]);
+  const healthUnknown = ["missing-health", "invalid-health", "latest-partial"].includes(kind);
+  expect(packet.decisionResources?.health).toBe(healthUnknown ? undefined : 100);
+  expect(packet.decisionResources?.armor).toBe(kind === "invalid-armor" ? undefined : 100);
+  expect(packet.decisionResources?.hasHelmet).toBe(kind === "unknown-helmet" ? undefined : true);
+  expect(packet.decisionResources?.utilityCount).toBe(kind === "bad-inventory" ? undefined : 2);
+  const result = runTeachingDiagnosis(context, reflection).cueCase.diagnosticResult!;
+  expect(result.status).toBe(kind === "bad-inventory" ? "SUPPORTED" : "UNVERIFIABLE");
+  expect(result.explanation).not.toMatch(/undefined|NaN|无头盔/);
+});
+
+it("does not substitute raw defaults for snapshot unknowns or inconsistent field values", async () => {
+  const { context, reflection, state } = fixture();
+  const snapshot = await bindRoster(context);
+  snapshot.selectedPlayer.value!.health = 90; // Raw 100 disagrees at the same sample.
+  snapshot.selectedPlayer.value!.armor = 100;
+  snapshot.selectedPlayer.value!.helmet = null; // Raw true must not fill this.
+  const resources = buildTeachingDiagnosisInput(context, reflection).decisionResources!;
+  expect(resources.health).toBeUndefined();
+  expect(resources.hasHelmet).toBeUndefined();
+  expect(resources.armor).toBe(100);
+  expect(state.health).toBe(100); // No source mutation.
+});
+
+
+it("renders known partial values and helmet unknown without changing the continue control", async () => {
+  const { createElement } = await import("react");
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { TeachingDiagnosisPanel } = await import("../../components/playback/teaching-diagnosis-panel");
+  const { context, reflection, state } = fixture();
+  state.health = 70; state.armor = 80; state.has_helmet = false; state.missing_fields = ["helmet"];
+  const result = runTeachingDiagnosis(context, reflection);
+  const html = renderToStaticMarkup(createElement(TeachingDiagnosisPanel, { cue: context.cue, decisionFacts: [], cueCase: result.cueCase, hasTrustedDecisionContext: true, onSubmit() {}, onSkip() {}, onConfirm() {}, onDisagree() {} }));
+  expect(html).toContain("70HP");
+  expect(html).toContain("80甲");
+  expect(html).toContain("头盔未知");
+  expect(html).not.toMatch(/无头盔|没头盔/);
+  expect(html).toContain("懂了，继续");
+});
+
+it.each([false, true])("preserves the known-zero death gate without treating a missing HP default as death (missing=%s)", async missing => {
+  const { context, reflection, state } = fixture();
+  state.health = 0;
+  if (missing) state.missing_fields = ["health"];
+  const snapshot = await bindRoster(context);
+  snapshot.selectedPlayer.value!.health = 70;
+  const resources = buildTeachingDiagnosisInput(context, reflection).decisionResources;
+  if (missing) {
+    expect(resources?.health).toBeUndefined();
+    expect(resources?.armor).toBe(100);
+  } else {
+    expect(resources).toBeUndefined();
+    expect(runTeachingDiagnosis(context, reflection).cueCase.diagnosticResult?.measurements).toEqual([]);
+  }
 });

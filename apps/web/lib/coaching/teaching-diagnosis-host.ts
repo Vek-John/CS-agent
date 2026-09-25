@@ -1,4 +1,4 @@
-import { currentDiagnosisSnapshot, currentDiagnosisState, currentDiagnosisWindow } from "./diagnosis-decision-state";
+import { currentDiagnosisSnapshot, currentDiagnosisResources, currentDiagnosisWindow } from "./diagnosis-decision-state";
 import type {
   CandidateMaterial,
   CoachCue,
@@ -19,7 +19,6 @@ import {
   CueCaseSchema,
   diagnoseTeachingCue,
   parseUserReflection,
-  projectDecisionUtilityCount,
   reviseTeachingDiagnosis,
 } from "@cs-coach/coach-agent/client";
 import type { CoachAgentIdentity, CoachAgentEvent } from "@cs-coach/coach-agent/client";
@@ -93,22 +92,13 @@ export function buildTeachingDiagnosisInput(
   const playerActionFacts = actionFactsForCue(context.cue, context.material);
   const outcomeFacts = outcomeFactsForCue(context.cue);
   const window = currentDiagnosisWindow(context);
-  const state = currentDiagnosisState(context, window);
+  const decisionResources = currentDiagnosisResources(context, window);
   const economyClass = context.material?.economy;
   const snapshot = currentDiagnosisSnapshot(context, window);
   const counts = snapshot?.aliveCounts.value;
   const selfAlive = snapshot?.selectedPlayer.value?.alive;
   const roster = snapshot && snapshot.aliveCounts.boundary === "OBSERVABLE" && snapshot.selectedPlayer.boundary === "OBSERVABLE" && typeof selfAlive === "boolean" && (snapshot.selectedPlayer.value?.side === "T" || snapshot.selectedPlayer.value?.side === "CT") && counts?.includesSelectedPlayer === true && Number.isSafeInteger(counts.allies) && counts.allies >= (selfAlive ? 1 : 0) && counts.allies <= (selfAlive ? 5 : 4) && !snapshot.missingFields.includes("complete_current_roster") && !snapshot.missingFields.includes("alive") && !snapshot.missingFields.includes("current_side")
     ? { aliveTeammates: counts.allies - (selfAlive ? 1 : 0), evidenceRefs: unique(snapshot.aliveCounts.evidenceRefs).slice(0, 32) } : undefined;
-  const decisionResources = state ? {
-    health: state.health,
-    armor: state.armor,
-    hasHelmet: state.has_helmet,
-    ...(state.money !== undefined ? { money: state.money } : {}),
-    ...(state.equipment_value !== undefined ? { equipmentValue: state.equipment_value } : {}),
-    ...projectDecisionUtilityCount(state),
-    evidenceRefs: unique(state.fact_refs ?? []).slice(0, 32),
-  } : undefined;
   // The Graph receives a compact, strict material projection.  Inferences,
   // annotations and callouts remain Host/rendering concerns and must not
   // cross the diagnosis event boundary.
@@ -136,13 +126,12 @@ export function buildTeachingDiagnosisInput(
     decisionFacts,
     playerActionFacts,
     outcomeFacts,
-    ...(state ? { decisionState: state } : {}),
     ...(decisionResources ? { decisionResources } : {}),
     ...(roster ? { decisionRoster: roster } : {}),
     ...(context.cue.primary_focus_code ? { focusCode: context.cue.primary_focus_code } : {}),
     ...(economyClass ? { economyClass } : {}),
     ...(context.learningThreads ? { existingThreads: context.learningThreads } : {}),
-    limitations: unique([...(state ? [] : ["决策时缺少本回合内足够新的本人资源，血量、护甲和库存暂时未知。"]), ...context.cue.limitations]).slice(0, 12),
+    limitations: unique([...(decisionResources ? [] : ["决策时缺少本回合内足够新的本人资源，血量、护甲和库存暂时未知。"]), ...context.cue.limitations]).slice(0, 12),
   };
 }
 

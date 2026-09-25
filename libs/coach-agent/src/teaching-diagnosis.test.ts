@@ -96,6 +96,51 @@ function input(overrides: Partial<TeachingDiagnosisInput> = {}): TeachingDiagnos
 }
 
 describe("teaching diagnosis trust and evidence boundaries", () => {
+  it.each([
+    { resources: {}, status: "UNVERIFIABLE" },
+    { resources: { health: 100, armor: 100 }, status: "UNVERIFIABLE" },
+    { resources: { health: 30 }, status: "PARTIALLY_SUPPORTED" },
+    { resources: { armor: 0 }, status: "PARTIALLY_SUPPORTED" },
+    { resources: { hasHelmet: false }, status: "PARTIALLY_SUPPORTED" },
+    { resources: { health: 100, armor: 100, hasHelmet: true }, status: "SUPPORTED" },
+    { resources: { health: 45 }, status: "PARTIALLY_SUPPORTED" },
+    { resources: { health: 46, armor: 1, hasHelmet: true }, status: "SUPPORTED" },
+    { resources: { money: 0, equipmentValue: 0, utilityCount: 0 }, status: "UNVERIFIABLE" },
+  ])("classifies partial resources without inventing missing values: $resources", ({ resources, status }) => {
+    const output = diagnoseCue(input({ decisionResources: { ...resources, evidenceRefs: ["resource-source"] } }));
+    expect(output.cueCase.diagnosticResult?.status).toBe(status);
+    expect(output.cueCase.verdict?.type).toBe("INCONCLUSIVE");
+    const result = output.cueCase.diagnosticResult!;
+    expect(result.explanation).not.toMatch(/undefined|NaN/);
+    if (resources.hasHelmet === undefined) expect(result.explanation).not.toMatch(/无头盔|没头盔/);
+    for (const m of result.measurements) expect(m.evidenceRefs).toEqual(["resource-source"]);
+  });
+
+  it.each(["FULL", "PISTOL", "ECO", "FORCE"] as const)("does not turn %s economy into complete self resources", economyClass => {
+    const output = diagnoseCue(input({ economyClass, decisionResources: { evidenceRefs: [] } }));
+    expect(output.cueCase.diagnosticResult?.status).toBe(["ECO", "FORCE"].includes(economyClass) ? "PARTIALLY_SUPPORTED" : "UNVERIFIABLE");
+    expect(output.cueCase.diagnosticResult?.measurements).toEqual([]);
+    expect(output.cueCase.diagnosticResult?.explanation).not.toMatch(/PISTOL|ECO|FORCE|FULL/);
+    expect(output.cueCase.verdict?.type).toBe("INCONCLUSIVE");
+  });
+
+  it("does not merge rich defaults into an explicit partial or empty compact projection", () => {
+    for (const resources of [{ health: 70, armor: 80 }, {}]) {
+      const output = diagnoseCue(input({ decisionState: decisionState({ has_helmet: false }), decisionResources: { ...resources, evidenceRefs: ["compact-source"] } }));
+      expect(output.cueCase.diagnosticResult?.status).toBe("UNVERIFIABLE");
+      expect(output.cueCase.diagnosticResult?.explanation).not.toMatch(/无头盔|没头盔/);
+      expect(output.cueCase.diagnosticResult?.measurements.find(m => m.label === "决策时血量")?.value).toBe(resources.health);
+    }
+  });
+
+  it("keeps legacy rich fields independently available without weakening its input schema", () => {
+    const output = diagnoseCue(input({ decisionState: decisionState({ health: 70, armor: 80, has_helmet: false, missing_fields: ["helmet"] }) }));
+    expect(output.cueCase.diagnosticResult?.status).toBe("UNVERIFIABLE");
+    expect(output.cueCase.diagnosticResult?.measurements.find(m => m.label === "决策时血量")?.value).toBe(70);
+    expect(output.cueCase.diagnosticResult?.explanation).toContain("头盔未知");
+    expect(output.cueCase.diagnosticResult?.explanation).not.toContain("无头盔");
+  });
+
   it.each([[0, 2], [2, 0]] as const)("uses independent roster %s over legacy %s across result, verdict and transfer", (current, legacy) => {
     const resources = { health: 100, armor: 100, hasHelmet: true, aliveTeammates: legacy, evidenceRefs: ["legacy-resource"] };
     const output = diagnoseCue(input({ reflection: reflection({ selectedGoal: "TRADE" }), decisionResources: resources, decisionRoster: { aliveTeammates: current, evidenceRefs: ["current-roster"] } }));

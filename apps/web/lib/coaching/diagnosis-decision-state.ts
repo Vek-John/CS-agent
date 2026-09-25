@@ -1,4 +1,5 @@
-import type { DecisionSnapshot, PlayerStateSample, RoundTimeline } from "@cs-coach/contracts";
+import { projectDecisionResources } from "@cs-coach/coach-agent/client";
+import type { DecisionResources, DecisionSnapshot, PlayerStateSample, RoundTimeline } from "@cs-coach/contracts";
 import type { TeachingDiagnosisHostContext } from "./teaching-diagnosis-host";
 
 const tick = (value: number): boolean => Number.isSafeInteger(value) && value >= 0;
@@ -25,7 +26,7 @@ export function currentDiagnosisSnapshot(context: TeachingDiagnosisHostContext, 
   return snapshot;
 }
 
-export function currentDiagnosisState(context: TeachingDiagnosisHostContext, window: Window | undefined): PlayerStateSample | undefined {
+export function currentDiagnosisResources(context: TeachingDiagnosisHostContext, window: Window | undefined): DecisionResources | undefined {
   if (!window) return;
   const decisionTick = context.cue.decision_tick;
   let selected: PlayerStateSample | undefined;
@@ -35,24 +36,28 @@ export function currentDiagnosisState(context: TeachingDiagnosisHostContext, win
     if (!selected || state.tick > selected.tick) { selected = state; duplicate = false; }
     else if (state.tick === selected.tick) duplicate = true;
   }
-  if (!selected || duplicate || decisionTick - selected.tick > window.ageLimit || selected.alive !== true || (selected.side !== "T" && selected.side !== "CT") || !bounded(selected.health, 100) || selected.health === 0 || !bounded(selected.armor, 100) || typeof selected.has_helmet !== "boolean" || !Array.isArray(selected.missing_fields) || !selected.missing_fields.every(field => typeof field === "string")) return;
+  if (!selected || duplicate || decisionTick - selected.tick > window.ageLimit || selected.alive !== true || (selected.side !== "T" && selected.side !== "CT") || !Array.isArray(selected.missing_fields) || !selected.missing_fields.every(field => typeof field === "string")) return;
   if (context.timeline?.match_events?.some(event => event.event_type === "PLAYER_DEATH" && event.target_player_id === context.selectedPlayerId && tick(event.tick) && event.tick >= window.round.start_tick && event.tick <= decisionTick)) return;
+  // Known raw zero HP contradicts alive=true even if a later snapshot conflicts.
+  // A missing-field default zero is not evidence of death.
+  if (selected.health === 0 && !hasMissing(selected.missing_fields, "health")) return;
   const missing = [...selected.missing_fields];
   const sourceSnapshot = context.material?.decisionSnapshot ?? context.cue.decisionSnapshot;
   if (sourceSnapshot) {
     const snapshot = currentDiagnosisSnapshot(context, window);
     const player = snapshot?.selectedPlayer.value;
-    if (!snapshot || snapshot.sampledAtTick !== selected.tick || snapshot.selectedPlayer.boundary !== "OBSERVABLE" || !player || player.alive !== true || !bounded(player.health, 100) || !bounded(player.armor, 100) || typeof player.helmet !== "boolean") return;
+    if (!snapshot || snapshot.sampledAtTick !== selected.tick || snapshot.selectedPlayer.boundary !== "OBSERVABLE" || !player || player.alive !== true || (player.side !== "T" && player.side !== "CT") || player.side !== selected.side) return;
     missing.push(...snapshot.missingFields);
-    if (player.grenades === null) missing.push("inventory");
-    if (player.money === null) missing.push("money");
-    if (player.equipmentValue === null) missing.push("equipment_value");
+    // Both views describe this exact sample. Unknown or conflicting snapshot fields
+    // veto only that field; normalized raw defaults cannot override them.
+    if (!bounded(player.health, 100) || player.health !== selected.health) missing.push("health");
+    if (!bounded(player.armor, 100) || player.armor !== selected.armor) missing.push("armor");
+    if (typeof player.helmet !== "boolean" || player.helmet !== selected.has_helmet) missing.push("helmet");
+    if (!Array.isArray(player.grenades)) missing.push("inventory");
+    if (!bounded(player.money, 10_000_000) || player.money !== selected.money) missing.push("money");
+    if (!bounded(player.equipmentValue, 10_000_000) || player.equipmentValue !== selected.equipment_value) missing.push("equipment_value");
   }
-  if (["health", "armor", "helmet", "has_helmet", "alive", "side", "current_side", "fresh_player_state"].some(key => hasMissing(missing, key))) return;
-  if (!Array.isArray(selected.inventory) || selected.inventory.length > 32 || selected.inventory.some(item => !item || !bounded(item.count, Number.MAX_VALUE)) || !Array.isArray(selected.fact_refs) || selected.fact_refs.some(ref => typeof ref !== "string" || !ref.trim() || ref.length > 160)) return;
-  // Optional unknowns are omitted, never backfilled or clamped into factual zeros.
-  const state = { ...selected, missing_fields: missing, fact_refs: selected.fact_refs.slice(0, 32) };
-  if (hasMissing(missing, "money") || !bounded(state.money, 10_000_000)) delete state.money;
-  if (hasMissing(missing, "equipment_value") || hasMissing(missing, "equipmentValue") || !bounded(state.equipment_value, 10_000_000)) delete state.equipment_value;
-  return state;
+  if (["alive", "side", "current_side", "fresh_player_state"].some(key => hasMissing(missing, key))) return;
+  if (!Array.isArray(selected.fact_refs) || selected.fact_refs.some(ref => typeof ref !== "string" || !ref.trim() || ref.length > 160)) return;
+  return projectDecisionResources({ ...selected, missing_fields: missing });
 }

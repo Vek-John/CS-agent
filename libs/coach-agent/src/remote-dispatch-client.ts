@@ -122,3 +122,5 @@ export type {
   ReconnectToolDisposition,
   PreparedNarrationArtifact,
 } from "./recovery-contract";
+
+export { projectDecisionResources } from "./decision-resources";

@@ -1,4 +1,5 @@
-import { MAX_DIAGNOSTIC_UTILITY_COUNT, projectDecisionUtilityCount } from "./decision-utilities";
+import { projectDecisionResources } from "./decision-resources";
+import { MAX_DIAGNOSTIC_UTILITY_COUNT } from "./decision-utilities";
 export { projectDecisionUtilityCount } from "./decision-utilities";
 import { z } from "zod";
 import type {
@@ -121,9 +122,9 @@ const PlayerStateSchema = z.object({
 
 /** Identity-free resource projection used when the full decision frame stays in Host. */
 export const DecisionResourcesSchema = z.object({
-  health: z.number().finite().nonnegative().max(100),
-  armor: z.number().finite().nonnegative().max(100),
-  hasHelmet: z.boolean(),
+  health: z.number().finite().nonnegative().max(100).optional(),
+  armor: z.number().finite().nonnegative().max(100).optional(),
+  hasHelmet: z.boolean().optional(),
   money: z.number().finite().nonnegative().max(10_000_000).optional(),
   equipmentValue: z.number().finite().nonnegative().max(10_000_000).optional(),
   inventoryCount: z.number().finite().nonnegative().max(64).optional(),
@@ -510,7 +511,7 @@ function outcomeIsNegative(outcomes: readonly OutcomeFact[]): boolean {
   );
 }
 
-function economyFrom(input: TeachingDiagnosisInput): TeachingDiagnosisInput["economyClass"] {
+function economyFrom(input: TeachingDiagnosisInput): NonNullable<TeachingDiagnosisInput["economyClass"]> {
   return input.economyClass ?? input.material?.economy ?? "UNKNOWN";
 }
 
@@ -520,28 +521,17 @@ function decisionRoster(input: TeachingDiagnosisInput) {
 }
 
 function resourceSnapshot(input: TeachingDiagnosisInput): DecisionResources | undefined {
-  if (input.decisionState) {
-    const state = input.decisionState;
-    return {
-      health: state.health,
-      armor: state.armor,
-      hasHelmet: state.has_helmet,
-      ...(state.money !== undefined ? { money: state.money } : {}),
-      ...(state.equipment_value !== undefined ? { equipmentValue: state.equipment_value } : {}),
-      ...projectDecisionUtilityCount(state),
-      evidenceRefs: unique(state.fact_refs ?? []).slice(0, 32),
-    };
-  }
-  return input.decisionResources;
+  // An explicit compact projection is authoritative, including its unknown fields.
+  // Do not merge legacy rich defaults into a partial projection.
+  return input.decisionResources ?? (input.decisionState ? projectDecisionResources(input.decisionState) : undefined);
 }
 
 function resourceMeasurements(input: TeachingDiagnosisInput, snapshot = resourceSnapshot(input)): DiagnosticMeasurement[] {
   if (!snapshot) return [];
   const refs = unique(snapshot.evidenceRefs).slice(0, 8);
-  const measurements: DiagnosticMeasurement[] = [
-    { id: `measurement-${input.cueId}-health`, label: "决策时血量", value: snapshot.health, unit: "HP", evidenceRefs: refs },
-    { id: `measurement-${input.cueId}-armor`, label: "决策时护甲", value: snapshot.armor, unit: "甲", evidenceRefs: refs },
-  ];
+  const measurements: DiagnosticMeasurement[] = [];
+  if (snapshot.health !== undefined) measurements.push({ id: `measurement-${input.cueId}-health`, label: "决策时血量", value: snapshot.health, unit: "HP", evidenceRefs: refs });
+  if (snapshot.armor !== undefined) measurements.push({ id: `measurement-${input.cueId}-armor`, label: "决策时护甲", value: snapshot.armor, unit: "甲", evidenceRefs: refs });
   if (snapshot.money !== undefined) measurements.push({ id: `measurement-${input.cueId}-money`, label: "决策时存款", value: snapshot.money, unit: "$", evidenceRefs: refs });
   if (snapshot.equipmentValue !== undefined) measurements.push({ id: `measurement-${input.cueId}-equipment`, label: "决策时装备价值", value: snapshot.equipmentValue, unit: "$", evidenceRefs: refs });
   if (snapshot.utilityCount !== undefined) measurements.push({ id: `measurement-${input.cueId}-utility`, label: "决策时道具数量", value: snapshot.utilityCount, unit: "颗", evidenceRefs: refs });
@@ -669,28 +659,27 @@ export function executeDiagnostic(
   }
   const resources = resourceSnapshot(input);
   const economy = economyFrom(input);
-  if (!resources && economy === "UNKNOWN") {
-    return DiagnosticResultSchema.parse({
-      resultId: `diagnostic-${input.cueId}-risk-budget`,
-      capabilityId: capability.id,
-      cueId: input.cueId,
-      hingeId: hinge.hingeId,
-      status: "UNVERIFIABLE",
-      evidenceRefs: refs,
-      measurements: [],
-      explanation: "决策帧没有可用的资源字段，暂时不能判断这次风险预算。",
-      limitations: unique([...commonLimitations, "缺少血量、护甲、经济或装备字段。"]).slice(0, MAX_DIAGNOSIS_LIMITATIONS),
-    });
-  }
-  const constrained = economy === "ECO" || economy === "FORCE" || Boolean(resources && (resources.health <= 45 || resources.armor <= 0 || !resources.hasHelmet));
+  const constrained = economy === "ECO" || economy === "FORCE" ||
+    (resources?.health !== undefined && resources.health <= 45) ||
+    (resources?.armor !== undefined && resources.armor <= 0) || resources?.hasHelmet === false;
+  const completeRiskState = resources?.health !== undefined && resources.armor !== undefined && resources.hasHelmet !== undefined;
   const negative = outcomeIsNegative(input.outcomeFacts);
-  const status: ClaimVerificationStatus = constrained ? "PARTIALLY_SUPPORTED" : "SUPPORTED";
-  const resourceText = resources
-    ? `${resources.health} HP、${resources.armor <= 0 ? "无护甲" : resources.hasHelmet ? `${resources.armor} 甲且有头盔` : `${resources.armor} 甲但没头盔`}`
-    : `${economy} 经济语境`;
+  const status: ClaimVerificationStatus = constrained ? "PARTIALLY_SUPPORTED" : completeRiskState ? "SUPPORTED" : "UNVERIFIABLE";
+  const known: string[] = [];
+  if (resources?.health !== undefined) known.push(`${resources.health} HP`);
+  if (resources?.armor !== undefined) known.push(resources.armor === 0 ? "无护甲" : `${resources.armor} 甲`);
+  if (resources?.hasHelmet !== undefined) known.push(resources.hasHelmet ? "有头盔" : "无头盔");
+  if (resources?.money !== undefined) known.push(`存款 ${resources.money}`);
+  if (resources?.equipmentValue !== undefined) known.push(`装备价值 ${resources.equipmentValue}`);
+  if (resources?.utilityCount !== undefined) known.push(`${resources.utilityCount} 颗道具`);
+  if (economy !== "UNKNOWN") known.push(`经济状态：${({ PISTOL: "手枪局", ECO: "经济局", FORCE: "强起", FULL: "完整购买" })[economy]}`);
+  const unknown = [resources?.health === undefined ? "血量" : "", resources?.armor === undefined ? "护甲" : "", resources?.hasHelmet === undefined ? "头盔" : ""].filter(Boolean);
+  const resourceText = `${known.length ? `已知：${known.join("、")}。` : "当前没有可确认的本人资源数值。"}${unknown.length ? `${unknown.join("、")}未知。` : ""}`;
   const explanation = constrained
-    ? `证据显示，决策时资源处于${resourceText}的受限状态；${negative ? "随后发生了负向接触结果。" : "但结果窗口本身不足以证明动作一定错误。"}`
-    : `证据显示，决策时资源并未落入低预算门槛（${resourceText}）；这项风险条件基本成立。`;
+    ? `${resourceText}已知条件表明资源背景受限；${negative ? "随后发生了负向接触结果，但不能单凭资源状态认定动作错误。" : "这不足以证明动作一定错误。"}`
+    : status === "SUPPORTED"
+      ? `${resourceText}这些已知资源未落入原有低预算门槛；这项风险条件基本成立。`
+      : `${resourceText}缺失项可能改变资源判断，暂时无法确认这次风险预算。`;
   return DiagnosticResultSchema.parse({
     resultId: `diagnostic-${input.cueId}-risk-budget`,
     capabilityId: capability.id,

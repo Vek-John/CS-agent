@@ -39,18 +39,21 @@
 | 已push、本地验收完成 | 射击事件即时身份归属 | 01a0d81c-bee6-7161-9cae-58ff2eea392b；完成并释放写入与进程 | 旧生产路径6红→绿，最终Rust夹具9＋parser3、186相关测试/TS/Web和Viewer构建通过；一次WASM1242shot/本人152、hurt与clock保持，见CURRENT_SHOT_IDENTITY.md |
 | 已push、本地验收完成 | 诊断道具数量与未知库存 | 01a0d837-aff5-7560-a4b1-ba553cd77ba6；完成并释放写入/进程 | 生产双入口4红→绿，共享utilityCount，不重解释legacy总数；79测试/TS/build通过，Graph/API/恢复/SSR已验证，见DIAGNOSTIC_UTILITY_COUNT.md |
 | 已push、本地验收完成 | 诊断资源时效与回合绑定 | 01a0d850-9c52-7803-85ca-03c7c8f5576e；完成并释放写入/进程 | 过期/跨回合2红→绿，同回合半秒门与独立可信decisionRoster落地；147测试/TS/build通过，见DIAGNOSTIC_RESOURCE_FRESHNESS.md |
-
-| 待执行 | 可信部分资源的独立测量 | 01a0d870-79b9-7d22-ae10-fc28ec2ceb6b；交接后独占当前树 | 当前资源required三字段导致缺helmet也丢health/armor；先复现，再字段级unknown和三值资源背景，保留刚完成的时效/身份门 |
+| 已push、本地验收完成 | 可信部分资源的独立测量 | 01a0d870-79b9-7d22-ae10-fc28ec2ceb6b；完成并释放写入/进程 | 70HP/80甲与未知helmet两红→绿，partial compact和三值资源背景落地；177测试/TS/build通过，见PARTIAL_DIAGNOSTIC_RESOURCES.md |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
 
 ## 本轮任务卡：可信部分资源的独立测量（2026-09-25）
 
-- 基线aad0732已push干净，前任务release；本轮01a0d870-79b9-7d22-ae10-fc28ec2ceb6b独占Host资源投影/窄诊断contracts/helper/执行器及tests/docs。默认配置，串行复用当前树，主控只读。
+- 基线7d5de37（aad0732＋交接）已push干净，前任务release；本轮01a0d870-79b9-7d22-ae10-fc28ec2ceb6b独占Host资源投影/窄诊断contracts/helper/执行器及tests/docs。默认配置，串行复用当前树，主控只读。
 - 新证据：当前fresh selector对helmet缺失一律整份return，DecisionResources又要求health/armor/hasHelmet齐备；真实parser省略false helmet，Snapshot保守保留null，所以新鲜已知血量/护甲可因无关头盔unknown全部丢失。不能撤掉新鲜度门或将unknown补false来救显示；需分离整体样本可信性与字段可用性。
 - 目标/验收：A1生产Host/local/remote复现helmet unknown使known health/armor消失；A2保持同round/player/decision/半秒/死亡/绑定门后逐字段保留可靠值，不制造新rich假默认，字段missing/null/非法仅使该字段unknown；A3只显示已知测量，unknown不是0/false；低资源背景仅由明确已知条件支持，部分高值不能推出资源足够，维持既有数值阈值与Verdict INCONCLUSIVE；A4旧完整投影/legacy utility/roster/已保存恢复兼容，Graph/API与Host结果一致、相关tests/TS/build；A5架构/学习日志/验证/任务板及commit/push。
 - 边界：此轮明确允许窄partial DecisionResources契约及资源背景三值处理，不升级专业判断，不修改Parser/Viewer/原始PlayerState全域类型、不重写历史。不借schema变更吞掉未来/身份错误/过期数据；总体可信门失败仍无资源。只恢复已有可知字段，未知头盔不冒称没头盔。
 - 风险/阶段：8分钟复现设计、25分钟实现/接线、10分钟相关构建；重点!undefined隐式false、undefined数值比较、empty对象误认为SUPPORTED、rich回退、已知false/0与缺失区别。纯fixture/真实Host-Graph-API入口，无Demo/模型/浏览器/服务/用户DB；必要5分钟只读终审。执行者负责所有测试/build退出，不改旧A5或发布安装main。
+
+- 结果：整体可信门通过后独立保留字段，snapshot明确unknown/primitive冲突只否决该字段；Host仅compact，本地与remote同源，legacy rich不补显式compact缺项。H/A/helmet optional，原阈值下明确低→受限、核心三项齐全且不低→未受限、其余unknown；FULL-only不能证成充足，Verdict仍INCONCLUSIVE。原2红转绿，known false/0与missing区分。
+- 验收：7文件177测试、TypeScript/Web build通过；Host→strict event/envelope→内存Graph/确定性POST、旧utility/roster、partial和legacy保存测量恢复零fetch、SSR已验证。partial_resources_review默认5分钟只读终审＋1分钟闭合确认，发现raw已知0被snapshot冲突省略后绕过死亡门，1红→绿修复；既有时效/回合/死亡门保留。
+- 清理/限制：主任务独占写入，全部测试/build退出，无Demo/模型/UI浏览器/服务/用户DB/Memory/密钥/Parser/Viewer/全域类型改动或安装部署main合并，旧A5不动。snapshot库存仅数组可用性而非内容对照，旧已保存测量不追溯修正。忽略目录仅日志，文档实现同次commit/push后释放；见[验证记录](validation/PARTIAL_DIAGNOSTIC_RESOURCES.md)。
 
 ## 本轮任务卡：诊断资源时效与回合绑定（2026-09-25）
 
