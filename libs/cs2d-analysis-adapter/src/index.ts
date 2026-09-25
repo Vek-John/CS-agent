@@ -70,6 +70,14 @@ export const CS2D_SOURCE = {
   input_boundary: "WASM_WORKER_STRUCTURED_REPLAY_ONLY"
 } as const;
 
+/** Known parser revisions retain independent hurt and current-shot provenance. */
+function parserVersion(replay: Cs2dReplay): string {
+  const base = `${CS2D_SOURCE.repository}@${CS2D_SOURCE.commit}`;
+  if (replay.generatedBy?.endsWith("+cs-coach.hurt-events.v1.shot-identity.v2")) return `${base}/hurt-events.v1/shot-identity.v2`;
+  if (replay.generatedBy?.endsWith("+cs-coach.hurt-events.v1")) return `${base}/hurt-events.v1`;
+  return base;
+}
+
 export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.7.0" as const;
 export const CS2D_TIMELINE_VERSION = "zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec/timeline/1.1.0" as const;
 export const CS2D_OBSERVATION_VERSION = "cs2d-analysis-adapter/1.7.0/internal-observation" as const;
@@ -1284,7 +1292,7 @@ function failedBundle(input: Cs2dAnalysisInput, metadata: Cs2dAnalysisMetadata, 
     cues: [],
     habit_clusters: [],
     generation_manifest: {
-      parser_version: `${CS2D_SOURCE.repository}@${CS2D_SOURCE.commit}${input.replay.generatedBy?.endsWith("+cs-coach.hurt-events.v1") ? "/hurt-events.v1" : ""}`,
+      parser_version: parserVersion(input.replay),
       observation_version: CS2D_OBSERVATION_VERSION,
       signal_version: CS2D_SIGNAL_VERSION,
       planner_version: CS2D_PLANNER_VERSION,
@@ -1422,7 +1430,7 @@ export function buildCs2dAnalysisBundle(input: Cs2dAnalysisInput): Cs2dAnalysisB
     observationVersion: CS2D_OBSERVATION_VERSION,
     signalVersion: CS2D_SIGNAL_VERSION,
     plannerVersion: CS2D_PLANNER_VERSION,
-    parserVersion: `${CS2D_SOURCE.repository}@${CS2D_SOURCE.commit}${input.replay.generatedBy?.endsWith("+cs-coach.hurt-events.v1") ? "/hurt-events.v1" : ""}`,
+    parserVersion: parserVersion(input.replay),
     promptVersion: "cs2d-decision-template/1.3.0",
     limitations
   });

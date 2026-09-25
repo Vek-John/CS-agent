@@ -209,6 +209,17 @@ function rehashBoundaryFixture(bundle: Cs2dAnalysisBundle): Cs2dAnalysisBundle {
 }
 
 describe("cs2d analysis adapter", () => {
+  it.each([
+    [undefined, ""],
+    ["cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1", "/hurt-events.v1"],
+    ["cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2", "/hurt-events.v1/shot-identity.v2"]
+  ] as const)("preserves independent parser provenance for %s", (generatedBy, suffix) => {
+    const bundle = buildCs2dAnalysisBundle({ replay: { ...replayFixture(), generatedBy }, selectedSteamId: "p-t1", demoId: "parser-provenance" });
+    const version = bundle.review_plan.generation_manifest.parser_version;
+    expect(version).toBe(`zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec${suffix}`);
+    expect(deserializeCs2dAnalysisBundle(serializeCs2dAnalysisBundle(bundle)).review_plan.generation_manifest.parser_version).toBe(version);
+  });
+
   it("records the pinned structured-input boundary and supports every player selection", () => {
     const replay = replayFixture();
     expect(CS2D_SOURCE.commit).toBe("dbbe698c9b9c91f9a14cecea92374b4114bf60ec");

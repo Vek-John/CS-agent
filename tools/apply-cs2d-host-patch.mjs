@@ -19,6 +19,7 @@ export const CS2D_PATCH_FILES = Object.freeze([
   resolve(root, 'tools/cs2d-host/patches/0008-teaching-playback.patch'),
   resolve(root, 'tools/cs2d-host/patches/0009-public-round-clock.patch'),
   resolve(root, 'tools/cs2d-host/patches/0010-self-hurt-events.patch'),
+  resolve(root, 'tools/cs2d-host/patches/0011-current-shot-identity.patch'),
 ])
 
 export const CS2D_REUSE_DECISIONS = Object.freeze({
@@ -71,6 +72,8 @@ const CONTROLLED_ORT_ASSETS = new Set([
 ])
 
 const REQUIRED_MARKERS = [
+  { name: 'current shot identity', shotIdentity: true, path: 'packages/parser/src/collector.rs', pattern: /if let Some\(\(p, shooter\)\) = verified_event_pawn\(ctx, ev_i32\(ge, "userid_pawn"\)\)/ },
+  { name: 'shot identity version', shotIdentity: true, path: 'packages/parser/src/lib.rs', pattern: /hurt-events\.v1\.shot-identity\.v2/ },
   { name: 'separate player hurt source', hurtEvents: true, path: 'packages/parser/src/collector.rs', pattern: /hurt_victim_steam\(ctx, ev_i32\(ge, "userid_pawn"\)\)/ },
   { name: 'hurt contract version', hurtEvents: true, path: 'packages/parser/src/lib.rs', pattern: /cs-coach\.hurt-events\.v1/ },
   { name: 'end-of-tick public round clock source', roundClock: true, path: 'packages/parser/src/collector.rs', pattern: /fn on_clock_tick_end/ },
@@ -91,7 +94,7 @@ const REQUIRED_MARKERS = [
     name: 'event-resolved shot actor',
     shotActor: true,
     path: 'packages/parser/src/collector.rs',
-    pattern: /let shooter = steam_from_pawn_handle\(self, ctx, ph\);[\s\S]*?self\.shots\.push\(\(tick, x, y, round1\(pawn_yaw\(p\)\), shooter\)\)/,
+    pattern: /self\.shots\.push\(\(tick, x, y, round1\(pawn_yaw\(p\)\), shooter\)\)/,
   },
   {
     name: 'shot actor assembly',
@@ -343,7 +346,7 @@ function diffCheck(upstream) {
   }
 }
 
-function markerErrors(upstream, includeManagedLibrary = true, includeShotActor = true, includeTeachingPlayback = true, includeRoundClock = true, includeHurtEvents = true) {
+function markerErrors(upstream, includeManagedLibrary = true, includeShotActor = true, includeTeachingPlayback = true, includeRoundClock = true, includeHurtEvents = true, includeShotIdentity = true) {
   const errors = []
   for (const marker of REQUIRED_MARKERS) {
     if (!includeManagedLibrary && marker.managedLibrary) continue
@@ -351,6 +354,7 @@ function markerErrors(upstream, includeManagedLibrary = true, includeShotActor =
     if (!includeTeachingPlayback && marker.teachingPlayback) continue
     if (!includeRoundClock && marker.roundClock) continue
     if (!includeHurtEvents && marker.hurtEvents) continue
+    if (!includeShotIdentity && marker.shotIdentity) continue
     const file = resolve(upstream, marker.path)
     if (!existsSync(file)) {
       errors.push(`${marker.name}: missing ${marker.path}`)
@@ -412,35 +416,38 @@ function inspectPatchedCheckout(upstream) {
   // generated model assets make older reverse checks intentionally inexact).
   // Only the explicitly supported tail upgrades can advance that checkout,
   // and only when each applies cleanly on top of all other validated markers.
-  const managedLibraryPatch = CS2D_PATCH_FILES.at(-5)
-  const pendingManagedLibraryPatch = !reverseStates.at(-5) && Boolean(managedLibraryPatch) &&
+  const managedLibraryPatch = CS2D_PATCH_FILES.at(-6)
+  const pendingManagedLibraryPatch = !reverseStates.at(-6) && Boolean(managedLibraryPatch) &&
     run('git', ['apply', '--check', managedLibraryPatch], {
       cwd: upstream,
       capture: true,
       allowFailure: true,
     }).status === 0
-  const shotActorPatch = CS2D_PATCH_FILES.at(-4)
-  const pendingShotActorPatch = !reverseStates.at(-4) && Boolean(shotActorPatch) &&
+  const shotActorPatch = CS2D_PATCH_FILES.at(-5)
+  const pendingShotActorPatch = !reverseStates.at(-5) && Boolean(shotActorPatch) &&
     run('git', ['apply', '--check', shotActorPatch], {
       cwd: upstream,
       capture: true,
       allowFailure: true,
     }).status === 0
-  const teachingPlaybackPatch = CS2D_PATCH_FILES.at(-3)
-  const pendingTeachingPlaybackPatch = !reverseStates.at(-3) && Boolean(teachingPlaybackPatch) &&
+  const teachingPlaybackPatch = CS2D_PATCH_FILES.at(-4)
+  const pendingTeachingPlaybackPatch = !reverseStates.at(-4) && Boolean(teachingPlaybackPatch) &&
     run('git', ['apply', '--check', teachingPlaybackPatch], {
       cwd: upstream,
       capture: true,
       allowFailure: true,
     }).status === 0
-  const roundClockPatch = CS2D_PATCH_FILES.at(-2)
-  const pendingRoundClockPatch = !reverseStates.at(-2) && Boolean(roundClockPatch) &&
+  const roundClockPatch = CS2D_PATCH_FILES.at(-3)
+  const pendingRoundClockPatch = !reverseStates.at(-3) && Boolean(roundClockPatch) &&
     run('git', ['apply', '--check', roundClockPatch], { cwd: upstream, capture: true, allowFailure: true }).status === 0
-  const hurtEventsPatch = CS2D_PATCH_FILES.at(-1)
-  const pendingHurtEventsPatch = !reverseStates.at(-1) && Boolean(hurtEventsPatch) &&
+  const hurtEventsPatch = CS2D_PATCH_FILES.at(-2)
+  const pendingHurtEventsPatch = !reverseStates.at(-2) && Boolean(hurtEventsPatch) &&
     run('git', ['apply', '--check', hurtEventsPatch], { cwd: upstream, capture: true, allowFailure: true }).status === 0
+  const shotIdentityPatch = CS2D_PATCH_FILES.at(-1)
+  const pendingShotIdentityPatch = !reverseStates.at(-1) && Boolean(shotIdentityPatch) &&
+    run('git', ['apply', '--check', shotIdentityPatch], { cwd: upstream, capture: true, allowFailure: true }).status === 0
   const errors = paths.length > 0 || patchesExactlyApplied
-    ? markerErrors(upstream, !pendingManagedLibraryPatch, !pendingShotActorPatch, !pendingTeachingPlaybackPatch, !pendingRoundClockPatch, !pendingHurtEventsPatch)
+    ? markerErrors(upstream, !pendingManagedLibraryPatch, !pendingShotActorPatch, !pendingTeachingPlaybackPatch, !pendingRoundClockPatch, !pendingHurtEventsPatch, !pendingShotIdentityPatch)
     : []
   const decision = classifyPatchedCheckout({
     head,
@@ -449,7 +456,7 @@ function inspectPatchedCheckout(upstream) {
     patchesExactlyApplied,
     markerErrors: errors,
   })
-  return { decision, head, paths, diffCheck: check, patchesExactlyApplied, markerErrors: errors, pendingManagedLibraryPatch, pendingShotActorPatch, pendingTeachingPlaybackPatch, pendingRoundClockPatch, pendingHurtEventsPatch }
+  return { decision, head, paths, diffCheck: check, patchesExactlyApplied, markerErrors: errors, pendingManagedLibraryPatch, pendingShotActorPatch, pendingTeachingPlaybackPatch, pendingRoundClockPatch, pendingHurtEventsPatch, pendingShotIdentityPatch }
 }
 
 function applyPatches(upstream) {
@@ -499,11 +506,12 @@ async function main(argv = process.argv.slice(2)) {
     process.stdout.write(`[cs2d-host] reused exact patched checkout at ${CS2D_PIN.slice(0, 7)}\n`)
   } else if (inspection?.decision === CS2D_REUSE_DECISIONS.CONTROLLED_SUPERSET) {
     const pendingPatches = [
-      ...(inspection.pendingManagedLibraryPatch ? [CS2D_PATCH_FILES.at(-5)] : []),
-      ...(inspection.pendingShotActorPatch ? [CS2D_PATCH_FILES.at(-4)] : []),
-      ...(inspection.pendingTeachingPlaybackPatch ? [CS2D_PATCH_FILES.at(-3)] : []),
-      ...(inspection.pendingRoundClockPatch ? [CS2D_PATCH_FILES.at(-2)] : []),
-      ...(inspection.pendingHurtEventsPatch ? [CS2D_PATCH_FILES.at(-1)] : []),
+      ...(inspection.pendingManagedLibraryPatch ? [CS2D_PATCH_FILES.at(-6)] : []),
+      ...(inspection.pendingShotActorPatch ? [CS2D_PATCH_FILES.at(-5)] : []),
+      ...(inspection.pendingTeachingPlaybackPatch ? [CS2D_PATCH_FILES.at(-4)] : []),
+      ...(inspection.pendingRoundClockPatch ? [CS2D_PATCH_FILES.at(-3)] : []),
+      ...(inspection.pendingHurtEventsPatch ? [CS2D_PATCH_FILES.at(-2)] : []),
+      ...(inspection.pendingShotIdentityPatch ? [CS2D_PATCH_FILES.at(-1)] : []),
     ]
     for (const patch of pendingPatches) {
       if (!patch) throw new Error('pending patch missing from controlled stack')

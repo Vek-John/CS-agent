@@ -1,0 +1,94 @@
+diff --git a/packages/parser/src/collector.rs b/packages/parser/src/collector.rs
+--- a/packages/parser/src/collector.rs
++++ b/packages/parser/src/collector.rs
+@@ -694,13 +694,12 @@
+                 if skip.iter().any(|s| w.contains(s)) {
+                     return Ok(());
+                 }
+-                if let Some(ph) = ev_i32(ge, "userid_pawn") {
+-                    if let Ok(p) = ctx.entities().get_by_handle(ph as u32 as usize) {
+-                        let x = round1(world_coord(p, "CBodyComponent.m_cellX", "CBodyComponent.m_vecX"));
+-                        let y = round1(world_coord(p, "CBodyComponent.m_cellY", "CBodyComponent.m_vecY"));
+-                        let shooter = steam_from_pawn_handle(self, ctx, ph);
+-                        self.shots.push((tick, x, y, round1(pawn_yaw(p)), shooter));
+-                    }
++                // Geometry and actor must share the same event-time validated pawn.
++                // Unknown ownership keeps a valid tracer; invalid/recycled entities emit no shot.
++                if let Some((p, shooter)) = verified_event_pawn(ctx, ev_i32(ge, "userid_pawn")) {
++                    let x = round1(world_coord(p, "CBodyComponent.m_cellX", "CBodyComponent.m_vecX"));
++                    let y = round1(world_coord(p, "CBodyComponent.m_cellY", "CBodyComponent.m_vecY"));
++                    self.shots.push((tick, x, y, round1(pawn_yaw(p)), shooter));
+                 }
+             }
+             "buytime_ended" => {
+diff --git a/packages/parser/src/props.rs b/packages/parser/src/props.rs
+--- a/packages/parser/src/props.rs
++++ b/packages/parser/src/props.rs
+@@ -230,8 +230,12 @@
+     (packed != 0xffffff).then_some(packed)
+ }
+ 
+-fn hurt_packed_owner(packed: u32, class: &str, index: u32, serial: u32, bindings: impl IntoIterator<Item = (u32, u64)>) -> Option<u64> {
+-    if class != "CCSPlayerPawn" || index != packed & 0x3fff || (serial & 0x3ff) != packed >> 14 { return None; }
++fn packed_pawn_matches(packed: u32, class: &str, index: u32, serial: u32) -> bool {
++    class == "CCSPlayerPawn" && index == (packed & 0x3fff) && (serial & 0x3ff) == (packed >> 14)
++}
++
++fn packed_pawn_owner(packed: u32, class: &str, index: u32, serial: u32, bindings: impl IntoIterator<Item = (u32, u64)>) -> Option<u64> {
++    if !packed_pawn_matches(packed, class, index, serial) { return None; }
+     let mut owner = None;
+     for (handle, steam) in bindings {
+         if handle != packed { continue; }
+@@ -241,21 +245,28 @@
+     owner
+ }
+ 
+-pub(crate) fn hurt_victim_steam(ctx: &Context, handle: Option<i32>) -> Option<String> {
++// A valid pawn with an unknown owner retains geometry; an invalid pawn provides neither.
++pub(crate) fn verified_event_pawn(ctx: &Context, handle: Option<i32>) -> Option<(&Entity, Option<String>)> {
+     let packed = event_pawn_to_packed(handle?)?;
+     let pawn = ctx.entities().get_by_index((packed & 0x3fff) as usize).ok()?;
++    if !packed_pawn_matches(packed, pawn.class().name(), pawn.index(), pawn.serial()) { return None; }
+     let bindings = ctx.entities().iter().filter(|e| e.class().name() == "CCSPlayerController").filter_map(|controller| {
+         match controller.get_property_by_name("m_hPlayerPawn") {
+             Ok(FieldValue::Unsigned32(h)) => Some((*h, prop_u64(controller, "m_steamID"))),
+             _ => None,
+         }
+     });
+-    hurt_packed_owner(packed, pawn.class().name(), pawn.index(), pawn.serial(), bindings).map(|steam| steam.to_string())
++    let owner = packed_pawn_owner(packed, pawn.class().name(), pawn.index(), pawn.serial(), bindings).map(|steam| steam.to_string());
++    Some((pawn, owner))
++}
++
++pub(crate) fn hurt_victim_steam(ctx: &Context, handle: Option<i32>) -> Option<String> {
++    verified_event_pawn(ctx, handle)?.1
+ }
+ 
+ #[cfg(test)]
+ mod hurt_handle_tests {
+-    use super::{event_pawn_to_packed, hurt_packed_owner};
++    use super::{event_pawn_to_packed, packed_pawn_owner};
+     #[test]
+     fn converts_native_event_handle_without_dropping_serial() {
+         // Source probe: native event, packed controller field and packet entity agree.
+@@ -268,7 +279,7 @@
+     fn validates_current_binding_and_only_the_serial_bits_on_the_wire() {
+         let packed = 16089222;
+         let owner = 76561198000000001;
+-        let resolve = |class, index, serial, bindings: Vec<(u32, u64)>| hurt_packed_owner(packed, class, index, serial, bindings);
++        let resolve = |class, index, serial, bindings: Vec<(u32, u64)>| packed_pawn_owner(packed, class, index, serial, bindings);
+         assert_eq!(event_pawn_to_packed((3 << 15) | 134), Some((3 << 14) | 134));
+         assert_eq!(event_pawn_to_packed(0xffffff), None);
+         assert_eq!(resolve("CCSPlayerPawn", 134, 982, vec![(packed, owner)]), Some(owner));
+diff --git a/packages/parser/src/lib.rs b/packages/parser/src/lib.rs
+--- a/packages/parser/src/lib.rs
++++ b/packages/parser/src/lib.rs
+@@ -21,7 +21,7 @@
+ use collector::Collector;
+ 
+ const DEMO_TICK_RATE: f64 = 64.0;
+-const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1";
++const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2";
+ 
+ /// Parses the bytes of a `.dem` in a single pass and returns `(Replay JSON, voice
+ /// blob)`. The `Replay` matches `replay-schema 2D`; the blob follows the `CLV2`

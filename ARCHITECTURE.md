@@ -113,6 +113,12 @@ DecisionSnapshot可选`selfHurtEvents`只投影所选玩家受击的source/sourc
 
 Timeline新增精确DAMAGE发生事实，不携带攻击者或报告数值；若精确事件覆盖健康采样区间，则抑制该区间重复DAMAGE并预留旧me编号，保留其它引用稳定。缺新字段的旧Replay继续使用区间事实，旧历史按保存产物恢复而不重算。Parser generatedBy标记hurt-events.v1，Adapter/Observation/Signal 1.7.0与Timeline 1.1.0记录新派生语义；读取兼容1.6.1及原有历史版本。
 
+### 2.4.3 射击的即时身份与几何来源
+
+`weapon_fire`的native pawn handle必须先转换为network packed形式，核对事件当时当前CCSPlayerPawn的class/index/可见低10位serial和唯一controller完整packed绑定。射击坐标、yaw与可空shooterSteamId使用同一个验证过的pawn，不读tick_start的index→SteamID缓存。有效pawn但owner缺失/无效/冲突时保留几何而actor为null；pawn本身无效、非pawn或serial不匹配时不生成shot，不能使用索引复用后的错误位置。此机制与hurt共享，其他事件及network字段的handle解析不自动迁移。
+
+合法shot格式与排序保持；删除旧错误shot可能改变新版解析的后续数组索引引用，不能把不同parser版本的索引互换。Parser以hurt-events.v1.shot-identity.v2记录生成语义，Adapter manifest同时保留hurt与shot来源版本；旧Replay缺actor继续未知，旧保存产物直接恢复，不重写引用。可确认本人开枪只证明开枪，不证明目标、LOS、再次接触或重复探身，不提升RETURN_AND_FIRE专业判断资格。
+
 ### 2.5 事实、推断、建议分层
 
 - `Fact`：Demo 可直接验证；

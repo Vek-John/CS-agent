@@ -1660,3 +1660,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 验证：最终一次真实WASM 7247ms，总消费7464ms；264hurt归属成功、本人27，23/44候选snapshot与2/4教学包/确定性Narration消费，2/4结果包消费。相同Replay去掉新流是0snapshot/0包，候选路线不变；两包仍INSUFFICIENT_EVIDENCE。182相关测试通过/1既有缺产物跳过，Rust3、TS/Web build/Viewer TS/WASM+Viewer build通过。详见[验证记录](validation/SELF_HURT_EVIDENCE.md)。
 - 学习与限度：编码一致性和当前绑定比“字段存在”更重要；只验证wire携带的serial位。事件发生/报告伤害/实际HP减少必须分开；上下文覆盖增加不等于教学准确率提高。恢复保持旧产物，不自动补新事实。没有外部模型或UI测试，原工具暂停A5未关闭。
 - 执行偏差：初次native探针后，获准首事件诊断时发生编译失败后误运行旧binary，额外全量读一次，已报告；改成build成功门后首事件即停。真实读取总计原probe、误运行旧probe、首事件诊断、最终WASM四次，不掩盖为一次。bulk均留在进程，只有小摘要；源码探针已从上游bin移走，所有进程退出。
+
+
+## 2026-09-25：射击身份与几何必须来自同一即时pawn
+
+- 问题：weapon_fire的几何按index-only get_by_handle取实体，身份从tick_start缓存取SteamID。直接编译生产分支/helper/source2 lookup的合成实体生命周期夹具7项中6红，确定性复现同index serial复用、当前绑定换人/解绑/冲突、非pawn及不可表示native index的错身份或错几何；不声称已有真实Demo已出现错误。
+- 决定：0011只迁移weapon_fire到共用verified_event_pawn，返回同一有效pawn和可空当前owner。无效pawn不出shot，有效pawn/未知owner保留几何和null；hurt wrapper语义等价，其它共享旧归属调用方及network m_hThrower不动。只核对wire低10位serial。新shot-identity.v2与hurt-events.v1并存，不把版本后删除事件导致的索引变化伪装成跨版稳定。
+- 验证：同一原7测试变绿，加2项连续生命周期/signed handle后9通过；parser Rust3、相关186测试/1既有缺产物跳过、Host/Viewer TS、Web与真实WASM/Viewer构建通过。一次真实WASM解析6141ms、消费6311ms；1242shot有actor、本人152入时间线、2 RETURN_AND_FIRE、44候选4cue；hurt264/本人27/23snapshot/2包及clock38snapshot/3包保持。见[紧凑记录](validation/CURRENT_SHOT_IDENTITY.md)。
+- 限制与清理：相同计数只证明样本兼容，不是actor准确率或专业教学质量提升；unknown由生产路径fixture覆盖，实际Demo无null。无native探针/模型/UI/用户DB/安装/发布，不检查全部事件生命周期，旧A5不动。独立默认配置5分钟只读终审无阻断；编译成功门后才消费WASM，所有进程退出、临时目录自动清理，push后释放写入。
