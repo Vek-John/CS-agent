@@ -2,6 +2,13 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 当前任务：Agent传输等待上限（2026-09-26）
+
+- 6bc126b已push/clean，前owner释放且118tests/TS/build通过；01a0d9f3-fd61-7af0-89a7-5a7462b9bdfb串行独占dispatchCoachAgentEvent传输/必要复用deadline helper/tests/docs，主控只读，默认配置。
+- 真实依据：coach-agent-host-adapter.ts的fetch和response.json无期限；Stage3 dispatchSerial await其结果，首请求不settle会卡lifecycleTail。此前只补已失败完成请求UI。preparation-transport已有fetch+body同一20秒deadline/不合作Abort安全settle能力，可复用而非重写队列。
+- A1实际dispatch/Controller小fixture复现悬挂fetch/JSON与阻塞后续；A2依据现有服务预算设置有界期限、释放计时器/Abort listener、晚headers不读body/晚result拒绝发布；A3真实Controller失败反馈与串行后续可进、默认diagnosis回退、成功schema/身份及取消保持，不自动重试，超时不假称服务器未执行；A4相关tests/TS/build；A5架构/学习/证据/任务板commit/push/release。
+- 5分钟现状与预算、15分钟最小实现、10分钟检查，必要5分钟只读review。无Demo/模型/UI服务/用户DB/密钥/部署main，不改Graph/checkpoint/Memory或全局fetch，不重写通用调度系统。纯fake transport/fake clock；owner清自有资源；不将checkpointer mirror悬挂扩大纳入本轮。
+
 ## 已交付：整场完成同步失败反馈（2026-09-26）
 
 - 4de4a91基线clean，前产品f9d9cbd已完成/release，01a0d9e3-8904-7a40-a998-a6ed8a7558df串行独占本轮Stage3 Controller完成结果/Host收尾/既有总结fallback/tests/docs，主控只读，默认配置。
