@@ -22,6 +22,16 @@
 
 大型Demo或浏览器测试先smoke，bulk留在所属Worker/页面，由一个控制器负责整个进程生命周期；超时有退出和清理。同一基础设施边界失败两次先简化harness。保护未提交工作、真实Demo、SQLite/Memory及密钥；不force push，不擅自部署、发布或安装用户应用。缺信息时完成独立可做项；无新信息的失败路径不无限重试。
 
+## 用户纠正与当前独立工作线（2026-09-25）
+
+用户再次明确“怎么停了，继续”：锁屏只阻塞原UI A5，不代表项目整体应等待。主控继续推进不依赖桌面的真实数据、接线、恢复与学习；阶段交付后选择下一项有实际收益的独立工作。不能把无新UI条件当作停掉全部工作的依据，也不制造无价值变更或重复审计。heartbeat同样遵守这条纠正。
+
+当前任务01a0d91d-29b6-7b80-b935-ef39ee0d0966“验证真实路线的自然慢放资格”，基线7ba8d0a（产品b5da690），独占本轮脚本/紧凑证据/必要窄修复及文档，其他owner已release，主控只读。原A5/残留InPrivate窗口保持独立待恢复，不启动CUA。
+
+- 目标/流程：已有Demo只解析一次→先Dog，再必要时同一Replay其余玩家逐个派生真实规则路线→生产Compiler/Narrator/Host当前purpose资格→默认Graph/Host command，形成自然可执行案例和具体拒绝原因；不强制cue/工具，不冒称UI通过。
+- 验收：A1先纯fixture贯通工具入口和状态机，确保smoke覆盖普通SKIP、多cue；A2一次WASM120秒、单进程拥有bulk且每player只留紧凑摘要，最多10人；A3自然候选与门逐项来源有据，默认Policy能自然effect或明确FINISH，至少一个合法case验证Host命令与原窗口/refs；A4真实缺陷先小fixture复现再窄修，相关tests/TS/build后push，无问题只交学习证据；A5记录真实数据与模拟执行界限、清理/释放和下一高价值建议。
+- 风险/阶段：5分钟小smoke、一次解析及所有派生总120秒，20分钟核对/必要修复，10分钟checks/build；每stage先写小摘要再进行下游步骤，不能因恢复辅助失败丢全部证据。只允许一次读Demo，不再新native/browser/harness；同基础设施两败先简化。命令端模拟只证明接线，不关闭真实pause≥12秒/seek/reconnect A5。无外部模型/用户DB/Memory/密钥/安装发布main合并，默认模型/推理，单写owner，不复制大数据。
+
 ## 新接线后的原A5接续（2026-09-25）
 
 - 基线b5da690干净且已push，接线owner已release；主控核对currentEvidenceBound/currentActionRefs、默认Graph自然effect及CURRENT_FOCUS_ACTION_REPLAY记录。唯一新增ACTION_FACT_REPLAY仍要求真实动作、同cue/candidate/frozen窗口、Narrator引用、Outcome实际完成；不改变assessment或专业门。
@@ -69,6 +79,8 @@
 | 已push、本地验收完成 | 真实教学点诊断消费验证 | 01a0d88c-619b-7e72-8133-40fae1e40057；完成并释放写入/进程 | 实际4cue均age0，partial库存未知/独立人数/8输出恢复通过；发现正人数被文案说未知并窄修，180测试/TS/build通过；首次harness失败后获准补读，总2次，见REAL_CUE_RESOURCE_CONSUMPTION.md |
 
 | 已push，本地验收完成 | 现行教学主题与证据工具接线 | 01a0d8c0-2ca6-71e2-a54c-d210097d46b3；已release | b5da690；当前Compiler→Host红→绿，唯一ACTION_FACT_REPLAY保持动作/引用/完整结果窗口门，默认Graph自然effect；257相关用例/TS/build通过，真实UI待原A5 |
+
+| 执行中 | 真实路线自然慢放资格 | 01a0d91d-29b6-7b80-b935-ef39ee0d0966；独占本轮写入 | 基于b5da690新实现，用同一真实Replay验证默认路线/资格/Graph/Host命令，原UI锁屏不阻塞此线 |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
 
