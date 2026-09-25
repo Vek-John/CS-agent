@@ -133,6 +133,8 @@ import {
   type Stage2ToolContext
 } from "../../lib/coaching/coach-agent-host-adapter";
 import { requestTeachingDiagnosisReplay } from "../../lib/coaching/diagnosis-replay";
+import { buildCurrentCueQuestionContext, currentCueQuestionState, updateCurrentCueQuestions, type CurrentCueQuestionState } from "../../lib/coaching/current-cue-questions";
+import { CurrentCueQuestionsPanel } from "./current-cue-questions-panel";
 import { TeachingDiagnosisPanel } from "./teaching-diagnosis-panel";
 import {
   baselineCueCase,
@@ -394,6 +396,7 @@ export function Cs2dPlaybackHost({
   const [session, setSession] = useState<CoachingSessionState>();
   const [teachingCases, setTeachingCases] = useState<Readonly<Record<string, CueCase>>>({});
   const [teachingThreads, setTeachingThreads] = useState<readonly LearningThread[]>([]);
+  const [cueQuestions, setCueQuestions] = useState<CurrentCueQuestionState>();
   const [diagnosticBusyCueId, setDiagnosticBusyCueId] = useState<string>();
   const [diagnosticError, setDiagnosticError] = useState<string>();
   const [diagnosticsEnabled, setDiagnosticsEnabled] = useState(true);
@@ -2312,6 +2315,24 @@ export function Cs2dPlaybackHost({
     ? cue.facts.filter((fact) => fact.availability === "DECISION" && fact.available_at_tick <= cue.decision_tick && cue.observable_fact_refs.includes(fact.id))
     : []);
 
+  const questionInput = {
+    plan: activePlan, session, generation: generationRef.current, diagnosticsEnabled, cueCase: activeTeachingCase,
+    presentableNarration, busy: agentToolBusy || diagnosticBusyCueId === cue?.id, takenOver: userTookOver,
+  };
+  const questionInputRef = useRef(questionInput);
+  questionInputRef.current = questionInput;
+  const questionContext = buildCurrentCueQuestionContext(questionInput);
+  const changeCueQuestion = useCallback((key: string, action: Parameters<typeof updateCurrentCueQuestions>[3]) => {
+    setCueQuestions(previous => {
+      const live = questionInputRef.current;
+      return updateCurrentCueQuestions(previous, key, buildCurrentCueQuestionContext({
+        ...live, plan: planRef.current, session: liveSessionRef.current, generation: generationRef.current,
+        cueCase: liveSessionRef.current?.current_cue_id ? teachingCasesRef.current[liveSessionRef.current.current_cue_id] : undefined,
+        busy: live.busy || Boolean(stage3ControllerRef.current?.busy), takenOver: userTookOverRef.current,
+      }), action);
+    });
+  }, []);
+
   const applyTeachingDiagnosis = useCallback(async (output: ReturnType<typeof runTeachingDiagnosis>): Promise<boolean> => {
     const nextCase = output.cueCase;
     setTeachingCases((current) => ({ ...current, [nextCase.cueId]: nextCase }));
@@ -3355,6 +3376,12 @@ export function Cs2dPlaybackHost({
               </div> : null}
             </section>
           ) : null}
+
+          {questionContext ? <CurrentCueQuestionsPanel
+            state={currentCueQuestionState(cueQuestions, questionContext)}
+            onDraft={text => changeCueQuestion(questionContext.key, { type: "DRAFT", text })}
+            onAsk={question => changeCueQuestion(questionContext.key, { type: "ASK", question })}
+          /> : null}
 
           {session && !userTookOver && cue && cueRevealed && session.phase === "PAUSED_FOR_COACHING" && !presentableNarration ? (
             <section className="cs2d-coach-card" role="status" aria-live="polite">

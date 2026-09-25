@@ -2,12 +2,18 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
-## 当前任务：当前教学点有据追问（2026-09-26）
+## 已交付：当前教学点有据追问（2026-09-26）
 
 - 2203ef7已push/clean且owner释放（20相关tests/TS/build）；01a0da30-b678-7c22-8623-707b3f03635a串行负责当前cue问答接口/纯回答投影/Host与小UI/必要保存/tests/docs，主控只读，默认配置。
 - 产品证据：PRD7.6/MVP4.3要求当前局面文本追问；实际answerCurrentCueQuestion仅legacy页面使用，默认Host没有入口。旧函数只看PAUSED和observable refs、直接advice[0]，无当前OutcomeGate/字段时间/建议资格，不可直接接通。
 - 先10分钟给最小契约与支持问题范围，目标是当前已展示证据内的解释/事实/未知条件及明确越界回退；不做开放聊天或新模型判断。A1实际入口缺失/旧helper不适用的小fixture；A2当前同cue/session且PAUSED+COMPLETE+可信presentable包，回答引用按事实/判断/建议分离，未知不编造/语音只用户假设/职业需已验证样本；A3反思与追问不混淆，已保存诊断不改写、replay/切换时状态隔离、显式重播意图仅调用已有白名单入口，重复无额外诊断/Memory；A4真实生产模块＋Panel交互/SSR、相关tests/TS/build；A5架构/学习/证据/任务板commit/push/release。
 - 风险/边界：先小闭环，再扩大支持意图；10分钟契约、20分钟实现、15分钟验证，必要5分钟独立信息边界审查。优先确定性合法内容投影，0模型/Demo/UI服务/用户DB密钥/安装部署main；旧产品scope不改，有限输出/refs，rawReplay不入问答。持久化若需要小版本先说明，不重构历史/Graph；实际UI未验明确说明，owner清进程。
+
+- 本轮交付：新增默认Host本地只读追问入口，三类明确问法/快捷按钮（部分判断依据、当时已知事实、未知条件）＋300字文本。旧legacy不接通；当前plan/session/cue/segment、PAUSED/完整gate、observer身份、诊断链或presentable narration归属及busy/takeover守卫。只用严格合法的已展示决策facts和既有限制，不生成新建议/判断。
+- 主控确认的收窄：basis使用实际诊断/assessment引用交集，无法解释时直说不完整，空事实明确无可逐条引用的依据；不把全部facts冒称完整verdict说明。manual首版不显示，不写新持久schema/Graph/Memory。职业/语音/错误前提/不明确问题返回具体边界，文本无控制副作用。
+- 保存/交互：Host临时草稿和最近4条，稳定来源key、实时回调门；重播保留，快捷问法不覆盖草稿，切换cue/session/generation或修订隔离。刷新不恢复，不进入历史/总结/长期记忆，不重跑诊断或消费attempt。
+- 验证：旧生产helper无gate、未来OUTCOME混入和空advice特征fixture；新增38项，最终5文件81tests、TS、production build通过。[验收](validation/CURRENT_CUE_QUESTIONS.md)。默认cue_question_boundary_review获授权5分钟内独立只读审查无must-fix，主控真实diff复核的小文案修正已复验；没有并行写入。
+- 文档/release：ARCHITECTURE明确local只读分工，学习/本卡/紧凑验证同步后commit/push/release；自有tests/build退出。实际Panel callback/SSR＋生产gate/reducer状态fixture不冒称完整Host挂载或浏览器验收。无Demo/模型/UI服务/用户DB/密钥/安装部署main；有限问法、manual/重启历史未支持，原UI A5保持。
 
 ## 已交付：诊断数值证据不静默截断（2026-09-26）
 

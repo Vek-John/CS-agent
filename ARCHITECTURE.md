@@ -1494,6 +1494,18 @@ Memory Brief 的 structured recall 优先于语义召回，最多返回 2 个 ac
 
 ## 12. 问答与生成约束
 
+### 12.1 默认Host的本地有据追问
+
+当前默认cs2d Host先提供不调用模型的只读解释投影，与legacy `answerCurrentCueQuestion`及未来生成式Question Adapter分开。首版仅默认路线、同Session/plan/cue/segment、PAUSED、匹配outcome end且实际完成的OutcomeCompletionGate、已揭示cue、现代可信观察者上下文及已呈现完整诊断/讲解时开放；manual、接管、工具/诊断忙碌、未可信历史和反思未提交不提供入口。输入300字以内，仅接受三类明确问法及有限同义表达：部分判断依据、当时已知事实、仍未知条件；不将短语路由称为通用语义理解。
+
+决策事实仅从当前已展示内容对应的cue事实中投影，必须DEMO、DECISION、observed_by_player、唯一引用ID、属于observable_fact_refs且available_at_tick不晚于decision_tick；OUTCOME/未来/全知事实不进入答案。诊断需通过既有CueCase schema和cue/candidate/reflection/hinge/result/verdict归属检查；依据仅取当前诊断evidenceRefs（基础讲解取assessment支持引用）与合法事实的交集，明确只解释部分依据。只有measurement来源或无法对齐时直说不能完整解释该判断，不把全部事实、既有数值或未过建议资格的advice拼成新的专业结论。未知条件只重述该可信表面已显示的限制，空列表不等于所有条件已知；内部ID和tick保留在本地来源引用中，不展示给玩家。
+
+职业案例未接入检索时不编造，语音/战术补充只作为未验证假设，不回写事实或改判；错误前提不被接受，不明确/越界问法给具体可问范围。文本不触发seek、工具、推进或回看，控制沿用已有明确按钮。提问不发送Reflection/Disagreement/Graph/Memory事件，不消耗诊断attempt，不新增模型请求。
+
+Host持有一份有界页面状态（300字草稿、最近4条问答），来源key由generation、session/plan/cue及稳定case revision/当前投影内容构成。回调重新检查live来源与门；相同来源重渲染及重播返回保留，换cue/session或诊断修订不显示旧答案。快捷问题不覆盖另行编辑的草稿。此首版不写历史artifact/Session事件或恢复快照，刷新后清空，不支持跨重启恢复，也不进入总结/长期记忆；不得把下述既有持久化/生成式问答契约描述为此入口已实现。
+
+### 12.2 生成式与领域问答的通用边界
+
 - 问答上下文默认限制在当前 cue、之前已展示内容和用户主动补充的信息；
 - “如果……”问题以条件化回答，不回写成 Demo 事实；
 - 全知回放可以展示某 tick 的真实装备与位置，但决策前问答只能引用该观察者 `ObservableState` 中到期可用的 claim；

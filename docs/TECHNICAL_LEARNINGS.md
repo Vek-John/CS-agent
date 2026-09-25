@@ -1855,3 +1855,12 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：沿用既有最多16项schema，完整按原顺序map，不加排序/分页/折叠。数值列表显式可访问名称，按容器宽度auto-fit，长标签/值允许换行；原标签、单位、0和“决策前最近记录”措辞保持。不改Limitations、来源、判决、trust gate或操作。
 - 验证：真实6项diagnoseTeachingCue→实际Panel SSR以及schema验证16项，两红→绿；只新增3项渲染测试，复用现有unknown/history/回看/异议测试，2文件20项、TS/Web production build通过。[紧凑证据](validation/DIAGNOSIS_MEASUREMENTS_DISPLAY.md)。
 - 限制：SSR不计算布局，窄栏换行仅经CSS审查/构建，未做浏览器视觉或辅助技术检查；不证明数据覆盖、诊断质量或性能提升。无Demo/模型/UI服务/用户DB/密钥操作，原UI A5不变。架构契约未变。
+
+
+## 2026-09-26：当前追问先做好来源边界和不完整解释
+
+- 问题：MVP的当前教学点追问仅legacy helper存在，默认Host无入口；旧函数PAUSED即回答，缺gate/事实时间门，observable refs可带入未来结果，advice为空会抛错，不能直接复用。
+- 决定：默认路线新增本地只读投影与Host受控Panel，明确三类问法：部分判断依据、当时已知事实、未知条件。状态/plan/cue/observer/gate以及当前诊断链归属先验证，facts再按DEMO/DECISION/observed/refs/唯一ID/非未来时间过滤。basis仅取实际判断引用交集，measurement-only或无可解释来源时明说不能完整解释，空事实不得声称仍可列出事实；不复述未过资格的advice或重判。
+- 交互/保存：300字草稿+最近4条只存Host页面状态，稳定来源key与live回调复核隔离session/cue/generation/revision，重播保留，快捷问题不覆盖草稿。manual首版无入口；文本不发播放/反思/异议/Graph/Memory命令，无新持久schema，不声称跨重启恢复或通用语义能力。
+- 验证：旧生产函数三种缺口小fixture、三类smoke及实际Panel callback/SSR，新增38项；最终5文件81tests、TypeScript/Web production build通过。默认cue_question_boundary_review只读信息边界审查无must-fix，主控真实diff复核后空事实文案修正已复验。[验收记录](validation/CURRENT_CUE_QUESTIONS.md)。
+- 限制：只支持明确有限问法，不完整解释数值测量、专业建议、职业案例或条件化战术反事实；无法匹配时给具体范围。未挂载完整Host或运行浏览器/iframe/辅助技术检查，未读Demo/用户DB/密钥或调用模型；原UI A5不变，不证明专业质量或性能提升。

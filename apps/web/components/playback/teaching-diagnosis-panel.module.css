@@ -160,6 +160,7 @@
 .measurements li span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; color: #eaf5ff; font: 650 0.6rem/1.45 ui-monospace, monospace; letter-spacing: 0; }
 .limitations { margin: 0.56rem 0 0; padding-left: 1rem; color: #b9bdc7; font-size: 0.6rem; line-height: 1.48; }
 .error { margin: 0.55rem 0 0; color: #ffaaa4; font-size: 0.65rem; line-height: 1.45; }
+.questionTurn { overflow-wrap: anywhere; }
 
 .actions { display: grid; grid-template-columns: 1.15fr 1fr; gap: 0.38rem; margin-top: 0.68rem; }
 .primary { border-color: rgba(112, 183, 255, 0.62); background: linear-gradient(180deg, #1689f5, #0873d9); color: #fff; box-shadow: inset 0 0.0625rem rgba(255,255,255,0.2), 0 0.5rem 1.1rem rgba(10,132,255,0.14); }
