@@ -30,7 +30,8 @@
 | 已push | 观察语义与联合证据协议 | 同上 | 6ba9e31；1073 tests/TS/Web/Viewer通过；27次live未证明Jev判断质量提高 |
 | 已push | 真实整场复盘体验与可靠性改进 | 01a0d72c-d1b6-7d31-9b5a-8705470ff0be（已结束，释放写入与进程） | d69a290；修复启动阻塞、已看cue回访跳过结果门；真实9回合/4cue到完成、刷新恢复、相关测试/TS/build通过；主控核对关键diff与验证记录 |
 | 已push、验收完成 | 暂停/播放保留带看意图 | 01a0d759-8472-7072-ae94-84ec101ece3b；已完成并释放写入/进程 | bf42aef修复；105测试/TS/build通过，锁屏恢复后原A5四条真实交互及Space/Return通过；见GUIDED_PAUSE_RESUME.md |
-| 阶段实现，真实验收未完成 | 教学演示暂停与继续 | 01a0d77e-085f-7880-9331-c01becde48cd；阶段push后释放写入，服务已停 | 基线bb0bc11；同次工具控制、活动时间预算、重载失效和晚RESULTED防复活已实现；156测试/Host与Viewer TS/Web与Viewer构建通过；真实工具验收受锁屏阻塞，见TEACHING_PLAYBACK_CONTROLS.md |
+| 阶段已push，真实验收未完成 | 教学演示暂停与继续 | 01a0d77e-085f-7880-9331-c01becde48cd；已释放写入，服务已停 | 214d743；156测试/Host与Viewer TS/Web与Viewer构建通过；锁屏阻塞原A5，不自动唤醒重试UI；解锁后先协调所有权再补验，见TEACHING_PLAYBACK_CONTROLS.md |
+| 已分配 | 区分无需演示与实际工具完成 | 01a0d795-539b-7421-afbd-64e3f0e5c42a，独占当前树本轮代码写入 | 真实页面与渲染代码均确认COMPLETED统一声称工具完成；只修复有依据的状态文案，保持工具与Session生命周期，不启动浏览器或重复模型实验 |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
 
