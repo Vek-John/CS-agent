@@ -1526,6 +1526,8 @@ Observation 单独评测视觉确认、脚步/枪声的空间精度、最后已�
 
 Agent Eval 必须同时验证“是否需要额外演示”和“选择哪个 capability”，不能把合法 capability 出现在列表中误算成 Policy 选对。首版维护约 20 个手工 fixture，记录是否需要工具、首选/可接受替代、禁止 capability 与必需 evidence refs，并覆盖 gate、空间/轨迹/measurement 缺失、列表外工具、boundArgs 不可变、失败最多一次替代、每 cue 一个成功 move、takeover、interrupt 幂等、checkpoint/route hash、SessionTheme、Provider 全失败和预算终止。
 
+Host 的会话完成与稳定点持久化回调必须与当前显示所有权绑定：派发前捕获 generation、history open epoch、该 effect 的 operation epoch、runtime 实例及 session/recovery/run 身份，返回和失败时再次核对；新导入、切换复盘、接管、恢复模式、显式放弃或卸载后的旧回调不得修改当前 record/checkpoint/identity/提示。同一身份的 record 快照替换不代表失效。Runtime 队列仅保证存储事件顺序，不授予旧 Promise 当前 UI 的写权限。`SESSION_COMPLETED` 只有 `READY` 且 recoveryId/record 均为空才清理 Host 恢复身份；`REJECTED`、`DEGRADED` 或异常保留当前内存恢复身份与 checkpoint，显示有限失败状态。完成和稳定点 dedup 沿用现状，不引入自动重试。该边界不改变 Session 的完成事实或同场总结收尾。
+
 恢复回归必须覆盖：Replay 缺失时 DORMANT 且零 LLM；同 Demo/player/route/version 在第三个 cue 后回到相同 `CUE_PAUSED`；错误 Demo/player/route/version 拒绝；工具中刷新不重复副作用；成功 callId 继续去重；takeover 回到最近合法边界；IndexedDB/DO 失败时基础回放可用；网络 envelope 不含 File、ArrayBuffer、raw Replay 或 frames。
 
 初始门槛：非法工具、route/tick 修改、决策/结果引用串线和重复副作用均为 0；是否需要工具一致率至少 90%；需要工具时首选 capability 一致率至少 80%；全场路线完成率 100%；每 cue Policy LLM 至多一次、成功视觉工具默认至多一个；`SKIP/FREEZE` Policy 调用为 0。

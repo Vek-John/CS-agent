@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { captureRecoveryBoundaryOwner, dispatchHostRecoveryBoundary, recoveryBoundaryFailureResult, type RecoveryBoundaryOwner } from "./host-recovery-boundary";
+import { describe, expect, it, vi } from "vitest";
 import { indexedDB as fakeIndexedDB } from "fake-indexeddb";
 import type { IDBFactory } from "fake-indexeddb";
 import {
@@ -265,4 +266,129 @@ describe("SessionRecoveryRuntime browser store seam", () => {
 
     await deleteDatabase(databaseName);
   });
+});
+
+
+describe("Host boundary publication with delayed production runtime", () => {
+  it.each(["SESSION_COMPLETED", "STABLE_BOUNDARY_REACHED"] as const)("ignores an old %s response after switching reviews", async type => {
+    const databaseName = `host-boundary-${type}`;
+    const runtime = createSessionRecoveryRuntime({ indexedDB: fakeIndexedDB, databaseName, now: () => 1000 });
+    const a = record("a", 1000); const b = record("b", 1000);
+    await runtime.dispatch({ type: "SESSION_STARTED", eventId: "start-a", record: a });
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let current = true;
+    const host = { record: a as SessionRecoveryRecord | undefined, identity: a.sessionId as string | undefined, checkpoint: a.agentCheckpointId };
+    const onCompleted = vi.fn(() => { host.identity = undefined; host.checkpoint = null; });
+    const accept = vi.fn((result: import("@cs-coach/coach-agent/client").SessionRecoveryResult) => { host.record = result.record ?? undefined; });
+    const pending = dispatchHostRecoveryBoundary({ runtime: { dispatch: async event => { const result = await runtime.dispatch(event); await gate; return result; } },
+      event: type === "SESSION_COMPLETED" ? { type, eventId: "complete-a", recoveryId: a.recoveryId }
+        : { type, eventId: "stable-a", recoveryId: a.recoveryId, boundary: a.boundary, cueProgress: a.cueProgress, routeReadiness: a.routeReadiness, narrationArtifacts: a.narrationArtifacts, agentCheckpointId: "checkpoint-new-a", updatedAt: 1001 },
+      record: a, isCurrent: () => current, onCompleted, accept, onFailure: vi.fn() });
+    current = false;
+    host.record = b; host.identity = b.sessionId; host.checkpoint = b.agentCheckpointId;
+    release(); await pending;
+    try {
+      expect(host).toEqual({ record: b, identity: b.sessionId, checkpoint: b.agentCheckpointId });
+      expect(onCompleted).not.toHaveBeenCalled(); expect(accept).not.toHaveBeenCalled();
+    } finally { await deleteDatabase(databaseName); }
+  });
+});
+
+it.each(["SESSION_COMPLETED", "STABLE_BOUNDARY_REACHED"] as const)("publishes current %s from the real runtime and preserves completion summary eligibility", async type => {
+  const databaseName = `host-current-${type}`;
+  const runtime = createSessionRecoveryRuntime({ indexedDB: fakeIndexedDB, databaseName, now: () => 1000 });
+  const a = record("current", 1000);
+  await runtime.dispatch({ type: "SESSION_STARTED", eventId: "start", record: a });
+  const onCompleted = vi.fn(); const accept = vi.fn(); const onFailure = vi.fn();
+  const owner: RecoveryBoundaryOwner = { generation: 1, historyEpoch: 1, operationEpoch: 1, runtime, sessionId: a.sessionId, record: a, takenOver: false, recovering: false };
+  const isCurrent = captureRecoveryBoundaryOwner(() => owner);
+  owner.record = { ...a };
+  try {
+    await dispatchHostRecoveryBoundary({ runtime, record: a, isCurrent, onCompleted, accept, onFailure,
+      event: type === "SESSION_COMPLETED" ? { type, eventId: "complete", recoveryId: a.recoveryId }
+        : { type, eventId: "stable", recoveryId: a.recoveryId, boundary: a.boundary, cueProgress: a.cueProgress, routeReadiness: a.routeReadiness, narrationArtifacts: a.narrationArtifacts, agentCheckpointId: "new-checkpoint", updatedAt: 1001 } });
+    expect(onFailure).not.toHaveBeenCalled(); expect(accept).toHaveBeenCalledOnce();
+    if (type === "SESSION_COMPLETED") {
+      expect(onCompleted).toHaveBeenCalledOnce();
+      expect(accept.mock.calls[0][0]).toMatchObject({ status: "READY", recoveryId: null, record: null });
+      const { isSessionWrapUpIdentityCurrent } = await import("../coaching/session-wrap-up-presentation");
+      expect(isSessionWrapUpIdentityCurrent({ identity: { sessionId: a.sessionId, runId: a.runId } } as import("@cs-coach/coach-agent/client").CoachAgentResult,
+        { id: a.sessionId, phase: "COMPLETED" }, undefined)).toBe(true);
+    } else {
+      expect(onCompleted).not.toHaveBeenCalled();
+      expect(accept.mock.calls[0][0]).toMatchObject({ status: "READY", record: { recoveryId: a.recoveryId, agentCheckpointId: "new-checkpoint", updatedAt: 1001 } });
+    }
+  } finally { await deleteDatabase(databaseName); }
+});
+
+it.each(["REJECTED", "DEGRADED"] as const)("does not treat real runtime %s as successful completion deletion", async kind => {
+  const databaseName = `host-failure-${kind}`;
+  const runtime = createSessionRecoveryRuntime({ indexedDB: kind === "DEGRADED" ? undefined : fakeIndexedDB, databaseName, now: () => 1000 });
+  const a = record("failed", 1000);
+  await runtime.dispatch({ type: "SESSION_STARTED", eventId: "start", record: a });
+  const onCompleted = vi.fn(); const accept = vi.fn(); const onFailure = vi.fn();
+  try {
+    await dispatchHostRecoveryBoundary({ runtime, record: a, isCurrent: () => true, onCompleted, accept, onFailure,
+      event: { type: "SESSION_COMPLETED", eventId: "complete", recoveryId: kind === "REJECTED" ? "not-stored" : a.recoveryId } });
+    expect(onCompleted).not.toHaveBeenCalled(); expect(accept).not.toHaveBeenCalled();
+    expect(onFailure).toHaveBeenCalledWith(expect.objectContaining({ status: kind }));
+    const shown = recoveryBoundaryFailureResult(a, onFailure.mock.calls[0][0]);
+    expect(shown).toMatchObject({ status: kind, recoveryId: a.recoveryId, record: a, effects: [] });
+    expect(shown.record?.agentCheckpointId).toBe(a.agentCheckpointId);
+  } finally { if (kind !== "DEGRADED") await deleteDatabase(databaseName); }
+});
+
+it.each(["generation", "history", "operation", "runtime", "session", "record", "run", "takeover", "recovering", "unmount"] as const)("does not publish a pending result after owner %s changes", async change => {
+  const a = record("owner", 1000);
+  let release!: (result: import("@cs-coach/coach-agent/client").SessionRecoveryResult) => void;
+  const runtime = { dispatch: vi.fn(() => new Promise<import("@cs-coach/coach-agent/client").SessionRecoveryResult>(resolve => { release = resolve; })) };
+  const owner: RecoveryBoundaryOwner = { generation: 1, historyEpoch: 1, operationEpoch: 1, runtime, sessionId: a.sessionId, record: a, takenOver: false, recovering: false };
+  const isCurrent = captureRecoveryBoundaryOwner(() => owner);
+  const onCompleted = vi.fn(); const accept = vi.fn(); const onFailure = vi.fn();
+  const pending = dispatchHostRecoveryBoundary({ runtime, record: a, event: { type: "SESSION_COMPLETED", eventId: "complete", recoveryId: a.recoveryId }, isCurrent, onCompleted, accept, onFailure });
+  if (change === "generation") owner.generation++;
+  if (change === "history") owner.historyEpoch++;
+  if (change === "operation") owner.operationEpoch++;
+  if (change === "runtime") owner.runtime = { dispatch: vi.fn() };
+  if (change === "session") owner.sessionId = "new-session";
+  if (change === "record") owner.record = record("new", 1000);
+  if (change === "run") owner.record = { ...a, runId: "new-run" };
+  if (change === "takeover") owner.takenOver = true;
+  if (change === "recovering") owner.recovering = true;
+  if (change === "unmount") owner.runtime = undefined;
+  release({ schemaVersion: "session-recovery-runtime.v1", status: "READY", recoveryId: null, record: null, effects: [], reason: null });
+  await pending;
+  expect(onCompleted).not.toHaveBeenCalled(); expect(accept).not.toHaveBeenCalled(); expect(onFailure).not.toHaveBeenCalled();
+});
+
+it.each([false, true])("catches a rejected dispatch without clearing recovery (stale=%s)", async stale => {
+  const a = record("throw", 1000);
+  let fail!: (error: Error) => void;
+  const runtime = { dispatch: () => new Promise<import("@cs-coach/coach-agent/client").SessionRecoveryResult>((_, reject) => { fail = reject; }) };
+  let current = true;
+  const onCompleted = vi.fn(); const accept = vi.fn(); const onFailure = vi.fn();
+  const pending = dispatchHostRecoveryBoundary({ runtime, record: a, event: { type: "SESSION_COMPLETED", eventId: "complete", recoveryId: a.recoveryId },
+    isCurrent: () => current, onCompleted, accept, onFailure });
+  current = !stale; fail(new Error("private store failure"));
+  await expect(pending).resolves.toBeUndefined();
+  expect(onCompleted).not.toHaveBeenCalled(); expect(accept).not.toHaveBeenCalled(); expect(onFailure).toHaveBeenCalledTimes(stale ? 0 : 1);
+  if (!stale) expect(onFailure).toHaveBeenCalledWith();
+});
+
+
+it("allows a newer record snapshot of the same owner and rejects foreign stable results", async () => {
+  const a = record("same", 1000); const other = record("foreign", 1000);
+  const result = { schemaVersion: "session-recovery-runtime.v1" as const, status: "READY" as const, recoveryId: other.recoveryId, record: other, effects: [], reason: null };
+  const runtime = { dispatch: vi.fn().mockResolvedValue(result) };
+  const owner: RecoveryBoundaryOwner = { generation: 1, historyEpoch: 1, operationEpoch: 1, runtime, sessionId: a.sessionId, record: a, takenOver: false, recovering: false };
+  const isCurrent = captureRecoveryBoundaryOwner(() => owner);
+  owner.record = { ...a };
+  expect(isCurrent()).toBe(true);
+  const onCompleted = vi.fn(); const accept = vi.fn(); const onFailure = vi.fn();
+  await dispatchHostRecoveryBoundary({ runtime, record: a, isCurrent, onCompleted, accept, onFailure,
+    event: { type: "STABLE_BOUNDARY_REACHED", eventId: "stable", recoveryId: a.recoveryId, boundary: a.boundary, cueProgress: a.cueProgress, routeReadiness: a.routeReadiness, narrationArtifacts: a.narrationArtifacts, agentCheckpointId: a.agentCheckpointId, updatedAt: 1001 } });
+  expect(accept).not.toHaveBeenCalled(); expect(onCompleted).not.toHaveBeenCalled();
+  expect(onFailure).toHaveBeenCalledOnce();
+  expect(recoveryBoundaryFailureResult(a, result)).toMatchObject({ status: "DEGRADED", record: a, recoveryId: a.recoveryId });
 });

@@ -1,5 +1,7 @@
 "use client";
 
+import { captureRecoveryBoundaryOwner, dispatchHostRecoveryBoundary, recoveryBoundaryFailureResult } from "../../lib/recovery/host-recovery-boundary";
+
 import {
   useCallback,
   useEffect,
@@ -366,6 +368,7 @@ export function Cs2dPlaybackHost({
   const [narrationByCue, setNarrationByCue] = useState<Readonly<Record<string, NarrationBundle>>>({});
   const preparationRef = useRef<ReturnType<typeof createReviewPreparationOrchestrator> | undefined>(undefined);
   const generationRef = useRef(0);
+  const recoveryBoundaryOperationRef = useRef(0);
   const recoveryRuntimeRef = useRef<ReturnType<typeof createSessionRecoveryRuntime> | undefined>(undefined);
   const recoveryRecordRef = useRef<SessionRecoveryRecord | undefined>(undefined);
   const recoveryModeRef = useRef(false);
@@ -1016,6 +1019,7 @@ export function Cs2dPlaybackHost({
   }, [acceptRecoveryResult]);
 
   const discardRecovery = useCallback(() => {
+    recoveryBoundaryOperationRef.current += 1;
     const runtime = recoveryRuntimeRef.current;
     const record = recoveryRecordRef.current;
     if (!runtime || !record) return;
@@ -2762,19 +2766,32 @@ export function Cs2dPlaybackHost({
     // Rehydrated UI is not a newly verified stable boundary. Only the explicit
     // reconnect path may update recovery until the handshake has completed.
     if (!runtime || !current || !session || userTookOverRef.current || recoveryModeRef.current) return;
+    const beginBoundaryOperation = () => {
+      recoveryBoundaryOperationRef.current += 1;
+      return captureRecoveryBoundaryOwner(() => ({
+        generation: generationRef.current, historyEpoch: historyOpenEpochRef.current,
+        operationEpoch: recoveryBoundaryOperationRef.current, runtime: recoveryRuntimeRef.current,
+        sessionId: liveSessionRef.current?.id, record: recoveryRecordRef.current,
+        takenOver: userTookOverRef.current, recovering: recoveryModeRef.current,
+      }));
+    };
+    const onFailure = (result?: SessionRecoveryResult) => {
+      // A failed or degraded delete is not proof that durable recovery was removed.
+      // Keep the current identity, checkpoint and record; only publish the failure status.
+      setRecoveryResult(recoveryBoundaryFailureResult(recoveryRecordRef.current ?? current, result));
+    };
     if (session.phase === "COMPLETED") {
       if (completedRecoveryRef.current === current.recoveryId) return;
       completedRecoveryRef.current = current.recoveryId;
-      void runtime.dispatch({
+      void dispatchHostRecoveryBoundary({ runtime, record: current, isCurrent: beginBoundaryOperation(), onFailure, event: {
         type: "SESSION_COMPLETED",
         eventId: recoveryEventId("recovery-session-completed"),
         recoveryId: current.recoveryId,
-      }).then((result) => {
+      }, onCompleted: () => {
         latestAgentCheckpointRef.current = undefined;
         recoveryIdentityRef.current = undefined;
         setRecoveryIdentity(undefined);
-        acceptRecoveryResult(result);
-      });
+      }, accept: acceptRecoveryResult });
       return;
     }
     const stable = currentStableRecoveryRecord(latestAgentCheckpointRef.current);
@@ -2788,7 +2805,7 @@ export function Cs2dPlaybackHost({
     ]);
     if (stableRecoveryKeyRef.current === key) return;
     stableRecoveryKeyRef.current = key;
-    void runtime.dispatch({
+    void dispatchHostRecoveryBoundary({ runtime, record: current, isCurrent: beginBoundaryOperation(), onFailure, onCompleted: () => {}, event: {
       type: "STABLE_BOUNDARY_REACHED",
       eventId: recoveryEventId("recovery-stable-boundary"),
       recoveryId: current.recoveryId,
@@ -2798,7 +2815,7 @@ export function Cs2dPlaybackHost({
       narrationArtifacts: stable.narrationArtifacts,
       agentCheckpointId: stable.agentCheckpointId,
       updatedAt: stable.updatedAt,
-    }).then(acceptRecoveryResult);
+    }, accept: acceptRecoveryResult });
   }, [acceptRecoveryResult, currentStableRecoveryRecord, narrationByCue, routeState, session, userTookOver]);
 
   useEffect(() => {

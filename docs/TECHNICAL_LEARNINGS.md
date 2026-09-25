@@ -1767,3 +1767,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：复用当前 result/manifest/artifact schema，三种有限本地失败为 FALLBACK/DETERMINISTIC，统一生产完成保存入口；不让空主题的确定性 helper 将失败包装成 NO_REPEATED_THEME，不保存异常原文。恢复用同一 presentation，旧缺失保持未知，旧成功不改写/重生成。
 - 验证：生产完成保存入口→HistoryPersistenceController→append validator→restoreHistoryControlPlane→stored validator→实际面板 SSR，覆盖三失败、正常无主题、旧本地/DeepSeek、旧缺失。保存拒绝仍完成和自由 seek；generation/run/review/revision/接管变更拒绝迟到发布。只读复核发现正常完成清理临时identity会误丢同场总结，新增1红→绿，以保留session身份和COMPLETED状态承接。84相关tests、TS/Web production build；详见[验证](validation/SESSION_SUMMARY_FAILURE_RECOVERY.md)。
 - 限制/下一步：没有用户SQLite、真实模型/Demo/浏览器验证，原UI暂停A5仍未完成；不证明专业判断或真实延迟改善。保存层不可用时仅显示保存失败，重开仍诚实显示未保存。可独立检查Session完成恢复写入的迟到dispatch是否也需要捕获身份：当前Host完成回调清理recoveryIdentity/acceptRecoveryResult未见同级guard，先用小fixture证实再决定修复，不扩成框架重构。
+
+
+## 2026-09-26：Runtime 串行不等于 Host 回调仍拥有当前会话
+
+- 问题：完成持久化返回无条件清理恢复identity/checkpoint；稳定点返回直接accept。Host已切换B时，A的旧Promise仍可清空B或把record换回A。抽取原两回调为实际Host使用入口，真实BrowserRuntime＋隔离fake IndexedDB＋延迟返回复现2红。
+- 决定：仅该effect使用小发布入口，捕获generation/history epoch/operation epoch/runtime/session/recovery/run；返回与失败均守卫，显式discard只新增失效序号，不扩大重写其流程。正常同身份record更新可放行；完成仅READY/null/null清理，真实DEGRADED可能只是内存delete，不能冒充耐久删除成功。失败保留当前记录、checkpoint和身份。
+- 验证：2红→绿；10种owner变化、当前完成/稳定点、真实拒绝/降级、抛错/迟到抛错、外来结果、同身份快照更新与139eb95总结收尾兼容。5文件74tests、TS与Web production build通过；独立默认配置只读终审无must-fix，建议的同身份快照正例已补，22项runtime/Host子集再通过。
+- 限制/后续：fake IDB不是用户SQLite或真实UI，原暂停A5仍未验证；未改runtime队列/DB/完成门，未新增自动重试。旁边discardRecovery自己的then仍无身份guard且无条件清理，是独立可复现候选，后续先用小fixture验证，不在本轮扩大Host审计。[证据](validation/STALE_RECOVERY_BOUNDARY.md)。
