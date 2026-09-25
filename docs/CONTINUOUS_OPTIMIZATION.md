@@ -2,6 +2,12 @@
 
 更新时间：2026-09-25。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 当前独立任务：放弃恢复的失败与迟到回调（2026-09-26）
+
+- 6509747已push且owner释放；01a0d976-bf65-7ad1-a1d9-4d57c30583c7串行独占discardRecovery窄接线/必要helper/tests/docs，主控只读，继承默认配置。真实代码约1021：DISCARD_RECOVERY任意返回都会清mode/landing/checkpoint/identity，无跨review guard。
+- 目标/验收：A1生产派发入口+deferred runtime/fake IDB复现跨review迟到与REJECTED/DEGRADED误清理；A2只在当前操作且耐久删除成功清理，失败保留可恢复资料并明确状态，迟到成功/异常不影响新review；A3初始DORMANT无liveSession也能正常放弃、恢复中放弃仍能取消，旧boundary失效保持；A4相关tests/TS/build及6509747/139eb95回归；A5必要架构/学习/证据、commit/push/release。
+- 范围不扩至全Host审计、通用取消框架或Runtime/DB重写，无Demo/模型/UI/服务/用户DB/Memory/密钥/部署main。风险是照搬boundary guard要求liveSession导致DORMANT无法放弃；先5分钟小复现，15分钟窄修，10分钟验证，必要5分钟只读终审，owner清理自有进程与fake存储。无证据不造变更。
+
 ## 已交付：旧复盘迟到恢复回调（2026-09-26）
 
 - 139eb95已push且owner释放，新任务01a0d96f-f08d-7470-83b7-cb56bd774cf6串行独占Host完成/同effect稳定边界回调、必要小helper/tests与本轮docs，主控只读，继承默认配置。
