@@ -41,7 +41,17 @@
 | 已push、本地验收完成 | 诊断资源时效与回合绑定 | 01a0d850-9c52-7803-85ca-03c7c8f5576e；完成并释放写入/进程 | 过期/跨回合2红→绿，同回合半秒门与独立可信decisionRoster落地；147测试/TS/build通过，见DIAGNOSTIC_RESOURCE_FRESHNESS.md |
 | 已push、本地验收完成 | 可信部分资源的独立测量 | 01a0d870-79b9-7d22-ae10-fc28ec2ceb6b；完成并释放写入/进程 | 70HP/80甲与未知helmet两红→绿，partial compact和三值资源背景落地；177测试/TS/build通过，见PARTIAL_DIAGNOSTIC_RESOURCES.md |
 
+| 待执行 | 真实教学点诊断消费验证 | 01a0d88c-619b-7e72-8133-40fae1e40057；交接后独占验证与必要窄修复 | 近三轮资源修复只用fixture；一次现有Demo验证实际4cue的Host投影、诊断测量/未知说明及恢复，零模型，不扩大完整性审查 |
+
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
+
+## 本轮任务卡：真实教学点诊断消费验证（2026-09-25）
+
+- 基线41799f6已push干净，partial任务release；01a0d88c-619b-7e72-8133-40fae1e40057独占本轮小验证工具/证据/docs及真实发现的必要窄修复，主控只读。默认配置，无需额外子代理或数据复制；使用现有WASM和授权Demo。
+- 目标：最近utility/freshness/partial三轮已验证fixture，但尚无实际Demo→当前Host诊断的消费证据。验证真实正式cue能显示哪些可靠血量/护甲/道具/人数、哪些应未知，当前讲解不泄漏来源不明数值。不重复shot/hurt/clock源头实验或同Jev拒判集。
+- 流程/验收：A1先以小fixture smoke复用脚本/import和生产Host调用，避免解析后才发现脚本错误；A2原有60.6MB Demo一次WASM解析（120秒），同进程持有Replay、Adapter及当前4cue，经过生产Host submission/诊断和保存往返；A3回传逐cue紧凑测量/未知原因/样本age/引用对照，原始帧和身份留owner，明确人工RISK/TRADE探针选择不是用户真实意图；A4若有真实功能缺陷先用最小fixture复现再修，在同次解析内留紧凑必要数据避免重复读Demo，相关tests/TS/build后push；无缺陷则只交实际学习证据，不制造代码变更；A5记录局限与清理、任务板及提交push。
+- 边界：没有UI或完整播放器验收，不关闭原工具暂停A5；不访问用户数据库/记忆或保存探针用户意图，不调用模型、不改教学阈值/路线、不伪造工具/cue、不重建Parser/Viewer（自e90493b未改源码，现有构建可复用），不做hash审计。旧历史仍仅隔离内存恢复。
+- 风险/阶段：5分钟入口smoke、一次最终解析120秒、15分钟核对真实测量与必要窄修复；bulk不经工具输出/持久文件，固定一个进程owner，最终只摘要。编译或smoke失败不得进入Demo解析；同基础设施失败两次先简化，不换多套harness。无生产修改则不重复177测试/TS/build，明确沿用已通过基线；新增工具按其实际风险做小验证。执行者负责所有进程/临时文件清理，保留用户Demo/缓存/其他树，不安装部署main合并。
 
 ## 本轮任务卡：可信部分资源的独立测量（2026-09-25）
 
