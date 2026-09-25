@@ -149,7 +149,7 @@ Adapter 1.8.0 只为已有 DEATH / HP_CHANGE 候选补充处理窗口本人开�
 
 ### 2.8 结构化事实优先，LLM 负责教学判断与表达
 
-Parser、SceneIndex、ObservationBuilder、CandidateGenerator 和 PlanCompiler 先提供可追溯的结构化事实与执行计划。Director LLM 在受限候选摘要上判断教学价值；Narrator LLM 只对 PlanCompiler 已锁定的候选和主要重点，在分离的 `CoachingPackage`/`OutcomePackage` 上构建结构化讲解。模型不能读取原始 Demo、任意数据库或直接控制播放器。学习排序器、视觉模型和端到端模型只能替换明确的 Director 子模块，并且必须有黄金集、版本、回滚和确定性校验。
+Parser、SceneIndex、ObservationBuilder、CandidateGenerator 和 PlanCompiler 先提供可追溯的结构化事实与执行计划。Director LLM 在受限候选摘要上判断教学价值；Narrator 只对 PlanCompiler 已锁定的候选和主要重点，在分离的 `CoachingPackage`/`OutcomePackage` 上构建结构化讲解；当前封闭语义协议由本地确定性投影完成，旧匿名协议仍保留受校验的 Provider 路径。模型不能读取原始 Demo、任意数据库或直接控制播放器。学习排序器、视觉模型和端到端模型只能替换明确的 Director 子模块，并且必须有黄金集、版本、回滚和确定性校验。
 
 ### 2.9 长期记忆用户控制与部署内唯一真相
 
@@ -268,7 +268,7 @@ flowchart TB
     Playback --> Host
     Playback --> Viewer
     Director --> LLM["LLM Adapter"]
-    Narrator --> LLM
+    Narrator -.->|兼容协议| LLM
     Runtime --> Effect["AgentEffect\nToolRequest / ToolResult"]
     Effect --> Playback
     Web["可选 Web / Cloudflare 形态"] -. 既有 Adapter .-> Host
@@ -338,7 +338,7 @@ flowchart LR
     Obs --> Evidence
     Evidence --> CoachingPackage["CoachingPackage\n决策局面 / 实际动作 / Advice"]
     Evidence --> OutcomePackage["OutcomePackage\n结果事实 / 胜率影响"]
-    CoachingPackage --> Narrator["Narrator LLM\n构建五字段讲解"]
+    CoachingPackage --> Narrator["Narrator\n封闭讲解本地投影 / 兼容 Provider"]
     OutcomePackage --> Narrator
     Narrator --> Sealed["NarrationBundle\nPREPARED / 密封"]
     Sealed --> Session["SessionOrchestrator"]
@@ -990,6 +990,12 @@ NarrationBundle
 
 Narrator 只能读取当前 cue 的两份包；`forbidden_refs`、package namespace、可用时间和引用集合由代码生成并在请求前后校验。输出 schema 不包含 segment、顺序、tick 或播放器字段，且 `primary_focus_code` 必须原样回显。OutcomePackage 不得复用 CoachingPackage 的对象引用；bundle 的 `state` 由确定性运行时设置，模型无权输出或修改。
 
+当前 `approvedNarration` 协议的输出语义已经封闭：Provider 校验只接受批准的五字段文本、refs、confidence 与 limitations，领域输出门继续核对确定性投影。因此持有完整领域包的 Host 客户端不再发送复制请求：`requestNarrationBundle` 以该协议字段的存在识别当前路径，独立从 `CoachingPackage` / `OutcomePackage` 重新建立匿名请求和批准文本，不信任调用方传入的 approved 内容、其他 request 字段或 aliases。随后复用共享纯 `narrator-validation` 的请求/schema/引用/封闭语义检查，再映射回真实 refs 并执行原领域验证；不得将仅通过匿名 shape 的文本视为领域批准。
+
+正常本地完成使用既有 `DISABLED` status、`DETERMINISTIC` provider、`CLOSED_SEMANTIC_PROJECTION` reason 和确定性讲解版本，不伪报模型成功、不附模型名；编排沿用可开始的 `FALLBACK` readiness。若领域有效投影超出 Provider wire 约束，则只在 `NarratorValidationError` 时进入原确定性生成＋领域验证 fallback，标记 `LOCAL_WIRE_VALIDATION_FAILED`；不放宽 wire 门，也不让原本可回退的讲解停留 PENDING。领域身份/命名空间或映射后的领域错误仍拒绝。缺少 approved 字段的旧协议继续原 HTTP/Provider/期限路径；匿名服务器不掌握完整领域上下文，不能为了省调用盲信外部 approved 字段。服务器原验证和未来生成适配器保留。
+
+本地快路径开始及返回前检查取消；Controller 的 generation/取消门继续拦截迟到发布。已准备或恢复的 narration 先按既有身份/就绪规则复用，不进入新请求、不改写旧正文/来源，不新增分析或记忆副作用。该变化只减少准备请求，完整 bundle 仍在结果门前密封，不改变 Director、判断、路线或五字段信息分离。
+
 `NarrationBundle` 的五字段是证据防火墙，不是五张用户卡。播放器侧只允许通过确定性的 `ThreeStageCoachingView` 投影展示三段；该投影可以合并文案，但不能改变、补造或跨 namespace 搬运 refs。结构化玩家状态优先用图标/短标签展示，字段不可得时省略而不是堆叠“未知”。
 
 ### 7.8 Playback 协议
@@ -1320,7 +1326,7 @@ priority = proximity_to_playhead
 
 当缓冲下降时，依次降级：延后额外职业案例、使用已验证结构化模板讲解、暂停非交互批处理；不得跳过事实校验。若仍追上后台，Session 在下一个 segment 的自然边界进入 `BUFFERING`，保持当前画面和基础播放控制，优先准备该 cue，达到 `READY/FALLBACK` 后自动恢复；不得把未就绪或 UNKNOWN 区间临时改成 SKIP。
 
-Director与单cue Narrator的Host客户端对fetch及response.json使用同一个20秒请求期限，容纳现有15秒服务端模型预算和5秒本地开销；不得给正文另开期限或自动retry。`LOCAL_REQUEST_TIMEOUT`走原确定性路线/五字段讲解回退与校验，不绕过引用或信息门。父signal已取消时零请求；进行中父取消立即以AbortError退出，即使transport不响应abort也不得发布fallback或READY_TO_START。客户端结算后移除本轮timer/listener，迟到headers/body/error不能复活旧generation。Controller在实际取消后不再启动额外fallback，冻结路线与已存恢复内容仍复用。20秒是异步单请求等待界线，不是整段准备或启动的总延迟保证。
+Director与仍需HTTP的旧协议单cue Narrator客户端对fetch及response.json使用同一个20秒请求期限，容纳现有15秒服务端模型预算和5秒本地开销；不得给正文另开期限或自动retry。`LOCAL_REQUEST_TIMEOUT`走原确定性路线/五字段讲解回退与校验，不绕过引用或信息门。父signal已取消时零请求；进行中父取消立即以AbortError退出，即使transport不响应abort也不得发布fallback或READY_TO_START。客户端结算后移除本轮timer/listener，迟到headers/body/error不能复活旧generation。Controller在实际取消后不再启动额外fallback，冻结路线与已存恢复内容仍复用。20秒是异步单请求等待界线，不是整段准备或启动的总延迟保证。
 
 ### 9.3 复盘阶段
 

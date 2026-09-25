@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { CoachingPackage, OutcomePackage } from "@cs-coach/contracts";
 import { buildNarratorRequestContext, requestNarrationBundle } from "./narrator-contract";
 
-function context() {
+function context(closed = false) {
   const coaching: CoachingPackage = {
     cueId: "cue-final",
     candidateId: "candidate-final",
@@ -25,13 +25,15 @@ function context() {
     confounders: [],
     limitations: []
   };
-  return buildNarratorRequestContext(coaching, outcome);
+  const result = buildNarratorRequestContext(coaching, outcome);
+  if (!closed) delete result.request.approvedNarration;
+  return result;
 }
 
 function providerResponse() {
   return {
     status: "SUCCEEDED",
-    bundle: context().request.approvedNarration,
+    bundle: context(true).request.approvedNarration,
     manifest: { status: "SUCCEEDED", provider: "DEEPSEEK", model: "deepseek-v4-flash", promptVersion: "provider/1", limitations: [] }
   };
 }
@@ -45,7 +47,7 @@ describe("client narrator alias seam", () => {
     expect(result.bundle.candidateId).toBe("candidate-final");
     expect(result.bundle.currentSituation.refs).toEqual(["decision-1"]);
     expect(result.bundle.playerAction.refs).toEqual(["action-1"]);
-    expect(result.bundle.betterPlay.refs).toEqual(context().request.approvedNarration?.betterPlay.refs.map((ref) => ref === "v1" ? "advice-1" : ref === "e1" ? "evidence-1" : "decision-1"));
+    expect(result.bundle.betterPlay.refs).toEqual(context(true).request.approvedNarration?.betterPlay.refs.map((ref) => ref === "v1" ? "advice-1" : ref === "e1" ? "evidence-1" : "decision-1"));
     expect(result.bundle.outcomeImpact.refs).toEqual(["outcome-1", "measurement-cue-final"]);
   });
 

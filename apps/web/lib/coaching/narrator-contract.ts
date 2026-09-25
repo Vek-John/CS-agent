@@ -1,3 +1,4 @@
+import { NarratorValidationError, parseNarrationRequest, parseProviderBundle } from "./narrator-validation";
 import { assertPreparationActive, PreparationRequestTimeout, requestPreparationJson } from "./preparation-transport";
 import { playerFacingLimitation } from "./decision-presentation";
 import type { CoachingPackage, NarrationBundle, NarrationManifest, NarrationResult, ObservationClaim, OutcomePackage } from "@cs-coach/contracts";
@@ -218,12 +219,39 @@ function fallbackResult(context: NarratorRequestContext, reason: string): Narrat
   return { status: "FALLBACK", bundle, manifest };
 }
 
-/** Client seam: anonymize once, call the single-cue provider, then remap and validate. */
+/** Locally validate closed projections; retain bounded provider transport for legacy packets. */
 export async function requestNarrationBundle(
   context: NarratorRequestContext,
   options: { endpoint?: string; fetcher?: NarrationFetcher; signal?: AbortSignal } = {}
 ): Promise<NarrationResult> {
   assertPreparationActive(options.signal);
+  if (context.request.approvedNarration !== undefined) {
+    // The supplied approved text/aliases are not an authority. Rebuild from the
+    // domain packages, then pass the same wire and domain gates as provider output.
+    const rebuilt = buildNarratorRequestContext(context.coachingPackage, context.outcomePackage);
+    if (!narrationJobIsEligible(rebuilt)) return fallbackResult(rebuilt, "NARRATION_NOT_ELIGIBLE");
+    let anonymousBundle: NarrationBundle;
+    try {
+      const request = parseNarrationRequest(rebuilt.request, new TextEncoder().encode(JSON.stringify(rebuilt.request)).byteLength);
+      anonymousBundle = parseProviderBundle(request.approvedNarration, request);
+    } catch (error) {
+      assertPreparationActive(options.signal);
+      if (!(error instanceof NarratorValidationError)) throw error;
+      // A domain-valid projection can exceed provider wire limits. Preserve the
+      // existing validated local fallback instead of leaving readiness PENDING.
+      return fallbackResult(rebuilt, "LOCAL_WIRE_VALIDATION_FAILED");
+    }
+    const bundle = mapNarrationBundle(anonymousBundle, rebuilt);
+    assertPreparationActive(options.signal);
+    return {
+      status: "DISABLED",
+      bundle,
+      manifest: {
+        status: "DISABLED", provider: "DETERMINISTIC", reason: "CLOSED_SEMANTIC_PROJECTION",
+        promptVersion: "review-planner/deterministic-narration/1.0.0", limitations: [],
+      },
+    };
+  }
   if (!narrationJobIsEligible(context)) return fallbackResult(context, "NARRATION_NOT_ELIGIBLE");
   const fetcher = options.fetcher ?? fetch;
   try {

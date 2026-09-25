@@ -1743,3 +1743,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：严格 decision<shot<reveal 且早于同回合已知死亡，要求决策时存活/明确本人，不扩窗口和提名；单候选一事实、最多3原事件refs。presentationOnly标记排除两处动作排序加分及过程/结构化决策/不可回撤判断，保持旧动作缺省语义，诊断strict传输保留。Adapter/signals1.8、Generator2.4，旧1.7可读。
 - 验证：326相关用例通过/1既有WebGPU产物缺失skip，TS/脚本TS/Web build通过；独立复核非法死亡时间3红→绿并闭合。原Demo一次解析6395ms、总6795ms；44候选10窗口补事实=9独立shot，四正式cue自然effect0→2（R5/c2、R7/c3），消融全部候选assessment/Director摘要/路线选点窗口不变。旧无actor和序列化恢复对照通过。
 - 限制：发生事实不证明专业质量；规则路线与模型UI路线不同，ACK/进度模拟不关闭原A5，未跑新模型/浏览器/Parser重建。下一独立方向可用假provider检查Narrator是否把仅发生事实误扩写为接触/命中/错误，先合同验证而非live调用。[证据](validation/WINDOW_SELF_FIRE.md)。
+
+
+## 2026-09-25：封闭语义讲解无需再请求模型复制
+
+- 问题：当前Narrator五字段已经是确定性批准投影，Provider/领域门只接受相同内容，却仍发客户端与模型复制请求。实际生产context假链证明深相等，成本/永不响应等待2红。
+- 决定：当前approved协议客户端从两份领域包独立重建，不信任传入approved/request/aliases；共享原pure wire validator后映射/领域assert。本地DISABLED/DETERMINISTIC/CLOSED_SEMANTIC_PROJECTION沿既有FALLBACK就绪。缺approved旧HTTP/Provider保留，匿名服务器不具独立重建依据，不盲信approved跳过校验。
+- 验证：2红→绿，单cue客户端/Provider调用1+1→0+0，三cue首窗/后续零Narrator请求和计时器、同文输出；旧prepared正文复用不改写，取消零发布。独立复核长讲解超wire但domain有效会卡PENDING，1红→绿后走原domain fallback并如实标记LOCAL_WIRE_VALIDATION_FAILED。130相关tests/TS/build通过，未重复全仓测试。
+- 限制：没有真实网络/模型/Demo/UI或用户DB测量，不能外推整场启动秒数/费用/专业质量。旧匿名兼容入口仍可能调用Provider，恢复不自动迁移旧产物。下一步可先fixture核实单候选Director是否真有选择自由，仅等价时才省请求。[记录](validation/CLOSED_NARRATION_FAST_PATH.md)。

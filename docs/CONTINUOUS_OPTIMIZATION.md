@@ -22,6 +22,16 @@
 
 大型Demo或浏览器测试先smoke，bulk留在所属Worker/页面，由一个控制器负责整个进程生命周期；超时有退出和清理。同一基础设施边界失败两次先简化harness。保护未提交工作、真实Demo、SQLite/Memory及密钥；不force push，不擅自部署、发布或安装用户应用。缺信息时完成独立可做项；无新信息的失败路径不无限重试。
 
+## 当前独立任务：封闭讲解本地快路径（2026-09-25）
+
+- 基线33b43e8，前owner均release，01a0d93c-fe09-7401-8afc-6a05fea80a91独占Narrator窄快路径/相关tests/docs，有限goal已建。按模板A1实际context/client/provider假链证明复制等价与调用成本；A2仅从完整Coaching/Outcome包独立重建并复用原schema/引用/closed语义校验后本地完成；A3真实DETERMINISTIC来源、既有DISABLED/FALLBACK就绪和取消；A4首窗/后续/恢复/旧HTTP及期限兼容、相关tests/TS/build；A5文档commit/push/release与下一建议。
+- 已核实客户端持有完整领域包，匿名HTTP入口没有足够材料独立重建专业批准文本。因此快路径置于客户端，保留匿名server/legacy请求与全部校验；不直接信任request.approvedNarration。不要为小优化新增状态或改变Director/Jev/结果门/历史产物。
+- 风险/阶段：8分钟等价与请求计数复现、20分钟窄实现/回归、10分钟TS/build；重点不可信approved、来源真假、取消和旧异步期限。只用fake transport/内存数据，无Demo/模型/UI/服务/用户DB/Memory/密钥/安装发布main；必要5分钟独立只读终审，主控单写且负责全部进程退出。
+
+- 交付结果：生产context/client/Provider假链等价＋成本2红→绿。当前协议从领域包重建并经过原共享wire与domain门，本地DISABLED/DETERMINISTIC/CLOSED_SEMANTIC_PROJECTION，单cueHTTP/Provider1+1→0+0；三cue首两就绪/后续零Narrator网络和计时器、正文不变，旧saved/恢复零重新生成。
+- 兼容/复核：缺approved保留HTTP/Provider/期限/取消；身份/ref错误仍拒绝。只读narration_fast_path_review发现领域有效长文超wire限制会卡PENDING，1红→绿修复为原domain fallback、真实来源LOCAL_WIRE_VALIDATION_FAILED，闭合无must-fix。9文件130tests、TS/Web build通过；见[验证](validation/CLOSED_NARRATION_FAST_PATH.md)。
+- release/下一步：所有tests/build退出，无Demo/真实模型/UI/服务/用户DB/Memory/密钥/安装发布main。同分支commit/push后释放，原A5保持未验。可独立用单候选fixture核实Director是否有真实选择自由，再判断是否存在等价省请求机会，不先关闭其决策能力或重复Jev拒判。
+
 ## 本轮独立任务：处理窗口内本人开火事实（2026-09-25）
 
 - 基线6ef784a干净已push，真实慢放资格任务已release；01a0d92a-c3dd-7143-9894-d5eaadcec0a8独占Adapter动作事实生产/必要窄引用接线、相关tests/验证工具/docs。主控只读，默认配置，串行复用已有树，不碰锁屏UI。
@@ -99,7 +109,7 @@
 
 | 已push，验收完成 | 处理窗口内本人开火事实 | 01a0d92a-c3dd-7143-9894-d5eaadcec0a8；已release | 69ca18e；10窗口/9shot，4cue路线与判断不变，0→2自然慢放；326tests/1旧skip/TS/build通过，模拟ACK不关闭A5 |
 
-| 执行中 | 封闭讲解本地快路径 | 01a0d93c-fe09-7401-8afc-6a05fea80a91；独占本轮写入 | 已批准且只允许逐字复制的讲解避免重复模型请求，先语义等价/调用计数验证 |
+| 已完成本地验收，同分支交付 | 封闭讲解本地快路径 | 01a0d93c-fe09-7401-8afc-6a05fea80a91；push后release | 本地重建/原门校验，当前cue HTTP/Provider1+1→0+0；三cue准备/恢复/旧兼容通过，130tests/TS/build，见CLOSED_NARRATION_FAST_PATH.md |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
 

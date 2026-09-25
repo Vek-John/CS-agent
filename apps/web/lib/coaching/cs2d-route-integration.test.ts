@@ -695,7 +695,7 @@ describe("real preparation clients with bounded transport", () => {
       const dependencies = createCs2dReviewPreparationDependencies(analysis, {
         assessDecisions: async candidateSet => ({ candidateSet, run: { version: "decision-assessment-run.v1", mode: "RULE_BASELINE", calls: 0, accepted: 0, records: [] } }),
         director: (set, options) => requestTeachingDirector(set, { ...options, fetcher: directorFetch }),
-        narrator: (context, options) => requestNarrationBundle(context, { ...options, fetcher: narratorFetch }),
+        narrator: (context, options) => { delete context.request.approvedNarration; return requestNarrationBundle(context, { ...options, fetcher: narratorFetch }); },
       });
       const events: import("./cs2d-route-integration").ReviewPreparationEvent[] = [];
       const controller = createReviewPreparationOrchestrator("bounded-clients", provisional, {}, dependencies);
@@ -741,7 +741,7 @@ describe("real preparation clients with bounded transport", () => {
       const dependencies = createCs2dReviewPreparationDependencies(analysis, {
         assessDecisions: async candidateSet => ({ candidateSet, run: { version: "decision-assessment-run.v1", mode: "RULE_BASELINE", calls: 0, accepted: 0, records: [] } }),
         director: (set, options) => requestTeachingDirector(set, { ...options, fetcher }),
-        narrator: (context, options) => requestNarrationBundle(context, { ...options, fetcher }),
+        narrator: (context, options) => { delete context.request.approvedNarration; return requestNarrationBundle(context, { ...options, fetcher }); },
       });
       const fallbackNarration = vi.fn();
       const events: string[] = [];
@@ -759,4 +759,98 @@ describe("real preparation clients with bounded transport", () => {
       expect(vi.getTimerCount()).toBe(0);
     } finally { vi.useRealTimers(); }
   });
+});
+
+it("prepares the first window and later closed cues without network or timer waits, then reuses saved narration", async () => {
+  vi.useFakeTimers();
+  const { requestNarrationBundle } = await import("./narrator-contract");
+  const { deterministicDirectorFallback } = await import("@cs-coach/review-planner");
+  const analysis = integrationAnalysis(true);
+  const fetcher = vi.fn(() => new Promise<Response>(() => {}));
+  const expected = new Map<string, ReturnType<typeof deterministicNarrationBundle>>();
+  const dependencies = createCs2dReviewPreparationDependencies(analysis, {
+    assessDecisions: async candidateSet => ({ candidateSet, run: { version: "decision-assessment-run.v1", mode: "RULE_BASELINE", calls: 0, accepted: 0, records: [] } }),
+    director: async set => deterministicDirectorFallback(set),
+    narrator: (context, options) => {
+      expected.set(context.coachingPackage.cueId, deterministicNarrationBundle(context.coachingPackage, context.outcomePackage));
+      return requestNarrationBundle(context, { ...options, fetcher });
+    },
+  });
+  const events: import("./cs2d-route-integration").ReviewPreparationEvent[] = [];
+  const controller = createReviewPreparationOrchestrator("local-closed", createFixtureReviewPlan(analysis.matchTimeline), {}, dependencies);
+  const run = controller.run(event => events.push(event));
+  try {
+    await vi.advanceTimersByTimeAsync(0);
+    await run;
+    const readyIndex = events.findIndex(event => event.type === "READY_TO_START");
+    expect(readyIndex).toBeGreaterThan(0);
+    expect(events.slice(0, readyIndex).filter(event => event.type === "NARRATION_UPDATE")).toHaveLength(2);
+    const ready = events[readyIndex];
+    if (ready.type !== "READY_TO_START") throw Error("Expected startup readiness");
+    expect(ready.routeState.startable).toBe(true);
+    const updates = events.filter(event => event.type === "NARRATION_UPDATE");
+    expect(updates).toHaveLength(3);
+    for (const update of updates) {
+      expect(update.result.narration).toEqual(expected.get(update.cueId));
+      expect(update.result).toMatchObject({ readiness: "FALLBACK", manifest: { status: "DISABLED", provider: "DETERMINISTIC", reason: "CLOSED_SEMANTIC_PROJECTION" } });
+    }
+    expect(events.some(event => event.type === "NARRATION_REJECTED")).toBe(false);
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+    const saved = JSON.parse(JSON.stringify({ readiness: Object.fromEntries(updates.map(update => [update.cueId, update.result.readiness])), narrationByCue: Object.fromEntries(updates.map(update => [update.cueId, update.result.narration])) }));
+    // Previously saved, identity-bound prose is restored as-is, never rewritten by the fast path.
+    saved.narrationByCue[updates[0].cueId].coreIssue.text = "已保存的旧讲解正文。";
+    const unchanged = JSON.stringify(saved);
+    const prepareNarration = vi.fn();
+    const restored: import("./cs2d-route-integration").ReviewPreparationEvent[] = [];
+    await createReviewPreparationOrchestrator("restored-closed", ready.plan, saved, { prepareRoute: async ({ inputPlan }) => inputPlan, prepareNarration }).run(event => restored.push(event));
+    expect(prepareNarration).not.toHaveBeenCalled();
+    expect(restored.some(event => event.type === "READY_TO_START")).toBe(true);
+    expect(JSON.stringify(saved)).toBe(unchanged);
+    expect(fetcher).not.toHaveBeenCalled();
+  } finally { controller.cancel(); await run; vi.useRealTimers(); }
+});
+
+it("does not publish a local completion after its preparation generation is cancelled", async () => {
+  const { requestNarrationBundle } = await import("./narrator-contract");
+  const { deterministicDirectorFallback } = await import("@cs-coach/review-planner");
+  const analysis = integrationAnalysis();
+  const fetcher = vi.fn();
+  let controller: ReturnType<typeof createReviewPreparationOrchestrator>;
+  const dependencies = createCs2dReviewPreparationDependencies(analysis, {
+    assessDecisions: async candidateSet => ({ candidateSet, run: { version: "decision-assessment-run.v1", mode: "RULE_BASELINE", calls: 0, accepted: 0, records: [] } }),
+    director: async set => deterministicDirectorFallback(set),
+    narrator: (context, options) => {
+      const result = requestNarrationBundle(context, { ...options, fetcher });
+      controller.cancel();
+      return result;
+    },
+  });
+  controller = createReviewPreparationOrchestrator("cancel-local-closed", createFixtureReviewPlan(analysis.matchTimeline), {}, dependencies);
+  const events: string[] = [];
+  await controller.run(event => events.push(event.type));
+  expect(events).not.toContain("NARRATION_UPDATE");
+  expect(events).not.toContain("READY_TO_START");
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+it("keeps a domain-valid projection beyond provider wire limits ready through fallback", async () => {
+  const { requestNarrationBundle } = await import("./narrator-contract");
+  const { deterministicDirectorFallback } = await import("@cs-coach/review-planner");
+  const analysis = integrationAnalysis();
+  const fetcher = vi.fn();
+  const dependencies = createCs2dReviewPreparationDependencies(analysis, {
+    assessDecisions: async candidateSet => ({ candidateSet, run: { version: "decision-assessment-run.v1", mode: "RULE_BASELINE", calls: 0, accepted: 0, records: [] } }),
+    director: async set => deterministicDirectorFallback(set),
+    narrator: (context, options) => {
+      context.coachingPackage.decisionContext.facts[0].text = "可核对的已记录事实。".repeat(200);
+      return requestNarrationBundle(context, { ...options, fetcher });
+    },
+  });
+  const events: import("./cs2d-route-integration").ReviewPreparationEvent[] = [];
+  await createReviewPreparationOrchestrator("long-closed", createFixtureReviewPlan(analysis.matchTimeline), {}, dependencies).run(event => events.push(event));
+  expect(events.some(event => event.type === "READY_TO_START" && event.routeState.startable)).toBe(true);
+  expect(events.some(event => event.type === "NARRATION_REJECTED")).toBe(false);
+  for (const event of events.filter(event => event.type === "NARRATION_UPDATE")) expect(event.result.manifest.reason).toBe("LOCAL_WIRE_VALIDATION_FAILED");
+  expect(fetcher).not.toHaveBeenCalled();
 });
