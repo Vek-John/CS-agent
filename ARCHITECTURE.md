@@ -555,13 +555,17 @@ LLM 只能选择 `capabilityId`；速度、cue 范围、actor/annotation/callout
 
 ### 6.8 Playback
 
+Host将普通暂停/继续与自由接管分开：在Session的PLAYING、REVEALING、REPLAYING、SKIPPING阶段（包括ManualCueVisit），暂停只设置瞬时transport意图，不发送USER_TAKEOVER，不修改cue、默认游标、呈现/消费记录或OutcomeCompletionGate。暂停和等待pause确认期间阻止TICK、自动跳段及会移动播放头的后台命令。继续只发送play；相同Session transition不能再次seek到结果起点。快速pause/play先等待单一有序iframe流的暂停回报，再续播；播放回报不能改变用户意图，排队的Session更新需匹配控制epoch。
+
+自由seek/切换回合继续沿既有接管路径使旧意图和manual visit失效；即使尚无Session，显式seek也必须先释放transport暂停再执行。更换Demo、打开历史或发起新的明确教学动作时清除瞬时transport意图；它不持久化为RecoveryBoundary。异步返回默认路线不得覆盖等待期间新的接管或暂停。教练停靠时通用播放按钮禁用，使用既有讲解卡的“再看一遍/继续下一段”及工具busy门；教学工具自身播放的暂停仍由现有接管/取消路径处理，不把底部原始play当作越过教学的入口。
+
 `PlaybackPort` 抽象加载、播放、暂停、跳转、速度、视角和状态确认。适配器包括：
 
 - `Web2DPlaybackAdapter`：浏览器按标准轨迹渲染；
 - `CS2DemoPlaybackAdapter`：桌面端驱动本地 CS2 Demo；
 - 未来可能的录像或导出适配器。
 
-localhost 与桌面 sidecar 都使用严格的单 iframe、有序命令流，不额外引入 command ID：父窗口只在 Session 状态转换时发命令，cs2d 用后续 `PLAYBACK_STATE` 回报 canonical tick、playing 与 speed；reducer 只根据该事实状态消费 `TICK`。Tauri 的 admin transport 与 Playback bridge 是不同 seam，不得把 supervision token 或命令混入 iframe bridge。未来真正的跨进程播放器需要重试/乱序恢复时，再为 `PlaybackPort` 增加 command ID 与 ACK。
+localhost 与桌面 sidecar 都使用严格的单 iframe、有序命令流，不额外引入 command ID：父窗口在 Session 状态转换或用户显式播放意图变化时发命令，cs2d 用后续 `PLAYBACK_STATE` 回报 canonical tick、playing 与 speed；reducer 只根据该事实状态消费 `TICK`。Tauri 的 admin transport 与 Playback bridge 是不同 seam，不得把 supervision token 或命令混入 iframe bridge。未来真正的跨进程播放器需要重试/乱序恢复时，再为 `PlaybackPort` 增加 command ID 与 ACK。
 
 当前 `Web2DPlaybackAdapter` 直接复用固定版本 cs2d 的解析器、播放器和 renderer，主仓库仅维护最小 host patch：
 
@@ -1182,7 +1186,7 @@ stateDiagram-v2
 - 图的流程由 LangGraph 编排；所有播放命令和关键状态转移仍由确定性约束层校验；
 - `TeachingMove` 不是新的 Session phase；它只能请求 reducer 已允许的 `REPLAYING`/稳定教学画面或地图呈现动作，并等待 Playback 确认；
 - Director、Narrator、问答和总结只在允许的 Graph 分支内调用，不可绕过 `ReviewPlan` 覆盖约束；
-- 用户可随时暂停或跳转，称为 `USER_TAKEOVER` 子状态；Agent 暂停，返回最近 cue 后恢复但不重排路线；
+- 普通暂停/继续为Host瞬时transport意图，保留Session教学意图；自由跳转等显式接管才进入 `USER_TAKEOVER`，Agent 暂停，返回默认路线或点播 frozen cue 后继续，不重排路线；
 - 恢复时以播放器确认的 tick 为准，而不是仅信任服务端快照；
 - Web 断线可本地继续播放，但进入新讲解点前必须重新同步；
 - Graph 只能进入 `READY` 的 segment；缓冲耗尽时进入显式 `BUFFERING`，不得临时生成无证据讲解；
@@ -1267,7 +1271,7 @@ priority = proximity_to_playhead
 
 地图在所有会话状态都显示当前 tick 的 cs2d 全知 Replay，不提供显式视角切换。信息授权发生在包引用和呈现 gate，而非 renderer：自动播放结果窗口时侧栏不显示密封 NarrationBundle 的任何分析字段；只有播放器确认到达 `outcome_end_tick` 后，Session 才把该 bundle 标记为 PRESENTABLE，并把五字段证据投影为“当前状态 / 处理与判断 / 建议与待确认信息”三段。进入下一个 cue 时重新绑定下一份内部 ObservableState 与密封 bundle；全场胜率曲线仍可始终显示，不受该文字 gate 裁剪。
 
-自动路线继续主持完整 Demo；用户主动操作时仅暂时交出播放头，不丢弃会话。自由查看侧栏显示实际回合与覆盖该位置的 segment，地图/HUD/事件均由同一播放头更新。用户可随时返回离当前播放位置最近的教练节点并从约 1 秒前置上下文重看；未接管时冻结时间直接自动消费、低价值段显式快进、关键 cue 连续播放完整处理并在结束后回到决策点讲解，结果播放、重播和结束暂停维持同一聚焦镜头。
+自动路线继续主持完整 Demo；普通暂停/继续保留带看，用户自由跳转等接管操作才暂时交出播放头，不丢弃会话。自由查看侧栏显示实际回合与覆盖该位置的 segment，地图/HUD/事件均由同一播放头更新。用户可随时返回离当前播放位置最近的教练节点并从约 1 秒前置上下文重看；未接管时冻结时间直接自动消费、低价值段显式快进、关键 cue 连续播放完整处理并在结束后回到决策点讲解，结果播放、重播和结束暂停维持同一聚焦镜头。
 
 Coach Agent 活动只显示简短玩家状态，例如“正在看完整处理”“正在回到决策点”“正在慢放关键动作”“正在标出补枪距离”“正在展示道具轨迹”“正在准备下一段”。UI 不显示 Prompt、chain-of-thought、candidate ID 或 tick。暂停、自由跳转、重播与“继续”是播放控制事件，不进入 Policy Prompt。
 

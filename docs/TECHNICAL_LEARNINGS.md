@@ -1597,3 +1597,13 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - **决定**：每次匹配当前cue的manual visit重新进入结果门；复用已有讲解，保持默认游标、全局消费/呈现/习惯去重。没有新增播放控制体系。
 - **验证**：两个回归先红后绿；恢复用例原始失败为frozenReviewPlan.decision_assessment_run unrecognized key，回访用例原始失败为PLAYING而非REVEALING。相关28文件274测试、历史库及Host恢复7文件46测试通过；TypeScript通过。真实Edge localhost已观察正常启动、首cue结果后停靠、修复前跨cue、修复后停回同一决策点、返回默认顺序与重播完成。
 - **限制与教训**：本轮provider凭据为空，只有本地确定性回退，不构成Jev教学质量提升证据。CUA浏览器连接失败后使用原生Edge；Vite两次依赖优化热重载中断Demo后改用现有静态Viewer，避免混入测试基础设施故障。普通localhost浏览器恢复与桌面SQLite历史UI需分别报告。刷新重选Demo已恢复原暂停点并继续至R9，四个教学点全部经过后到达“复盘完成”；生产build通过，详见[完整验证记录](validation/FULL_REVIEW_RELIABILITY.md)。补充准备失败时取消本代编排，防止晚到讲解覆盖错误状态；编排集成16测试通过。
+
+
+## 2026-09-25：普通暂停不是退出教练
+
+- **问题**：底部pause/play和seek共用无差别issueUserCommand→markUserTookOver，普通暂停触发Agent接管并取消manual visit。上一轮真实R2已有证据，本轮先将原行为无改动提取到实际Host使用的入口，回归出现1失败/24通过：暂停再播放后freeViewing仍true。
+- **决定**：Host拥有瞬时transport暂停/ACK与控制epoch，Session继续权威拥有phase、路线、进度和结果门。暂停时冻结TICK/自动directive/自动skip；同一transition续播不重跑seek。快速pause/play先排空暂停确认，迟到回报不改变意图，functional updater再核对epoch。没有新增Session phase、持久化schema或模型调用。
+- **入口一致性**：时间轴、拖动和±15秒使用同一显式seek入口。只读独立审查发现无Session时pause latch会拦住旧独立seek路径，已修复并补对应回归。返回默认路线await也检查控制epoch，防止旧恢复撤销新选择。
+- **教学停靠取舍**：通用播放按钮在教学停靠/缓冲等非主动播放阶段禁用，用户使用既有卡片回看/继续，不让raw play绕过Outcome gate。已有Stage3教学工具播放时也不能用这个按钮暂停，可用自由seek接管取消；本轮没有重写工具播放生命周期。
+- **验证**：8文件105相关测试、TypeScript和production build通过。包含默认及已看manual结果窗口暂停，暂停期间旧大tick不推进、门不提前开放、续播只play且恰好一次完成，free seek仍接管，无Session seek正常，快速暂停续播/更新epoch和延迟自动skip。
+- **环境限制**：本轮真实页面验收尚未通过。Edge原生连接持续超时；内置浏览器能返回localhost DOM/截图，但文件入口的AX、DOM和坐标点击均报告目标不可用，未能导入Demo。已询问用户是否锁屏/远程断开；不能把上轮UI结果或本轮自动测试替代本轮实际交互验收。详细状态见[本轮证据](validation/GUIDED_PAUSE_RESUME.md)。

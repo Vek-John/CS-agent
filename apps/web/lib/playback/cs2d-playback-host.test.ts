@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createSyntheticMirageTimeline } from "@cs-coach/demo-domain";
 import { createFixtureReviewPlan } from "@cs-coach/review-planner";
-import { PLAYBACK_BRIDGE_CHANNEL, type ReviewPlan } from "@cs-coach/contracts";
-import { createOutcomeCompletionGate, completeOutcomeGate } from "@cs-coach/session";
+import { PLAYBACK_BRIDGE_CHANNEL, type PlaybackCommand, type ReviewPlan } from "@cs-coach/contracts";
+import { createCoachingSession, reduceCoachingSession, createOutcomeCompletionGate, completeOutcomeGate } from "@cs-coach/session";
 import {
   acceptedPlaybackEvent,
   canBeginManualCueVisit,
@@ -14,6 +14,9 @@ import {
   cs2dHostConfig,
   HOST_SPEED_OPTIONS,
   hostCoachingCueSurface,
+  issueHostUserCommand,
+  HostPlaybackControl,
+  canToggleHostPlayback,
   isRecoveryPlaybackLanding,
   managedReplayMatchesExpected,
   managedReplayContextIsCurrent,
@@ -368,4 +371,148 @@ describe("cs2d localhost host boundary", () => {
   it("exposes the complete host speed scale", () => {
     expect(HOST_SPEED_OPTIONS).toEqual([0.25, 0.5, 1, 2, 4, 8]);
   });
+});
+
+
+describe("Host pause intent at the Session/Agent handoff", () => {
+  it("pauses and resumes the active route without sending Agent takeover or changing Session progress", () => {
+    const plan = createFixtureReviewPlan(createSyntheticMirageTimeline());
+    const session = reduceCoachingSession(plan, createCoachingSession(plan), { type: "START" });
+    const before = structuredClone(session);
+    const agentTakeover = vi.fn();
+    const send = vi.fn();
+    let freeViewing = false;
+    const input = { session, send, control: new HostPlaybackControl(), userTookOver: false, takeover: () => { freeViewing = true; agentTakeover(); } };
+    issueHostUserCommand({ type: "pause" }, input);
+    input.control.observe(false); // Viewer confirms the pause on the ordered stream.
+    issueHostUserCommand({ type: "play" }, input);
+    expect(freeViewing).toBe(false);
+    expect(agentTakeover).not.toHaveBeenCalled();
+    expect(session).toEqual(before);
+    expect(send.mock.calls.map(([command]) => command.type)).toEqual(["pause", "play"]);
+  });
+
+  it.each([false, true])("keeps a fresh result gate through pause/continue (manual=%s)", manual => {
+    const plan = createFixtureReviewPlan(createSyntheticMirageTimeline());
+    const cue = plan.cues[0]!;
+    let session = reduceCoachingSession(plan, createCoachingSession(plan), { type: "START" });
+    session = reduceCoachingSession(plan, session, { type: "ADVANCE_SEGMENT" });
+    if (manual) {
+      session = reduceCoachingSession(plan, session, { type: "TICK", tick: cue.outcome_end_tick });
+      session = reduceCoachingSession(plan, session, { type: "CUE_PRESENTED", cueId: cue.id });
+      session = reduceCoachingSession(plan, session, { type: "BEGIN_MANUAL_CUE_VISIT", cueId: cue.id, visitId: "revisit-paused" });
+    }
+    session = reduceCoachingSession(plan, session, { type: "TICK", tick: cue.decision_tick });
+    const control = new HostPlaybackControl();
+    const before = structuredClone(session);
+    const send = vi.fn();
+    const takeover = vi.fn();
+    const input = () => ({ session, control, send, takeover, userTookOver: manual });
+    const deliver = (tick: number, playing: boolean) => {
+      const result = control.observe(playing);
+      result.commands.forEach(send);
+      if (result.advance && control.canAdvance(session, manual)) {
+        session = reduceCoachingSession(plan, session, { type: "TICK", tick });
+      }
+    };
+    const key = `${session.phase}:${session.current_cue_id}`;
+    expect(control.claimTransition(key)).toBe(true);
+    issueHostUserCommand({ type: "pause" }, input());
+    deliver(cue.outcome_end_tick + 100, true); // Delayed moving report cannot finish the gate.
+    deliver(cue.decision_tick + 1, false);
+    expect(control.claimTransition(key)).toBe(false);
+    expect(control.allows({ type: "play" })).toBe(false);
+    expect(control.allows({ type: "seekCanonicalTick", canonicalTick: cue.outcome_end_tick })).toBe(false);
+    expect(session).toEqual(before);
+    expect(session.outcome_completion?.status).toBe("LOCKED");
+    expect(hostCoachingCueSurface(cue, session.phase, session.outcome_completion)).toBeUndefined();
+    send.mockClear();
+    issueHostUserCommand({ type: "play" }, input());
+    expect(send).toHaveBeenCalledExactlyOnceWith({ type: "play" });
+    expect(control.claimTransition(key)).toBe(false); // No re-seek to outcome_start.
+    deliver(cue.outcome_end_tick - 1, true);
+    expect(session.outcome_completion?.status).toBe("LOCKED");
+    deliver(cue.outcome_end_tick, true);
+    const finished = structuredClone(session);
+    deliver(cue.outcome_end_tick + 100, false);
+    expect(session).toEqual(finished);
+    expect(session).toMatchObject({ phase: "PAUSED_FOR_COACHING", current_tick: cue.decision_tick,
+      outcome_completion: { status: "COMPLETE" } });
+    expect(takeover).not.toHaveBeenCalled();
+    expect(session.presented_cue_ids).toEqual(before.presented_cue_ids);
+    expect(session.consumed_cue_ids).toEqual(before.consumed_cue_ids);
+    if (manual) {
+      expect(session.manual_cue_visit).toEqual(before.manual_cue_visit);
+      expect(session.default_route_cursor).toEqual(before.default_route_cursor);
+      expect(session.user_events.filter(e => e.type === "OUTCOME_REPLAYED")).toHaveLength(1);
+    } else expect(session.user_events.filter(e => e.type === "OUTCOME_REVEALED")).toHaveLength(1);
+  });
+
+  it("drains a fast pause/play acknowledgement and rejects work queued before a newer intent", () => {
+    const control = new HostPlaybackControl();
+    const plan = createFixtureReviewPlan(createSyntheticMirageTimeline());
+    const session = reduceCoachingSession(plan, createCoachingSession(plan), { type: "START" });
+    const oldEpoch = control.epoch;
+    control.pause();
+    expect(control.resume()).toEqual([]);
+    expect(control.observe(true).advance).toBe(false);
+    expect(control.observe(false)).toEqual({ advance: false, commands: [{ type: "play" }] });
+    expect(control.canAdvance(session, false, oldEpoch)).toBe(false);
+    expect(control.observe(true).advance).toBe(true);
+    control.pause();
+    control.reset(); // A newer seek, history open or generation wins over an old resume.
+    expect(control.observe(false).commands).toEqual([]);
+    expect(control.paused).toBe(false);
+    expect(control.canAdvance(session, true)).toBe(false);
+  });
+
+  it("retains free-seek takeover and forbids raw play at a teaching stop", () => {
+    const plan = createFixtureReviewPlan(createSyntheticMirageTimeline());
+    let session = reduceCoachingSession(plan, createCoachingSession(plan), { type: "START" });
+    session = reduceCoachingSession(plan, session, { type: "ADVANCE_SEGMENT" });
+    session = reduceCoachingSession(plan, session, { type: "TICK", tick: plan.cues[0]!.outcome_end_tick });
+    const control = new HostPlaybackControl();
+    const takeover = vi.fn();
+    const send = vi.fn();
+    expect(canToggleHostPlayback(session, false)).toBe(false);
+    issueHostUserCommand({ type: "play" }, { session, control, takeover, send, userTookOver: false });
+    expect(send).not.toHaveBeenCalled();
+    expect(takeover).not.toHaveBeenCalled();
+    control.pause();
+    const seek: PlaybackCommand = { type: "seekCanonicalTick", canonicalTick: 1000 };
+    issueHostUserCommand(seek, { session, control, takeover, send, userTookOver: false });
+    expect(takeover).toHaveBeenCalledOnce();
+    expect(send.mock.calls.map(([command]) => command)).toEqual([{ type: "pause" }, seek]);
+    expect(control.holding).toBe(false);
+    expect(canToggleHostPlayback(session, true)).toBe(true);
+  });
+
+  it("defers automatic skip transitions while paused and retries a cancelled queued skip", () => {
+    const control = new HostPlaybackControl();
+    expect(control.claimTransition("SKIPPING:one", true)).toBe(true);
+    control.pause();
+    expect(control.claimTransition("SKIPPING:one", true)).toBe(false);
+    control.observe(false);
+    control.resume();
+    expect(control.claimTransition("SKIPPING:one", true)).toBe(true);
+    expect(control.claimTransition("PLAYING:two")).toBe(true);
+    expect(control.claimTransition("PLAYING:two")).toBe(false);
+  });
+
+
+  it("lets the same timeline/15-second seek entry leave a pause before a Session exists", () => {
+    const control = new HostPlaybackControl();
+    const delivered: PlaybackCommand[] = [];
+    const takeover = vi.fn();
+    const input = { session: undefined, control, takeover, userTookOver: false,
+      send: (command: PlaybackCommand) => { if (control.allows(command)) delivered.push(command); } };
+    issueHostUserCommand({ type: "pause" }, input);
+    control.observe(false);
+    delivered.length = 0;
+    issueHostUserCommand({ type: "seekCanonicalTick", canonicalTick: 500 }, input);
+    expect(delivered).toEqual([{ type: "pause" }, { type: "seekCanonicalTick", canonicalTick: 500 }]);
+    expect(control.holding).toBe(false);
+    expect(takeover).not.toHaveBeenCalled();
+  });
+
 });

@@ -188,6 +188,9 @@ import {
   timelinePercent,
   HOST_SPEED_OPTIONS,
   hostCoachingCueSurface,
+  issueHostUserCommand,
+  HostPlaybackControl,
+  canToggleHostPlayback,
   teachingDiagnosticsEnabled,
   canBeginManualCueVisit,
   cuePresentedActionForTerminal,
@@ -398,6 +401,9 @@ export function Cs2dPlaybackHost({
   const timelineContentRef = useRef<HTMLDivElement>(null);
   const timelinePanRef = useRef<{ pointerId: number; startClientX: number; startScrollLeft: number } | undefined>(undefined);
   const userTookOverRef = useRef(false);
+  const transportRef = useRef(new HostPlaybackControl());
+  const [transportVersion, setTransportVersion] = useState(0);
+  const notifyTransport = useCallback(() => setTransportVersion(value => value + 1), []);
   const stage2AdapterRef = useRef(new CoachAgentHostAdapter());
   const stage2AckTimeoutRef = useRef(new Stage2AckTimeoutController());
   const stage2PendingRef = useRef<Stage2PendingTool | undefined>(undefined);
@@ -673,9 +679,11 @@ export function Cs2dPlaybackHost({
     setStage2Status("IDLE");
     setStage2Error(undefined);
     generationRef.current += 1;
+    transportRef.current.reset();
+    notifyTransport();
     preparationRef.current?.cancel();
     preparationRef.current = undefined;
-  }, []);
+  }, [notifyTransport]);
 
   const tickMin = replay?.startCanonicalTick ?? 0;
   const tickMax = replay?.endCanonicalTick ?? Math.max(1, tickMin + 1);
@@ -685,6 +693,7 @@ export function Cs2dPlaybackHost({
     : 0;
 
   const send = useCallback((command: PlaybackCommand) => {
+    if (!transportRef.current.allows(command)) return;
     iframeRef.current?.contentWindow?.postMessage(playbackCommandMessage(command), config.origin);
   }, [config.origin]);
 
@@ -1074,6 +1083,8 @@ export function Cs2dPlaybackHost({
   }, []);
 
   const markUserTookOver = useCallback(() => {
+    transportRef.current.reset();
+    notifyTransport();
     invalidateGuidedSeek();
     if (diagnosticsEnabled) {
       // Invalidate any in-flight adaptive request before the live refs change;
@@ -1107,15 +1118,18 @@ export function Cs2dPlaybackHost({
     if (!userTookOverRef.current) send({ type: "setCamera", mode: "full" });
     userTookOverRef.current = true;
     setUserTookOver(true);
-  }, [diagnosticsEnabled, invalidateGuidedSeek, send, stage2Status]);
+  }, [diagnosticsEnabled, invalidateGuidedSeek, notifyTransport, send, stage2Status]);
 
   const clearUserTakeover = useCallback(() => {
+    transportRef.current.reset();
+    notifyTransport();
     invalidateGuidedSeek();
     userTookOverRef.current = false;
     setUserTookOver(false);
-  }, [invalidateGuidedSeek]);
+  }, [invalidateGuidedSeek, notifyTransport]);
 
   const resumeGuidedRoute = useCallback(async () => {
+    const intentEpoch = transportRef.current.epoch;
     const activePlan = planRef.current;
     if (activePlan) {
       setSession((current) => current
@@ -1129,22 +1143,22 @@ export function Cs2dPlaybackHost({
     }
     // Keep the takeover guard active while the Graph checkpoint is reconciled.
     // The normal default-cue effect consumes the armed resume sequence once.
+    if (transportRef.current.epoch !== intentEpoch) return;
     clearUserTakeover();
   }, [clearUserTakeover, diagnosticsEnabled, stage3Mode]);
 
   const issueUserCommand = useCallback((command: PlaybackCommand) => {
-    if (session) markUserTookOver();
-    send(command);
-  }, [markUserTookOver, send, session]);
+    issueHostUserCommand(command, { session: liveSessionRef.current, userTookOver: userTookOverRef.current,
+      control: transportRef.current, takeover: markUserTookOver, send });
+    notifyTransport();
+  }, [markUserTookOver, notifyTransport, send]);
 
   const seekFromTimeline = useCallback((canonicalTick: number) => {
-    if (session) markUserTookOver();
-    send({ type: "pause" });
-    send({
+    issueUserCommand({
       type: "seekCanonicalTick",
       canonicalTick: clampCanonicalTick(canonicalTick, tickMin, tickMax)
     });
-  }, [markUserTookOver, send, session, tickMax, tickMin]);
+  }, [issueUserCommand, tickMax, tickMin]);
 
   const seekBySeconds = useCallback((seconds: number) => {
     if (!replay) return;
@@ -1199,10 +1213,8 @@ export function Cs2dPlaybackHost({
     const canonicalTick = canonicalTickFromPointer(event.clientX);
     if (canonicalTick === undefined) return;
     event.currentTarget.setPointerCapture(event.pointerId);
-    if (session) markUserTookOver();
-    send({ type: "pause" });
-    send({ type: "seekCanonicalTick", canonicalTick });
-  }, [canonicalTickFromPointer, markUserTookOver, replay, send, session]);
+    seekFromTimeline(canonicalTick);
+  }, [canonicalTickFromPointer, replay, seekFromTimeline]);
 
   const onTimelinePointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
@@ -2104,7 +2116,6 @@ export function Cs2dPlaybackHost({
       }
 
       if (payload.type !== "PLAYBACK_STATE") return;
-      playbackRef.current = payload;
       const pendingSeek = guidedSeekGateRef.current;
       if (pendingSeek) {
         if (pendingSeek.epoch !== guidedSeekEpochRef.current || !isGuidedSeekLanding(pendingSeek, payload.canonicalTick)) {
@@ -2114,6 +2125,7 @@ export function Cs2dPlaybackHost({
         }
         guidedSeekGateRef.current = undefined;
       }
+      playbackRef.current = payload;
       const recoveryLanding = recoveryLandingRef.current;
       if (recoveryLanding) {
         if (!isRecoveryPlaybackLanding(payload, recoveryLanding.targetTick, replayRef.current?.tickRate ?? 64)) return;
@@ -2124,11 +2136,17 @@ export function Cs2dPlaybackHost({
         return;
       }
       setPlayback(payload);
-      if (userTookOverRef.current && !liveSessionRef.current?.manual_cue_visit) return;
+      const transport = transportRef.current;
+      const wasHolding = transport.holding;
+      const observation = transport.observe(payload.playing);
+      observation.commands.forEach(send);
+      if (wasHolding !== transport.holding) notifyTransport();
+      const intentEpoch = transport.epoch;
+      if (!observation.advance || !transport.canAdvance(liveSessionRef.current, userTookOverRef.current)) return;
       const activePlan = planRef.current;
       if (!activePlan) return;
       setSession((current) => {
-        if (!current || !["PLAYING", "REVEALING", "REPLAYING"].includes(current.phase)) return current;
+        if (!current || !transport.canAdvance(current, userTookOverRef.current, intentEpoch) || !["PLAYING", "REVEALING", "REPLAYING"].includes(current.phase)) return current;
         return reduceCoachingSession(activePlan, current, {
           type: "TICK",
           tick: payload.canonicalTick
@@ -2137,7 +2155,7 @@ export function Cs2dPlaybackHost({
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [clearRecoveryLandingTimeout, completeRecoveryLanding, config.origin, desktopLibraryEnabled, handleRecoveryAnalysisReady, handleRecoveryReplayReady, handleStoredHistoryPlayerSelected, handleSuccessfulDemoImport, historyActiveReviewId, invalidateGeneration, invalidateGuidedSeek, refreshReviewHistory, resetAnalysis, reviewHistoryApi, reviewPreparationDependencies, send, stage2Mode, stage3Mode]);
+  }, [clearRecoveryLandingTimeout, completeRecoveryLanding, config.origin, desktopLibraryEnabled, handleRecoveryAnalysisReady, handleRecoveryReplayReady, handleStoredHistoryPlayerSelected, handleSuccessfulDemoImport, historyActiveReviewId, invalidateGeneration, invalidateGuidedSeek, refreshReviewHistory, resetAnalysis, reviewHistoryApi, reviewPreparationDependencies, notifyTransport, send, stage2Mode, stage3Mode]);
 
   const transition = useCallback((action: SessionAction) => {
     const activePlan = planRef.current;
@@ -2184,6 +2202,7 @@ export function Cs2dPlaybackHost({
     const activePlan = planRef.current;
     if (!activePlan || !session || !playback || (userTookOverRef.current && !session.manual_cue_visit)) return;
     const directive = guidedPlaybackDirective(activePlan, session, replay?.tickRate);
+    if (!transportRef.current.claimTransition(`${session.id}:${transitionKey}`, Boolean(directive.automaticAction))) return;
     const seek = directive.commands.find((command): command is Extract<PlaybackCommand, { type: "seekCanonicalTick" }> => command.type === "seekCanonicalTick");
     if (seek) {
       const epoch = guidedSeekEpochRef.current + 1;
@@ -2192,12 +2211,17 @@ export function Cs2dPlaybackHost({
     }
     directive.commands.forEach(send);
     if (directive.automaticAction) {
-      setSession((current) => current
+      const intentEpoch = transportRef.current.epoch;
+      setSession((current) => current && transportRef.current.canAdvance(current, userTookOverRef.current, intentEpoch)
         ? reduceCoachingSession(activePlan, current, directive.automaticAction!)
         : current);
     }
-  }, [playback !== undefined, replay?.tickRate, send, transitionKey, userTookOver]);
+  }, [playback !== undefined, replay?.tickRate, send, transitionKey, transportVersion, userTookOver]);
 
+  const transportPaused = transportRef.current.paused;
+  const transportPlaying = !transportPaused && Boolean(playback?.playing);
+  const transportToggleAllowed = canToggleHostPlayback(session, userTookOver);
+  const transportLabel = transportPaused ? "继续播放" : transportPlaying ? "暂停" : "播放";
   const activePlan = plan ?? bundle?.review_plan;
   const segment = activePlan && session ? getCurrentSegment(activePlan, session) : undefined;
   const cue = activePlan && session ? getCurrentCue(activePlan, session) : undefined;
@@ -3001,9 +3025,11 @@ export function Cs2dPlaybackHost({
     const activePlan = planRef.current;
     const currentSession = liveSessionRef.current;
     if (!activePlan || !currentSession || !nearestManualCue || !canBeginManualCueVisit(nearestManualReadiness, true, Boolean(currentSession.manual_cue_visit))) return;
+    transportRef.current.reset();
+    notifyTransport();
     const visitId = `manual-${currentSession.id}-${nearestManualCue.cue.id}-${++manualVisitSequenceRef.current}`.replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 160);
     setSession((current) => current ? reduceCoachingSession(activePlan, current, { type: "BEGIN_MANUAL_CUE_VISIT", visitId, cueId: nearestManualCue.cue.id }) : current);
-  }, [nearestManualCue, nearestManualReadiness]);
+  }, [nearestManualCue, nearestManualReadiness, notifyTransport]);
 
   useEffect(() => {
     if (historyPlaybackOnlyRef.current || !stage3Mode || !stage3IdentityContext || !activePlan || !session || !segment || userTookOverRef.current) return;
@@ -3196,7 +3222,7 @@ export function Cs2dPlaybackHost({
             <div>
               <p className="cs2d-coach-kicker"><Sparkles aria-hidden="true" />私教会话</p>
               {selected ? <p className="cs2d-coach-focus" title={selected.displayName}>正在复盘：{selected.displayName}</p> : null}
-              <h2>{userTookOver ? "自由查看" : session ? phaseText[session.phase] : selected ? (routeState && !routeState.routeFrozen ? "等待教学路线冻结" : `正在分析 ${selected.displayName}`) : replay ? "先在地图内选择玩家" : "等待 Demo"}</h2>
+              <h2>{transportPaused && session && (!userTookOver || session.manual_cue_visit) ? "已暂停带看" : userTookOver ? "自由查看" : session ? phaseText[session.phase] : selected ? (routeState && !routeState.routeFrozen ? "等待教学路线冻结" : `正在分析 ${selected.displayName}`) : replay ? "先在地图内选择玩家" : "等待 Demo"}</h2>
             </div>
             <span
               className="cs2d-coach-badge"
@@ -3464,15 +3490,15 @@ export function Cs2dPlaybackHost({
             <button
               className="cs2d-host-play"
               type="button"
-              disabled={!replay}
-              title={playback?.playing ? "暂停" : "播放"}
-              aria-label={playback?.playing ? "暂停" : "播放"}
-              onClick={() => issueUserCommand({ type: playback?.playing ? "pause" : "play" })}
+              disabled={!replay || !transportToggleAllowed}
+              title={transportToggleAllowed ? transportLabel : "请使用讲解卡中的回看或继续操作"}
+              aria-label={transportToggleAllowed ? transportLabel : "播放不可用，请使用讲解卡操作"}
+              onClick={() => issueUserCommand({ type: transportPlaying ? "pause" : "play" })}
             >
-              {playback?.playing
+              {transportPlaying
                 ? <Pause size={17} strokeWidth={2.2} aria-hidden="true" />
                 : <Play size={17} strokeWidth={2.2} aria-hidden="true" />}
-              <span className="cs2d-visually-hidden">{playback?.playing ? "暂停" : "播放"}</span>
+              <span className="cs2d-visually-hidden">{transportLabel}</span>
             </button>
             <button
               className="cs2d-host-icon-button"

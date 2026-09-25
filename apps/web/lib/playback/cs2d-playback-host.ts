@@ -474,3 +474,97 @@ export function reviewPositionAtTick(
     segment,
   };
 }
+
+
+/**
+ * Transient transport intent, not a Session phase or recovery boundary.
+ * The single ordered iframe stream supplies the pause acknowledgement; no
+ * report can change the user's intent. Route/cue/gate truth stays in Session.
+ */
+export class HostPlaybackControl {
+  paused = false;
+  epoch = 0;
+  private awaitingPause = false;
+  private resumeAfterPause = false;
+  private appliedTransition: string | undefined;
+
+  get holding(): boolean { return this.paused || this.awaitingPause; }
+
+  reset(): void {
+    this.epoch++;
+    this.paused = false;
+    this.awaitingPause = false;
+    this.resumeAfterPause = false;
+    this.appliedTransition = undefined;
+  }
+
+  pause(): readonly PlaybackCommand[] {
+    this.epoch++;
+    this.paused = true;
+    this.awaitingPause = true;
+    this.resumeAfterPause = false;
+    return [{ type: "pause" }];
+  }
+
+  resume(): readonly PlaybackCommand[] {
+    this.epoch++;
+    this.paused = false;
+    // A rapid pause/play must drain older moving reports before resuming.
+    this.resumeAfterPause = this.awaitingPause;
+    return this.awaitingPause ? [] : [{ type: "play" }];
+  }
+
+  observe(playing: boolean): { advance: boolean; commands: readonly PlaybackCommand[] } {
+    if (this.awaitingPause) {
+      if (playing) return { advance: false, commands: [{ type: "pause" }] };
+      this.awaitingPause = false;
+      const resume = this.resumeAfterPause;
+      this.resumeAfterPause = false;
+      return { advance: false, commands: resume ? [{ type: "play" }] : [] };
+    }
+    if (this.paused) return { advance: false, commands: playing ? [{ type: "pause" }] : [] };
+    return { advance: true, commands: [] };
+  }
+
+  allows(command: PlaybackCommand): boolean {
+    return !this.holding || !["play", "seekCanonicalTick", "selectRound", "teachingTool"].includes(command.type);
+  }
+
+  claimTransition(key: string, automatic = false): boolean {
+    if (this.holding || this.appliedTransition === key) return false;
+    // An automatic Session action may be cancelled before React applies it.
+    // Leave it retryable; the reducer transition itself advances its key.
+    if (!automatic) this.appliedTransition = key;
+    return true;
+  }
+
+  canAdvance(session: CoachingSessionState | undefined, takeover: boolean, epoch = this.epoch): boolean {
+    return epoch === this.epoch && !this.holding && Boolean(session && (!takeover || session.manual_cue_visit));
+  }
+}
+
+export function canToggleHostPlayback(session: CoachingSessionState | undefined, takeover: boolean): boolean {
+  if (!session || (takeover && !session.manual_cue_visit)) return true;
+  // A teaching stop has explicit replay/continue actions and its own tool gate.
+  return ["PLAYING", "REVEALING", "REPLAYING", "SKIPPING"].includes(session.phase);
+}
+
+/** Shared by the visible Host controls and their Session/Agent boundary tests. */
+export function issueHostUserCommand(command: PlaybackCommand, input: {
+  session: CoachingSessionState | undefined;
+  userTookOver: boolean;
+  control: HostPlaybackControl;
+  takeover: () => void;
+  send: (command: PlaybackCommand) => void;
+}): void {
+  if (command.type === "pause" || command.type === "play") {
+    if (!canToggleHostPlayback(input.session, input.userTookOver)) return;
+    const commands = command.type === "pause" ? input.control.pause() : input.control.resume();
+    commands.forEach(command => input.send(command));
+    return;
+  }
+  input.control.reset();
+  if (input.session) input.takeover();
+  if (command.type === "seekCanonicalTick") input.send({ type: "pause" });
+  input.send(command);
+}

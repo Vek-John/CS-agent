@@ -29,9 +29,22 @@
 | 已push | Jev受限评估与准备性能修复 | 原任务 01a0c914-96d1-72c0-b00d-f1b02ed6f4a4（空闲，不再派发写工作） | da640a6；1039 tests、TS、Web/Viewer/desktop构建和sidecar通过 |
 | 已push | 观察语义与联合证据协议 | 同上 | 6ba9e31；1073 tests/TS/Web/Viewer通过；27次live未证明Jev判断质量提高 |
 | 已push | 真实整场复盘体验与可靠性改进 | 01a0d72c-d1b6-7d31-9b5a-8705470ff0be（已结束，释放写入与进程） | d69a290；修复启动阻塞、已看cue回访跳过结果门；真实9回合/4cue到完成、刷新恢复、相关测试/TS/build通过；主控核对关键diff与验证记录 |
-| 已分配 | 暂停/播放保留带看意图 | 新任务01a0d759-8472-7072-ae94-84ec101ece3b，独占当前工作树本轮写入 | 真实R2暂停立即进入自由查看，再播放仍不恢复教练；本轮只修复这一条控制语义，并验证结果窗口暂停续播和真正自由跳转仍可接管 |
+| 阶段已push，A5待补验 | 暂停/播放保留带看意图 | 01a0d759-8472-7072-ae94-84ec101ece3b，阶段结束释放写入；原goal未完成 | Host普通暂停/继续、结果门与显式seek修复；105相关测试/TS/build通过；电脑控制连接/点击失败，真实Demo交互未验收。详见GUIDED_PAUSE_RESUME.md；恢复工具后先补原A5，不重复模型实验 |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
+
+## 本轮任务卡：暂停/继续保留带看意图（2026-09-25）
+
+- 基线2890ee6，启动时工作树干净，负责人01a0d759-8472-7072-ae94-84ec101ece3b；有限goal已建立。只处理暂停语义，不重做d69a290或Jev实验。
+- A1复现：底部pause/play共用issueUserCommand，无条件USER_TAKEOVER；先提取原行为到Host真实调用的共享入口，写Session/Agent交接红测试，再验证现有真实Demo页面。
+- A2/A3：暂停为Host瞬时播放意图，Session仍拥有phase/cue/default cursor/Outcome gate；普通及manual结果窗口暂停期间不得推进或被effect重播，续播从当前帧继续，恰好一次完成门。
+- A4：seek/回合跳转继续接管并使旧意图失效；教练已暂停时用既有“再看一遍/继续下一段”，不让通用play跨门；旧bridge状态只能提供事实，不能恢复用户意图。
+- A5/A6：相关语义回归、TS、build，实际默认/结果/manual暂停续播与自由seek；ARCHITECTURE、学习日志、验证记录、commit/push。桌面App/安装不在本轮验证范围。
+- 风险/所有权：主控负责所有写入与唯一Edge窗口、页面/Worker/server；复用开发Host+静态Viewer，空provider、原Demo只读，bulk不出页面。controller40分钟超时，完成后关闭窗口、服务并确认端口释放。pause_effect_review只读检查effect/Agent/重连风险，继承默认模型/推理，10分钟期限，不启动进程、不写文件。
+
+- 阶段结果：原始Host入口回归1红/24绿；修复后8文件105相关测试、TS、production build通过。只读审查发现的无Session pause→seek回归已统一真实入口修复。未修改Session契约/持久化或模型调用，教练停靠时原始play禁用。
+- A5仍环境阻塞：Edge原生timeout；内置浏览器快照可读，但AX/DOM/坐标点击目标不可用，文件选择未触发，未执行四条真实Demo交互。已问用户桌面可操作状态，未重复追问。经主控明确许可只提交阶段成果，原goal不标完成、不降低验收。
+- 清理与接续：主控唯一server已停，3000/5174无监听；本轮IAB页已关，浏览器tab清单为空；Edge调用没有返回可用窗口句柄，无法确认其后台窗口状态，未强制终止用户浏览器。阶段提交后释放写入；恢复交互后按[最小接续路径](validation/GUIDED_PAUSE_RESUME.md)补验，进入前核实最新工作树所有权。
 
 ## 本轮任务卡：真实带看控制可靠性（2026-09-25）
 
