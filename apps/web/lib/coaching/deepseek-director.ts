@@ -1,3 +1,4 @@
+import { assertPreparationActive, requestPreparationJson } from "./preparation-transport";
 import { type ObservableSituation, observableSituation, playerFacingLimitation } from "./decision-presentation";
 import type {
   CandidateSet,
@@ -416,6 +417,7 @@ export async function requestTeachingDirector(
   set: CandidateSet,
   options: { endpoint?: string; fetcher?: FetchLike; maxSelected?: number; signal?: AbortSignal } = {}
 ): Promise<DirectorDecisionSet> {
+  assertPreparationActive(options.signal);
   const context = buildDirectorProviderRequestContext(set, options.maxSelected);
   if (context.request.candidates.length === 0) {
     return deterministicDirectorFallback(set, set.candidates.length === 0 ? "NO_CANDIDATES" : "NO_PRACTICAL_CANDIDATES", context.request.max_selected);
@@ -423,12 +425,14 @@ export async function requestTeachingDirector(
   const endpoint = options.endpoint ?? "/api/coaching/direct";
   try {
     const fetcher = options.fetcher ?? fetch;
-    const response = await fetcher(endpoint, { method: "POST", headers: { "content-type": "application/json" }, ...(options.signal ? { signal: options.signal } : {}), body: JSON.stringify(context.request) });
+    const response = await requestPreparationJson(fetcher, endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(context.request) }, options.signal);
+    assertPreparationActive(options.signal);
     if (!response.ok) return deterministicDirectorFallback(set, `HTTP_${response.status}`, context.request.max_selected);
-    const raw = await response.json() as unknown;
+    const raw = response.payload;
     const result = raw && typeof raw === "object" && "selected" in raw ? raw as DirectorProviderResult : fallbackProviderResult(context.request, "INVALID_RESPONSE");
     return mapDirectorProviderResult(set, context, result);
   } catch (error) {
+    assertPreparationActive(options.signal);
     if (error instanceof Error && error.name === "AbortError") throw error;
     return deterministicDirectorFallback(set, error instanceof Error ? error.message : "DIRECTOR_REQUEST_FAILED", context.request.max_selected);
   }

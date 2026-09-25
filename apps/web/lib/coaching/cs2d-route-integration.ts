@@ -323,6 +323,7 @@ export function createReviewPreparationOrchestrator(
       try {
         result = await dependencies.prepareNarration(request);
       } catch (error) {
+        if (!active || controller.signal.aborted) return;
         const cause = error instanceof Error ? error.message : "NARRATION_PROVIDER_ERROR";
         if (!dependencies.fallbackNarration) throw new Error(`NARRATION_PREPARATION_FAILED:${cause}`);
         result = await dependencies.fallbackNarration(request, cause);

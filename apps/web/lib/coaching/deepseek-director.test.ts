@@ -178,6 +178,9 @@ describe("DeepSeek Director provider packet", () => {
     });
 
     expect(result.status).toBe("SUCCEEDED");
+    const clientResult = await requestTeachingDirector(candidateSet(1), { fetcher: async () => Response.json(result) });
+    expect(clientResult.manifest.status).toBe("SUCCEEDED");
+    expect(clientResult.selected).toHaveLength(1);
     expect(requestBody?.messages?.[0]?.content).toContain("do not use a selections key");
     expect(requestBody?.messages?.[0]?.content).toContain("priority, primary_focus_code, selection_reason, reason_refs, evidence_refs, confidence");
     expect(requestBody?.messages?.[0]?.content).toContain("Do not echo candidate_set_id");
@@ -194,7 +197,7 @@ describe("DeepSeek Director provider packet", () => {
     const controller = new AbortController();
     const abort = Object.assign(new Error("aborted"), { name: "AbortError" });
     const fetcher = vi.fn(async (_input: string | URL, init?: RequestInit) => {
-      expect(init?.signal).toBe(controller.signal);
+      expect(init?.signal?.aborted).toBe(false);
       throw abort;
     });
     await expect(requestTeachingDirector(candidateSet(1), { fetcher, signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
@@ -240,4 +243,45 @@ it("projects public decision state and rejects hidden-state additions to the Dir
   const malicious = structuredClone(context.request);
   Object.assign(malicious.candidates[0].result_summary, { enemyPositions: [{ x: 1234, y: 5678 }] });
   expect(() => parseDirectorRequest(malicious)).toThrow(/unapproved data/);
+});
+
+
+describe("bounded preparation transport regression", () => {
+  it.each(["fetch", "body"] as const)("settles a hung %s at the client deadline even if abort is ignored", async stage => {
+    vi.useFakeTimers();
+    try {
+      const never = new Promise<Response>(() => {});
+      const fetcher = vi.fn(() => stage === "fetch" ? never : Promise.resolve({ ok: true, status: 200, json: () => new Promise(() => {}) } as Response));
+      let settled = false;
+      const pending = requestTeachingDirector(candidateSet(1), { fetcher }).then(value => { settled = true; return value; });
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(settled).toBe(true);
+      expect((await pending).manifest).toMatchObject({ status: "FALLBACK", reason: "LOCAL_REQUEST_TIMEOUT" });
+    } finally { vi.useRealTimers(); }
+  });
+});
+
+
+it("does not request or return fallback when the client parent is already cancelled", async () => {
+  const parent = new AbortController(); parent.abort(); const fetcher = vi.fn();
+  await expect(requestTeachingDirector(candidateSet(1), { fetcher, signal: parent.signal })).rejects.toMatchObject({ name: "AbortError" });
+  expect(fetcher).not.toHaveBeenCalled();
+});
+it("exits the client on parent cancellation even when fetch ignores abort", async () => {
+  vi.useFakeTimers();
+  try {
+    const parent = new AbortController();
+    const pending = requestTeachingDirector(candidateSet(1), { fetcher: () => new Promise(() => {}), signal: parent.signal }).catch(error => error);
+    parent.abort();
+    expect(await pending).toMatchObject({ name: "AbortError" });
+    expect(vi.getTimerCount()).toBe(0);
+  } finally { vi.useRealTimers(); }
+});
+
+
+it.each(["http", "bad-body"] as const)("retains the client fallback reason for %s", async mode => {
+  const fetcher = async () => mode === "http" ? new Response(null, { status: 503 })
+    : Object.assign(new Response(), { json: async () => { throw new SyntaxError("bad-body"); } });
+  const result = await requestTeachingDirector(candidateSet(1), { fetcher });
+  expect(result.manifest).toMatchObject({ status: "FALLBACK", reason: mode === "http" ? "HTTP_503" : "bad-body" });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildCs2dAnalysisBundle,
   type Cs2dReplay,
@@ -17,6 +17,7 @@ import {
 import {
   assertRecoveryMatchesActiveRevision,
   buildReconnectReplayEvent,
+  createRecoveryReviewPreparationDependencies,
   buildSessionRecoveryRecord,
   checkpointForRecoveryBoundary,
   createRecoverySessionIdentity,
@@ -564,4 +565,24 @@ it("restores only the checkpoint case matching the paused cue without advancing 
   expect(restored.outcome_completion).toEqual(session.outcome_completion);
   expect(restored.consumed_cue_ids).toEqual(session.consumed_cue_ids);
   expect(restoreCheckpointTeachingCase(plan, session, { ...saved.cueCase, cueId: "another-cue" })).toBe(session);
+});
+
+
+it("reuses saved preparation without opening either bounded client request", async () => {
+  const { createReviewPreparationOrchestrator } = await import("../coaching/cs2d-route-integration");
+  const input = fixture();
+  const record = buildSessionRecoveryRecord({ ...input, plan: input.analysis.review_plan,
+    boundaryKind: "ROUTE_START", demoContentHash: HASH, selectedPlayerId: "dog", agentCheckpointId: "checkpoint-1" });
+  const dependencies = createRecoveryReviewPreparationDependencies(input.analysis, record);
+  const fetcher = vi.fn(() => { throw Error("saved preparation must not request transport"); });
+  vi.stubGlobal("fetch", fetcher);
+  try {
+    const events: string[] = [];
+    const controller = createReviewPreparationOrchestrator("saved-preparation", input.analysis.review_plan,
+      { narrationByCue: input.narrationByCue, readiness: input.routeState.readiness }, dependencies);
+    await controller.run(event => events.push(event.type));
+    expect(events).toContain("READY_TO_START");
+    expect(events).not.toContain("NARRATION_UPDATE");
+    expect(fetcher).not.toHaveBeenCalled();
+  } finally { vi.unstubAllGlobals(); }
 });

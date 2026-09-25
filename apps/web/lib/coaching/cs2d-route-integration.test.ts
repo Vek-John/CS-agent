@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createSyntheticMirageTimeline } from "@cs-coach/demo-domain";
 import { createFixtureReviewPlan, assembleCandidateSet, deterministicNarrationBundle } from "@cs-coach/review-planner";
 import { decisionSnapshotFixture } from "../../../../libs/review-planner/src/teaching-gate-fixtures";
@@ -64,11 +64,12 @@ function planWithThirdCue() {
   };
 }
 
-function integrationAnalysis() {
+function integrationAnalysis(withThird = false) {
   const matchTimeline = createSyntheticMirageTimeline();
   const candidateData = [
     { id: "candidate-r2", roundNumber: 2, preRollStart: 2200, decisionTick: 2350, revealTick: 2460, outcomeEnd: 2700 },
-    { id: "candidate-r3", roundNumber: 3, preRollStart: 3800, decisionTick: 3910, revealTick: 4020, outcomeEnd: 4250 }
+    { id: "candidate-r3", roundNumber: 3, preRollStart: 3800, decisionTick: 3910, revealTick: 4020, outcomeEnd: 4250 },
+    ...(withThird ? [{ id: "candidate-r4", roundNumber: 4, preRollStart: 5200, decisionTick: 5350, revealTick: 5460, outcomeEnd: 5700 }] : [])
   ] as const;
   const candidates = candidateData.map((item) => ({
     candidateId: item.id,
@@ -672,4 +673,90 @@ it("does not merge readiness from a different frozen route during activation", a
   })).toBe(false);
   expect(accepted).toBe(false);
   expect(mounted).toBe(false);
+});
+
+
+describe("real preparation clients with bounded transport", () => {
+  it("freezes the full route and starts after Director/first-window timeouts, then prepares later cues", async () => {
+    vi.useFakeTimers();
+    try {
+      const { requestTeachingDirector } = await import("./deepseek-director");
+      const { requestNarrationBundle } = await import("./narrator-contract");
+      const analysis = integrationAnalysis(true);
+      const provisional = createFixtureReviewPlan(analysis.matchTimeline);
+      const late: Array<() => void> = [];
+      const lateDirectorJson = vi.fn(async () => { throw Error("late headers must not read body"); });
+      const directorFetch = vi.fn(() => new Promise<Response>(resolve => {
+        late.push(() => resolve(Object.assign(new Response(), { json: lateDirectorJson })));
+      }));
+      const narratorFetch = vi.fn(async () => ({ ok: true, status: 200, json: () => new Promise((_resolve, reject) => {
+        late.push(() => reject(Error("late narrator body")));
+      }) } as Response));
+      const dependencies = createCs2dReviewPreparationDependencies(analysis, {
+        assessDecisions: async candidateSet => ({ candidateSet, run: { version: "decision-assessment-run.v1", mode: "RULE_BASELINE", calls: 0, accepted: 0, records: [] } }),
+        director: (set, options) => requestTeachingDirector(set, { ...options, fetcher: directorFetch }),
+        narrator: (context, options) => requestNarrationBundle(context, { ...options, fetcher: narratorFetch }),
+      });
+      const events: import("./cs2d-route-integration").ReviewPreparationEvent[] = [];
+      const controller = createReviewPreparationOrchestrator("bounded-clients", provisional, {}, dependencies);
+      const run = controller.run(event => events.push(event));
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(directorFetch).toHaveBeenCalledTimes(1);
+      expect(narratorFetch).toHaveBeenCalledTimes(2);
+      const frozen = events.find(event => event.type === "ROUTE_FROZEN")!;
+      expect(frozen.plan.cues).toHaveLength(3);
+      const shape = routeSnapshot(frozen.plan);
+      await vi.advanceTimersByTimeAsync(20_000);
+      const ready = events.find(event => event.type === "READY_TO_START")!;
+      expect(ready.routeState.startable).toBe(true);
+      expect(routeSnapshot(ready.plan)).toEqual(shape);
+      expect(ready.plan.segments[0].start_tick).toBe(provisional.segments[0].start_tick);
+      expect(ready.plan.segments.at(-1)?.end_tick).toBe(provisional.segments.at(-1)?.end_tick);
+      expect(narratorFetch).toHaveBeenCalledTimes(3);
+      expect(events.filter(event => event.type === "NARRATION_UPDATE")).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(20_000); await run;
+      const updates = events.filter(event => event.type === "NARRATION_UPDATE");
+      expect(updates).toHaveLength(3);
+      for (const event of updates) {
+        const cue = ready.plan.cues.find(item => item.id === event.cueId)!;
+        expect(event.result.manifest).toMatchObject({ status: "FALLBACK", reason: "LOCAL_REQUEST_TIMEOUT" });
+        expect(event.result.narration).toMatchObject({ cueId: cue.id, candidateId: cue.candidate_id, primaryFocusCode: cue.primary_focus_code });
+      }
+      const beforeLate = JSON.stringify(events);
+      late.forEach(release => release()); await vi.advanceTimersByTimeAsync(0);
+      expect(JSON.stringify(events)).toBe(beforeLate);
+      expect(lateDirectorJson).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it.each(["director", "narrator"] as const)("cancel during %s exits without publishing readiness or invoking recovery fallback", async stage => {
+    vi.useFakeTimers();
+    try {
+      const { requestTeachingDirector } = await import("./deepseek-director");
+      const { requestNarrationBundle } = await import("./narrator-contract");
+      const analysis = integrationAnalysis();
+      const lateRejects: Array<(reason: Error) => void> = [];
+      const fetcher = vi.fn(() => new Promise<Response>((_resolve, reject) => lateRejects.push(reject)));
+      const dependencies = createCs2dReviewPreparationDependencies(analysis, {
+        assessDecisions: async candidateSet => ({ candidateSet, run: { version: "decision-assessment-run.v1", mode: "RULE_BASELINE", calls: 0, accepted: 0, records: [] } }),
+        director: (set, options) => requestTeachingDirector(set, { ...options, fetcher }),
+        narrator: (context, options) => requestNarrationBundle(context, { ...options, fetcher }),
+      });
+      const fallbackNarration = vi.fn();
+      const events: string[] = [];
+      const controller = createReviewPreparationOrchestrator("cancel-old-demo-player", createFixtureReviewPlan(analysis.matchTimeline), {}, { ...dependencies, fallbackNarration });
+      const run = controller.run(event => events.push(event.type));
+      await vi.advanceTimersByTimeAsync(stage === "director" ? 0 : 20_000);
+      expect(fetcher).toHaveBeenCalledTimes(stage === "director" ? 1 : 3);
+      controller.cancel(); await run;
+      const beforeLate = [...events];
+      lateRejects.forEach(reject => reject(Error("superseded result"))); await vi.advanceTimersByTimeAsync(20_000);
+      expect(events).toEqual(beforeLate);
+      expect(events).not.toContain("READY_TO_START");
+      expect(events).not.toContain("NARRATION_UPDATE");
+      expect(fallbackNarration).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
 });

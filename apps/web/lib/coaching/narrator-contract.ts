@@ -1,3 +1,4 @@
+import { assertPreparationActive, PreparationRequestTimeout, requestPreparationJson } from "./preparation-transport";
 import { playerFacingLimitation } from "./decision-presentation";
 import type { CoachingPackage, NarrationBundle, NarrationManifest, NarrationResult, ObservationClaim, OutcomePackage } from "@cs-coach/contracts";
 import {
@@ -222,17 +223,18 @@ export async function requestNarrationBundle(
   context: NarratorRequestContext,
   options: { endpoint?: string; fetcher?: NarrationFetcher; signal?: AbortSignal } = {}
 ): Promise<NarrationResult> {
+  assertPreparationActive(options.signal);
   if (!narrationJobIsEligible(context)) return fallbackResult(context, "NARRATION_NOT_ELIGIBLE");
   const fetcher = options.fetcher ?? fetch;
   try {
-    const response = await fetcher(options.endpoint ?? "/api/coaching/narrate", {
+    const response = await requestPreparationJson(fetcher, options.endpoint ?? "/api/coaching/narrate", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      ...(options.signal ? { signal: options.signal } : {}),
       body: JSON.stringify(context.request)
-    });
+    }, options.signal);
+    assertPreparationActive(options.signal);
     if (!response.ok) return fallbackResult(context, `HTTP_${response.status}`);
-    const payload = await response.json() as unknown;
+    const payload = response.payload;
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) return fallbackResult(context, "CLIENT_SCHEMA");
     const value = payload as Record<string, unknown>;
     if (!exactKeys(value, ["status", "bundle", "manifest"]) || !["SUCCEEDED", "FALLBACK", "DISABLED"].includes(String(value.status)) || !value.manifest || typeof value.manifest !== "object" || Array.isArray(value.manifest)) return fallbackResult(context, "CLIENT_SCHEMA");
@@ -253,7 +255,8 @@ export async function requestNarrationBundle(
     };
     return { status: manifest.status, bundle, manifest };
   } catch (error) {
+    assertPreparationActive(options.signal);
     if (error instanceof Error && error.name === "AbortError") throw error;
-    return fallbackResult(context, "CLIENT_SCHEMA");
+    return fallbackResult(context, error instanceof PreparationRequestTimeout ? error.message : "CLIENT_SCHEMA");
   }
 }

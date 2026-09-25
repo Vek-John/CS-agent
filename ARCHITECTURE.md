@@ -1273,6 +1273,8 @@ priority = proximity_to_playhead
 
 当缓冲下降时，依次降级：延后额外职业案例、使用已验证结构化模板讲解、暂停非交互批处理；不得跳过事实校验。若仍追上后台，Session 在下一个 segment 的自然边界进入 `BUFFERING`，保持当前画面和基础播放控制，优先准备该 cue，达到 `READY/FALLBACK` 后自动恢复；不得把未就绪或 UNKNOWN 区间临时改成 SKIP。
 
+Director与单cue Narrator的Host客户端对fetch及response.json使用同一个20秒请求期限，容纳现有15秒服务端模型预算和5秒本地开销；不得给正文另开期限或自动retry。`LOCAL_REQUEST_TIMEOUT`走原确定性路线/五字段讲解回退与校验，不绕过引用或信息门。父signal已取消时零请求；进行中父取消立即以AbortError退出，即使transport不响应abort也不得发布fallback或READY_TO_START。客户端结算后移除本轮timer/listener，迟到headers/body/error不能复活旧generation。Controller在实际取消后不再启动额外fallback，冻结路线与已存恢复内容仍复用。20秒是异步单请求等待界线，不是整段准备或启动的总延迟保证。
+
 ### 9.3 复盘阶段
 
 客户端加载轻量 session package；Replay 和逐帧数据继续留在 cs2d iframe。`CoachingSession` reducer 先按冻结路线从 cue 前置上下文连续播放到结果结束，确认 gate 后回到决策点并呈现 Narrator 的三段式讲解。随后 Host 才向 Coach Agent dispatch 当前 cue 的白名单摘要；Graph 选择 `FINISH_CUE` 或至多一个合法 `TeachingCapability`，以 interrupt 返回 `AgentEffect`，等待 Host 执行和 `Command resume`。Graph checkpoint 和业务会话事件分别持久化，Agent/Provider/tool 任一失败都不能阻塞播放器基本控制。

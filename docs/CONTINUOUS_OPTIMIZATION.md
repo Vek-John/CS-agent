@@ -35,17 +35,21 @@
 | 已push | 决策时公开回合时钟 | 01a0d7bb-d7ea-7e21-864f-54e7e2e17049，完成并释放写入 | 9150d51；44候选/38个有效时钟、4cue/3个教学包消费，148测试通过/1个既有缺产物跳过，TS/Web/Viewer构建通过；暂停补偿未知仍null，不据时间单独判错，见PUBLIC_ROUND_CLOCK.md |
 | 已push | 新解析器构建工具链配置 | 01a0d7ce-5686-7d33-84f4-717bae0a8401，完成并释放写入/进程 | 355e3f7；CI补WASM target/固定CLI0.2.125，保持Rust1.89；本地同toolchain预检和一次编译接线完成，21测试/真实parser与Viewer构建/TS/Web build通过；CI及1.89实际编译未运行，见PARSER_TOOLCHAIN.md |
 
-| 待执行 | 准备阶段本地请求期限 | 01a0d7e0-5597-7bf1-bc85-832b767654a7，交接后独占当前树写入 | Director/Narrator客户端仅传signal，没有transport/JSON截止时间；先确定性复现，再有界回退与取消/晚到回归，不运行模型或浏览器 |
+| 本地实现与验收完成 | 准备阶段本地请求期限 | 01a0d7e0-5597-7bf1-bc85-832b767654a7，交接后独占当前树写入 | 两个client fetch＋JSON共用20秒期限，父取消立即退出；4红复现后69相关测试/TS/build通过，真实prepare集成证明fallback后READY_TO_START/后续准备与保存恢复零请求；见PREPARATION_REQUEST_DEADLINES.md |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
 
 ## 本轮任务卡：准备阶段本地请求期限（2026-09-25）
 
-- 基线355e3f7，工作树干净；上一任务已完成并释放所有进程/写入，故串行复用当前实现树，避免另起旧main。新任务01a0d7e0-5597-7bf1-bc85-832b767654a7独占本轮代码/测试/架构/日志/任务板写入；主控仅只读协调。
+- 基线33bdb30（实现355e3f7＋交接），工作树干净；上一任务已完成并释放所有进程/写入，故串行复用当前实现树，避免另起旧main。新任务01a0d7e0-5597-7bf1-bc85-832b767654a7独占本轮代码/测试/架构/日志/任务板写入；主控仅只读协调。
 - 证据：`requestTeachingDirector`和`requestNarrationBundle`客户端分别等待fetch和response.json，没有自己的deadline。服务端15秒provider timeout不覆盖本地入口/正文卡住，Controller会一直等route或前两条narration。已有取消测试只验证fetch主动抛AbortError，未验证忽略abort的transport。
 - 目标与验收：A1用有限计时假transport复现headers/body永久等待；A2限定单次请求的fetch+JSON总期限，超时返回已有经过校验的确定性route/五字段讲解；A3父取消立即退出、不生成新fallback、不发迟到事件，清理timer/listener，不重试；A4真实Controller与客户端接线证明前两cue仍可READY_TO_START、背景准备可继续、恢复已保存内容零调用；A5相关tests/TS/production build、架构/学习日志/证据记录并commit/push功能分支。
 - 范围：当前两个Host客户端、窄transport helper和相关测试/文档；不改教学阈值、Jev实验、提示词/模型、持久化schema、播放器UI或Viewer，不延伸成全项目HTTP重构。默认客户端期限须容纳现有15秒provider预算和有界本地开销，记录选择理由；deadline不是端到端启动性能承诺。
 - 风险与阶段：先8分钟以内小复现，20分钟实现与局部回归，再最多10分钟检查/构建；无真实Demo/模型/数据库/浏览器，不碰锁屏A5或残留Edge窗口。若无可复现功能缺口则报告证据并停止，不为制造改动推进。当前任务默认模型/推理，无需为小模块强行分工；若确需独立审查只读、5分钟上限。执行者负责测试/构建进程退出、临时文件清理与写入释放。
+
+- 实际结果：4个挂起回归先红（13旧测试通过）；修复后5文件69测试通过，TypeScript与production build通过。20秒为每请求fetch+JSON共有deadline，不是整个启动耗时承诺；保留15秒server预算+5秒本地余量与LOCAL_REQUEST_TIMEOUT，无自动重试。
+- 集成证据：真实Controller＋生产clients的Director和首两Narrator timeout仍冻结完整3-cue路线并READY_TO_START，第三cue继续准备；实际恢复依赖复用已存内容零fetch。取消立即完成，晚resolve/reject不写route或发布ready，不进入额外fallback。HTTP/坏正文/正常路径保持。
+- 分工/清理：主控独占实现，preparation_cancel_review继承默认配置仅5分钟只读审查竞态，已结束、无确定must-fix；未启动服务/浏览器/模型/Demo/数据库调用，所有测试/build退出，日志仅留本树忽略目录。commit/push后释放代码写入；原工具暂停A5仍独立阻塞。后续只有实际慢请求新证据才考虑调整预算，不推广全项目HTTP重构。
 
 ## 本轮任务卡：Parser WASM构建工具链（2026-09-25）
 
