@@ -1530,6 +1530,8 @@ Host 的会话完成与稳定点持久化回调必须与当前显示所有权绑
 
 显式放弃恢复以保存的 recovery/session/run 为身份，不要求已经存在 live Session 或临时 Agent identity，因此初始 DORMANT 仍可放弃。Host 的 discard 入口捕获 generation/history epoch/runtime 与有限记录身份，同一当前操作的重复点击合并；旧操作成功、失败或异常均不得写新 UI。只有 `READY/null/null` 才清理 mode、landing/timeout、checkpoint 和 identity，并推进 history epoch 废弃进行中的旧握手。失败保留当前 Host 恢复资料，显示固定「尚未确认放弃成功」提示；不能将 Runtime 的降级内存删除描述为耐久删除。已派发的 landing timeout 在返回和异常后也需复核 epoch/runtime/记录身份；删除失败仍属当前身份时，正常 timeout 继续生效。该窄流程不提供持久重试或重建 Runtime 中已降级删除的记录。
 
+恢复提示中的「到回放区选择 Demo」只是同步 scroll/focus 导航，不表示文件已选择，不派发 `REPLAY_LOADING` 或启动导入。Viewer 保有真实选择与导入事件的权威：Host 仅以匹配当前 requestId 的 `DEMO_IMPORT_REQUESTED/PROGRESS` 进度呈现导入中，成功或失败沿原入口结束进度；切换历史记录清旧进度。未选择文件或没有导入事件时保留原 DORMANT/REJECTED/DEGRADED 和可再次操作的选择入口，不虚构文件选择器取消事件。真实 `REPLAY_READY` 后的哈希、玩家、版本和恢复握手不依赖先发 `REPLAY_LOADING`，原 Runtime 事件契约保持兼容。
+
 恢复回归必须覆盖：Replay 缺失时 DORMANT 且零 LLM；同 Demo/player/route/version 在第三个 cue 后回到相同 `CUE_PAUSED`；错误 Demo/player/route/version 拒绝；工具中刷新不重复副作用；成功 callId 继续去重；takeover 回到最近合法边界；IndexedDB/DO 失败时基础回放可用；网络 envelope 不含 File、ArrayBuffer、raw Replay 或 frames。
 
 初始门槛：非法工具、route/tick 修改、决策/结果引用串线和重复副作用均为 0；是否需要工具一致率至少 90%；需要工具时首选 capability 一致率至少 80%；全场路线完成率 100%；每 cue Policy LLM 至多一次、成功视觉工具默认至多一个；`SKIP/FREEZE` Policy 调用为 0。

@@ -1784,3 +1784,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 复核：独立只读发现已发landing timeout即使clearTimeout也可能迟到覆写成功提示，主控批准作为A3必要闭合；实际timeout入口1红→绿，返回/异常守卫，正常current timeout与拒绝discard后的timeout仍生效。
 - 验证：五文件94项通过，再新增真实current timeout正例，最终43项runtime/Host子集通过（合计95个不同相关用例）；TS/Web production build和diffcheck通过，复审无剩余must-fix。DORMANT无session/identity、正常恢复取消、十余身份/迟到/重复/异常分支、6509747边界与139eb95总结兼容覆盖。[证据](validation/RECOVERY_DISCARD.md)。
 - 限制/后续：无用户DB/Demo/模型/浏览器，fake IDB和SSR不是实际UI/耐久故障实测，原A5仍未验。降级后只承诺Host资料保留，不重建Runtime内存/持久记录或保证刷新恢复。此次所读相邻chooseRecoveryDemo仍把REPLAY_LOADING返回直接accept，可后续小fixture证明切换时是否覆写，不扩本轮为全Host审计。
+
+
+## 2026-09-26：到选择入口不等于已开始解析
+
+- 问题：chooseRecoveryDemo仅scroll/focus，却派发REPLAY_LOADING；Runtime返回REBUILDING让面板声称正在解析并隐藏选择按钮。原样抽生产入口＋实际Runtime＋面板SSR，未选文件虚假加载1红。
+- 决定：删除过早dispatch，入口仅同步导航，消除不必要的迟到回调；等待说明明确文件选择后才导入。保留真实Viewer IMPORT_REQUESTED/PROGRESS/SUCCEEDED/FAILED接线，用现有进度给面板导入反馈，不新造domain状态/取消事件。
+- 验证：DORMANT/REJECTED/DEGRADED重复导航和无事件保持原记录/可操作入口、0 runtime调用；真实Runtime无需REPLAY_LOADING即可完成REPLAY_READY→ANALYSIS_READY→RECOVERED。独立复核导入A切B残留progress，新提示会假忙；加requestId绑定和openHistory清进度，1红→绿并闭合。7文件138tests、TS/Web build、diffcheck通过。[记录](validation/RECOVERY_PICKER_FEEDBACK.md)。
+- 限制/下一步：仅Host入口、bridge adapter、Runtime/fakeIDB、SSR和patch契约测试，没有真实选择器取消/导入/浏览器验证，不变更Viewer/Parser/专业判断。无新增教学缺陷证据，不继续扩Host扫描；完整带看应回到已有自然动作回放材料及原暂停A5：仅明确桌面可用后由主控检查专属窗口缓存、限定预算接续，不在本轮新解析或尝试解锁。

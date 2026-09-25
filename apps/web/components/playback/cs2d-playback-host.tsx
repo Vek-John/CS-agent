@@ -1,5 +1,7 @@
 "use client";
 
+import { focusRecoveryDemoPicker, isRecoveryDemoImportActive } from "../../lib/recovery/recovery-demo-picker";
+
 import { dispatchDiscardableLandingTimeout, HostRecoveryDiscard, recoveryDiscardFailureResult, hostRecoveryStatusDetail } from "../../lib/recovery/host-recovery-discard";
 import { captureRecoveryBoundaryOwner, dispatchHostRecoveryBoundary, recoveryBoundaryFailureResult } from "../../lib/recovery/host-recovery-boundary";
 
@@ -447,7 +449,7 @@ export function Cs2dPlaybackHost({
   const [historyError, setHistoryError] = useState<string>();
   const [historySearch, setHistorySearch] = useState("");
   const [historyNextCursor, setHistoryNextCursor] = useState<string>();
-  const [historyImportProgress, setHistoryImportProgress] = useState<{ completedBytes: number; totalBytes: number }>();
+  const [historyImportProgress, setHistoryImportProgress] = useState<{ requestId: string; completedBytes: number; totalBytes: number }>();
   const historyDurabilityReadyRef = useRef<Promise<void> | undefined>(undefined);
   const historyOpenEpochRef = useRef(0);
   const expectedManagedSourceRef = useRef<ExpectedManagedReplayIdentity | undefined>(undefined);
@@ -765,6 +767,7 @@ export function Cs2dPlaybackHost({
       }
     };
     expectedManagedSourceRef.current = undefined;
+    setHistoryImportProgress(undefined);
     invalidateGeneration();
     clearRecoveryLandingTimeout();
     guidedSeekEpochRef.current += 1;
@@ -1006,19 +1009,8 @@ export function Cs2dPlaybackHost({
   }, [historyActiveReviewId, historyItems, refreshReviewHistory, reviewHistoryApi]);
 
   const chooseRecoveryDemo = useCallback(() => {
-    const runtime = recoveryRuntimeRef.current;
-    const record = recoveryRecordRef.current;
-    if (!runtime || !record) return;
-    // File pickers require a trusted click inside the iframe. Bring that
-    // existing local picker into view without moving File/FileList into Host.
-    iframeRef.current?.scrollIntoView({ block: "center", behavior: "auto" });
-    iframeRef.current?.focus();
-    void runtime.dispatch({
-      type: "REPLAY_LOADING",
-      eventId: recoveryEventId("recovery-replay-loading"),
-      recoveryId: record.recoveryId,
-    }).then(acceptRecoveryResult);
-  }, [acceptRecoveryResult]);
+    focusRecoveryDemoPicker(iframeRef.current);
+  }, []);
 
   const discardRecovery = useCallback(() => {
     const runtime = recoveryRuntimeRef.current;
@@ -1651,7 +1643,7 @@ export function Cs2dPlaybackHost({
         historyOpenEpochRef.current += 1;
         historyRestoreControllerRef.current?.cancel();
         expectedManagedSourceRef.current = { requestId: payload.requestId };
-        setHistoryImportProgress({ completedBytes: 0, totalBytes: payload.byteSize });
+        setHistoryImportProgress({ requestId: payload.requestId, completedBytes: 0, totalBytes: payload.byteSize });
         void reviewHistoryApi.importCapability({ requestId: payload.requestId, originalFilename: payload.originalFilename, byteSize: payload.byteSize })
           .then(({ capabilityToken }) => {
             if (!managedRequestMatchesExpected(expectedManagedSourceRef.current, payload.requestId)) return;
@@ -1699,7 +1691,7 @@ export function Cs2dPlaybackHost({
       }
       if (payload.type === "DEMO_IMPORT_PROGRESS") {
         if (!managedRequestMatchesExpected(expectedManagedSourceRef.current, payload.requestId)) return;
-        setHistoryImportProgress({ completedBytes: payload.completedBytes, totalBytes: payload.totalBytes });
+        setHistoryImportProgress({ requestId: payload.requestId, completedBytes: payload.completedBytes, totalBytes: payload.totalBytes });
         return;
       }
 
@@ -3282,6 +3274,7 @@ export function Cs2dPlaybackHost({
           {recoveryStatusKind ? (
             <SessionRecoveryStatus
               status={recoveryStatusKind}
+              importing={isRecoveryDemoImportActive(historyImportProgress, expectedManagedSourceRef.current)}
               detail={hostRecoveryStatusDetail(recoveryResult)}
               onChooseDemo={chooseRecoveryDemo}
               onDiscard={discardRecovery}

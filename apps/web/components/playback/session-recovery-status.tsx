@@ -8,6 +8,7 @@ export type SessionRecoveryStatusKind = "DORMANT" | "LOADING" | "REBUILDING" | "
 export interface SessionRecoveryStatusProps {
   readonly status: SessionRecoveryStatusKind;
   readonly detail?: string;
+  readonly importing?: boolean;
   readonly onChooseDemo: () => void;
   readonly onDiscard?: () => void;
 }
@@ -30,15 +31,19 @@ function Icon({ kind }: { kind: SessionRecoveryStatusKind }) {
   return <ShieldCheck aria-hidden="true" />;
 }
 
-export function SessionRecoveryStatus({ status, detail, onChooseDemo, onDiscard }: SessionRecoveryStatusProps) {
-  const copy = COPY[status];
+export function SessionRecoveryStatus({ status, detail, importing = false, onChooseDemo, onDiscard }: SessionRecoveryStatusProps) {
+  const copy = importing ? {
+    title: "正在导入 Demo", detail: "正在导入所选文件；完成后会核对比赛、玩家和恢复位置。",
+    choose: false, discard: COPY[status].discard,
+  } : COPY[status];
   return (
-    <section className={styles.status} data-recovery-state={status} aria-live="polite">
-      <div className={styles.icon}><Icon kind={status} /></div>
+    <section className={styles.status} data-recovery-state={status} aria-live="polite" aria-busy={importing || status === "LOADING" || status === "REBUILDING"}>
+      <div className={styles.icon}><Icon kind={importing ? "LOADING" : status} /></div>
       <div className={styles.copy}>
         <p className={styles.eyebrow}>复盘恢复</p>
         <h2>{copy.title}</h2>
-        <p className={styles.detail}>{detail ?? copy.detail}</p>
+        <p className={styles.detail}>{importing ? copy.detail : detail ?? copy.detail}</p>
+        {copy.choose ? <p className={styles.detail}>请在回放区选择同一份 Demo。选择文件后才会开始导入；未选择时可随时继续。</p> : null}
       </div>
       <div className={styles.actions}>
         {copy.choose ? (

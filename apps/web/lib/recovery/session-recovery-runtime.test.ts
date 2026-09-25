@@ -1,3 +1,4 @@
+import { focusRecoveryDemoPicker } from "./recovery-demo-picker";
 import { dispatchDiscardableLandingTimeout, HostRecoveryDiscard, type RecoveryDiscardOwner } from "./host-recovery-discard";
 import { captureRecoveryBoundaryOwner, dispatchHostRecoveryBoundary, recoveryBoundaryFailureResult, type RecoveryBoundaryOwner } from "./host-recovery-boundary";
 import { describe, expect, it, vi } from "vitest";
@@ -604,5 +605,74 @@ it("still publishes a current landing timeout from the real runtime after a reje
     await dispatchDiscardableLandingTimeout({ runtime: wrapper, record: a, eventId: "timeout", isCurrent: () => owner.historyEpoch === 1, accept });
     expect(accept).toHaveBeenCalledOnce();
     expect(accept).toHaveBeenCalledWith(expect.objectContaining({ status: "DEGRADED", recoveryId: a.recoveryId, record: a, reason: "PLAYBACK_LANDING_TIMEOUT" }));
+  } finally { await deleteDatabase(databaseName); }
+});
+
+
+it("does not claim to rebuild a DORMANT review when the Host only focuses the Demo picker", async () => {
+  const databaseName = "recovery-picker-feedback";
+  const runtime = createSessionRecoveryRuntime({ indexedDB: fakeIndexedDB, databaseName, now: () => 1000 });
+  const a = record("picker-waiting", 1000);
+  await runtime.dispatch({ type: "SESSION_STARTED", eventId: "start", record: a });
+  let current = await runtime.dispatch({ type: "BOOT", eventId: "boot" });
+  const before = JSON.stringify(current);
+  const surface = { scrollIntoView: vi.fn(), focus: vi.fn() };
+  const dispatch = vi.spyOn(runtime, "dispatch");
+  try {
+    focusRecoveryDemoPicker(surface);
+    const { SessionRecoveryStatus } = await import("../../components/playback/session-recovery-status");
+    const { createElement } = await import("react"); const { renderToStaticMarkup } = await import("react-dom/server");
+    const html = renderToStaticMarkup(createElement(SessionRecoveryStatus, { status: current.status === "READY" ? "REBUILDING" : current.status, onChooseDemo: () => {} }));
+    expect(html).not.toContain("正在验证并重新解析");
+    expect(html).toContain("到回放区选择 Demo");
+    expect(JSON.stringify(current)).toBe(before); expect(dispatch).not.toHaveBeenCalled();
+    expect(surface.scrollIntoView).toHaveBeenCalledWith({ block: "center", behavior: "auto" }); expect(surface.focus).toHaveBeenCalledOnce();
+  } finally { await deleteDatabase(databaseName); }
+});
+
+it.each(["DORMANT", "REJECTED", "DEGRADED"] as const)("keeps %s recoverable and actionable when no file is selected after repeated picker navigation", async status => {
+  const databaseName = `picker-idle-${status}`;
+  const runtime = createSessionRecoveryRuntime({ indexedDB: status === "DEGRADED" ? undefined : fakeIndexedDB, databaseName, now: () => 1000 });
+  const a = record("waiting-picker", 1000);
+  await runtime.dispatch({ type: "SESSION_STARTED", eventId: "start", record: a });
+  const current = status === "REJECTED" ? await runtime.dispatch(replayReady(a.recoveryId, "f".repeat(64)))
+    : await runtime.dispatch({ type: "BOOT", eventId: "boot" });
+  const original = JSON.stringify(current);
+  const dispatch = vi.spyOn(runtime, "dispatch");
+  const surface = { scrollIntoView: vi.fn(), focus: vi.fn() };
+  try {
+    // No Viewer import event: represents waiting/non-selection, not a real browser cancel event.
+    for (let click = 0; click < 3; click++) focusRecoveryDemoPicker(surface);
+    focusRecoveryDemoPicker(null);
+    await Promise.resolve();
+    const { SessionRecoveryStatus } = await import("../../components/playback/session-recovery-status");
+    const { createElement } = await import("react"); const { renderToStaticMarkup } = await import("react-dom/server");
+    const html = renderToStaticMarkup(createElement(SessionRecoveryStatus, { status, onChooseDemo: () => {} }));
+    expect(html).toContain(`data-recovery-state="${status}"`); expect(html).toContain('aria-busy="false"');
+    expect(html).toContain("选择文件后才会开始导入"); expect(html).toContain("到回放区选择 Demo");
+    expect(html).not.toContain("正在验证并重新解析"); expect(html).not.toContain("复盘已恢复");
+    expect(JSON.stringify(current)).toBe(original); expect(dispatch).not.toHaveBeenCalled();
+    expect(surface.focus).toHaveBeenCalledTimes(3);
+  } finally { if (status !== "DEGRADED") await deleteDatabase(databaseName); }
+});
+
+it("recovers through the real replay/hash/player/version handshake without the obsolete picker loading request", async () => {
+  const databaseName = "recovery-no-picker-loading";
+  const runtime = createSessionRecoveryRuntime({ indexedDB: fakeIndexedDB, databaseName, now: () => 1000 });
+  const a = record("direct-replay", 1000);
+  await runtime.dispatch({ type: "SESSION_STARTED", eventId: "start", record: a });
+  await runtime.dispatch({ type: "BOOT", eventId: "boot" });
+  try {
+    focusRecoveryDemoPicker({ scrollIntoView: vi.fn(), focus: vi.fn() });
+    const replay = await runtime.dispatch(replayReady(a.recoveryId));
+    expect(replay.status).toBe("READY");
+    expect(replay.effects).toEqual([{ type: "SELECT_PLAYER", recoveryId: a.recoveryId, playerId: a.selectedPlayerId }]);
+    const analysis = await runtime.dispatch({ type: "ANALYSIS_READY", eventId: "analysis", recoveryId: a.recoveryId,
+      demoContentHash: HASH, selectedPlayerId: a.selectedPlayerId, routeId: a.routeId, routeHash: a.routeHash,
+      versions: { parser: a.versions.parser, analysisAdapter: a.versions.analysisAdapter, planner: a.versions.planCompiler } });
+    expect(analysis.status).toBe("REBUILDING");
+    expect(analysis.effects.map(effect => effect.type)).toEqual(["REQUEST_SESSION_REHYDRATE", "SEEK_RECOVERY_BOUNDARY", "RECONNECT_AGENT"]);
+    const restored = await runtime.dispatch({ type: "RECOVERY_HANDSHAKE_COMPLETED", eventId: "restored", recoveryId: a.recoveryId });
+    expect(restored).toMatchObject({ status: "RECOVERED", record: a });
   } finally { await deleteDatabase(databaseName); }
 });
