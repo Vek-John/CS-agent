@@ -1816,3 +1816,10 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：先从真实source2 runner/observer确认end旧tick→start新tick→消息处理。每tick-end单次controller遍历、index查pawn/weapon、整批替换O(players)小缓存；绑定完整实体世代与round。下一start只接受真实相邻end样本，frame不再被同tick-end覆写。v2独立sample时间/refs与明确缺失标记，Host按source的round/freshness/strict-prior和变化门判断，旧v1不重解释。
 - 验证：真实Parser/CNetMsgTick Observer夹具验证同tick多命令、跳跃/倒退和真实来源时间；首次夹具缺sync暴露prologue差异，补全协议后通过。parser9/vendor33、相关180tests、TS/Web/WASM/Viewer及ViewerTS通过，clean13patch与0012→0013受控升级通过。本轮唯一真实解析7,118ms/总7,363ms，7,239frames不变、cache实测max10、2,970条有效ammo、正式消费3/4（M4A4=11、FAMAS=12、AK47=14），44候选/全路线/4诊断判断建议消融一致。
 - 限制：c1仍因WEAPON_FIRE与decision同tick19426而拒绝，不能用该tick结束信息解锁。41空clip为记录不是事件；单次耗时非性能基准。备弹与完整换弹/捡放来源仍未知，端点一致不是连续性证明，专业判断质量未提升结论。详见[真实验收](validation/PRIOR_TICK_AMMO.md)。
+
+## 2026-09-26：整场完成失败必须区别于去重和过期
+
+- 问题：Controller.completeSession将请求异常、空/不可信响应、CONFIRMED去重都吞成undefined，Host只在result存在才请求总结。默认diagnostics通过本地fallback已走完时，面板可只剩标题和完成按钮。
+- 决定：请求owner获得START即反馈pending；当前失败用本地FAILED wrapper走既有MISSING_SESSION_SUMMARY / SESSION_SUMMARY artifact，不伪Graph已完成或无重复主题。完整身份匹配且Graph/sessionStatus均COMPLETED才投影成功摘要。请求前捕获generation/session/run/review/revision/open epoch；去重或token过期仍静默。attempt绑定owner token，取消后显式同run返回可重新收尾，旧清理不删新pending。
+- 验证：真实Controller→生产Host完成入口→SSR Panel 1红→绿；29新增集成包括ANSWERED/SKIPPED经真实Agent同步失败→本地诊断→WRAP_UP→完成/自由seek，以及pending/CONFIRMED/当前错identity/取消交错/正常身份释放。8文件118tests、TS/Web production通过，原成功总结和139eb95失败保存/历史恢复零重新生成保持。
+- 限制：SSR不冒称浏览器验收，原UI A5不动。Agent fetch/json无客户端deadline，永不settle仍pending但可完成/回看；本轮不扩transport/重试/队列。见[验收](validation/SESSION_COMPLETION_FEEDBACK.md)。

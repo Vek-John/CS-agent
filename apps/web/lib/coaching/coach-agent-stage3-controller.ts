@@ -28,6 +28,11 @@ export type Stage3ControllerStatus =
   | "CANCELLED"
   | "RECOVERY_REQUIRED";
 
+/** Local completion request outcome; FAILED never pretends to be a completed Graph. */
+export type Stage3SessionCompletion =
+  | { readonly status: "SUCCEEDED"; readonly result: CoachAgentResult }
+  | { readonly status: "FAILED" };
+
 export interface Stage3PlaybackState {
   readonly sessionId: string;
   readonly runId: string;
@@ -151,6 +156,7 @@ export class CoachAgentStage3Controller {
   private readonly adapter: CoachAgentStage3HostAdapter;
   private readonly scheduler: Stage3ControllerScheduler;
   private readonly startedCueIds = new Set<string>();
+  private readonly completionAttempts = new Map<string, number>();
   private pending: PendingTool | undefined;
   private activeInput: Stage3HostAdapterInput | undefined;
   private takeoverPromise: Promise<boolean> | undefined;
@@ -793,23 +799,49 @@ export class CoachAgentStage3Controller {
     void this.queueObserversUntil(input, segmentIndex, true, currentSessionPhase).catch(() => undefined);
   }
 
-  completeSession(input: Stage3IdentityInput): Promise<CoachAgentResult | undefined> {
+  async completeSession(input: Stage3IdentityInput, onPending?: () => void): Promise<Stage3SessionCompletion | undefined> {
     const eventId = `stage3-complete-${input.runId}`.replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 160);
-    const lifecycleStatus = this.adapter.beginLifecycleEvent(eventId);
-    if (lifecycleStatus === "CONFIRMED") return Promise.resolve(undefined);
-    try {
-      const event = this.adapter.createCompleteSessionEvent(input, eventId);
-      return this.dispatchLifecycle(event, eventId).then((result) => {
-        if (!result) return undefined;
-        const identity = result.identity;
-        return identity.runId === input.runId && identity.routeId === input.plan.id && identity.routeHash === input.routeState.routeFingerprint && identity.selectedPlayerId === input.selectedPlayerId
-          ? result
-          : undefined;
-      }).catch(() => undefined);
-    } catch {
-      // Completion sync is best effort; the reducer remains the UI authority.
+    // One owner handles the terminal UI result. Pending/settled repeats are not failures.
+    const previousOwner = this.completionAttempts.get(eventId);
+    if (previousOwner !== undefined && previousOwner !== this.token) {
+      this.completionAttempts.delete(eventId);
       this.adapter.releaseLifecycleEvent(eventId);
-      return Promise.resolve(undefined);
+    }
+    if (this.completionAttempts.has(eventId)) return undefined;
+    const lifecycleStatus = this.adapter.beginLifecycleEvent(eventId);
+    if (lifecycleStatus !== "START") return undefined;
+    const token = this.token;
+    this.completionAttempts.set(eventId, token);
+    const discardCancelled = () => {
+      // A reset or explicit resume may already have installed a new owner.
+      if (this.completionAttempts.get(eventId) === token) {
+        this.completionAttempts.delete(eventId);
+        this.adapter.releaseLifecycleEvent(eventId);
+      }
+      return undefined;
+    };
+    try {
+      onPending?.();
+      const event = this.adapter.createCompleteSessionEvent(input, eventId);
+      const result = await this.dispatchSerial(event, { notifyAgentResult: false });
+      if (token !== this.token) return discardCancelled();
+      if (result?.identity && Object.entries(event.identity).some(([key, value]) => result.identity[key as keyof typeof result.identity] !== value)) {
+        this.adapter.releaseLifecycleEvent(eventId);
+        return { status: "FAILED" };
+      }
+      if (!result?.identity || result.status !== "COMPLETED" || result.state.sessionStatus !== "COMPLETED") {
+        this.adapter.releaseLifecycleEvent(eventId);
+        return { status: "FAILED" };
+      }
+      try { await this.options.onAgentResult?.(event, result); } catch { /* Live completion does not depend on checkpoint mirroring. */ }
+      if (token !== this.token) return discardCancelled();
+      this.adapter.confirmLifecycleEvent(eventId);
+      return { status: "SUCCEEDED", result };
+    } catch {
+      if (token !== this.token) return discardCancelled();
+      // Preserve a bounded local failure without claiming Graph/session completion.
+      this.adapter.releaseLifecycleEvent(eventId);
+      return { status: "FAILED" };
     }
   }
 
@@ -877,6 +909,7 @@ export class CoachAgentStage3Controller {
     this.clearTimeout();
     this.pending = undefined;
     this.startedCueIds.clear();
+    this.completionAttempts.clear();
     this.adapter.reset();
     this.activeInput = undefined;
     this.takeoverPromise = undefined;

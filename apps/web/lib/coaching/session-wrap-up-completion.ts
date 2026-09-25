@@ -44,3 +44,18 @@ export async function completeAndSaveSessionWrapUp(input: {
     if (input.isCurrent()) input.onSaveError();
   }
 }
+
+/** The live Host completion entry, shared by its effect and isolated integration tests. */
+export async function completeStage3SessionWrapUp(input: Omit<Parameters<typeof completeAndSaveSessionWrapUp>[0], "buildInput"> & {
+  controller: Pick<import("./coach-agent-stage3-controller").CoachAgentStage3Controller, "completeSession">;
+  identity: import("./coach-agent-stage3-host-adapter").Stage3IdentityInput;
+  buildInput: (result: import("@cs-coach/coach-agent/client").CoachAgentResult) => SessionWrapUpBuildInput | null;
+  claim: () => boolean;
+  onStart: () => void;
+}): Promise<void> {
+  if (!input.isCurrent()) return;
+  const completion = await input.controller.completeSession(input.identity, () => { if (input.isCurrent()) input.onStart(); });
+  if (!completion || !input.isCurrent()) return;
+  if (!input.claim()) return;
+  await completeAndSaveSessionWrapUp({ ...input, buildInput: () => completion.status === "SUCCEEDED" ? input.buildInput(completion.result) : null });
+}

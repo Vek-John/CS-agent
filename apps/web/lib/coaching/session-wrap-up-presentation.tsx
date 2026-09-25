@@ -5,7 +5,7 @@ export function canPublishSessionWrapUp(result: CoachAgentResult, generation: nu
     && result.status === "COMPLETED" && result.state.sessionStatus === "COMPLETED";
 }
 
-export function isSessionWrapUpIdentityCurrent(result: CoachAgentResult,
+export function isSessionWrapUpIdentityCurrent(result: { identity: { sessionId: string; runId: string } },
   session: Pick<import("@cs-coach/contracts").CoachingSessionState, "id" | "phase"> | undefined,
   activeRunId: string | undefined): boolean {
   // Normal completion releases recovery/Stage3 identity but retains the completed session.

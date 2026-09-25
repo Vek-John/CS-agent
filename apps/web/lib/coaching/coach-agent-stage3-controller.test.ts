@@ -477,8 +477,8 @@ describe("CoachAgentStage3Controller", () => {
   it("returns COMPLETE_SESSION result once and dedupes the lifecycle event", async () => {
     const summaryResult = {
       status: "COMPLETED",
-      identity: { runId: "run-1", routeId: "route-1", routeHash: "route-hash", selectedPlayerId: "player-1" },
-      state: { sessionSummaryInput: { themes: [], completedCues: [], limitations: [] } },
+      identity: { sessionId: "session-1", runId: "run-1", routeId: "route-1", routeHash: "route-hash", selectedPlayerId: "player-1" },
+      state: { sessionStatus: "COMPLETED", sessionSummaryInput: { themes: [], completedCues: [], limitations: [] } },
       effects: [],
     } as unknown as CoachAgentResult;
     const h = harness({ dispatch: async (event) => {
@@ -494,11 +494,12 @@ describe("CoachAgentStage3Controller", () => {
       sessionId: "session-1",
       runId: "run-1",
     } as unknown as Stage3IdentityInput;
+    vi.mocked(h.adapter.createCompleteSessionEvent).mockReturnValue({ identity: summaryResult.identity } as CoachAgentEvent & { type: "COMPLETE_SESSION" });
     const first = h.controller.completeSession(lifecycleInput);
     const second = h.controller.completeSession(lifecycleInput);
     await flush();
-    expect(await first).toBe(summaryResult);
-    expect(await second).toBe(summaryResult);
+    expect(await first).toEqual({ status: "SUCCEEDED", result: summaryResult });
+    expect(await second).toBeUndefined();
     expect(h.dispatched).toHaveLength(1);
   });
 });

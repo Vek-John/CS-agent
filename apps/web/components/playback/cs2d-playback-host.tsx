@@ -120,8 +120,8 @@ import {
 } from "../../lib/coaching/cs2d-coaching-view";
 import { resolveItemPresentation } from "../../lib/assets/game-asset-display";
 import { loadLocalGameAssetCatalog } from "../../lib/assets/local-game-asset-catalog";
-import { completeAndSaveSessionWrapUp } from "../../lib/coaching/session-wrap-up-completion";
-import { canPublishSessionWrapUp, isSessionWrapUpIdentityCurrent, sessionWrapUpPresentation, SessionWrapUpPanel } from "../../lib/coaching/session-wrap-up-presentation";
+import { completeStage3SessionWrapUp } from "../../lib/coaching/session-wrap-up-completion";
+import { isSessionWrapUpIdentityCurrent, sessionWrapUpPresentation, SessionWrapUpPanel } from "../../lib/coaching/session-wrap-up-presentation";
 import { buildStage3WrapUpInput } from "../../lib/coaching/coach-agent-stage3-wrap-up";
 import {
   CoachAgentHostAdapter,
@@ -3069,28 +3069,31 @@ export function Cs2dPlaybackHost({
     );
   }, [activePlan, segment, session, stage3IdentityContext, stage3Mode]);
 
-  const requestStage3WrapUp = useCallback(async (agentResult: import("@cs-coach/coach-agent/client").CoachAgentResult, generation: number, runId: string) => {
-    if (!stage3Mode || !activePlan || !canPublishSessionWrapUp(agentResult, generation, generationRef.current, runId, userTookOverRef.current)) return;
-    if (stage3WrapUpGenerationRef.current === generation) return;
+  const requestStage3WrapUp = useCallback(async (identity: Stage3IdentityInput, generation: number) => {
+    const controller = stage3ControllerRef.current;
+    if (!stage3Mode || !activePlan || !controller || stage3WrapUpGenerationRef.current === generation) return;
     const persistence = historyPersistenceControllerRef.current;
     const reviewId = persistence?.reviewId;
     const revisionId = persistence?.revisionId;
     const openEpoch = historyOpenEpochRef.current;
-    const isCurrent = () => canPublishSessionWrapUp(agentResult, generation, generationRef.current, runId, userTookOverRef.current)
-      && isSessionWrapUpIdentityCurrent(agentResult, liveSessionRef.current, stage3IdentityRef.current?.runId)
+    const isCurrent = () => generation === generationRef.current && !userTookOverRef.current
+      && isSessionWrapUpIdentityCurrent({ identity }, liveSessionRef.current, stage3IdentityRef.current?.runId)
+      && (liveSessionRef.current?.phase === "WRAP_UP" || liveSessionRef.current?.phase === "COMPLETED")
       && historyOpenEpochRef.current === openEpoch
       && historyPersistenceControllerRef.current === persistence
       && persistence?.reviewId === reviewId && persistence?.revisionId === revisionId;
-    if (!isCurrent()) return;
-    stage3WrapUpGenerationRef.current = generation;
-    setStage3WrapUpStatus("LOADING");
-    setStage3WrapUpError(undefined);
-    await completeAndSaveSessionWrapUp({
-      buildInput: () => {
+    await completeStage3SessionWrapUp({
+      controller, identity, isCurrent, persistence,
+      claim: () => {
+        if (stage3WrapUpGenerationRef.current === generation) return false;
+        stage3WrapUpGenerationRef.current = generation;
+        return true;
+      },
+      onStart: () => { setStage3WrapUpStatus("LOADING"); setStage3WrapUpError(undefined); },
+      buildInput: (agentResult) => {
         const summaryInput = agentResult.state.sessionSummaryInput as SessionSummaryInput | null;
         return summaryInput ? buildStage3WrapUpInput(activePlan, summaryInput, narrationByCue, bundle?.candidate_set) : null;
       },
-      isCurrent, persistence,
       onRequest: setStage3WrapUpRequest,
       onResult: (result) => {
         setStage3WrapUpResult(result);
@@ -3105,10 +3108,7 @@ export function Cs2dPlaybackHost({
   useEffect(() => {
     if (historyPlaybackOnlyRef.current || !stage3Mode || !stage3IdentityContext || !session || userTookOverRef.current) return;
     if (session.phase !== "WRAP_UP" && session.phase !== "COMPLETED") return;
-    const requestedGeneration = generationRef.current;
-    void stage3ControllerRef.current?.completeSession(stage3IdentityContext).then((result) => {
-      if (result) void requestStage3WrapUp(result, requestedGeneration, stage3IdentityContext.runId);
-    });
+    void requestStage3WrapUp(stage3IdentityContext, generationRef.current);
   }, [requestStage3WrapUp, session, stage3IdentityContext, stage3Mode]);
 
   const recoveryStatusKind: SessionRecoveryStatusKind | undefined = recoveryResult?.record

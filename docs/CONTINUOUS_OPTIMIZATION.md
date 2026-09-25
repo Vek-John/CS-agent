@@ -2,12 +2,17 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
-## 当前任务：整场完成同步失败反馈（2026-09-26）
+## 已交付：整场完成同步失败反馈（2026-09-26）
 
 - 4de4a91基线clean，前产品f9d9cbd已完成/release，01a0d9e3-8904-7a40-a998-a6ed8a7558df串行独占本轮Stage3 Controller完成结果/Host收尾/既有总结fallback/tests/docs，主控只读，默认配置。
 - 新证据：Controller.completeSession catch返回undefined，CONFIRMED去重和身份不符也返回undefined；Host完成effect只在result存在调用requestStage3WrapUp。Graph不可用而本地诊断/Session已经走完时，摘要可停在IDLE无result，面板空白。先真实controller→Host入口fixture复现，不预设必须新增模型/数据契约。
 - A1区分实际失败、pending/已确认去重、过期/取消；A2当前会话失败明确提示未生成并可完成/回看，若存储可用复用既有失败artifact语义；A3重复effect不得把已保存成功覆盖为失败，旧会话不写新UI，默认diagnostics本地fallback可收尾且恢复不重新调用；A4相关tests/TS/production build；A5必要架构/学习/证据/任务板commit/push/release。
 - 风险/边界：只修有证据的完成请求→收尾展示，不全Host审计、不重写Graph/恢复/重试框架、不伪造Graph已完成或无重复主题、不改Session完成门。5分钟复现、15分钟实现、10分钟检查，必要5分钟只读review；无Demo/模型/UI服务/用户DB/密钥/部署main。纯fixture/fake transport，owner清自有测试资源。
+
+- 本轮完成：真实Controller→生产Host收尾入口→SSR Panel先复现仅标题/按钮无反馈（1红），现在当前异常/空或未完成/错身份响应均为有限FAILED→既有MISSING_SESSION_SUMMARY artifact。失败不伪Graph/sessionSummaryInput、不推导无重复主题、不保存异常或错误payload。START显示LOADING，pending/CONFIRMED/重复不覆盖；正常完成和自由回看保持。
+- 取消边界：attempt由eventId+owner token绑定，当前失败不自动重试；takeover→显式同run返回可释放被取消旧attempt。旧owner迟到不得删新PENDING或改新UI。请求前捕获generation/session/run/review/revision/history epoch，失效回调不发布/写入；当前请求错identity降级而非永久LOADING。
+- 验证/审查：8文件118tests、TypeScript、Web production build通过；29项新增入口集成覆盖默认diagnostics答题/跳过经真实同步失败→本地诊断→Session WRAP_UP/完成/自由seek、pending/去重/身份失效、同run返回及正常成功。原139eb95失败artifact验证/历史恢复零重新生成回归通过。默认completion_feedback_review只读终审无must-fix，主控发现的pending和cancel-owner补充边界已修复实测。见[紧凑验收](validation/SESSION_COMPLETION_FEEDBACK.md)。
+- 限制与release：不启动浏览器/服务，不读Demo/用户DB/密钥、不调用模型或安装部署main。测试均隔离fixture/fake transport，SSR不冒称真实浏览器验收；原UI A5保持。Agent fetch目前无客户端deadline，永不settle仍pending，但完成和自由回看可用；后续独立处理，不扩本轮。文档、commit/push及自有测试/build退出后释放，旧证据保留。
 
 ## 最新交付：弹药真实教学消费已闭合（2026-09-26）
 

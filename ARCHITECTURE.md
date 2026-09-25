@@ -1,7 +1,7 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：5.9.1
+> 版本：5.9.2
 > 最后更新：2026-09-26
 > 适用范围：Web 2D 到桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
@@ -712,7 +712,9 @@ Graph `sessionSummaryInput.themes[*].cueRefs` 是实际已完成的主题支持�
 
 确定性正文必须引用实际代表 cueId，不能引用主题数组的另一个首项。顶层、主题以及所用代表 coreIssue/betterPlay 的来源限定去重保留，并在总结面板呈现，不重新表述或静默截断。输出仍最多八条、每条 200 字符；不能完整表示时抛既有类型 `SessionWrapUpValidationError`，reason 为 `SOURCE_LIMITATIONS_EXCEED_OUTPUT_LIMIT`。匿名 Provider 请求在调用前预检并返回原受控 INVALID_REQUEST 路径，不裸抛内部 schema 异常。Host 明确显示总结未生成，保留 WRAP_UP 的完成按钮、COMPLETED 会话和自由回看，不将失败误报为无重复主题或成功总结。
 
-Host 只发布匹配 run、捕获 generation 且 Graph/sessionStatus 均 COMPLETED 的总结；完成 Graph 请求前捕获 generation，返回后仍检查 generation/接管，防止迟到结果沿新 generation 写入。旧保存总结仍按原正文/manifest 恢复，不迁移引用或重算限制，不触发新分析/模型/Memory。该约束不改变 Session/Graph 完成门或单 cue 专业判断。
+Host只有从当前请求得到身份全字段匹配、Graph/sessionStatus均COMPLETED的结果时，才能投影真实sessionSummaryInput。Controller.completeSession将当前完成请求的异常、空/未完成响应或身份不匹配响应显式返回本地FAILED；这不是Graph状态，不确认其生命周期、不mirror错响应、不伪造摘要或重复主题。Host实际入口completeStage3SessionWrapUp将此失败交给既有MISSING_SESSION_SUMMARY保存与展示。Session即使通过默认diagnostics本地fallback完成，也能明确告知总结未生成，仍可完成和自由回看。
+
+完成请求仅取得START所有权时显示LOADING；pending/CONFIRMED/已处理的重复effect无新增请求或展示副作用，成功和失败结果均只收尾一次。完成attempt绑定本地controller token：取消的旧owner释放自己的pending，显式返回同run可再发起；旧返回不得删除新owner的pending。仍当前但收到错误身份payload是有限失败，本地token/Host身份过期则静默丢弃，二者不可混同。请求前捕获generation/session/run/review/revision/history-open epoch，返回及保存时复核；正常完成清除临时run identity不妨碍同一COMPLETED session收尾。旧保存总结仍按原正文/manifest恢复，不迁移引用或重算限制，不触发新分析/模型/Memory。该约束不改变Session/Graph完成门或单cue专业判断。当前Agent transport没有客户端完成deadline，永不settle时仍显示pending；本轮不新增超时或自动重试，完成/回看不等待它。
 
 总结失败同样是可保存的收尾结果。Host 统一经 `completeAndSaveSessionWrapUp` 发布并写入既有 `SESSION_SUMMARY / session-wrap-up.v1`，无需升级 schema；三种本地失败 `MISSING_SESSION_SUMMARY`、`INVALID_PRESENTABLE_INPUT`、`SOURCE_LIMITATIONS_EXCEED_OUTPUT_LIMIT` 标记 `FALLBACK / DETERMINISTIC`，只保存有限原因，不存异常原文、不冒充 `NO_REPEATED_THEME`。恢复先经原 artifact/domain validator，再按保存的 status/manifest 呈现。历史缺失 summary 只表示「未保存、生成结果未知」，不推断失败原因或自动重新生成；旧成功正文、refs、manifest 原样使用。写入前及异步错误回调都核对 generation、session/run、review/revision 与 history open epoch；正常 COMPLETED 清理临时 recovery identity 后，同一 completed session 仍可接收其捕获 run 的收尾。保存失败只提示，完成与自由回看不依赖保存成功。
 
