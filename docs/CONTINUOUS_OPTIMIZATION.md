@@ -28,8 +28,8 @@
 |---|---|---|---|
 | 已push | Jev受限评估与准备性能修复 | 原任务 01a0c914-96d1-72c0-b00d-f1b02ed6f4a4（空闲，不再派发写工作） | da640a6；1039 tests、TS、Web/Viewer/desktop构建和sidecar通过 |
 | 已push | 观察语义与联合证据协议 | 同上 | 6ba9e31；1073 tests/TS/Web/Viewer通过；27次live未证明Jev判断质量提高 |
-| 已push | 真实整场复盘体验与可靠性改进 | 新任务 01a0d72c-d1b6-7d31-9b5a-8705470ff0be；接管原工作树全部本轮写入 | 修复实际编排产物被恢复schema拒绝的启动阻塞、已看cue回访跳过结果门；真实9回合/4cue到完成、刷新恢复、相关测试/TS/build通过；详见FULL_REVIEW_RELIABILITY.md |
-| 有证据待安排 | 暂停/播放应保留带看意图 | heartbeat统筹 | 真实R2暂停立即进入自由查看，再播放仍不恢复教练；需额外回默认顺序。下一轮只建议修复并验证这一条控制语义 |
+| 已push | 真实整场复盘体验与可靠性改进 | 01a0d72c-d1b6-7d31-9b5a-8705470ff0be（已结束，释放写入与进程） | d69a290；修复启动阻塞、已看cue回访跳过结果门；真实9回合/4cue到完成、刷新恢复、相关测试/TS/build通过；主控核对关键diff与验证记录 |
+| 已分配 | 暂停/播放保留带看意图 | 新任务01a0d759-8472-7072-ae94-84ec101ece3b，独占当前工作树本轮写入 | 真实R2暂停立即进入自由查看，再播放仍不恢复教练；本轮只修复这一条控制语义，并验证结果窗口暂停续播和真正自由跳转仍可接管 |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
 
