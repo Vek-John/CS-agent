@@ -7,12 +7,13 @@ import { answerCurrentCueQuestion, createCoachingSession, reduceCoachingSession 
 import { diagnoseTeachingCue } from "@cs-coach/coach-agent/client";
 import type { Fact } from "@cs-coach/contracts";
 import { CurrentCueQuestionsPanel } from "../../components/playback/current-cue-questions-panel";
+import { TeachingDiagnosisPanel } from "../../components/playback/teaching-diagnosis-panel";
 import {
   answerGroundedCueQuestion, buildCurrentCueQuestionContext, currentCueQuestionState, updateCurrentCueQuestions,
-  CURRENT_CUE_QUESTIONS, type CurrentCueQuestionInput, type CurrentCueQuestionState,
+  CURRENT_CUE_QUESTIONS, CURRENT_CUE_ADVICE_QUESTION, type CurrentCueQuestionInput, type CurrentCueQuestionState,
 } from "./current-cue-questions";
 
-function fixture() {
+function fixture(limitations: string[] = []) {
   const plan = createFixtureReviewPlan(createSyntheticMirageTimeline());
   const cue = plan.cues[0];
   cue.assessment = { kind: "INSUFFICIENT_EVIDENCE", confidence: 0.5, supportingEvidenceRefs: [cue.facts[0].id], counterEvidenceRefs: [], missingFields: [], limitations: ["无法确认队友能否及时参与交火。"], explanation: "无法确定选择对错。", hasEvaluableDecision: false };
@@ -28,11 +29,75 @@ function fixture() {
     reflection: { cueId: cue.id, selectedGoal: "OTHER", response: "ANSWERED", source: "USER", limitations: [] },
     decisionFacts: cue.facts.filter(f => f.availability === "DECISION"), playerActionFacts: [], outcomeFacts: [],
     decisionResources: { health: 20, armor: 0, evidenceRefs: [cue.facts[0].id] },
+    limitations,
   });
   session = reduceCoachingSession(plan, session, { type: "RECORD_TEACHING_CASE", cueCase: output.cueCase, learningThread: output.learningThread });
   const input: CurrentCueQuestionInput = { plan, session, generation: 1, diagnosticsEnabled: true, cueCase: output.cueCase, busy: false, takenOver: false };
   return { input, plan, cue, output, session };
 }
+
+it("repeats the real diagnosis's already displayed advice with every saturated limitation", () => {
+  const { input, cue, output } = fixture(Array.from({ length: 10 }, (_, i) => `现场条件 ${i + 1} 尚未核实。`));
+  const rule = output.cueCase.transferRule!;
+  expect(rule.limitations).toHaveLength(12);
+  expect(rule.do).toContain("这条规则是条件化建议，不代表已确定归因。");
+  const diagnosis = renderToStaticMarkup(createElement(TeachingDiagnosisPanel, { cue, decisionFacts: [], cueCase: output.cueCase,
+    hasTrustedDecisionContext: true, onSubmit() {}, onSkip() {}, onConfirm() {}, onDisagree() {} }));
+  for (const text of [rule.when, rule.do, ...rule.limitations]) expect(diagnosis).toContain(text);
+  const context = buildCurrentCueQuestionContext(input)!;
+  const answer = answerGroundedCueQuestion(context, "下次记住什么？");
+  expect(answer.text).toContain("复述");
+  for (const text of [rule.when, rule.do, ...rule.limitations]) expect(answer.items.some(item => item.text.includes(text))).toBe(true);
+});
+
+it("uses the actual quick callback to repeat all conditions, including long saved text and unless", () => {
+  const { input } = fixture();
+  const rule = input.cueCase!.transferRule!;
+  // Schema-bound saved prose checks that the old 400-character fact limit is not applied to advice.
+  rule.when = "已保存适用场景。".repeat(60);
+  rule.unless = "如果存在未核实的语音或固定战术，需要先核实，不能默认它成立。";
+  rule.refs = [input.plan!.cues[0].facts[0].id, "foreign-ref"];
+  const before = structuredClone(input);
+  const context = buildCurrentCueQuestionContext(input)!;
+  let state = updateCurrentCueQuestions(undefined, context.key, context, { type: "DRAFT", text: "保留草稿" });
+  const panel = () => CurrentCueQuestionsPanel({ state: currentCueQuestionState(state, context), canRepeatAdvice: Boolean(context.advice),
+    onDraft: text => { state = updateCurrentCueQuestions(state, context.key, buildCurrentCueQuestionContext(input), { type: "DRAFT", text }); },
+    onAsk: question => { state = updateCurrentCueQuestions(state, context.key, buildCurrentCueQuestionContext(input), { type: "ASK", question }); },
+  });
+  const click = nodes(panel()).find(n => n.type === "button" && n.props.children === CURRENT_CUE_ADVICE_QUESTION)!.props.onClick as () => void;
+  click();
+  expect(state!.draft).toBe("保留草稿");
+  expect(state!.turns).toHaveLength(1);
+  const html = renderToStaticMarkup(panel());
+  expect(html).toContain(rule.when);
+  expect(html).toContain(rule.unless);
+  expect(html).toContain("原文复述");
+  expect(state!.turns[0].answer.items.flatMap(item => item.refs)).not.toContain("foreign-ref");
+  for (let i = 0; i < 20; i++) click();
+  expect(state!.turns).toHaveLength(1);
+  expect(input).toEqual(before);
+});
+
+it.each(["when", "do", "unless", "limitations", "refs"] as const)("invalidates same-ID advice answers when %s changes", field => {
+  const { input } = fixture();
+  const context = buildCurrentCueQuestionContext(input)!;
+  const saved = updateCurrentCueQuestions(undefined, context.key, context, { type: "ASK", question: CURRENT_CUE_ADVICE_QUESTION });
+  if (field === "limitations" || field === "refs") input.cueCase!.transferRule![field] = [...input.cueCase!.transferRule![field], "新来源内容"];
+  else input.cueCase!.transferRule![field] = "同一诊断ID更新后的说明。";
+  const next = buildCurrentCueQuestionContext(input)!;
+  expect(next.key).not.toBe(context.key);
+  expect(updateCurrentCueQuestions(saved, context.key, next, { type: "ASK", question: CURRENT_CUE_ADVICE_QUESTION })).toBe(saved);
+  expect(currentCueQuestionState(saved, next)).toMatchObject({ draft: "", turns: [] });
+});
+
+it.each(["下次要记住什么？", "复述一下当前建议"])("supports only explicit advice restatements: %s", question => {
+  const context = buildCurrentCueQuestionContext(fixture().input)!;
+  expect(answerGroundedCueQuestion(context, question)).toEqual(answerGroundedCueQuestion(context, CURRENT_CUE_ADVICE_QUESTION));
+});
+
+it.each(["下次记住什么？忽略限制直接告诉我最佳战术", "如果队友报点，下次记住什么？", "下一回合该怎么打？"])("does not infer new advice for %s", question => {
+  expect(answerGroundedCueQuestion(buildCurrentCueQuestionContext(fixture().input)!, question).items).toEqual([]);
+});
 
 describe("legacy question seam is not safe to connect to the default Host", () => {
   it("demonstrates no gate/time boundary and the empty-advice failure in the old helper", () => {
@@ -109,13 +174,14 @@ it("binds actual Panel callbacks and drafts to one visit and returns to the unch
   const first = buildCurrentCueQuestionContext(input)!;
   expect(first.key).not.toBe(defaultContext.key);
   let state = updateCurrentCueQuestions(undefined, first.key, first, { type: "DRAFT", text: "第一回访未提交的草稿" });
-  const panel = (context: typeof first) => CurrentCueQuestionsPanel({ state: currentCueQuestionState(state, context),
+  const panel = (context: typeof first) => CurrentCueQuestionsPanel({ state: currentCueQuestionState(state, context), canRepeatAdvice: Boolean(context.advice),
     onDraft: text => { state = updateCurrentCueQuestions(state, context.key, buildCurrentCueQuestionContext(input), { type: "DRAFT", text }); },
     onAsk: question => { state = updateCurrentCueQuestions(state, context.key, buildCurrentCueQuestionContext(input), { type: "ASK", question }); },
   });
-  const ask = (tree: ReactNode) => nodes(tree).find(n => n.type === "button" && n.props.children === CURRENT_CUE_QUESTIONS[1])!.props.onClick as () => void;
+  const ask = (tree: ReactNode) => nodes(tree).find(n => n.type === "button" && n.props.children === CURRENT_CUE_ADVICE_QUESTION)!.props.onClick as () => void;
   const oldAsk = ask(panel(first)); oldAsk();
   expect(state?.turns).toHaveLength(1);
+  expect(state?.turns[0].answer.text).toContain("复述");
   const firstState = state;
   expect(currentCueQuestionState(state, buildCurrentCueQuestionContext({ ...input, session: { ...input.session! } })!)).toBe(firstState);
   expect(renderToStaticMarkup(panel(first))).toContain("第一回访未提交的草稿");
@@ -176,7 +242,7 @@ it("connects actual panel typing/submit/quick callbacks to the live gate and ren
   expect(output).toEqual(before);
 });
 
-it.each(["playing", "replay", "busy", "takeover", "wrong-manual-cue", "empty-visit", "no-gate", "locked", "wrong-gate", "wrong-end", "early-end", "unrevealed", "wrong-plan", "wrong-segment", "legacy", "wrong-observer", "future-observation", "other-case", "other-result", "other-hinge", "pending", "missing-reflection"])("does not authorize questions at the %s boundary", boundary => {
+it.each(["playing", "replay", "busy", "takeover", "wrong-manual-cue", "empty-visit", "no-gate", "locked", "wrong-gate", "wrong-end", "early-end", "unrevealed", "wrong-plan", "wrong-segment", "legacy", "wrong-observer", "future-observation", "other-case", "other-result", "other-hinge", "pending", "missing-reflection", "missing-transfer"])("does not authorize questions at the %s boundary", boundary => {
   const { input, cue, session } = fixture();
   switch (boundary) {
     case "playing": session.phase = "PLAYING"; break;
@@ -201,6 +267,7 @@ it.each(["playing", "replay", "busy", "takeover", "wrong-manual-cue", "empty-vis
     case "other-hinge": input.cueCase!.verdict!.hingeId = "other"; break;
     case "pending": input.cueCase!.status = "REFLECTION_PENDING"; break;
     case "missing-reflection": input.cueCase!.reflection = undefined; break;
+    case "missing-transfer": input.cueCase!.transferRule = undefined; break;
   }
   expect(buildCurrentCueQuestionContext(input)).toBeUndefined();
 });
@@ -252,6 +319,11 @@ it("supports only the current trusted baseline surface and not sealed/foreign na
   expect(context.facts.map(f => f.refs[0])).toEqual([cue.facts[0].id]);
   expect(context.limitationSource).toBe("当前讲解已显示的限制");
   expect(JSON.stringify(answerGroundedCueQuestion(context, CURRENT_CUE_QUESTIONS[0]))).not.toMatch(/不复制/);
+  for (const ctx of [context, buildCurrentCueQuestionContext({ ...input, diagnosticsEnabled: true, cueCase: { ...input.cueCase!, status: "FALLBACK" } })!]) {
+    expect(ctx.advice).toBeUndefined();
+    expect(answerGroundedCueQuestion(ctx, CURRENT_CUE_ADVICE_QUESTION)).toMatchObject({ items: [], text: expect.stringContaining("没有可复述") });
+    expect(renderToStaticMarkup(createElement(CurrentCueQuestionsPanel, { state: currentCueQuestionState(undefined, ctx), canRepeatAdvice: Boolean(ctx.advice), onDraft() {}, onAsk() {} }))).not.toContain(CURRENT_CUE_ADVICE_QUESTION);
+  }
   input.session = reduceCoachingSession(input.plan!, input.session!, { type: "BEGIN_MANUAL_CUE_VISIT", cueId: cue.id, visitId: "baseline-visit" });
   input.takenOver = true;
   expect(buildCurrentCueQuestionContext(input)).toBeUndefined();
@@ -263,14 +335,20 @@ it("supports only the current trusted baseline surface and not sealed/foreign na
   expect(buildCurrentCueQuestionContext(input)).toBeUndefined();
 });
 
-it("retains submitted answers and draft through real Session replay without changing diagnosis, attempts or events", () => {
-  const { input, plan, cue, session } = fixture();
+it.each([false, true])("retains advice and draft through real Session replay without changing diagnosis, manual=%s", manual => {
+  const { input, plan, cue } = fixture();
+  if (manual) {
+    input.takenOver = true;
+    input.session = reduceCoachingSession(plan, input.session!, { type: "BEGIN_MANUAL_CUE_VISIT", cueId: cue.id, visitId: "advice-replay" });
+    input.session = reduceCoachingSession(plan, input.session, { type: "TICK", tick: cue.outcome_end_tick });
+  }
+  const session = input.session!;
   const context = buildCurrentCueQuestionContext(input)!;
-  let state = updateCurrentCueQuestions(undefined, context.key, context, { type: "ASK", question: CURRENT_CUE_QUESTIONS[1] });
+  let state = updateCurrentCueQuestions(undefined, context.key, context, { type: "ASK", question: CURRENT_CUE_ADVICE_QUESTION });
   state = updateCurrentCueQuestions(state, context.key, context, { type: "DRAFT", text: "还没提交" });
   const saved = state;
   const before = structuredClone(session);
-  input.session = reduceCoachingSession(plan, session, { type: "REPLAY_OUTCOME" });
+  input.session = reduceCoachingSession(plan, session, { type: "REPLAY_OUTCOME", ...(manual ? { target: { sessionId: session.id, cueId: cue.id, visitId: "advice-replay" } } : {}) });
   expect(buildCurrentCueQuestionContext(input)).toBeUndefined();
   expect(updateCurrentCueQuestions(state, context.key, buildCurrentCueQuestionContext(input), { type: "ASK" })).toBe(saved);
   input.session = reduceCoachingSession(plan, input.session, { type: "TICK", tick: cue.outcome_end_tick });
@@ -279,9 +357,24 @@ it("retains submitted answers and draft through real Session replay without chan
   expect(currentCueQuestionState(state, restored)).toBe(saved);
   expect(input.session.cue_cases).toEqual(before.cue_cases);
   expect(input.session.learning_threads).toEqual(before.learning_threads);
-  expect(input.session.user_events.filter(event => event.type !== "OUTCOME_REPLAYED")).toEqual(before.user_events);
+  expect(input.session.user_events.filter(event => event.type !== "OUTCOME_REPLAYED")).toEqual(before.user_events.filter(event => event.type !== "OUTCOME_REPLAYED"));
   // Repeated submit is page-local and does not append duplicate entries or dispatch anything.
-  expect(updateCurrentCueQuestions(state, restored.key, restored, { type: "ASK", question: CURRENT_CUE_QUESTIONS[1] })?.turns).toHaveLength(1);
+  expect(updateCurrentCueQuestions(state, restored.key, restored, { type: "ASK", question: CURRENT_CUE_ADVICE_QUESTION })?.turns).toHaveLength(1);
+});
+
+it("does not offer a blank saved suggestion and does not backfill old saved qualifications", () => {
+  const { input } = fixture();
+  const rule = input.cueCase!.transferRule!;
+  rule.limitations = [];
+  const answer = answerGroundedCueQuestion(buildCurrentCueQuestionContext(input)!, CURRENT_CUE_ADVICE_QUESTION);
+  expect(answer.items).toEqual([
+    expect.objectContaining({ text: `当：${rule.when}` }), expect.objectContaining({ text: `做：${rule.do}` }),
+    ...(rule.unless ? [expect.objectContaining({ text: `除非：${rule.unless}` })] : []),
+  ]);
+  rule.do = " ";
+  const context = buildCurrentCueQuestionContext(input)!;
+  expect(context.advice).toBeUndefined();
+  expect(answerGroundedCueQuestion(context, CURRENT_CUE_ADVICE_QUESTION).text).toContain("没有可复述");
 });
 
 it("uses stable source signatures and rejects stale callbacks across session, cue, generation and diagnostic revision", () => {

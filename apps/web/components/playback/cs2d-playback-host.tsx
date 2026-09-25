@@ -3402,6 +3402,7 @@ export function Cs2dPlaybackHost({
 
           {questionContext ? <CurrentCueQuestionsPanel
             state={currentCueQuestionState(cueQuestions, questionContext)}
+            canRepeatAdvice={Boolean(questionContext.advice)}
             onDraft={text => changeCueQuestion(questionContext.key, { type: "DRAFT", text })}
             onAsk={question => changeCueQuestion(questionContext.key, { type: "ASK", question })}
           /> : null}

@@ -1,25 +1,27 @@
 "use client";
 
 import {
-  CURRENT_CUE_QUESTIONS, MAX_CUE_QUESTION_LENGTH,
+  CURRENT_CUE_QUESTIONS, CURRENT_CUE_ADVICE_QUESTION, MAX_CUE_QUESTION_LENGTH,
   type CurrentCueQuestionState,
 } from "../../lib/coaching/current-cue-questions";
 import styles from "./teaching-diagnosis-panel.module.css";
 
 export interface CurrentCueQuestionsPanelProps {
   state: CurrentCueQuestionState;
+  canRepeatAdvice?: boolean;
   onDraft: (text: string) => void;
   onAsk: (question?: string) => void;
 }
 
 /** Controlled by Host so a replay can unmount this surface without losing its draft or answers. */
-export function CurrentCueQuestionsPanel({ state, onDraft, onAsk }: CurrentCueQuestionsPanelProps) {
+export function CurrentCueQuestionsPanel({ state, canRepeatAdvice = false, onDraft, onAsk }: CurrentCueQuestionsPanelProps) {
   return (
     <section className={styles.panel} aria-labelledby="current-cue-questions-title">
       <h3 id="current-cue-questions-title">问问当前教学点</h3>
-      <p className={styles.lede}>仅核对当前已展示的事实与限制，不重新分析或改判。记录仅在本页临时保留，最多4条，不写入复盘历史。</p>
+      <p className={styles.lede}>{canRepeatAdvice ? "可核对当前已展示的事实与限制，或复述已有建议及适用条件。" : "仅核对当前已展示的事实与限制。"}不重新分析或改判。记录仅在本页临时保留，最多4条，不写入复盘历史。</p>
       <div className={styles.quickGrid} role="group" aria-label="当前教学点的快捷问题">
         {CURRENT_CUE_QUESTIONS.map(question => <button key={question} className={styles.secondary} type="button" onClick={() => onAsk(question)}>{question}</button>)}
+        {canRepeatAdvice ? <button className={styles.secondary} type="button" onClick={() => onAsk(CURRENT_CUE_ADVICE_QUESTION)}>{CURRENT_CUE_ADVICE_QUESTION}</button> : null}
       </div>
       <p className={styles.muted}>也可核对血量、护甲、道具数量和决策前弹匣记录，例如“我当时多少血？”。</p>
       <form onSubmit={event => { event.preventDefault(); onAsk(); }}>

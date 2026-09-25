@@ -29,6 +29,13 @@
 - 验证：三种实际合法生产链 3 红转绿（含 240 字输入限制），真实 append/restore validators→Panel SSR 新旧产物兼容，相关 5 文件 102 tests、TS、Web production build 通过；[证据](validation/SATURATED_TRANSFER_QUALIFICATION.md)。
 - 限制：只对新生成结果生效，旧缺句记录不重算回填；其他层的上游裁剪未改。内存 DTO/SSR 不是实际 SQLite/浏览器/桌面验收，无 Demo/模型/Memory/用户密钥或部署操作，不声称专业判断提升。
 
+## 2026-09-26：已有建议可复述，但不能借复述重新授予判断能力
+
+- 问题：完整生产诊断及Panel已经展示when/do/unless与适用限制，当前追问却把“下次记住什么”当unsupported；旧sourceRevision仅case/result ID和verdict版本，不能隔离同ID规则内容变化。
+- 决定：只在现有完整诊断身份/当前完成门内投影TransferRule，新增3个精确问法及按实际能力显示的快捷入口。全量有界条件与原文保留，不用事实400字/限制前4条上限；来源明确复述，不宣称最优或重新验证建议。rule完整内容进key，合法引用只取rule与既有可见决策事实交集。
+- 验证：实际producer饱和12条→Panel→问答红例转绿；actual快捷callback、长于400字条件、完整unless、5类同ID内容变更、默认/manual重播及跨visit隔离，相关5文件154tests、TypeScript、Web production build通过。主控关键diff只读无must-fix；[证据](validation/CURRENT_CUE_ADVICE_QUESTIONS.md)。
+- 限制：基础/fallback无合格规则不能补齐，旧历史限制不回填；非通用战术问答、不支持假设改判/其他cue。仅本页4条，无持久化/模型/Memory/重诊断/新播放动作，不重扫大Replay；SSR/callback/Session不是真实UI/DB验收，也不证明教练质量提升。
+
 ## 1. 维护规则
 
 以下变化合并时，同时更新本文：

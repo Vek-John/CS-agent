@@ -1508,6 +1508,8 @@ Memory Brief 的 structured recall 优先于语义召回，最多返回 2 个 ac
 
 资源数值追问仅在当前完整诊断分支启用：Host复用`currentDiagnosisWindow/currentDiagnosisResources`取得合法compact，并核对plan/cue/player/demo/material归属；必须与已展示measurement的唯一规范ID、数值类型/值、规范标签/单位和非空引用集合一致，不能凭label或历史measurement提权。普通资源引用沿原去重前8项规则，弹匣使用独立来源引用；缺失/冲突/不匹配均未知，不补0。ammo仍遵守原strict-prior、同实体、回合/新鲜度、最新样本缺失及事件变化失效门，回答必须带“决策前最近记录”、不能保证瞬间精确余量、采样后换枪/换弹可能未知及备弹未知；不据此判错或建议换弹。baseline、未可信history不借数值入口开放事实，假设/自称数值/其他cue问句不匹配明确问法。
 
+完整诊断分支还可复述已展示的 TransferRule，仅接受“下次记住什么”“下次要记住什么”“复述一下当前建议”三个明确问法及现有标点/空白归一化。沿相同身份与完成门，when/do必须非空，原 when/do/unless 及全部有界 limitations 按诊断面板既有玩家文案投影展示，不套事实的400字或通用限制前4条裁剪。回复明确只复述已有建议及适用条件，不重新评判、不证明最优；引用仅为rule.refs与该上下文合法已显示决策事实引用的交集，不能当作每句动作已被证实。完整rule内容加入sourceRevision，同ID内容变化也使旧草稿/回答和回调失效；同visit同来源重播保持。基础讲解/fallback或缺失合格rule不显示该快捷入口，明确问法返回无可复述来源，不能借cue.advice、Narration或其他cue补齐；身份门未通过时仍关闭整个追问入口。旧保存rule只按已有内容复述，不补写历史缺失限制。仅投影已有schema有界字符串，不重扫Replay、不重新诊断或调用模型，原3+4类及资源cache保持。
+
 资源投影由Host持有单条identity cache，按不可变plan/cue/timeline/material对象和selectedPlayer复用；大轨迹只在来源更换时交给既有投影器，草稿编辑和同来源重播只做有界measurement核对。页面内不透明source token通过WeakMap关联来源，不能从序列化数据伪造；替换/清空cache时旧token失效。source revision及匹配值加入问答key，旧回调不沿用新来源，原case revision仍独立失效；不得在原对象上静默改写时间线后继续使用旧cache。
 
 职业案例未接入检索时不编造，语音/战术补充只作为未验证假设，不回写事实或改判；错误前提不被接受，不明确/越界问法给具体可问范围。文本不触发seek、工具、推进或回看，控制沿用已有明确按钮。提问不发送Reflection/Disagreement/Graph/Memory事件，不消耗诊断attempt，不新增模型请求。

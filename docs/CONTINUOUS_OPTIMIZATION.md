@@ -2,6 +2,12 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：当前追问复述已有建议与适用条件（2026-09-26）
+
+- 基线 7bdbe68 已push/clean，前 owner RELEASE；01a0daaa-2bac-7222-8c53-f813ce51a8f9 独占当前问答/Panel/Host一行能力props/tests/docs，主控只读关键diff，无子代理。emil/apple沿用原样式，无浏览器/服务。风险集中完整条件、同ID来源变化和跨visit回调，先实际producer红例再接有界投影。
+- A1 diagnoseTeachingCue 满12条→实际DiagnosisPanel已有完整建议，而问答unsupported红例；A2 完整诊断身份链内复述when/do/unless/全部已有适用限制，不截400字/前4条，明确不重判/不证明最优；A3 基础/fallback无源不许诺，rule完整内容进key，默认/manual同visit回看保留且旧visit/旧内容回调拒绝；A4 问答/资源cache/Panel/replay回归、TS/build；A5 架构/学习/简证及commit/push/RELEASE。
+- 仅3个精确问法，当前页面最多4条，不新增诊断/Memory/持久化/模型/播放动作，不改producer/Graph/Session/schema。旧规则按原文复述不回填；refs仅现有rule与合法决策事实交集，不认证建议正确。相关5文件154tests、TypeScript、Web production build通过，主控只读关键diff无must-fix；[验证](validation/CURRENT_CUE_ADVICE_QUESTIONS.md)。SSR/生产callback与Session fixture不等于真实UI或专家质量验收。自有验证进程已退出，文档同批commit/push后RELEASE。
+
 ## 已交付：保留限制饱和时的条件化建议说明（2026-09-26）
 
 - 基线 af0ec28 已 push/clean 且前 owner RELEASE；01a0daa4-7a86-7780-b109-a9a8601d2bdf 独占 producer/两测试/docs，主控只读，默认配置无子代理。风险：替换原限制、放错 unless、超长和旧结果重算；采用固定 do 文本末尾条件化完整句，沿 800 字 schema，不改 12 条上限。

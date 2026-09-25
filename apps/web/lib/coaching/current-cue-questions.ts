@@ -1,4 +1,4 @@
-import type { CoachingSessionState, CueCase, NarrationBundle, ReviewPlan } from "@cs-coach/contracts";
+import type { CoachingSessionState, CueCase, NarrationBundle, ReviewPlan, TransferRule } from "@cs-coach/contracts";
 import { CueCaseSchema } from "@cs-coach/coach-agent/client";
 import { getCurrentCue, getCurrentSegment } from "@cs-coach/session";
 import { observableSituation, playerFacingLimitation } from "./decision-presentation";
@@ -6,6 +6,7 @@ import { matchDisplayedCueResources, type CurrentCueResourceSource, type CueReso
 
 export const MAX_CUE_QUESTION_LENGTH = 300;
 export const CURRENT_CUE_QUESTIONS = ["这次判断依据是什么？", "当时有哪些已知事实？", "还有哪些未知条件？"] as const;
+export const CURRENT_CUE_ADVICE_QUESTION = "下次记住什么？";
 
 export interface CurrentCueQuestionInput {
   plan?: ReviewPlan;
@@ -26,6 +27,7 @@ export interface CurrentCueQuestionContext {
   limitations: readonly string[];
   limitationSource: string;
   resources: Partial<Record<CueResourceKind, VerifiedResourceText>>;
+  advice?: Pick<TransferRule, "when" | "do" | "unless" | "limitations" | "refs">;
 }
 export interface CurrentCueAnswer {
   text: string;
@@ -68,6 +70,7 @@ export function buildCurrentCueQuestionContext(input: CurrentCueQuestionInput): 
   let shownFactIds: ReadonlySet<string>;
   let limitationSource: string;
   let resources: CurrentCueQuestionContext["resources"] = {};
+  let transferRule: TransferRule | undefined;
   if (input.diagnosticsEnabled && input.cueCase?.status !== "FALLBACK") {
     const parsed = CueCaseSchema.safeParse(input.cueCase);
     if (!parsed.success) return;
@@ -82,7 +85,8 @@ export function buildCurrentCueQuestionContext(input: CurrentCueQuestionInput): 
     limitations = [...c.hinge.limitations, ...r.limitations, ...c.verdict.limitations];
     // The reflection surface displays these first three decision facts. Do not widen that surface here.
     shownFactIds = new Set(cue.facts.filter(f => f.availability === "DECISION" && f.available_at_tick <= cue.decision_tick && cue.observable_fact_refs.includes(f.id)).slice(0, 3).map(f => f.id));
-    sourceRevision = [c.caseId, r.resultId, c.verdict.revision, c.status];
+    transferRule = c.transferRule.when.trim() && c.transferRule.do.trim() ? c.transferRule : undefined;
+    sourceRevision = [c.caseId, r.resultId, c.verdict.revision, c.status, c.transferRule];
     limitationSource = "当前诊断已显示的限制";
     resources = matchDisplayedCueResources(input.resourceSource, plan, cue, r.measurements);
   } else {
@@ -107,6 +111,12 @@ export function buildCurrentCueQuestionContext(input: CurrentCueQuestionInput): 
   return {
     key: JSON.stringify([input.generation, session.id, plan.id, cue.id, visit?.visit_id ?? null, sourceRevision, facts, basis, shownLimitations, input.resourceSource?.revision, resources]),
     facts, basis, limitations: shownLimitations, limitationSource, resources,
+    ...(transferRule ? { advice: {
+      when: transferRule.when, do: transferRule.do, unless: transferRule.unless,
+      // Match the diagnosis surface, retaining its entire schema-bounded list.
+      limitations: [...new Set(transferRule.limitations.filter(Boolean).map(playerFacingLimitation))],
+      refs: transferRule.refs.filter(ref => facts.some(fact => fact.refs.includes(ref))),
+    } } : {}),
   };
 }
 
@@ -123,6 +133,20 @@ export function answerGroundedCueQuestion(context: CurrentCueQuestionContext, qu
   if (/职业|pro\b/i.test(q)) return boundary("这里没有接入可验证的职业案例，不能据此说明职业选手通常怎么做。");
   if (/语音|报点|队友报|叫我|战术|听到|脚步/.test(q)) return boundary("你补充的语音或战术只能作为假设，当前记录不能确认它。这条追问不会把它写成事实，也不会据此改判；如需复核原诊断，可使用上方的异议入口。");
   if (["再看一遍", "能再放一遍吗", "重播", "继续下一段"].includes(q)) return boundary("请使用讲解区已有的回看或继续按钮。追问文字不会直接控制播放。");
+  if (["下次记住什么", "下次要记住什么", "复述一下当前建议"].includes(q)) {
+    const advice = context.advice;
+    if (!advice) return { text: "当前没有可复述的完整诊断建议，不能从基础讲解或其他教学点补齐。", items: [], source: "当前建议的来源缺口" };
+    return {
+      text: "下面只复述当前诊断已展示的建议和适用条件，不重新评判，也不表示这些做法已被证明最优。",
+      items: [
+        { text: `当：${advice.when}`, refs: advice.refs },
+        { text: `做：${advice.do}`, refs: advice.refs },
+        ...(advice.unless ? [{ text: `除非：${advice.unless}`, refs: advice.refs }] : []),
+        ...advice.limitations.map(text => ({ text: `适用限制：${text}`, refs: [] })),
+      ],
+      source: "当前诊断已展示的建议与适用条件（原文复述）",
+    };
+  }
   const resourceQuestions: readonly [CueResourceKind, readonly string[]][] = [
     ["health", ["我当时多少血", "当时多少血", "当时血量是多少"]],
     ["armor", ["当时有多少护甲", "我当时有多少护甲"]],
