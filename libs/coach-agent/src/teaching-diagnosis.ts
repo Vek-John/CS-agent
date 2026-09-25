@@ -826,16 +826,20 @@ export function createTransferRule(input: TeachingDiagnosisInput, hinge: HingeCo
     : result.status === "CONTRADICTED"
       ? "血量和装备只能说明风险背景；还需确认当时的时间、目标要求和可执行选项，才能评价这个选择。"
       : "先扫一眼自己的血量、护甲和经济，再决定是否把这次接触升级成不可回撤的动作。";
+  const conditionalQualification = "这条规则是条件化建议，不代表已确定归因。";
+  const limitations = unique([...result.limitations, ...(verdict.type === "INCONCLUSIVE" ? [conditionalQualification] : [])]).slice(0, MAX_DIAGNOSIS_LIMITATIONS);
+  // Preserve all bounded source limitations; a full list must not erase the advice's qualification.
+  const qualifyDo = verdict.type === "INCONCLUSIVE" && !limitations.includes(conditionalQualification);
   return TransferRuleSchema.parse({
     ruleId: `rule-${input.cueId}-${hinge.conditionCode.toLowerCase()}`.slice(0, 160),
     when,
-    do: doText,
+    do: qualifyDo ? `${doText}${conditionalQualification}` : doText,
     ...(result.status === "UNVERIFIABLE"
       ? { unless: isSync ? "Demo 无法验证这条语音、战术或听觉信息；若它成立，你的行为可以被合理解释，但当前结论保持条件化。" : isInformation ? "Demo 无法验证你是否实际听到或理解这条声音信息；若它成立，你的行为可以被合理解释，但当前结论保持条件化。" : isTiming ? "Demo 无法可靠比较这次时机与替代选项；当前结论保持条件化。" : "如果存在 Demo 无法验证的语音或固定战术，先把它当作额外条件，而不是默认事实。" }
       : {}),
     refs,
     confidence: Math.max(0.2, Math.min(0.9, verdict.confidence)),
-    limitations: unique([...result.limitations, ...(verdict.type === "INCONCLUSIVE" ? ["这条规则是条件化建议，不代表已确定归因。"] : [])]).slice(0, MAX_DIAGNOSIS_LIMITATIONS),
+    limitations,
   });
 }
 

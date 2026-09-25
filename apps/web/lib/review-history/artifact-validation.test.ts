@@ -1,6 +1,8 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { SessionWrapUpResult, SessionWrapUpRequest } from "@cs-coach/coach-agent/client";
+import { diagnoseTeachingCue } from "@cs-coach/coach-agent/client";
+import { TeachingDiagnosisPanel } from "../../components/playback/teaching-diagnosis-panel";
 import type { ReviewPlan, NarrationBundle } from "@cs-coach/contracts";
 import { completeAndSaveSessionWrapUp } from "../coaching/session-wrap-up-completion";
 import { sessionWrapUpPresentation, SessionWrapUpPanel } from "../coaching/session-wrap-up-presentation";
@@ -171,6 +173,45 @@ function fixture(): { loaded: LoadedReview; head: CommitRuntimeHeadInput } {
 }
 
 describe("Review artifact domain validation", () => {
+  it.each([false, true])("preserves saturated transfer artifacts through existing save/restore validators and Panel, legacy=%s", legacy => {
+    const { loaded, head } = fixture();
+    const plan = loaded.artifacts.find(a => a.artifactType === "REVIEW_PLAN")!.payload as unknown as ReviewPlan;
+    const cue = plan.cues[0];
+    const output = diagnoseTeachingCue({ cueId: cue.id,
+      reflection: { cueId: cue.id, selectedGoal: "OTHER", response: "ANSWERED", source: "USER", limitations: [] },
+      decisionFacts: [], playerActionFacts: [], outcomeFacts: [],
+      decisionResources: { health: 100, armor: 100, hasHelmet: true, evidenceRefs: [] },
+      limitations: Array.from({ length: 10 }, (_, i) => `现场条件 ${i + 1} 尚未核实。`),
+    });
+    const qualification = "这条规则是条件化建议，不代表已确定归因。";
+    if (legacy) {
+      // Exact pre-fix saturated shape; restoration must not silently regenerate old advice.
+      output.cueCase.transferRule!.do = "先扫一眼自己的血量、护甲和经济，再决定是否把这次接触升级成不可回撤的动作。";
+      output.learningThread.transferRule = { ...output.cueCase.transferRule! };
+    }
+    const before = JSON.stringify(output);
+    const additions = [
+      { artifactType: "CUE_CASE" as const, artifactKey: cue.id, schemaVersion: "cue-case.v1", payload: json(output.cueCase) },
+      { artifactType: "LEARNING_THREAD" as const, artifactKey: output.learningThread.threadId, schemaVersion: "learning-thread.v1", payload: json(output.learningThread) },
+    ];
+    for (const item of additions) validateReviewArtifactAppend(loaded, { ...item, reviewRevisionId: "revision-a", artifactRevision: 1, idempotencyKey: item.artifactKey });
+    const restored = restoreHistoryControlPlane({ review: { id: "review-a", demoId: "managed-demo-a", title: "saved", status: "COMPLETED", selectedPlayerId: "player-a" },
+      revision: { id: "revision-a", status: "READY", artifactContractVersion: 2, routeId: head.routeId, routeHash: head.routeHash },
+      artifacts: [...loaded.artifacts, ...additions].map(a => ({ kind: a.artifactType, key: a.artifactKey, payload: a.payload })), runtimeHead: null });
+    const validated = validateStoredReviewArtifacts({ ...restored, selectedPlayerId: "player-a", demoContentHash: HASH, routeId: head.routeId, routeHash: head.routeHash });
+    expect(validated.cueCases[cue.id]).toEqual(output.cueCase);
+    expect(validated.learningThreads).toEqual([output.learningThread]);
+    const rule = validated.cueCases[cue.id].transferRule!;
+    expect(rule.limitations).toEqual(output.cueCase.diagnosticResult!.limitations);
+    expect(rule.limitations).toHaveLength(12);
+    const html = renderToStaticMarkup(createElement(TeachingDiagnosisPanel, { cue, decisionFacts: [], cueCase: validated.cueCases[cue.id],
+      hasTrustedDecisionContext: true, onSubmit() {}, onSkip() {}, onConfirm() {}, onDisagree() {} }));
+    const advice = html.split("下次记住什么</span>")[1].split("</div>")[0];
+    for (const limitation of rule.limitations) expect(advice).toContain(limitation);
+    expect(advice.includes(qualification)).toBe(!legacy);
+    expect(JSON.stringify(output)).toBe(before);
+  });
+
   it("restores the deterministic summary's representative round without its transient request", async () => {
     const { loaded, head } = fixture();
     const plan = loaded.artifacts.find(a => a.artifactType === "REVIEW_PLAN")!.payload as unknown as ReviewPlan;

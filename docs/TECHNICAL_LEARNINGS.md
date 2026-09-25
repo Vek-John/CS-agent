@@ -22,6 +22,13 @@
 - 验证：真实 diagnoseTeachingCue INCONCLUSIVE→Panel SSR 以及 12 条 schema fixture 两红转绿；相关 5 文件 160 项、TS、Web production build 通过；主控只读复核无 must-fix。原建议、JSON 往返结果与 CueCase 不变，原重播/草稿测试通过；[证据](validation/TRANSFER_RULE_LIMITATIONS.md)。
 - 限制：producer 将追加限制后 slice12，满额时条件化句可能从未生成，本轮不扩 producer 修复；既有技术词投影与其他列表上限不改。无真实浏览器/桌面/DB/模型验收，不将 SSR 当视觉验证，也不声称判断准确性提高。
 
+## 2026-09-26：限制列表满额不能静默消除建议的条件性
+
+- 问题：前轮已显示 transferRule.limitations，但真实 RISK/SYNC/INFORMATION 路径可输出 12 条 result 限制；createTransferRule 追加条件化说明后 slice12 会丢句。
+- 决定：只有 INCONCLUSIVE 且最终列表没有该完整说明时，将同一句附在固定 doText 末尾。保留已有 12 条原文、when/unless/refs/confidence、未饱和行为和非 INCONCLUSIVE；使用既有 800 字 TextSchema，不拼接 240 字条目、不增上限或迁移。该展示内容生成修复没有架构契约变化。
+- 验证：三种实际合法生产链 3 红转绿（含 240 字输入限制），真实 append/restore validators→Panel SSR 新旧产物兼容，相关 5 文件 102 tests、TS、Web production build 通过；[证据](validation/SATURATED_TRANSFER_QUALIFICATION.md)。
+- 限制：只对新生成结果生效，旧缺句记录不重算回填；其他层的上游裁剪未改。内存 DTO/SSR 不是实际 SQLite/浏览器/桌面验收，无 Demo/模型/Memory/用户密钥或部署操作，不声称专业判断提升。
+
 ## 1. 维护规则
 
 以下变化合并时，同时更新本文：

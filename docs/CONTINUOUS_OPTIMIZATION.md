@@ -2,6 +2,12 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：保留限制饱和时的条件化建议说明（2026-09-26）
+
+- 基线 af0ec28 已 push/clean 且前 owner RELEASE；01a0daa4-7a86-7780-b109-a9a8601d2bdf 独占 producer/两测试/docs，主控只读，默认配置无子代理。风险：替换原限制、放错 unless、超长和旧结果重算；采用固定 do 文本末尾条件化完整句，沿 800 字 schema，不改 12 条上限。
+- A1 实际 diagnoseCue 的 RISK/SYNC/INFORMATION 合法输入各得到满 12 条和 INCONCLUSIVE，追加说明丢失 3 红；A2 保留原 12 条、仅说明未进入列表时附 do，其他字段/普通结果/非 INCONCLUSIVE 保持；A3 actual append/restore validators→Panel SSR 新旧产物兼容，新句可见旧记录不回填；A4 相关 tests/TS/build；A5 学习/证据及 commit/push/RELEASE。
+- 3 红→绿，相关 5 文件 102 tests、TS、Web production build 通过，主控只读 diff 无 must-fix。[验证](validation/SATURATED_TRANSFER_QUALIFICATION.md)。无 Panel/Host/Graph/Memory/schema/Parser 变更，无新模型、QA、真实 UI/DB/Demo/服务/安装部署/main；其他上游限制裁剪不扩大。自有测试/build 已退出，文档同批 commit/push 后 RELEASE。
+
 ## 已交付：保留教学建议已生成的适用限制（2026-09-26）
 
 - 基线 6c6c720 已 push/clean，前 owner RELEASE；01a0da9f-bb2d-7151-8e81-8e1502a03145 独占 Panel/tests/docs，主控只读，默认配置无子代理。风险集中在 slice4 再裁剪、改写语义及 12 条内容挤压操作；复用现有列表和滚动，不启动浏览器或服务。

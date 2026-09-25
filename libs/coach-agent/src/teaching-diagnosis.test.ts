@@ -10,6 +10,7 @@ import type {
 } from "@cs-coach/contracts";
 import {
   buildUserClaims,
+  createTransferRule,
   diagnoseCue,
   TeachingDiagnosisInputSchema,
   reviseDiagnosis,
@@ -96,6 +97,33 @@ function input(overrides: Partial<TeachingDiagnosisInput> = {}): TeachingDiagnos
 }
 
 describe("teaching diagnosis trust and evidence boundaries", () => {
+  it.each([
+    { name: "risk", selectedGoal: "OTHER" as const },
+    { name: "voice", selectedGoal: "EXECUTE_PLAN" as const, rawText: "队友语音让我执行战术" },
+    { name: "information", selectedGoal: "GET_INFO" as const, rawText: "我听到了脚步" },
+  ])("preserves saturated result limitations and conditional advice in the real $name chain", ({ selectedGoal, rawText }) => {
+    const sourceLimitations = Array.from({ length: 10 }, (_, i) => `现场条件 ${i + 1} 尚未核实。`.padEnd(240, "限"));
+    const output = diagnoseCue(input({ reflection: reflection({ selectedGoal, rawText }),
+      decisionResources: { health: 100, armor: 100, hasHelmet: true, evidenceRefs: ["resource-source"] }, limitations: sourceLimitations }));
+    const { diagnosticResult: result, transferRule: rule, verdict } = output.cueCase;
+    expect(result!.limitations).toHaveLength(12);
+    expect(verdict!.type).toBe("INCONCLUSIVE");
+    expect(rule!.limitations).toEqual(result!.limitations);
+    expect(sourceLimitations.every(text => rule!.limitations.includes(text))).toBe(true);
+    expect([rule!.do, ...rule!.limitations].join(" ")).toContain("这条规则是条件化建议，不代表已确定归因。");
+    const ordinary = diagnoseCue(input({ reflection: reflection({ selectedGoal, rawText }),
+      decisionResources: { health: 100, armor: 100, hasHelmet: true, evidenceRefs: ["resource-source"] } })).cueCase.transferRule!;
+    expect(rule!.do).toBe(`${ordinary.do}这条规则是条件化建议，不代表已确定归因。`);
+    expect(ordinary.limitations).toContain("这条规则是条件化建议，不代表已确定归因。");
+    expect({ ...rule, do: ordinary.do, limitations: ordinary.limitations }).toEqual(ordinary);
+    expect(rule!.do.length).toBeLessThanOrEqual(800);
+    expect(output.learningThread.transferRule).toEqual(rule);
+    // A verdict-specific unit boundary, using the real saturated result as its input.
+    const conclusive = createTransferRule(input(), output.cueCase.hinge!, result!, { ...verdict!, type: "GOAL_AND_ACTION_ALIGNED" });
+    expect(conclusive.do).toBe(ordinary.do);
+    expect(conclusive.limitations).toEqual(result!.limitations);
+  });
+
   it("acknowledges the known positive roster instead of asking whether teammates were alive", () => {
     // Minimized from the real-cue resource summary; no player identity or Replay.
     const output = diagnoseCue(input({ reflection: reflection({ selectedGoal: "TRADE" }),
