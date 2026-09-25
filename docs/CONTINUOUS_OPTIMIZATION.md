@@ -2,6 +2,13 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 当前任务：手动回访中的同次重播（2026-09-26）
+
+- 1bb88e2已push/clean且owner release；01a0da66-e866-7c11-a7d8-aa863864691b串行独占Session重播动作的visit绑定、Host/诊断/基础面板窄入口及tests/docs，主控只读，默认配置。
+- 证据：PRD7.6要求重放当前片段；manual完成不写global revealed，REPLAY_OUTCOME却要求global revealed，Host在manual隐藏基础和诊断重播入口。本轮补同visit完成后的重播，不借旧全局标记、不重新开visit。
+- A1真实reducer已看/未看manual完整播放后现动作/入口缺口；A2明确session/cue/visit匹配与本次完整gate才允许重播，继续使用frozen窗口/现有directive，结束回同visit/decision；A3保留manual接管/取消与默认cursor，重置普通暂停意图但不误回默认，旧visit双击/晚回调拒绝，诊断/问答保留且无重复模型/Memory/呈现计数；A4相关tests/TS/build；A5架构学习证据/任务板commit/push/release。
+- 先5分钟给最小动作契约（可沿既有REPLAY_OUTCOME增加可选visit/cue绑定，default旧调用兼容），15分钟实现、10分钟验证，必要5分钟独立时间/visit审查。无新任意seek/Graph工具、cue时间/完成门不降低；无Demo/模型/UI服务/用户DB密钥/部署main，SSR/生产链fixture不冒称真实浏览器。owner清进程，原UI A5独立等待。
+
 ## 已交付：手动回访完成后的有据追问（2026-09-26）
 
 - 9311269已push/clean、210tests/TS/build且owner release；01a0da50-848f-78d3-bb41-f028c8aed357串行独占问答上下文gate/visit状态key、必要窄Host和tests/docs，默认配置，主控只读。
