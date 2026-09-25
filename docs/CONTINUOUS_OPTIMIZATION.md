@@ -2,6 +2,13 @@
 
 更新时间：2026-09-25。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 当前独立任务：恢复入口的等待选文件反馈（2026-09-26）
+
+- 64f9fb5已push且owner释放，01a0d981-0b6d-7143-a1f9-f138ebb0d04a串行独占chooseRecoveryDemo入口/恢复状态反馈/必要helper/tests/docs，主控只读，继承默认配置。
+- 真实依据：chooseRecoveryDemo仅scroll/focus却dispatch REPLAY_LOADING，Runtime返回REBUILDING，实际面板显示“正在验证并重新解析”且隐藏choose。没有Demo导入时不应声称在解析；另有直接then(acceptRecoveryResult)旧返回风险。优先修正可见流程，不继续全Host回调扫描。
+- 目标/验收：A1实际入口+Runtime/面板复现未选文件的虚假加载；A2等待选同一Demo时明确等待、选择入口可再次使用，未选择/取消不陷无限加载；实际导入后才准确进入解析/验证；A3新review/放弃后旧入口响应不复活旧记录，正常DORMANT/REJECTED/DEGRADED保持，现有握手接线不回归；A4相关tests/TS/build；A5架构/学习/紧凑证据、commit/push/release。
+- 风险/边界：先查REPLAY_LOADING的真实消费者，可能只需移除过早事件，不新增虚构进度/重复事件或通用状态框架。5分钟最小复现、15分钟实现、10分钟验证，必要5分钟只读review；不读Demo/模型、不启动锁屏UI/服务、不动用户数据，模拟不冒称浏览器取消验收。owner清理自有测试资源。
+
 ## 已交付：放弃恢复的失败与迟到回调（2026-09-26）
 
 - 6509747已push且owner释放；01a0d976-bf65-7ad1-a1d9-4d57c30583c7串行独占discardRecovery窄接线/必要helper/tests/docs，主控只读，继承默认配置。真实代码约1021：DISCARD_RECOVERY任意返回都会清mode/landing/checkpoint/identity，无跨review guard。
