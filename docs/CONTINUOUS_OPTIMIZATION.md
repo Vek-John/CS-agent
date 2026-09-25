@@ -2,6 +2,13 @@
 
 更新时间：2026-09-25。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 当前独立任务：旧复盘迟到恢复回调（2026-09-26）
+
+- 139eb95已push且owner释放，新任务01a0d96f-f08d-7470-83b7-cb56bd774cf6串行独占Host完成/同effect稳定边界回调、必要小helper/tests与本轮docs，主控只读，继承默认配置。
+- 源码依据：Host SESSION_COMPLETED dispatch.then无身份检查即清checkpoint/recoveryIdentity并acceptRecoveryResult；同effect STABLE_BOUNDARY_REACHED也直接accept。切换历史先增加openEpoch/清旧ref，runtime串行队列并不能让旧Promise回调自动识别新UI。先用生产接线小fixture证明污染再修。
+- 目标/验收：A1延迟旧完成/稳定边界返回并切换新review后，新identity/checkpoint/result不变；A2同场正常完成仍清理且总结可收尾，稳定点正常保存；A3取消/新导入/卸载及失败或REJECTED返回有明确边界，不把未成功删除视作成功清理；A4相关tests/TS/build；A5必要架构/学习/证据/任务板commit/push/release。不做全Host审计、Runtime/DB重构、UI/Demo/模型或主main/部署。
+- 风险/阶段：5分钟最小复现，15分钟窄修，10分钟相关检查；恢复错误传播和正常收尾竞态为重点。纯fixture/deferred store，不动用户数据；必要5分钟只读复核，owner负责进程退出和临时资源清理。相同工具失败两次先简化。
+
 ## 已交付：总结失败状态恢复（2026-09-26）
 
 - 上轮04e6b71已push、工作树干净、owner释放；93相关测试/TS/build通过。新任务01a0d964-7dcf-7062-8e43-7b08d87bfa18串行复用当前实现树，默认配置；独占总结Host/展示/必要历史artifact接线、tests及本轮docs，主控只读。
