@@ -1823,3 +1823,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：请求owner获得START即反馈pending；当前失败用本地FAILED wrapper走既有MISSING_SESSION_SUMMARY / SESSION_SUMMARY artifact，不伪Graph已完成或无重复主题。完整身份匹配且Graph/sessionStatus均COMPLETED才投影成功摘要。请求前捕获generation/session/run/review/revision/open epoch；去重或token过期仍静默。attempt绑定owner token，取消后显式同run返回可重新收尾，旧清理不删新pending。
 - 验证：真实Controller→生产Host完成入口→SSR Panel 1红→绿；29新增集成包括ANSWERED/SKIPPED经真实Agent同步失败→本地诊断→WRAP_UP→完成/自由seek，以及pending/CONFIRMED/当前错identity/取消交错/正常身份释放。8文件118tests、TS/Web production通过，原成功总结和139eb95失败保存/历史恢复零重新生成保持。
 - 限制：SSR不冒称浏览器验收，原UI A5不动。Agent fetch/json无客户端deadline，永不settle仍pending但可完成/回看；本轮不扩transport/重试/队列。见[验收](validation/SESSION_COMPLETION_FEEDBACK.md)。
+
+## 2026-09-26：网络等待上限必须覆盖响应正文且独立于abort合作
+
+- 问题：dispatchCoachAgentEvent仅await fetch/json，网络任一阶段不settle会把Stage3 dispatchSerial尾巴永久卡住；上轮完成FAILED反馈无法处理永不返回的Promise。
+- 决定：复用preparation原期限owner小提取；Agent网络请求起fetch+body共同20秒，先本地settle再abort，不合作transport也退出，late headers不读body，late reject被观察。Preparation20秒和错误语义保持；Agent成功schema/身份及HTTP/JSON错误保持，不重试/不改eventId。
+- 预算依据：Next默认确定性，Graph每cue最多1 Policy，远端Policy route/provider均15秒；20秒是客户端等待政策，不是Graph最坏总执行保证。服务端是否执行/写入未知，保留幂等语义；可选signal未表示所有Host接管均主动abort。
+- 验证：真实dispatch fetch/body及Controller tail挂起3红→绿，17新Agent+8原preparation局部通过；11文件169tests、TS/Web production通过。包括真实Host总结timeout→既有失败artifact、默认diagnostics本地fallback、真实Graph合法WAITING_TOOL晚body在dispose后零post/mirror/UI，成功/HTTP/JSON/schema/取消和资源清理。
+- 限制：deadline从网络开始，不含之前排队或之后checkpoint mirror/持久化等待；不改服务端执行/队列/Memory，不以客户端abort宣称服务端未执行。无真实网络/模型/浏览器验收，原UI A5保持。详见[验收](validation/AGENT_TRANSPORT_DEADLINE.md)。

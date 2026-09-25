@@ -2,6 +2,8 @@
 
 2026-09-26；基线c6f4e2d（前产品f9d9cbd）。本轮仅修改完成请求、Host总结入口与既有失败保存接线；不改Graph/Session完成门、默认diagnostics、专业判断、Memory或重试架构。
 
+后续[Agent传输期限更新](AGENT_TRANSPORT_DEADLINE.md)已给网络和正文读取增加共同20秒上限；本记录保留当时未覆盖该边界的历史结论。
+
 ## A1 复现与用户反馈
 
 隔离fixture使用真实CoachAgentStage3Controller、真实Host Adapter和生产组件调用的`completeStage3SessionWrapUp`，fake transport拒绝COMPLETE_SESSION。以实际SessionWrapUpPanel做SSR：旧代码将失败吞成undefined，结果只有“本场复盘总结”和“完成本次复盘”，期望“未生成全场总结”的断言失败（1红）。不是只验证新predicate。

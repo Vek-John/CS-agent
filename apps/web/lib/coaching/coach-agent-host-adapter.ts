@@ -1,3 +1,4 @@
+import { requestJsonWithDeadline } from "./request-json-deadline";
 import {
   AgentToolRequestSchema,
   AgentToolResultSchema,
@@ -117,24 +118,30 @@ export class Stage2AckTimeoutController {
   }
 }
 
+// One Policy selection has a 15s provider/route budget; allow routing/body overhead.
+// This bounds client waiting, not server queue/checkpoint execution or its side effects.
+export const AGENT_REQUEST_TIMEOUT_MS = 20_000;
+export class AgentRequestTimeout extends Error {
+  readonly code = "AGENT_REQUEST_TIMEOUT";
+  constructor() { super("教练请求等待超时；基础回放仍可继续。"); this.name = "AgentRequestTimeout"; }
+}
+
 export async function dispatchCoachAgentEvent(
   event: CoachAgentEvent,
   fetcher: Stage2RemoteFetchLike = fetch,
+  signal?: AbortSignal,
 ): Promise<CoachAgentResult> {
   const envelope = createRemoteCoachAgentDispatchEnvelope(event);
-  const response = await fetcher("/api/coaching/agent", {
+  const response = await requestJsonWithDeadline(fetcher, "/api/coaching/agent", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: serializeRemoteCoachAgentDispatchEnvelope(envelope),
-  });
+  }, {
+    timeoutMs: AGENT_REQUEST_TIMEOUT_MS, timeoutError: () => new AgentRequestTimeout(), cancelMessage: "Agent request cancelled",
+    invalidJsonError: () => new Error("agent dispatch returned invalid JSON"),
+  }, signal);
   if (!response.ok) throw new Error(`agent dispatch HTTP ${response.status}`);
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    throw new Error("agent dispatch returned invalid JSON");
-  }
-  return parseRemoteCoachAgentDispatchResponse(body);
+  return parseRemoteCoachAgentDispatchResponse(response.payload);
 }
 
 function unique(values: readonly string[]): string[] {

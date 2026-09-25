@@ -1,7 +1,7 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：5.9.2
+> 版本：5.9.3
 > 最后更新：2026-09-26
 > 适用范围：Web 2D 到桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
@@ -714,7 +714,14 @@ Graph `sessionSummaryInput.themes[*].cueRefs` 是实际已完成的主题支持�
 
 Host只有从当前请求得到身份全字段匹配、Graph/sessionStatus均COMPLETED的结果时，才能投影真实sessionSummaryInput。Controller.completeSession将当前完成请求的异常、空/未完成响应或身份不匹配响应显式返回本地FAILED；这不是Graph状态，不确认其生命周期、不mirror错响应、不伪造摘要或重复主题。Host实际入口completeStage3SessionWrapUp将此失败交给既有MISSING_SESSION_SUMMARY保存与展示。Session即使通过默认diagnostics本地fallback完成，也能明确告知总结未生成，仍可完成和自由回看。
 
-完成请求仅取得START所有权时显示LOADING；pending/CONFIRMED/已处理的重复effect无新增请求或展示副作用，成功和失败结果均只收尾一次。完成attempt绑定本地controller token：取消的旧owner释放自己的pending，显式返回同run可再发起；旧返回不得删除新owner的pending。仍当前但收到错误身份payload是有限失败，本地token/Host身份过期则静默丢弃，二者不可混同。请求前捕获generation/session/run/review/revision/history-open epoch，返回及保存时复核；正常完成清除临时run identity不妨碍同一COMPLETED session收尾。旧保存总结仍按原正文/manifest恢复，不迁移引用或重算限制，不触发新分析/模型/Memory。该约束不改变Session/Graph完成门或单cue专业判断。当前Agent transport没有客户端完成deadline，永不settle时仍显示pending；本轮不新增超时或自动重试，完成/回看不等待它。
+完成请求仅取得START所有权时显示LOADING；pending/CONFIRMED/已处理的重复effect无新增请求或展示副作用，成功和失败结果均只收尾一次。完成attempt绑定本地controller token：取消的旧owner释放自己的pending，显式返回同run可再发起；旧返回不得删除新owner的pending。仍当前但收到错误身份payload是有限失败，本地token/Host身份过期则静默丢弃，二者不可混同。请求前捕获generation/session/run/review/revision/history-open epoch，返回及保存时复核；正常完成清除临时run identity不妨碍同一COMPLETED session收尾。旧保存总结仍按原正文/manifest恢复，不迁移引用或重算限制，不触发新分析/模型/Memory。该约束不改变Session/Graph完成门或单cue专业判断。Agent客户端网络和正文读取受下述统一期限约束；完成/回看不等待总结成功。
+
+
+`dispatchCoachAgentEvent`从其网络请求开始，对fetch和response.json共用20秒客户端等待期限，复用`requestJsonWithDeadline`；preparation仍保留原20秒、LOCAL_REQUEST_TIMEOUT与取消/JSON错误语义。Next默认Agent策略为确定性；Graph每cue最多一次Policy调用，远端Policy route/provider预算15秒。20秒容纳该调用和常见路由/正文开销，是客户端等待策略，不是服务器Graph、排队或checkpoint最坏耗时保证。
+
+超时先以AgentRequestTimeout（AGENT_REQUEST_TIMEOUT）结算本地Promise，再主动abort底层请求，即使transport不响应abort也释放当前网络等待；正文不能重新计时。成功、HTTP错误、JSON错误、取消和超时均清理本轮timer/父signal listener；迟到headers不再读body、迟到成功或拒绝不能替换既定结果。可选第三参AbortSignal向后兼容；未传signal的Host仍通过原token/generation/identity门隔离晚结果，不宣称所有接管都已主动abort。
+
+超时沿原Controller失败或diagnostics本地fallback处理，COMPLETE_SESSION沿既有有限失败总结保存链；网络Promise失败会释放dispatchSerial的tail供下一已排队事件继续。协议/schema/身份验证和eventId不变，不自动重试或增加模型请求。超时仅表示客户端未取得结果，服务器是否已执行或落盘仍未知，不能据此绕过原幂等。期限不含dispatchSerial排队前等待，也不覆盖其后的onAgentResult/checkpoint mirror或其他持久化Promise；这些仍可能独立阻塞，不属于网络期限已解决范围。
 
 总结失败同样是可保存的收尾结果。Host 统一经 `completeAndSaveSessionWrapUp` 发布并写入既有 `SESSION_SUMMARY / session-wrap-up.v1`，无需升级 schema；三种本地失败 `MISSING_SESSION_SUMMARY`、`INVALID_PRESENTABLE_INPUT`、`SOURCE_LIMITATIONS_EXCEED_OUTPUT_LIMIT` 标记 `FALLBACK / DETERMINISTIC`，只保存有限原因，不存异常原文、不冒充 `NO_REPEATED_THEME`。恢复先经原 artifact/domain validator，再按保存的 status/manifest 呈现。历史缺失 summary 只表示「未保存、生成结果未知」，不推断失败原因或自动重新生成；旧成功正文、refs、manifest 原样使用。写入前及异步错误回调都核对 generation、session/run、review/revision 与 history open epoch；正常 COMPLETED 清理临时 recovery identity 后，同一 completed session 仍可接收其捕获 run 的收尾。保存失败只提示，完成与自由回看不依赖保存成功。
 

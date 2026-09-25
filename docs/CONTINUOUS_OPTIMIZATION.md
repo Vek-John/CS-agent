@@ -2,12 +2,17 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
-## 当前任务：Agent传输等待上限（2026-09-26）
+## 已交付：Agent传输等待上限（2026-09-26）
 
 - 6bc126b已push/clean，前owner释放且118tests/TS/build通过；01a0d9f3-fd61-7af0-89a7-5a7462b9bdfb串行独占dispatchCoachAgentEvent传输/必要复用deadline helper/tests/docs，主控只读，默认配置。
 - 真实依据：coach-agent-host-adapter.ts的fetch和response.json无期限；Stage3 dispatchSerial await其结果，首请求不settle会卡lifecycleTail。此前只补已失败完成请求UI。preparation-transport已有fetch+body同一20秒deadline/不合作Abort安全settle能力，可复用而非重写队列。
 - A1实际dispatch/Controller小fixture复现悬挂fetch/JSON与阻塞后续；A2依据现有服务预算设置有界期限、释放计时器/Abort listener、晚headers不读body/晚result拒绝发布；A3真实Controller失败反馈与串行后续可进、默认diagnosis回退、成功schema/身份及取消保持，不自动重试，超时不假称服务器未执行；A4相关tests/TS/build；A5架构/学习/证据/任务板commit/push/release。
 - 5分钟现状与预算、15分钟最小实现、10分钟检查，必要5分钟只读review。无Demo/模型/UI服务/用户DB/密钥/部署main，不改Graph/checkpoint/Memory或全局fetch，不重写通用调度系统。纯fake transport/fake clock；owner清自有资源；不将checkpointer mirror悬挂扩大纳入本轮。
+
+- 交付结果：实际dispatch fetch永不返回、JSON永不返回及Stage3串行tail阻塞3红→绿。Agent fetch+body统一20秒，从网络开始计时；复用preparation owner逻辑小提取，Preparation错误/取消语义不变。超时先本地结算再abort，不合作transport也能退出，晚headers不读body/晚reject被观察。成功schema、HTTP/JSON错误与原eventId保持。
+- 预算/局限：Next默认确定性，Graph每cue最多1次Policy，远端Policy route/provider15秒；20秒是等待政策，不是Graph/服务器队列/checkpoint完成保证。不含客户端dispatchSerial排队前时间或后续checkpoint mirror；超时不证明服务器未执行，不自动retry。可选signal测试不冒称所有Host接管都主动abort，原token/identity隔离仍负责旧返回。
+- 验证：新Agent17＋原prep8项局部通过；相关11文件169tests、TypeScript、Web production build通过。真实Controller fetch/body timeout后后续队列前进，默认diagnostics可本地fallback，实际Host总结timeout→有限失败artifact，真实Graph WAITING_TOOL迟到正文在dispose后零tool/post/mirror/UI更新。默认agent_deadline_review限定只读终审无must-fix；见[验收](validation/AGENT_TRANSPORT_DEADLINE.md)。
+- 文档与release：ARCHITECTURE/TECHNICAL_LEARNINGS/本卡同批更新后commit/push，测试/build退出，无Demo/真实模型/浏览器服务/用户DB/密钥/Memory/部署安装操作。原UI A5仍独立等待；不扩大到持久化或服务器队列。
 
 ## 已交付：整场完成同步失败反馈（2026-09-26）
 
