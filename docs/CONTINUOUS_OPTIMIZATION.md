@@ -2,12 +2,17 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
-## 当前任务：手动回访完成后的有据追问（2026-09-26）
+## 已交付：手动回访完成后的有据追问（2026-09-26）
 
 - 9311269已push/clean、210tests/TS/build且owner release；01a0da50-848f-78d3-bb41-f028c8aed357串行独占问答上下文gate/visit状态key、必要窄Host和tests/docs，默认配置，主控只读。
 - 来源依据：Session BEGIN_MANUAL_CUE_VISIT重置outcome gate，finishOutcome完成本visit但故意不写global revealed；当前问答一律拒绝manual/takeover，导致已完整回看的合法诊断无法用3+4类既有问法。本轮只补问答，不新增manual重播或修改Session reducer/全局进度。
 - A1真实manual reducer从开始到结束证明fresh gate与global reveal区别，完成前不显示/不答；A2同visit PAUSED+匹配COMPLETE及原现代可信内容才支持既有问法，合法manual takeover可读、普通自由查看仍拒绝；A3key绑定visit_id，旧visit回调拒绝、同visit重渲染保留草稿，返回默认游标/consumed/presented不因提问改变，无额外诊断/Memory/历史写；A4相关tests/TS/build；A5架构/学习/简证/任务板commit/push/release。
 - 5分钟门契约、10分钟小改、10分钟验证；emil/apple沿用，不绕原本次visit播放门，不借global旧看过记录授权，不扩持久化/自由语义/新字段或重播控制。0Demo/模型/浏览器服务/用户DB密钥/安装部署main，证据为生产模块/Session/SSR，原UI A5独立等待。owner清自有进程。
+
+- 交付：只改QA上下文gate与key，合法manual采用当前cue匹配/非空实际visit_id及Session本次PAUSED+完整gate，可在本visit takeover状态使用原3+4类问法；default仍未接管+global reveal。未改Session/replay/global progress/Host与Panel事件，未加manual再看一遍。
+- 身份/状态：key用manual实际visit_id或default null，测试合法visit名“default”也不碰撞；同visit重渲染草稿保持，新visit播放中及完成后旧callback均拒绝。QA不改defaultcursor/consumed/presented/case/thread/attempt，cancel按既有Session恢复默认游标，资源核对及单条cache复用保持。
+- 验证：已看/未默认看过两种真实reducer begin清gate→LOCKED→finish不写global reveal，2红→绿。新增5项并扩原baseline测试，6文件136tests、TS、production build通过；[证据](validation/MANUAL_VISIT_QUESTIONS.md)。主控集中只读复核，无新代理。
+- 文档/release：ARCHITECTURE/学习/本卡/validation同步后commit/push/release，自有tests/build退出。仅同visit页面状态，不承诺跨visit/跨cue/重启永久保存；SSR/callback/Session fixture不冒称完整Host或浏览器验收。无模型/Demo/UI服务/用户DB密钥/安装部署main，原UI A5保持。
 
 ## 已交付：已验证资源数值追问（2026-09-26）
 

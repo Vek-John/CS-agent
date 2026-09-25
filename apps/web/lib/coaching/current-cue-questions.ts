@@ -46,12 +46,15 @@ const tick = (value: number | undefined): value is number => Number.isSafeIntege
 export function buildCurrentCueQuestionContext(input: CurrentCueQuestionInput): CurrentCueQuestionContext | undefined {
   const { plan, session } = input;
   if (!plan || !session || session.review_plan_id !== plan.id || session.phase !== "PAUSED_FOR_COACHING"
-    || session.manual_cue_visit || input.takenOver || input.busy) return;
+    || input.busy) return;
+  const visit = session.manual_cue_visit;
+  if (input.takenOver && !visit) return;
   const cue = getCurrentCue(plan, session);
   const segment = getCurrentSegment(plan, session);
   const gate = session.outcome_completion;
   if (!cue || !segment || cue.segment_id !== segment.id || !segment.cue_ids.includes(cue.id)
-    || !session.revealed_cue_ids.includes(cue.id) || !gate || gate.cueId !== cue.id || gate.status !== "COMPLETE"
+    || (visit ? visit.cue_id !== cue.id || typeof visit.visit_id !== "string" || !visit.visit_id.trim() : !session.revealed_cue_ids.includes(cue.id))
+    || !gate || gate.cueId !== cue.id || gate.status !== "COMPLETE"
     || !tick(cue.decision_tick) || !tick(cue.outcome_end_tick) || gate.outcomeEndTick !== cue.outcome_end_tick
     || !tick(gate.completedAtTick) || gate.completedAtTick < cue.outcome_end_tick) return;
   const observable = cue.observableContext;
@@ -102,7 +105,7 @@ export function buildCurrentCueQuestionContext(input: CurrentCueQuestionInput): 
   const shownLimitations = [...new Set(limitations.filter(Boolean).map(playerFacingLimitation))].slice(0, 4)
     .map(text => boundedText(text) ? text : "当前记录中的限制较长，请结合上方完整诊断查看；这里不截断后改变其含义。");
   return {
-    key: JSON.stringify([input.generation, session.id, plan.id, cue.id, sourceRevision, facts, basis, shownLimitations, input.resourceSource?.revision, resources]),
+    key: JSON.stringify([input.generation, session.id, plan.id, cue.id, visit?.visit_id ?? null, sourceRevision, facts, basis, shownLimitations, input.resourceSource?.revision, resources]),
     facts, basis, limitations: shownLimitations, limitationSource, resources,
   };
 }

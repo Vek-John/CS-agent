@@ -1872,3 +1872,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：Host单条identity cache复用currentDiagnosisWindow/Resources，核对plan/cue/player/demo/material，opaque WeakMap token只关联合法compact。当前完整诊断还需唯一规范measurement ID、number值、label/unit、非空refs集合全匹配；缺失/矛盾unknown，原health0与alive矛盾门不变。ammo保持strict-prior/entity/变化失效，回答最近记录＋非瞬间精确/备弹未知，不延伸建议。
 - 验证：生产资源→diagnose→真实Panel已显示而问答拒绝4红→绿；新增43项，最终5文件210tests、TypeScript/Web production build通过。spy证明初次投影后20次编辑/replay零额外投影，同cue新timeline/material分别重新计算并使旧token/key失效；真实Panel submit callback/SSR数值及来源通过。主控真实diff复核无must-fix。[证据](validation/CURRENT_CUE_RESOURCE_QUESTIONS.md)。
 - 限制：cache依赖源对象不可变替换，不宣称大Demo速度基准；明确整句匹配不是通用语义理解。没有专业判断、诊断/provider/Memory新调用，不接manual/跨重启保存。未做真实浏览器或完整Host/iframe验收，0Demo/模型/UI服务/用户DB密钥，原UI A5保留。
+
+
+## 2026-09-26：手动回访授权应来自本visit完成门
+
+- 问题：Session手动begin清gate，finish只完成本visit、不写global revealed；默认问答却一律拒绝manual/takeover，并要求global reveal。已看和未默认看过的cue都在本次完整播放后仍不能问。
+- 决定：只改问答gate/key。普通默认路径保持未接管＋global revealed；manual校验当前cue和非空实际visit_id，允许本visit takeover并复用原PAUSED/完整outcomeEnd/completedAt门。key以visit_id或null区分，避免合法名“default”碰撞；不修改Session/播放事件，也不新增manual重播。
+- 验证：两种真实Session begin→LOCKED→finish基线2红→绿；实际Panel旧callback在新visit未完成/完成后拒绝，同visit草稿保留，cancel后原默认游标/正常推进保持。资源4问和同源cache不退化，QA前后case/thread/attempt/progress不变。新增5项并扩既有测试，6文件136tests、TS/Web production build通过；主控集中复核。[记录](validation/MANUAL_VISIT_QUESTIONS.md)。
+- 限制：保留同visit页面状态，不跨visit/cue/重启永久存草稿。真实Panel callback/SSR与生产Session fixture不是完整Host取消流程或浏览器验收；无Demo/模型/服务/用户DB/密钥/安装部署，原UI A5不变。既有三类＋四类问法不等于开放语义问答。

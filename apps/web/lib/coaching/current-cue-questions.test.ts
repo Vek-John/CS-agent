@@ -72,6 +72,83 @@ function nodes(tree: ReactNode): ReactElement<Record<string, unknown>>[] {
   return [tree, ...nodes(tree.props.children as ReactNode)];
 }
 
+it.each([true, false])("authorizes only the freshly completed real manual visit (seen on default route: %s)", seen => {
+  const { input, plan, cue } = fixture();
+  if (!seen) input.session = reduceCoachingSession(plan, createCoachingSession(plan), { type: "START" });
+  const before = structuredClone(input.session!);
+  expect(before.revealed_cue_ids.includes(cue.id)).toBe(seen);
+  input.takenOver = true;
+  input.session = reduceCoachingSession(plan, input.session!, { type: "BEGIN_MANUAL_CUE_VISIT", cueId: cue.id, visitId: "visit-first" });
+  expect(input.session.outcome_completion).toBeUndefined();
+  expect(buildCurrentCueQuestionContext(input)).toBeUndefined();
+  input.session = reduceCoachingSession(plan, input.session, { type: "TICK", tick: cue.decision_tick });
+  expect(input.session.outcome_completion?.status).toBe("LOCKED");
+  expect(buildCurrentCueQuestionContext(input)).toBeUndefined();
+  input.session = reduceCoachingSession(plan, input.session, { type: "TICK", tick: cue.outcome_end_tick });
+  expect(input.session.phase).toBe("PAUSED_FOR_COACHING");
+  expect(input.session.outcome_completion).toMatchObject({ cueId: cue.id, status: "COMPLETE", outcomeEndTick: cue.outcome_end_tick, completedAtTick: cue.outcome_end_tick });
+  expect(input.session.revealed_cue_ids).toEqual(before.revealed_cue_ids);
+  const context = buildCurrentCueQuestionContext(input);
+  expect(context).toBeDefined();
+  const unchanged = structuredClone(input.session);
+  const state = updateCurrentCueQuestions(undefined, context!.key, context, { type: "ASK", question: CURRENT_CUE_QUESTIONS[1] });
+  expect(state?.turns).toHaveLength(1);
+  expect(input.session).toEqual(unchanged);
+  expect(input.session.default_route_cursor).toEqual(before.default_route_cursor);
+  expect(input.session.consumed_cue_ids).toEqual(before.consumed_cue_ids);
+  expect(input.session.presented_cue_ids).toEqual(before.presented_cue_ids);
+});
+
+it("binds actual Panel callbacks and drafts to one visit and returns to the unchanged default route", () => {
+  const { input, plan, cue, session: original } = fixture();
+  const defaultContext = buildCurrentCueQuestionContext(input)!;
+  const begin = (visitId: string) => { input.session = reduceCoachingSession(plan, input.session!, { type: "BEGIN_MANUAL_CUE_VISIT", cueId: cue.id, visitId }); };
+  const finish = () => { input.session = reduceCoachingSession(plan, input.session!, { type: "TICK", tick: cue.outcome_end_tick }); };
+  input.takenOver = true;
+  begin("default"); finish(); // A literal visit name must not collide with the default-route sentinel.
+  const first = buildCurrentCueQuestionContext(input)!;
+  expect(first.key).not.toBe(defaultContext.key);
+  let state = updateCurrentCueQuestions(undefined, first.key, first, { type: "DRAFT", text: "第一回访未提交的草稿" });
+  const panel = (context: typeof first) => CurrentCueQuestionsPanel({ state: currentCueQuestionState(state, context),
+    onDraft: text => { state = updateCurrentCueQuestions(state, context.key, buildCurrentCueQuestionContext(input), { type: "DRAFT", text }); },
+    onAsk: question => { state = updateCurrentCueQuestions(state, context.key, buildCurrentCueQuestionContext(input), { type: "ASK", question }); },
+  });
+  const ask = (tree: ReactNode) => nodes(tree).find(n => n.type === "button" && n.props.children === CURRENT_CUE_QUESTIONS[1])!.props.onClick as () => void;
+  const oldAsk = ask(panel(first)); oldAsk();
+  expect(state?.turns).toHaveLength(1);
+  const firstState = state;
+  expect(currentCueQuestionState(state, buildCurrentCueQuestionContext({ ...input, session: { ...input.session! } })!)).toBe(firstState);
+  expect(renderToStaticMarkup(panel(first))).toContain("第一回访未提交的草稿");
+  begin("second-visit");
+  expect(input.session!.outcome_completion).toBeUndefined();
+  expect(buildCurrentCueQuestionContext(input)).toBeUndefined();
+  oldAsk(); expect(state).toBe(firstState);
+  finish();
+  const second = buildCurrentCueQuestionContext(input)!;
+  expect(second.key).not.toBe(first.key);
+  expect(currentCueQuestionState(state, second)).toMatchObject({ draft: "", turns: [] });
+  expect(renderToStaticMarkup(panel(second))).not.toContain("第一回访未提交的草稿");
+  const beforeAsk = structuredClone(input.session);
+  ask(panel(second))();
+  const secondState = state;
+  oldAsk(); expect(state).toBe(secondState);
+  expect(input.session).toEqual(beforeAsk);
+  expect(input.session!.cue_cases).toEqual(original.cue_cases);
+  expect(input.session!.learning_threads).toEqual(original.learning_threads);
+  expect(input.session!.default_route_cursor).toEqual(original.default_route_cursor);
+  expect(input.session!.consumed_cue_ids).toEqual(original.consumed_cue_ids);
+  expect(input.session!.presented_cue_ids).toEqual(original.presented_cue_ids);
+  input.session = reduceCoachingSession(plan, input.session!, { type: "CANCEL_MANUAL_CUE_VISIT" });
+  expect(input.session.manual_cue_visit).toBeUndefined();
+  expect(buildCurrentCueQuestionContext(input)).toBeUndefined(); // Ordinary free viewing is still not authorized.
+  input.takenOver = false;
+  const resumed = buildCurrentCueQuestionContext(input)!;
+  expect(resumed.key).toBe(defaultContext.key);
+  expect(currentCueQuestionState(state, resumed).turns).toEqual([]);
+  expect(reduceCoachingSession(plan, input.session, { type: "ADVANCE_SEGMENT" }).default_route_cursor)
+    .toEqual(reduceCoachingSession(plan, original, { type: "ADVANCE_SEGMENT" }).default_route_cursor);
+});
+
 it("connects actual panel typing/submit/quick callbacks to the live gate and renders the answer", () => {
   const { input, output } = fixture();
   const before = structuredClone(output);
@@ -99,14 +176,15 @@ it("connects actual panel typing/submit/quick callbacks to the live gate and ren
   expect(output).toEqual(before);
 });
 
-it.each(["playing", "replay", "busy", "takeover", "manual", "no-gate", "locked", "wrong-gate", "wrong-end", "early-end", "unrevealed", "wrong-plan", "wrong-segment", "legacy", "wrong-observer", "future-observation", "other-case", "other-result", "other-hinge", "pending", "missing-reflection"])("does not authorize questions at the %s boundary", boundary => {
+it.each(["playing", "replay", "busy", "takeover", "wrong-manual-cue", "empty-visit", "no-gate", "locked", "wrong-gate", "wrong-end", "early-end", "unrevealed", "wrong-plan", "wrong-segment", "legacy", "wrong-observer", "future-observation", "other-case", "other-result", "other-hinge", "pending", "missing-reflection"])("does not authorize questions at the %s boundary", boundary => {
   const { input, cue, session } = fixture();
   switch (boundary) {
     case "playing": session.phase = "PLAYING"; break;
     case "replay": session.phase = "REPLAYING"; break;
     case "busy": input.busy = true; break;
     case "takeover": input.takenOver = true; break;
-    case "manual": session.manual_cue_visit = { cue_id: cue.id, visit_id: "manual" }; break;
+    case "wrong-manual-cue": session.manual_cue_visit = { cue_id: "another-cue", visit_id: "manual" }; break;
+    case "empty-visit": session.manual_cue_visit = { cue_id: cue.id, visit_id: " " }; break;
     case "no-gate": session.outcome_completion = undefined; break;
     case "locked": session.outcome_completion!.status = "LOCKED"; break;
     case "wrong-gate": session.outcome_completion!.cueId = "other"; break;
@@ -174,6 +252,11 @@ it("supports only the current trusted baseline surface and not sealed/foreign na
   expect(context.facts.map(f => f.refs[0])).toEqual([cue.facts[0].id]);
   expect(context.limitationSource).toBe("当前讲解已显示的限制");
   expect(JSON.stringify(answerGroundedCueQuestion(context, CURRENT_CUE_QUESTIONS[0]))).not.toMatch(/不复制/);
+  input.session = reduceCoachingSession(input.plan!, input.session!, { type: "BEGIN_MANUAL_CUE_VISIT", cueId: cue.id, visitId: "baseline-visit" });
+  input.takenOver = true;
+  expect(buildCurrentCueQuestionContext(input)).toBeUndefined();
+  input.session = reduceCoachingSession(input.plan!, input.session, { type: "TICK", tick: cue.outcome_end_tick });
+  expect(buildCurrentCueQuestionContext(input)?.facts).toEqual(context.facts);
   input.presentableNarration.cueId = "another-cue";
   expect(buildCurrentCueQuestionContext(input)).toBeUndefined();
   input.presentableNarration = undefined;

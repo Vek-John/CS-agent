@@ -204,3 +204,33 @@ it("renders the actual resource answer after the Panel submit callback without c
   expect(html).not.toMatch(/weapon_handle|current-frame|resource-source/);
   expect(output).toEqual(before);
 });
+
+it("preserves all four verified resources and the cache in a completed manual visit", () => {
+  const { input, cache, sourceContext, output, cue } = fixture();
+  const before = structuredClone(input.session);
+  const defaultContext = buildCurrentCueQuestionContext(input)!;
+  const project = vi.spyOn(resourceProjection, "currentDiagnosisResources");
+  try {
+    input.takenOver = true;
+    input.session = reduceCoachingSession(input.plan, input.session, { type: "BEGIN_MANUAL_CUE_VISIT", cueId: cue.id, visitId: "resources-manual" });
+    expect(buildCurrentCueQuestionContext(input)).toBeUndefined();
+    input.session = reduceCoachingSession(input.plan, input.session, { type: "TICK", tick: cue.outcome_end_tick });
+    input.resourceSource = cache.read({ ...sourceContext });
+    const manualContext = buildCurrentCueQuestionContext(input)!;
+    expect(manualContext.key).not.toBe(defaultContext.key);
+    for (const [question] of examples) expect(answerGroundedCueQuestion(manualContext, question)).toEqual(answerGroundedCueQuestion(defaultContext, question));
+    const sessionBeforeQuestions = structuredClone(input.session);
+    const saved = updateCurrentCueQuestions(undefined, manualContext.key, manualContext, { type: "DRAFT", text: "我当时多少血？" });
+    input.resourceSource = cache.read({ ...sourceContext });
+    expect(currentCueQuestionState(saved, buildCurrentCueQuestionContext(input)!)).toBe(saved);
+    expect(project).not.toHaveBeenCalled();
+    expect(input.session).toEqual(sessionBeforeQuestions);
+    expect(input.session.default_route_cursor).toEqual(before.default_route_cursor);
+    expect(input.session.consumed_cue_ids).toEqual(before.consumed_cue_ids);
+    expect(input.session.presented_cue_ids).toEqual(before.presented_cue_ids);
+    expect(input.session.cue_cases?.[cue.id]).toEqual(output.cueCase);
+    expect(input.session.learning_threads).toEqual(before.learning_threads);
+    input.resourceSource = { revision: input.resourceSource!.revision };
+    expect(answerGroundedCueQuestion(buildCurrentCueQuestionContext(input)!, "我当时多少血？").items).toEqual([]);
+  } finally { project.mockRestore(); }
+});
