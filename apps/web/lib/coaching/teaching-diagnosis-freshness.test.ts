@@ -165,7 +165,7 @@ it("honors snapshot missing information instead of recovering the same field fro
   expect(packet.decisionResources?.armor).toBe(100);
 });
 
-it.each(["fresh", "partial", "low-partial", "all-unknown", "known-false", "stale", "independent-roster", "invalid-roster"])("keeps Host rich, compact Graph and API consistent for %s", async kind => {
+it.each(["fresh", "partial", "low-partial", "all-unknown", "known-false", "stale", "independent-roster", "positive-roster", "invalid-roster"])("keeps Host rich, compact Graph and API consistent for %s", async kind => {
   const { buildTeachingDiagnosisSubmissionEvent } = await import("./teaching-diagnosis-host");
   const { createCoachAgentRuntime, createRemoteCoachAgentDispatchEnvelope, parseRemoteCoachAgentDispatchEnvelope } = await import("@cs-coach/coach-agent");
   const { fixtureIdentity } = await import("../../../../libs/coach-agent/src/test-fixtures");
@@ -173,7 +173,7 @@ it.each(["fresh", "partial", "low-partial", "all-unknown", "known-false", "stale
   const { context, reflection, state } = fixture();
   context.cue.facts.push({ id: "current-legal-fact", text: "可验证的决策事实。", availability: "DECISION", available_at_tick: 1990, source: "DEMO", observed_by_player: true });
   context.cue.observable_fact_refs.push("current-legal-fact");
-  if (["stale", "independent-roster", "invalid-roster"].includes(kind)) state.tick = 1900;
+  if (["stale", "independent-roster", "positive-roster", "invalid-roster"].includes(kind)) state.tick = 1900;
   if (kind === "partial") {
     state.health = 70; state.armor = 80; state.has_helmet = false;
     const snapshot = await bindRoster(context);
@@ -186,10 +186,11 @@ it.each(["fresh", "partial", "low-partial", "all-unknown", "known-false", "stale
     reflection.selectedGoal = "TRADE";
     const snapshot = await bindRoster(context);
     if (kind === "invalid-roster") snapshot.sampledAtTick = 2001;
+    if (kind === "positive-roster") snapshot.aliveCounts.value!.allies = 5;
   }
   const event = buildTeachingDiagnosisSubmissionEvent(context, reflection, { eventType: "SUBMIT_REFLECTION", eventId: "freshness-reflection", identity: { ...fixtureIdentity, selectedPlayerId: context.selectedPlayerId } });
   expect(event.input).not.toHaveProperty("decisionState");
-  if (["stale", "independent-roster", "invalid-roster"].includes(kind)) expect(event.input).not.toHaveProperty("decisionResources");
+  if (["stale", "independent-roster", "positive-roster", "invalid-roster"].includes(kind)) expect(event.input).not.toHaveProperty("decisionResources");
   if (kind === "partial") expect(event.input.decisionResources).toMatchObject({ health: 70, armor: 80 });
   if (kind === "partial" || kind === "all-unknown") expect(event.input.decisionResources).not.toHaveProperty("hasHelmet");
   expect(event.input.decisionFacts.map(f => f.id)).toContain("current-legal-fact");

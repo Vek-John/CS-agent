@@ -58,3 +58,12 @@ it.each([0, 2, undefined])("renders a known utility count or explicit unknown wi
   }
   expect(html).toContain("懂了，继续");
 });
+
+
+it("keeps known living teammates distinct from unknown contact conditions", () => {
+  const html = renderTradePanel(4);
+  expect(html).toContain("当时还有4名存活队友");
+  expect(html).not.toContain("还缺少队友是否存活");
+  expect(html).toContain("双方能否看到同一个对手");
+  expect(html).toContain("懂了，继续");
+});

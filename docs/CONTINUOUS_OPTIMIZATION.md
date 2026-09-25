@@ -40,18 +40,22 @@
 | 已push、本地验收完成 | 诊断道具数量与未知库存 | 01a0d837-aff5-7560-a4b1-ba553cd77ba6；完成并释放写入/进程 | 生产双入口4红→绿，共享utilityCount，不重解释legacy总数；79测试/TS/build通过，Graph/API/恢复/SSR已验证，见DIAGNOSTIC_UTILITY_COUNT.md |
 | 已push、本地验收完成 | 诊断资源时效与回合绑定 | 01a0d850-9c52-7803-85ca-03c7c8f5576e；完成并释放写入/进程 | 过期/跨回合2红→绿，同回合半秒门与独立可信decisionRoster落地；147测试/TS/build通过，见DIAGNOSTIC_RESOURCE_FRESHNESS.md |
 | 已push、本地验收完成 | 可信部分资源的独立测量 | 01a0d870-79b9-7d22-ae10-fc28ec2ceb6b；完成并释放写入/进程 | 70HP/80甲与未知helmet两红→绿，partial compact和三值资源背景落地；177测试/TS/build通过，见PARTIAL_DIAGNOSTIC_RESOURCES.md |
-
-| 待执行 | 真实教学点诊断消费验证 | 01a0d88c-619b-7e72-8133-40fae1e40057；交接后独占验证与必要窄修复 | 近三轮资源修复只用fixture；一次现有Demo验证实际4cue的Host投影、诊断测量/未知说明及恢复，零模型，不扩大完整性审查 |
+| 已push、本地验收完成 | 真实教学点诊断消费验证 | 01a0d88c-619b-7e72-8133-40fae1e40057；完成并释放写入/进程 | 实际4cue均age0，partial库存未知/独立人数/8输出恢复通过；发现正人数被文案说未知并窄修，180测试/TS/build通过；首次harness失败后获准补读，总2次，见REAL_CUE_RESOURCE_CONSUMPTION.md |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
 
 ## 本轮任务卡：真实教学点诊断消费验证（2026-09-25）
 
-- 基线41799f6已push干净，partial任务release；01a0d88c-619b-7e72-8133-40fae1e40057独占本轮小验证工具/证据/docs及真实发现的必要窄修复，主控只读。默认配置，无需额外子代理或数据复制；使用现有WASM和授权Demo。
+- 基线43746ce（41799f6＋交接）已push干净，partial任务release；01a0d88c-619b-7e72-8133-40fae1e40057独占本轮小验证工具/证据/docs及真实发现的必要窄修复，主控只读。默认配置，无需额外子代理或数据复制；使用现有WASM和授权Demo。
 - 目标：最近utility/freshness/partial三轮已验证fixture，但尚无实际Demo→当前Host诊断的消费证据。验证真实正式cue能显示哪些可靠血量/护甲/道具/人数、哪些应未知，当前讲解不泄漏来源不明数值。不重复shot/hurt/clock源头实验或同Jev拒判集。
 - 流程/验收：A1先以小fixture smoke复用脚本/import和生产Host调用，避免解析后才发现脚本错误；A2原有60.6MB Demo一次WASM解析（120秒），同进程持有Replay、Adapter及当前4cue，经过生产Host submission/诊断和保存往返；A3回传逐cue紧凑测量/未知原因/样本age/引用对照，原始帧和身份留owner，明确人工RISK/TRADE探针选择不是用户真实意图；A4若有真实功能缺陷先用最小fixture复现再修，在同次解析内留紧凑必要数据避免重复读Demo，相关tests/TS/build后push；无缺陷则只交实际学习证据，不制造代码变更；A5记录局限与清理、任务板及提交push。
 - 边界：没有UI或完整播放器验收，不关闭原工具暂停A5；不访问用户数据库/记忆或保存探针用户意图，不调用模型、不改教学阈值/路线、不伪造工具/cue、不重建Parser/Viewer（自e90493b未改源码，现有构建可复用），不做hash审计。旧历史仍仅隔离内存恢复。
 - 风险/阶段：5分钟入口smoke、一次最终解析120秒、15分钟核对真实测量与必要窄修复；bulk不经工具输出/持久文件，固定一个进程owner，最终只摘要。编译或smoke失败不得进入Demo解析；同基础设施失败两次先简化，不换多套harness。无生产修改则不重复177测试/TS/build，明确沿用已通过基线；新增工具按其实际风险做小验证。执行者负责所有进程/临时文件清理，保留用户Demo/缓存/其他树，不安装部署main合并。
+
+- 实际结果：9round/44候选/4正式cue均同round sample=decision、age0≤32；HP/甲为5/68、20/48、100/100、73/97，头盔均true，道具1/未知/1/1，人数4/0/0/0。RISK背景3受限1未触发阈值，所有Verdict仍INCONCLUSIVE；第2cue缺库存仍保留其它字段，第三cue存款0保留。8个risk/trade输出local/compact一致、隔离恢复新增fetch/诊断0。
+- 执行偏差：首次小fixture未覆盖普通SKIP，真实parse后恢复helper错误ADVANCE_SEGMENT阻塞且未写出摘要。立即报告后修同一脚本为SKIP_SEGMENT、普通skip/双cue smoke通过，并按协调明确追加授权补读1次；总2次真实读取。成功parse6079ms/总6317ms，bulk一直在单进程，修脚本后每cue先小摘要再独立恢复，不改Session门。
+- 确证修复/验收：真实第1cue已知4队友却说缺少是否存活，最小fixture1红→绿；只改正人数文字/roster refs，不改status或专业门。已捕获小投影复放确认最终说明，没有第三次Demo读取。生产改动后7文件180测试/TS/build通过；文档/JSON证据记录真实探针与所有局限。未知helmet/false及其他拒绝边界仅fixture，不冒称真实覆盖。
+- 清理：默认配置root独占，无子代理，无模型/浏览器/服务/用户DB/Memory/密钥/安装发布/main合并，WASM未重建、旧A5不动。所有parse/smoke/复放/tests/build退出，只保留去身份小日志/证据，commit/push后释放；见[记录](validation/REAL_CUE_RESOURCE_CONSUMPTION.md)。
 
 ## 本轮任务卡：可信部分资源的独立测量（2026-09-25）
 

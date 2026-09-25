@@ -96,6 +96,18 @@ function input(overrides: Partial<TeachingDiagnosisInput> = {}): TeachingDiagnos
 }
 
 describe("teaching diagnosis trust and evidence boundaries", () => {
+  it("acknowledges the known positive roster instead of asking whether teammates were alive", () => {
+    // Minimized from the real-cue resource summary; no player identity or Replay.
+    const output = diagnoseCue(input({ reflection: reflection({ selectedGoal: "TRADE" }),
+      decisionResources: { health: 5, armor: 68, hasHelmet: true, utilityCount: 1, evidenceRefs: ["current-resource"] },
+      decisionRoster: { aliveTeammates: 4, evidenceRefs: ["public-roster"] } }));
+    expect(output.cueCase.diagnosticResult?.status).toBe("UNVERIFIABLE");
+    expect(output.cueCase.verdict?.type).toBe("INCONCLUSIVE");
+    expect(output.cueCase.diagnosticResult?.explanation).toContain("当时还有4名存活队友");
+    expect(output.cueCase.diagnosticResult?.explanation).not.toContain("还缺少队友是否存活");
+    expect(output.cueCase.diagnosticResult?.evidenceRefs).toContain("public-roster");
+  });
+
   it.each([
     { resources: {}, status: "UNVERIFIABLE" },
     { resources: { health: 100, armor: 100 }, status: "UNVERIFIABLE" },

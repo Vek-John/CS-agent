@@ -630,17 +630,21 @@ export function executeDiagnostic(
       .filter((fact) => /队友(?:尚未|未|没(?:有)?|无法|不能|不在)|(?:无法|不能|未能|没(?:有)?)覆盖|(?:无法|不能|未能|没(?:有)?)同步|(?:不在|未在|没有在)同一(?:条)?枪线|(?:teammate|ally).*(?:not|cannot|can't|unable).*(?:position|cover|sync|trade|angle|line of sight)/i.test(fact.text.replace(/\s+/g, "")))
       .map((fact) => fact.id);
     const partiallySupported = explicitCoverageGap.length > 0;
+    const livingTeammates = roster?.aliveTeammates;
+    const knownLivingTeammates = livingTeammates !== undefined && livingTeammates > 0;
     return DiagnosticResultSchema.parse({
       resultId: `diagnostic-${input.cueId}-${capability.kind.toLowerCase()}`,
       capabilityId: capability.id,
       cueId: input.cueId,
       hingeId: hinge.hingeId,
       status: partiallySupported ? "PARTIALLY_SUPPORTED" : "UNVERIFIABLE",
-      evidenceRefs: refs,
+      evidenceRefs: unique([...refs, ...(knownLivingTeammates ? roster?.evidenceRefs ?? [] : [])]).slice(0, 64),
       measurements: [],
       explanation: partiallySupported
         ? "回放记录了队友未到位或无法覆盖这次接触；还需确认你和队友能否在相近时间看到同一个对手，不能仅凭站得近就认定可以补枪。"
-        : "你想在队友交火后及时补上，这个意图我理解。要判断当时能不能做到，还缺少队友是否存活、双方能否看到同一个对手，以及你能否及时接上这次交火的信息。",
+        : knownLivingTeammates
+          ? `你想在队友交火后及时补上，这个意图我理解。当时还有${livingTeammates}名存活队友，但仍需确认双方能否看到同一个对手，以及你能否及时接上这次交火。`
+          : "你想在队友交火后及时补上，这个意图我理解。要判断当时能不能做到，还缺少队友是否存活、双方能否看到同一个对手，以及你能否及时接上这次交火的信息。",
       limitations: unique([...commonLimitations, "缺少队友视线、阻挡、精确接触时间和语音数据。"]).slice(0, MAX_DIAGNOSIS_LIMITATIONS),
     });
   }

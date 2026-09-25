@@ -1694,3 +1694,12 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 复查：默认只读终审发现raw明确0HP被snapshot冲突降为unknown后可绕过旧死亡矛盾门，组合先1红/1绿，检查前置后闭合；缺失标记的默认0仍不当死亡。库存只沿既有数组可用性/分类规则，不泛称全部资源冲突已审计。
 - 验证：7文件177测试/TS/Web build通过；Host→strict事件/envelope→内存Graph及确定性POST的partial/full/all-unknown/known-false与本地结果一致，旧utility/roster规则保持；partial及旧保存测量恢复原样零fetch，SSR显示70HP/80甲与头盔未知并保留继续。见[记录](validation/PARTIAL_DIAGNOSTIC_RESOURCES.md)。
 - 限制/清理：无Parser/Viewer/全域类型重构或Demo/模型/浏览器/用户DB/安装发布，原A5未验，不以测试声称专业质量提升。原历史不追溯修正，库存跨视图内容未检查，低层rich仍由调用方保证上下文。所有检查进程退出，仅忽略目录小日志，commit/push后release。
+
+
+## 2026-09-25：真实正式cue验证必须区分已知人数与未知接触
+
+- 真实收益：当前9回合/44候选/4正式cue全部以age0样本进入Host；资源分别5HP68甲、20HP48甲、100HP100甲、73HP97甲，头盔均true。第2cue库存未知但其余资源保留，第三cue真实存款0保留；独立存活队友4/0/0/0。人工RISK/TRADE探针不是用户意图，所有Verdict INCONCLUSIVE。
+- 问题/修复：第1cue已知4名队友，TRADE文案仍说缺少是否存活。最小投影先1红后绿，现明确4人已知，仅视线/接战窗口待确认，并加入roster refs；不改status、Verdict或阈值。修复后只复放捕获小投影，不再解析Demo。
+- 验证：第二次成功解析6079ms/至消费恢复6317ms，AnalysisBundle/Host输入往返一致；8个诊断输出恢复保持measurement/gate，额外diagnosis0/fetch0，16次确定性本地/compact消费。真实缺陷修复后180相关测试、TS/Web build通过。详见[完整证据](validation/REAL_CUE_RESOURCE_CONSUMPTION.md)。
+- 脚本教训：首smoke只有自动freeze skip，首次真实读取后恢复helper在普通SKIPPING误用ADVANCE_SEGMENT，且最后才输出摘要导致证据丢失。已立即报告；改用生产SKIP_SEGMENT、补普通skip和双cue smoke、先输出每cue证据/隔离恢复失败后，获协调明确授权补一次。总计2读，非一次；没有因此修改产品Session或伪造暂停状态。
+- 限制/清理：真实4cue没有unknown/false helmet、过期或跨回合拒绝、已知道具0，仍只由fixture覆盖；不声称专业质量或UI验证。无模型/浏览器/服务/用户DB/Memory/安装部署，Parser/Viewer未重建、原A5不动，无子代理。所有解析/测试/build退出，仅保留去身份小摘要，push后release。

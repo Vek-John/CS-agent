@@ -1,0 +1,551 @@
+{
+  "baseline": "43746ce",
+  "taskDemoReads": 2,
+  "failedFirstAttempt": {
+    "reason": "Validation helper used ADVANCE_SEGMENT in SKIPPING instead of SKIP_SEGMENT",
+    "resourceSummaryRetained": false,
+    "productionDefect": false
+  },
+  "successfulAttemptBeforeTextFix": {
+    "mode": "REAL_DEMO_SYNTHETIC_INTENT_PROBES",
+    "parsePasses": 1,
+    "parseMs": 6079,
+    "totalMs": 6317,
+    "rounds": 9,
+    "candidates": 44,
+    "formalCues": 4,
+    "bundleRoundTrip": true,
+    "fetchCalls": 0,
+    "diagnosisCalls": 16,
+    "rows": [
+      {
+        "ordinal": 1,
+        "round": 3,
+        "decisionTick": 19426,
+        "sourceSampleTick": 19426,
+        "ageTicks": 0,
+        "ageLimitTicks": 32,
+        "sameRound": true,
+        "source": {
+          "health": 5,
+          "armor": 68,
+          "helmet": true,
+          "grenadeCount": 1,
+          "money": 4400,
+          "equipmentValue": 5600
+        },
+        "snapshot": {
+          "sampledAtTick": 19426,
+          "health": 5,
+          "armor": 68,
+          "helmet": true
+        },
+        "resources": {
+          "evidenceRefs": [
+            "state-3-19426"
+          ],
+          "health": 5,
+          "armor": 68,
+          "hasHelmet": true,
+          "money": 4400,
+          "equipmentValue": 5600,
+          "utilityCount": 1
+        },
+        "unknown": [],
+        "roster": {
+          "aliveTeammates": 4,
+          "evidenceRefs": [
+            "fact-cs2d-r3-event-79-alive-counts"
+          ]
+        },
+        "risk": {
+          "probe": "SYNTHETIC_OTHER_INTENT",
+          "status": "PARTIALLY_SUPPORTED",
+          "measurements": [
+            {
+              "id": "measurement-c1-health",
+              "label": "决策时血量",
+              "value": 5,
+              "unit": "HP",
+              "evidenceRefs": [
+                "state-3-19426"
+              ]
+            },
+            {
+              "id": "measurement-c1-armor",
+              "label": "决策时护甲",
+              "value": 68,
+              "unit": "甲",
+              "evidenceRefs": [
+                "state-3-19426"
+              ]
+            },
+            {
+              "id": "measurement-c1-money",
+              "label": "决策时存款",
+              "value": 4400,
+              "unit": "$",
+              "evidenceRefs": [
+                "state-3-19426"
+              ]
+            },
+            {
+              "id": "measurement-c1-equipment",
+              "label": "决策时装备价值",
+              "value": 5600,
+              "unit": "$",
+              "evidenceRefs": [
+                "state-3-19426"
+              ]
+            },
+            {
+              "id": "measurement-c1-utility",
+              "label": "决策时道具数量",
+              "value": 1,
+              "unit": "颗",
+              "evidenceRefs": [
+                "state-3-19426"
+              ]
+            }
+          ],
+          "explanation": "已知：5 HP、68 甲、有头盔、存款 4400、装备价值 5600、1 颗道具、经济状态：完整购买。已知条件表明资源背景受限；随后发生了负向接触结果，但不能单凭资源状态认定动作错误。",
+          "verdict": "INCONCLUSIVE"
+        },
+        "trade": {
+          "probe": "SYNTHETIC_TRADE_INTENT",
+          "status": "UNVERIFIABLE",
+          "measurements": [],
+          "explanation": "你想在队友交火后及时补上，这个意图我理解。要判断当时能不能做到，还缺少队友是否存活、双方能否看到同一个对手，以及你能否及时接上这次交火的信息。",
+          "verdict": "INCONCLUSIVE"
+        },
+        "restoration": {
+          "risk": {
+            "sameValues": true,
+            "fetchDelta": 0,
+            "diagnosisDelta": 0
+          },
+          "trade": {
+            "sameValues": true,
+            "fetchDelta": 0,
+            "diagnosisDelta": 0
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "round": 5,
+        "decisionTick": 31179,
+        "sourceSampleTick": 31179,
+        "ageTicks": 0,
+        "ageLimitTicks": 32,
+        "sameRound": true,
+        "source": {
+          "health": 20,
+          "armor": 48,
+          "helmet": true,
+          "grenadeCount": null,
+          "money": 2200,
+          "equipmentValue": 4100
+        },
+        "snapshot": {
+          "sampledAtTick": 31179,
+          "health": 20,
+          "armor": 48,
+          "helmet": true
+        },
+        "resources": {
+          "evidenceRefs": [
+            "state-5-31179"
+          ],
+          "health": 20,
+          "armor": 48,
+          "hasHelmet": true,
+          "money": 2200,
+          "equipmentValue": 4100
+        },
+        "unknown": [
+          {
+            "field": "utilityCount",
+            "reason": "FIELD_UNAVAILABLE_MISSING_OR_CONFLICT"
+          }
+        ],
+        "roster": {
+          "aliveTeammates": 0,
+          "evidenceRefs": [
+            "fact-cs2d-r5-frame-health-31179-31187-alive-counts"
+          ]
+        },
+        "risk": {
+          "probe": "SYNTHETIC_OTHER_INTENT",
+          "status": "PARTIALLY_SUPPORTED",
+          "measurements": [
+            {
+              "id": "measurement-c2-health",
+              "label": "决策时血量",
+              "value": 20,
+              "unit": "HP",
+              "evidenceRefs": [
+                "state-5-31179"
+              ]
+            },
+            {
+              "id": "measurement-c2-armor",
+              "label": "决策时护甲",
+              "value": 48,
+              "unit": "甲",
+              "evidenceRefs": [
+                "state-5-31179"
+              ]
+            },
+            {
+              "id": "measurement-c2-money",
+              "label": "决策时存款",
+              "value": 2200,
+              "unit": "$",
+              "evidenceRefs": [
+                "state-5-31179"
+              ]
+            },
+            {
+              "id": "measurement-c2-equipment",
+              "label": "决策时装备价值",
+              "value": 4100,
+              "unit": "$",
+              "evidenceRefs": [
+                "state-5-31179"
+              ]
+            }
+          ],
+          "explanation": "已知：20 HP、48 甲、有头盔、存款 2200、装备价值 4100、经济状态：完整购买。已知条件表明资源背景受限；随后发生了负向接触结果，但不能单凭资源状态认定动作错误。",
+          "verdict": "INCONCLUSIVE"
+        },
+        "trade": {
+          "probe": "SYNTHETIC_TRADE_INTENT",
+          "status": "CONTRADICTED",
+          "measurements": [
+            {
+              "id": "measurement-c2-alive-teammates",
+              "label": "当时存活队友",
+              "value": 0,
+              "unit": "人",
+              "evidenceRefs": [
+                "fact-cs2d-r5-frame-health-31179-31187-alive-counts"
+              ]
+            }
+          ],
+          "explanation": "你想接上队友的交火，这个意图我理解。但当时四名队友都已阵亡，已经无法和存活队友形成补枪配合。这个条件不成立，并不单独说明你之前的选择有错。",
+          "verdict": "INCONCLUSIVE"
+        },
+        "restoration": {
+          "risk": {
+            "sameValues": true,
+            "fetchDelta": 0,
+            "diagnosisDelta": 0
+          },
+          "trade": {
+            "sameValues": true,
+            "fetchDelta": 0,
+            "diagnosisDelta": 0
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "round": 7,
+        "decisionTick": 44507,
+        "sourceSampleTick": 44507,
+        "ageTicks": 0,
+        "ageLimitTicks": 32,
+        "sameRound": true,
+        "source": {
+          "health": 100,
+          "armor": 100,
+          "helmet": true,
+          "grenadeCount": 1,
+          "money": 0,
+          "equipmentValue": 3450
+        },
+        "snapshot": {
+          "sampledAtTick": 44507,
+          "health": 100,
+          "armor": 100,
+          "helmet": true
+        },
+        "resources": {
+          "evidenceRefs": [
+            "state-7-44507"
+          ],
+          "health": 100,
+          "armor": 100,
+          "hasHelmet": true,
+          "money": 0,
+          "equipmentValue": 3450,
+          "utilityCount": 1
+        },
+        "unknown": [],
+        "roster": {
+          "aliveTeammates": 0,
+          "evidenceRefs": [
+            "fact-cs2d-r7-frame-health-44507-44515-alive-counts"
+          ]
+        },
+        "risk": {
+          "probe": "SYNTHETIC_OTHER_INTENT",
+          "status": "PARTIALLY_SUPPORTED",
+          "measurements": [
+            {
+              "id": "measurement-c3-health",
+              "label": "决策时血量",
+              "value": 100,
+              "unit": "HP",
+              "evidenceRefs": [
+                "state-7-44507"
+              ]
+            },
+            {
+              "id": "measurement-c3-armor",
+              "label": "决策时护甲",
+              "value": 100,
+              "unit": "甲",
+              "evidenceRefs": [
+                "state-7-44507"
+              ]
+            },
+            {
+              "id": "measurement-c3-money",
+              "label": "决策时存款",
+              "value": 0,
+              "unit": "$",
+              "evidenceRefs": [
+                "state-7-44507"
+              ]
+            },
+            {
+              "id": "measurement-c3-equipment",
+              "label": "决策时装备价值",
+              "value": 3450,
+              "unit": "$",
+              "evidenceRefs": [
+                "state-7-44507"
+              ]
+            },
+            {
+              "id": "measurement-c3-utility",
+              "label": "决策时道具数量",
+              "value": 1,
+              "unit": "颗",
+              "evidenceRefs": [
+                "state-7-44507"
+              ]
+            }
+          ],
+          "explanation": "已知：100 HP、100 甲、有头盔、存款 0、装备价值 3450、1 颗道具、经济状态：强起。已知条件表明资源背景受限；随后发生了负向接触结果，但不能单凭资源状态认定动作错误。",
+          "verdict": "INCONCLUSIVE"
+        },
+        "trade": {
+          "probe": "SYNTHETIC_TRADE_INTENT",
+          "status": "CONTRADICTED",
+          "measurements": [
+            {
+              "id": "measurement-c3-alive-teammates",
+              "label": "当时存活队友",
+              "value": 0,
+              "unit": "人",
+              "evidenceRefs": [
+                "fact-cs2d-r7-frame-health-44507-44515-alive-counts"
+              ]
+            }
+          ],
+          "explanation": "你想接上队友的交火，这个意图我理解。但当时四名队友都已阵亡，已经无法和存活队友形成补枪配合。这个条件不成立，并不单独说明你之前的选择有错。",
+          "verdict": "INCONCLUSIVE"
+        },
+        "restoration": {
+          "risk": {
+            "sameValues": true,
+            "fetchDelta": 0,
+            "diagnosisDelta": 0
+          },
+          "trade": {
+            "sameValues": true,
+            "fetchDelta": 0,
+            "diagnosisDelta": 0
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "round": 7,
+        "decisionTick": 45091,
+        "sourceSampleTick": 45091,
+        "ageTicks": 0,
+        "ageLimitTicks": 32,
+        "sameRound": true,
+        "source": {
+          "health": 73,
+          "armor": 97,
+          "helmet": true,
+          "grenadeCount": 1,
+          "money": 300,
+          "equipmentValue": 4500
+        },
+        "snapshot": {
+          "sampledAtTick": 45091,
+          "health": 73,
+          "armor": 97,
+          "helmet": true
+        },
+        "resources": {
+          "evidenceRefs": [
+            "state-7-45091"
+          ],
+          "health": 73,
+          "armor": 97,
+          "hasHelmet": true,
+          "money": 300,
+          "equipmentValue": 4500,
+          "utilityCount": 1
+        },
+        "unknown": [],
+        "roster": {
+          "aliveTeammates": 0,
+          "evidenceRefs": [
+            "fact-cs2d-r7-event-122-alive-counts"
+          ]
+        },
+        "risk": {
+          "probe": "SYNTHETIC_OTHER_INTENT",
+          "status": "SUPPORTED",
+          "measurements": [
+            {
+              "id": "measurement-c4-health",
+              "label": "决策时血量",
+              "value": 73,
+              "unit": "HP",
+              "evidenceRefs": [
+                "state-7-45091"
+              ]
+            },
+            {
+              "id": "measurement-c4-armor",
+              "label": "决策时护甲",
+              "value": 97,
+              "unit": "甲",
+              "evidenceRefs": [
+                "state-7-45091"
+              ]
+            },
+            {
+              "id": "measurement-c4-money",
+              "label": "决策时存款",
+              "value": 300,
+              "unit": "$",
+              "evidenceRefs": [
+                "state-7-45091"
+              ]
+            },
+            {
+              "id": "measurement-c4-equipment",
+              "label": "决策时装备价值",
+              "value": 4500,
+              "unit": "$",
+              "evidenceRefs": [
+                "state-7-45091"
+              ]
+            },
+            {
+              "id": "measurement-c4-utility",
+              "label": "决策时道具数量",
+              "value": 1,
+              "unit": "颗",
+              "evidenceRefs": [
+                "state-7-45091"
+              ]
+            }
+          ],
+          "explanation": "已知：73 HP、97 甲、有头盔、存款 300、装备价值 4500、1 颗道具、经济状态：完整购买。这些已知资源未落入原有低预算门槛；这项风险条件基本成立。",
+          "verdict": "INCONCLUSIVE"
+        },
+        "trade": {
+          "probe": "SYNTHETIC_TRADE_INTENT",
+          "status": "CONTRADICTED",
+          "measurements": [
+            {
+              "id": "measurement-c4-alive-teammates",
+              "label": "当时存活队友",
+              "value": 0,
+              "unit": "人",
+              "evidenceRefs": [
+                "fact-cs2d-r7-event-122-alive-counts"
+              ]
+            }
+          ],
+          "explanation": "你想接上队友的交火，这个意图我理解。但当时四名队友都已阵亡，已经无法和存活队友形成补枪配合。这个条件不成立，并不单独说明你之前的选择有错。",
+          "verdict": "INCONCLUSIVE"
+        },
+        "restoration": {
+          "risk": {
+            "sameValues": true,
+            "fetchDelta": 0,
+            "diagnosisDelta": 0
+          },
+          "trade": {
+            "sameValues": true,
+            "fetchDelta": 0,
+            "diagnosisDelta": 0
+          }
+        }
+      }
+    ]
+  },
+  "afterTextFixMinimizedReplay": {
+    "mode": "MINIMIZED_CAPTURED_RESOURCE_PROJECTIONS",
+    "demoReads": 0,
+    "fetchCalls": 0,
+    "diagnosisCalls": 4,
+    "limitation": "Replays captured resources/roster only, not the full original cue or Replay.",
+    "rows": [
+      {
+        "ordinal": 1,
+        "status": "UNVERIFIABLE",
+        "explanation": "你想在队友交火后及时补上，这个意图我理解。当时还有4名存活队友，但仍需确认双方能否看到同一个对手，以及你能否及时接上这次交火。",
+        "evidenceRefs": [
+          "fact-cs2d-r3-event-79-alive-counts"
+        ],
+        "verdict": "INCONCLUSIVE"
+      },
+      {
+        "ordinal": 2,
+        "status": "CONTRADICTED",
+        "explanation": "你想接上队友的交火，这个意图我理解。但当时四名队友都已阵亡，已经无法和存活队友形成补枪配合。这个条件不成立，并不单独说明你之前的选择有错。",
+        "evidenceRefs": [
+          "fact-cs2d-r5-frame-health-31179-31187-alive-counts"
+        ],
+        "verdict": "INCONCLUSIVE"
+      },
+      {
+        "ordinal": 3,
+        "status": "CONTRADICTED",
+        "explanation": "你想接上队友的交火，这个意图我理解。但当时四名队友都已阵亡，已经无法和存活队友形成补枪配合。这个条件不成立，并不单独说明你之前的选择有错。",
+        "evidenceRefs": [
+          "fact-cs2d-r7-frame-health-44507-44515-alive-counts"
+        ],
+        "verdict": "INCONCLUSIVE"
+      },
+      {
+        "ordinal": 4,
+        "status": "CONTRADICTED",
+        "explanation": "你想接上队友的交火，这个意图我理解。但当时四名队友都已阵亡，已经无法和存活队友形成补枪配合。这个条件不成立，并不单独说明你之前的选择有错。",
+        "evidenceRefs": [
+          "fact-cs2d-r7-event-122-alive-counts"
+        ],
+        "verdict": "INCONCLUSIVE"
+      }
+    ]
+  },
+  "limitations": [
+    "RISK/TRADE are synthetic test intents, not user statements.",
+    "The successful parse has four existing formal cues; no cue or threshold was changed.",
+    "Post-fix replay uses captured resources and roster only, not a third Demo read or the full original cue packet.",
+    "Unknown helmet, known false helmet, stale/cross-round rejection and known-zero utility are fixture-only coverage for this run."
+  ]
+}
