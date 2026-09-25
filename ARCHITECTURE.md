@@ -178,6 +178,14 @@ Coach Agent、Director、Narrator 和 Policy 没有长期记忆写权限。它�
 
 utilityCount的strict schema只接受0..64整数；缺字段表示未知并在资源诊断中说明，不以0替代。legacy inventoryCount保留原读取规则，表示历史全物品总量，新诊断不将其转换成道具数。已经保存的DiagnosticMeasurement及CueCase按保存内容恢复，不重解释旧数值，不触发自动重算或计费。远端仍不接收完整inventory、玩家身份、位置或tick；风险预算仍由原健康/护甲/头盔/经济门决定，不使用本次数量纠正改变判决。
 
+### 2.12.2 当前决策资源的时间与来源门
+
+Host诊断资源必须绑定cue所属计划segment、timeline唯一当前round和selectedPlayer。回合start_tick包含freeze，end_tick为半开边界；decision/sample tick是非负安全整数，tickRate为正安全整数。只取同回合本人不晚于decision的最新样本，最多ceil(tickRate/2)旧；乱序不改变选择，最新tick重复或最新状态无效时保持未知，不向前无限回退。明确死亡/已到期死亡事件、必需资源或其缺失标记不满足时，不把旧血量、库存或默认零当当前资源。
+
+已有DecisionSnapshot时，必须核对player/round/decision/sample时间与OBSERVABLE边界及missing信息；不得用另一个raw分支绕过失效快照。合法同一state才可同时进入本地rich和远端DecisionResources；未知可选数值省略，旧资源不可由当前facts或未来outcomes背书。资源measurement只引用样本自身来源，其他合法事实与独立经济语境继续按原规则参与诊断。
+
+公共队友人数以可选无身份decisionRoster（aliveTeammates及evidenceRefs）独立于必需health/armor/helmet。只允许当前cue/player/round/decision绑定、sampledAtTick同回合非未来且半秒内、OBSERVABLE且阵营/存活/完整名单已知的snapshot提供人数；本人资源不可用不妨碍独立可信人数，人数不可信也不借用。新decisionRoster优先于legacy decisionResources.aliveTeammates，结果、Verdict和Transfer使用相同选择规则；0存活队友仍只否定补枪条件，维持原INCONCLUSIVE判决边界。人数引用与本人资源引用分离，远端不新增玩家身份/时间/位置。旧保存诊断原样恢复，不自动重算或追溯修正。
+
 ### 2.13 托管 Demo 与会话恢复
 
 页面刷新或关闭不会持久化 Replay。桌面首次导入时，用户选择的 `File` 先由 cs2d Viewer 使用 sidecar 签发的短期、一次性 IMPORT capability，经 Viewer 自己的 loopback authority 流式写入应用托管资料库；sidecar 同步计算 SHA-256、校验 Demo 文件头并完成内容寻址落盘，之后 Viewer 才把同一 `File` 交给现有 Worker/WASM 解析。Host、Agent、LLM、Memory、Checkpoint 和日志始终不能读取原始 bytes 或绝对路径。localhost/Web Adapter 不具备该桌面资料库时继续维持既有浏览器本地选择语义。

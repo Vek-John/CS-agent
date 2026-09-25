@@ -96,6 +96,15 @@ function input(overrides: Partial<TeachingDiagnosisInput> = {}): TeachingDiagnos
 }
 
 describe("teaching diagnosis trust and evidence boundaries", () => {
+  it.each([[0, 2], [2, 0]] as const)("uses independent roster %s over legacy %s across result, verdict and transfer", (current, legacy) => {
+    const resources = { health: 100, armor: 100, hasHelmet: true, aliveTeammates: legacy, evidenceRefs: ["legacy-resource"] };
+    const output = diagnoseCue(input({ reflection: reflection({ selectedGoal: "TRADE" }), decisionResources: resources, decisionRoster: { aliveTeammates: current, evidenceRefs: ["current-roster"] } }));
+    const expected = diagnoseCue(input({ reflection: reflection({ selectedGoal: "TRADE" }), decisionResources: { ...resources, aliveTeammates: current, evidenceRefs: ["current-roster"] } }));
+    expect(output.cueCase.diagnosticResult).toEqual(expected.cueCase.diagnosticResult);
+    expect(output.cueCase.verdict).toEqual(expected.cueCase.verdict);
+    expect(output.cueCase.transferRule).toEqual(expected.cueCase.transferRule);
+  });
+
   it("keeps unknown-count explanations bounded and does not assume completeness in legacy rich state", () => {
     const state = decisionState();
     delete (state as Partial<PlayerStateSample>).missing_fields;

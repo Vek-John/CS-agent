@@ -38,18 +38,21 @@
 | 已push、本地验收完成 | 逐次受击事实与决策前本人证据 | 01a0d7f1-0580-7910-abbd-554dcd9a55de；已完成，释放写入与进程 | 264 hurt/本人27，23/44 snapshot和2/4教学包/确定性讲解实际消费；182测试+Rust3/TS/Web与Viewer构建通过；仍不证明专业判断提升，见SELF_HURT_EVIDENCE.md |
 | 已push、本地验收完成 | 射击事件即时身份归属 | 01a0d81c-bee6-7161-9cae-58ff2eea392b；完成并释放写入与进程 | 旧生产路径6红→绿，最终Rust夹具9＋parser3、186相关测试/TS/Web和Viewer构建通过；一次WASM1242shot/本人152、hurt与clock保持，见CURRENT_SHOT_IDENTITY.md |
 | 已push、本地验收完成 | 诊断道具数量与未知库存 | 01a0d837-aff5-7560-a4b1-ba553cd77ba6；完成并释放写入/进程 | 生产双入口4红→绿，共享utilityCount，不重解释legacy总数；79测试/TS/build通过，Graph/API/恢复/SSR已验证，见DIAGNOSTIC_UTILITY_COUNT.md |
-
-| 待执行 | 诊断资源时效与回合绑定 | 01a0d850-9c52-7803-85ca-03c7c8f5576e；交接后独占当前树 | Host stateAtOrBefore只按player/tick选最后样本，无age/round约束；先复现stale/跨回合，再保证当前决策资源或明确未知 |
+| 已push、本地验收完成 | 诊断资源时效与回合绑定 | 01a0d850-9c52-7803-85ca-03c7c8f5576e；完成并释放写入/进程 | 过期/跨回合2红→绿，同回合半秒门与独立可信decisionRoster落地；147测试/TS/build通过，见DIAGNOSTIC_RESOURCE_FRESHNESS.md |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
 
 ## 本轮任务卡：诊断资源时效与回合绑定（2026-09-25）
 
-- 基线67b7497已push且干净，上一任务明确release；本轮01a0d850-9c52-7803-85ca-03c7c8f5576e独占Host诊断资源选择、必要窄领域共享函数/契约及tests/docs，主控只读协调。默认模型/推理，小串行工作复用现有树，无Demo/依赖复制。
+- 基线91a6c02（67b7497＋交接）已push且干净，上一任务明确release；本轮01a0d850-9c52-7803-85ca-03c7c8f5576e独占Host诊断资源选择、必要窄领域共享函数/契约及tests/docs，主控只读协调。默认模型/推理，小串行工作复用现有树，无Demo/依赖复制。
 - 已见源码证据：teaching-diagnosis-host.ts的stateAtOrBefore仅判断player_id和tick<=decision_tick，未检查tick有限性、年龄、当前回合；buildTeachingDiagnosisInput直接把该state当决策资源且本地rich优先。Trusted DecisionSnapshot已有半秒新鲜规则，诊断独立从timeline读取可绕开。缺口需用生产调用的过期/上一回合夹具验证，不声称真实样本已错。
 - 目标/验收：A1复现过期和跨回合资源实际进入测量/风险背景；A2以同回合、非未来、明确tickRate/年龄及当前身份为依据筛选，优先复用已有可信快照/领域规则而不发明无限期fallback；无可信资源时不出假血量/库存，不用后果补数；A3Host→remote紧凑与本地rich一致，乱序/未来/无tickRate/轮次不明/边界及合法新鲜数据回归；已有道具unknown/zero、TRADE公共人数及旧保存结果恢复行为不被无关改写；A4相关tests/TS/Web build；A5架构/学习日志/证据/任务板，commit/push后释放。
 - 范围：时效与回合绑定、必要未知降级，不扩展Parser/Viewer/所有资源或风险阈值，不重写历史/自动重诊断。若字段缺失或状态死亡是否可用涉及现有语义，先明确规则并测试，不把所有缺信息当0或硬说决策有错。
 - 风险/阶段：8分钟复现与契约、20分钟实现、10分钟相关验证/构建；重点跨回合freeze边界、采样age、rich路径绕过、历史兼容。小fixture与实际Host/Graph/API接线，不做新Demo解析、模型/浏览器/服务/用户DB，不碰旧A5。必要只读5分钟独立复查；执行者负责所有测试/build退出和临时清理，不安装/部署/main合并。
+
+- 实际结果：Host stale33tick/跨round近邻2tick两例先红后绿。新selector绑定cue segment/round/player/decision与合法tickRate、半秒ceil年龄、freeze及死亡/missing边界，已有snapshot失效不能靠raw绕过；资源refs仅样本自身。独立decisionRoster从可信当前snapshot提供0..4人数，不要求伪补本人健康字段，新优先旧兼容，result/verdict/transfer统一，专业门保持。
+- 验收与分工：7文件147测试、TS与Web production build通过；Host→strict event/envelope→内存Graph与实际确定性POST同local rich结果一致，旧恢复零fetch原样、SSR有未知与继续。resource_freshness_review默认配置5分钟只读终审＋2分钟闭合复核，发现legacy人数残留导致的Verdict/Transfer不一致，2红→绿修复；同时补side known门。收尾发现未知说明超过12条限制预算，2红→绿修复文本容量。
+- 清理/限制：主任务独占生产写入，全部测试/build退出，无服务、Demo、模型、浏览器、用户DB/Memory/密钥、安装部署或main合并，原UI A5不动。时间门在Host，低层rich仍要求可信输入；旧错误记录不追溯改写。忽略目录仅保留小日志，代码与文档同次commit/push后释放，见[验证记录](validation/DIAGNOSTIC_RESOURCE_FRESHNESS.md)。
 
 ## 本轮任务卡：诊断道具数量与未知库存（2026-09-25）
 

@@ -111,3 +111,15 @@ it("keeps legacy totals readable while rejecting invalid new counts and rich res
     expect((await response.json()).status).toBe("FALLBACK");
   }
 });
+
+it("accepts independently verified public counts without self resources, with a strict roster boundary", async () => {
+  const input = { ...validInput, reflection: { ...validInput.reflection, selectedGoal: "TRADE" }, decisionRoster: { aliveTeammates: 0, evidenceRefs: ["public-roster"] } };
+  const output = await (await POST(request({ mode: "START", outcomeGateStatus: "COMPLETE", input }))).json();
+  expect(output.status).toBe("SUCCEEDED");
+  expect(output.cueCase.diagnosticResult.status).toBe("CONTRADICTED");
+  expect(output.cueCase.verdict.type).toBe("INCONCLUSIVE");
+  for (const patch of [{ aliveTeammates: -1 }, { aliveTeammates: 5 }, { aliveTeammates: 0.5 }, { playerId: "not-allowed" }, { sampledAtTick: 100 }, { world_position: {} }]) {
+    const invalid = await (await POST(request({ mode: "START", outcomeGateStatus: "COMPLETE", input: { ...input, decisionRoster: { ...input.decisionRoster, ...patch } } }))).json();
+    expect(invalid.status).toBe("FALLBACK");
+  }
+});

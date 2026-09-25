@@ -1676,3 +1676,12 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：共用projectDecisionUtilityCount，只认明确UTILITY/GRENADE，已知非道具不计，未知类别或部分/缺失/不支持数量使计数整体未知。新增optional utilityCount与0..64整数strict schema；32条/64数量只是已有诊断传输边界。legacy inventoryCount保持可读且不重新解释，新诊断显示未知，已存测量原样恢复。未知说明有界，不改风险阈值/判决资格。
 - 验证：6文件79测试、TypeScript、Web生产build通过。Host→strict事件/remote envelope→真实内存Graph→确定性POST与本地rich一致；重复dispatch无额外attempt/trace，真实保存结果恢复0/2和legacy1.5原样、零fetch；组件SSR显示0/2或未知并保留继续。原4红已绿，风险status/Verdict除新增limitations外保持。见[验证记录](validation/DIAGNOSTIC_UTILITY_COUNT.md)。
 - 限制：上游若先过滤坏项却没标缺失，本层不能恢复其完整性；本轮只修诊断，不拓展Parser或其它资源语义。没有模型/Demo/浏览器/DB/Memory/发布操作，原锁屏工具A5不动。按两项UI技能保持既有布局/辅助入口，SSR不冒充浏览器验收；所有测试/build退出，主任务自行复查，无代理，push后释放写入。
+
+
+## 2026-09-25：诊断资源必须绑定当前回合与新鲜样本
+
+- 问题：Host只取player的最后一个不晚于decision的state，无age/round门。真实Host→diagnose合成回归先2红：64tick/s下33tick旧样本和round2 decision1601前的round1样本1599都被报为当前血量/库存/资源SUPPORTED；不声称真实Demo已误诊。
+- 决定：cue→segment→唯一当前round绑定，freeze包含/end半开，合法tick/rate及ceil(rate/2)年龄门，存活/必需字段/missing和已到期死亡边界；已有snapshot必须同身份/采样时间/OBSERVABLE且不能绕过missing。通过的同一state供rich与compact，测量只留其source refs。独立decisionRoster保留无本人资源时的可信当前公共人数，新优先旧兼容，不合并引用。
+- 复查：默认只读代理发现结果已读新roster而Verdict/Transfer仍读旧字段，2个新旧0/2冲突回归先红后绿，统一selector保持原INCONCLUSIVE与规则；补unknown side门。新增未知说明触发GET_INFO/DELAY限制数组超12的2红，预留执行器说明容量后修复，不改变专业判断阈值。
+- 验证：7文件147测试、TypeScript及Web build通过；实际Host→strict event/remote envelope→内存Graph及确定性POST与local rich的result/verdict/transfer一致，合法facts保留、引用分离、重复事件幂等，旧保存测量恢复零fetch原样。SSR有未知说明和继续按钮；详见[记录](validation/DIAGNOSTIC_RESOURCE_FRESHNESS.md)。fixture共享round数组导致的3个假失败已用独立克隆修复，未改生产来迁就测试。
+- 限制/清理：Host拥有时间可信门，低层rich调用仍依赖调用方可信输入；旧历史不追溯修正。无Demo/模型/浏览器/服务/用户DB/发布，Parser/Viewer与原工具A5不动，不以测试声称专业准确率提升。所有检查进程退出，忽略目录仅小日志，commit/push后释放写入。

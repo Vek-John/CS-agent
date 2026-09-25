@@ -1,3 +1,4 @@
+import { currentDiagnosisSnapshot, currentDiagnosisState, currentDiagnosisWindow } from "./diagnosis-decision-state";
 import type {
   CandidateMaterial,
   CoachCue,
@@ -7,7 +8,6 @@ import type {
   MatchTimeline,
   OutcomeFact,
   PlayerActionFact,
-  PlayerStateSample,
   ReviewPlan,
   UserReflection,
   CueCase,
@@ -42,16 +42,6 @@ export interface TeachingDiagnosisSubmissionOptions {
 
 function unique(values: readonly string[]): string[] {
   return [...new Set(values.filter((value) => typeof value === "string" && value.trim()))];
-}
-
-function stateAtOrBefore(states: readonly PlayerStateSample[] | undefined, playerId: string, tick: number): PlayerStateSample | undefined {
-  if (!states) return undefined;
-  let selected: PlayerStateSample | undefined;
-  for (const state of states) {
-    if (state.player_id !== playerId || state.tick > tick) continue;
-    if (!selected || state.tick >= selected.tick) selected = state;
-  }
-  return selected;
 }
 
 function outcomeFactsForCue(cue: CoachCue): OutcomeFact[] {
@@ -102,26 +92,22 @@ export function buildTeachingDiagnosisInput(
   const decisionFacts = decisionFactsForCue(context.cue, context.material);
   const playerActionFacts = actionFactsForCue(context.cue, context.material);
   const outcomeFacts = outcomeFactsForCue(context.cue);
-  const state = stateAtOrBefore(context.timeline?.player_state_tracks, context.selectedPlayerId, context.cue.decision_tick);
+  const window = currentDiagnosisWindow(context);
+  const state = currentDiagnosisState(context, window);
   const economyClass = context.material?.economy;
-  const snapshot = context.material?.decisionSnapshot ?? context.cue.decisionSnapshot;
-  const roster = snapshot?.decisionTick === context.cue.decision_tick && snapshot.selectedPlayerId === context.selectedPlayerId && snapshot.aliveCounts.boundary === "OBSERVABLE" && snapshot.selectedPlayer.boundary === "OBSERVABLE" && typeof snapshot.selectedPlayer.value?.alive === "boolean"
-    ? snapshot.aliveCounts.value : undefined;
-  const aliveTeammates = roster ? Math.max(0, roster.allies - (snapshot?.selectedPlayer.value?.alive ? 1 : 0)) : undefined;
+  const snapshot = currentDiagnosisSnapshot(context, window);
+  const counts = snapshot?.aliveCounts.value;
+  const selfAlive = snapshot?.selectedPlayer.value?.alive;
+  const roster = snapshot && snapshot.aliveCounts.boundary === "OBSERVABLE" && snapshot.selectedPlayer.boundary === "OBSERVABLE" && typeof selfAlive === "boolean" && (snapshot.selectedPlayer.value?.side === "T" || snapshot.selectedPlayer.value?.side === "CT") && counts?.includesSelectedPlayer === true && Number.isSafeInteger(counts.allies) && counts.allies >= (selfAlive ? 1 : 0) && counts.allies <= (selfAlive ? 5 : 4) && !snapshot.missingFields.includes("complete_current_roster") && !snapshot.missingFields.includes("alive") && !snapshot.missingFields.includes("current_side")
+    ? { aliveTeammates: counts.allies - (selfAlive ? 1 : 0), evidenceRefs: unique(snapshot.aliveCounts.evidenceRefs).slice(0, 32) } : undefined;
   const decisionResources = state ? {
-    ...(aliveTeammates === undefined ? {} : { aliveTeammates }),
     health: state.health,
     armor: state.armor,
     hasHelmet: state.has_helmet,
     ...(state.money !== undefined ? { money: state.money } : {}),
     ...(state.equipment_value !== undefined ? { equipmentValue: state.equipment_value } : {}),
     ...projectDecisionUtilityCount(state),
-    evidenceRefs: unique([
-      ...(aliveTeammates === undefined ? [] : snapshot?.aliveCounts.evidenceRefs ?? []),
-      ...(state.fact_refs ?? []),
-      ...decisionFacts.map((fact) => fact.id),
-      ...playerActionFacts.flatMap((fact) => fact.evidenceRefs),
-    ]).slice(0, 32),
+    evidenceRefs: unique(state.fact_refs ?? []).slice(0, 32),
   } : undefined;
   // The Graph receives a compact, strict material projection.  Inferences,
   // annotations and callouts remain Host/rendering concerns and must not
@@ -152,10 +138,11 @@ export function buildTeachingDiagnosisInput(
     outcomeFacts,
     ...(state ? { decisionState: state } : {}),
     ...(decisionResources ? { decisionResources } : {}),
+    ...(roster ? { decisionRoster: roster } : {}),
     ...(context.cue.primary_focus_code ? { focusCode: context.cue.primary_focus_code } : {}),
     ...(economyClass ? { economyClass } : {}),
     ...(context.learningThreads ? { existingThreads: context.learningThreads } : {}),
-    limitations: unique(context.cue.limitations),
+    limitations: unique([...(state ? [] : ["决策时缺少本回合内足够新的本人资源，血量、护甲和库存暂时未知。"]), ...context.cue.limitations]).slice(0, 12),
   };
 }
 

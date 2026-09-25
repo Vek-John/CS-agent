@@ -143,6 +143,7 @@ export const TeachingDiagnosisInputSchema = z.object({
   outcomeFacts: z.array(OutcomeFactSchema).max(16),
   decisionState: PlayerStateSchema.optional(),
   decisionResources: DecisionResourcesSchema.optional(),
+  decisionRoster: z.object({ aliveTeammates: z.number().int().min(0).max(4), evidenceRefs: z.array(IdSchema).max(32) }).strict().optional(),
   focusCode: z.string().max(160).optional(),
   economyClass: z.enum(["PISTOL", "ECO", "FORCE", "FULL", "UNKNOWN"]).optional(),
   /** A bounded hint from the trusted Memory Brief; never a fact source. */
@@ -513,6 +514,11 @@ function economyFrom(input: TeachingDiagnosisInput): TeachingDiagnosisInput["eco
   return input.economyClass ?? input.material?.economy ?? "UNKNOWN";
 }
 
+/** New independent evidence wins; old compact packets keep their original roster meaning. */
+function decisionRoster(input: TeachingDiagnosisInput) {
+  return input.decisionRoster ?? input.decisionResources;
+}
+
 function resourceSnapshot(input: TeachingDiagnosisInput): DecisionResources | undefined {
   if (input.decisionState) {
     const state = input.decisionState;
@@ -523,7 +529,7 @@ function resourceSnapshot(input: TeachingDiagnosisInput): DecisionResources | un
       ...(state.money !== undefined ? { money: state.money } : {}),
       ...(state.equipment_value !== undefined ? { equipmentValue: state.equipment_value } : {}),
       ...projectDecisionUtilityCount(state),
-      evidenceRefs: unique([...(state.fact_refs ?? []), ...factRefs(input)]).slice(0, 32),
+      evidenceRefs: unique(state.fact_refs ?? []).slice(0, 32),
     };
   }
   return input.decisionResources;
@@ -531,7 +537,7 @@ function resourceSnapshot(input: TeachingDiagnosisInput): DecisionResources | un
 
 function resourceMeasurements(input: TeachingDiagnosisInput, snapshot = resourceSnapshot(input)): DiagnosticMeasurement[] {
   if (!snapshot) return [];
-  const refs = unique([...snapshot.evidenceRefs, ...factRefs(input)]).slice(0, 8);
+  const refs = unique(snapshot.evidenceRefs).slice(0, 8);
   const measurements: DiagnosticMeasurement[] = [
     { id: `measurement-${input.cueId}-health`, label: "决策时血量", value: snapshot.health, unit: "HP", evidenceRefs: refs },
     { id: `measurement-${input.cueId}-armor`, label: "决策时护甲", value: snapshot.armor, unit: "甲", evidenceRefs: refs },
@@ -564,7 +570,7 @@ export function executeDiagnostic(
     ...(input.limitations ?? []),
     ...(input.material?.limitations ?? []),
     ...capability.limitations,
-  ]).slice(0, MAX_DIAGNOSIS_LIMITATIONS);
+  ]).slice(0, MAX_DIAGNOSIS_LIMITATIONS - 2); // Reserve room for each executor's two bounded explanations.
   if (capability.kind === "VERIFY_SYNC_ASSUMPTION") {
     return DiagnosticResultSchema.parse({
       resultId: `diagnostic-${input.cueId}-${capability.kind.toLowerCase()}`,
@@ -619,12 +625,13 @@ export function executeDiagnostic(
     });
   }
   if (capability.kind === "VERIFY_TRADE_ASSUMPTION") {
-    if (input.decisionResources?.aliveTeammates === 0) {
+    const roster = decisionRoster(input);
+    if (roster?.aliveTeammates === 0) {
       return DiagnosticResultSchema.parse({
         resultId: `diagnostic-${input.cueId}-${capability.kind.toLowerCase()}`, capabilityId: capability.id,
         cueId: input.cueId, hingeId: hinge.hingeId, status: "CONTRADICTED",
-        evidenceRefs: [...input.decisionResources.evidenceRefs],
-        measurements: [{ id: `measurement-${input.cueId}-alive-teammates`, label: "当时存活队友", value: 0, unit: "人", evidenceRefs: [...input.decisionResources.evidenceRefs] }],
+        evidenceRefs: [...roster.evidenceRefs],
+        measurements: [{ id: `measurement-${input.cueId}-alive-teammates`, label: "当时存活队友", value: 0, unit: "人", evidenceRefs: [...roster.evidenceRefs] }],
         explanation: "你想接上队友的交火，这个意图我理解。但当时四名队友都已阵亡，已经无法和存活队友形成补枪配合。这个条件不成立，并不单独说明你之前的选择有错。",
         limitations: ["还需要当时的敌人信息、时间和目标要求，才能评价其他处理是否可行。"],
       });
@@ -644,7 +651,7 @@ export function executeDiagnostic(
       explanation: partiallySupported
         ? "回放记录了队友未到位或无法覆盖这次接触；还需确认你和队友能否在相近时间看到同一个对手，不能仅凭站得近就认定可以补枪。"
         : "你想在队友交火后及时补上，这个意图我理解。要判断当时能不能做到，还缺少队友是否存活、双方能否看到同一个对手，以及你能否及时接上这次交火的信息。",
-      limitations: unique([...commonLimitations, "缺少队友视线、阻挡、精确接触时间和语音数据。"]),
+      limitations: unique([...commonLimitations, "缺少队友视线、阻挡、精确接触时间和语音数据。"]).slice(0, MAX_DIAGNOSIS_LIMITATIONS),
     });
   }
   if (capability.kind !== "VERIFY_RISK_BUDGET") {
@@ -672,7 +679,7 @@ export function executeDiagnostic(
       evidenceRefs: refs,
       measurements: [],
       explanation: "决策帧没有可用的资源字段，暂时不能判断这次风险预算。",
-      limitations: unique([...commonLimitations, "缺少血量、护甲、经济或装备字段。"]),
+      limitations: unique([...commonLimitations, "缺少血量、护甲、经济或装备字段。"]).slice(0, MAX_DIAGNOSIS_LIMITATIONS),
     });
   }
   const constrained = economy === "ECO" || economy === "FORCE" || Boolean(resources && (resources.health <= 45 || resources.armor <= 0 || !resources.hasHelmet));
@@ -757,7 +764,7 @@ export function synthesizeCoachVerdict(
   // A resource check measures the situation, not the quality of a decision.
   // Likewise, missing coordination evidence cannot establish team error.
   if (hinge.kind === "RISK" || result.status === "UNVERIFIABLE" || result.status === "PARTIALLY_SUPPORTED") type = "INCONCLUSIVE";
-  if (hinge.kind === "TRADE" && input.decisionResources?.aliveTeammates === 0) type = "INCONCLUSIVE";
+  if (hinge.kind === "TRADE" && decisionRoster(input)?.aliveTeammates === 0) type = "INCONCLUSIVE";
   const confidenceBase = type === "INCONCLUSIVE" ? 0.38 : result.status === "SUPPORTED" ? 0.84 : result.status === "CONTRADICTED" ? 0.82 : result.status === "PARTIALLY_SUPPORTED" ? 0.62 : 0.38;
   const confidence = Math.max(0.15, Math.min(0.95, confidenceBase - (revision > 0 ? 0.14 : 0)));
   const limitations = unique([
@@ -766,7 +773,7 @@ export function synthesizeCoachVerdict(
   ]).slice(0, MAX_DIAGNOSIS_LIMITATIONS);
   const syncUnverifiable = hinge.kind === "SYNC" && result.status === "UNVERIFIABLE";
   const informationUnverifiable = hinge.kind === "INFORMATION" && result.status === "UNVERIFIABLE";
-  const explanation = hinge.kind === "TRADE" && input.decisionResources?.aliveTeammates === 0
+  const explanation = hinge.kind === "TRADE" && decisionRoster(input)?.aliveTeammates === 0
     ? "你想补枪，但当时已没有存活队友，那个时刻无法执行这项配合；还不能据此评价你之前的选择。"
     : syncUnverifiable
     ? "你补充的信息可能改变判断；Demo 无法验证这条语音、固定战术或听觉信息。若它成立，这次行为可以被合理解释为团队同步/执行条件问题，而不是直接归因于个人决策错误。"
@@ -807,7 +814,7 @@ export function createTransferRule(input: TeachingDiagnosisInput, hinge: HingeCo
     : isInformation ? "准备依据听到、看到或报点的信息进入接触前"
       : isTiming ? "准备继续拖延、等待信息或等待队友动作前"
         : isTrade ? "准备和队友一起进入同一条枪线前" : "准备在资源受限或未知枪线中主动接触前";
-  const doText = isTrade && input.decisionResources?.aliveTeammates === 0
+  const doText = isTrade && decisionRoster(input)?.aliveTeammates === 0
     ? "当时已无法再与队友配合；目前还缺少确认其他可行处理所需的现场信息。"
     : isSync
     ? "这条补充信息可能改变判断；还需要确认当时队友是否能及时参与同一次交火。"

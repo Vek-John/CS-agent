@@ -327,6 +327,8 @@ export interface TeachingDiagnosisInput {
   outcomeFacts: readonly OutcomeFact[];
   decisionState?: PlayerStateSample;
   decisionResources?: DecisionResources;
+  /** Independently verified public roster; usable even when self resources are unknown. */
+  decisionRoster?: { aliveTeammates: number; evidenceRefs: readonly string[] };
   focusCode?: string;
   economyClass?: "PISTOL" | "ECO" | "FORCE" | "FULL" | "UNKNOWN";
   existingThreads?: readonly LearningThread[];

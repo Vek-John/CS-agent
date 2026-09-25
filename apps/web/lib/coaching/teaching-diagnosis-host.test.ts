@@ -41,18 +41,19 @@ it("projects teammate count only from the same decision's observable public rost
   const cue = plan.cues[0];
   const snapshot = decisionSnapshotFixture(cue.decision_tick, cue.observable_fact_refs[0]);
   snapshot.selectedPlayerId = timeline.selected_player_id;
+  snapshot.roundNumber = 2;
   const material = {
     candidateId: "candidate", decisionSnapshot: snapshot, decisionFacts: cue.facts.filter((fact) => fact.availability === "DECISION"), playerActionFacts: [], outcomeFacts: [], inferences: [], advice: [], evidence: [], limitations: [],
   };
   const state = { player_id: timeline.selected_player_id, tick: cue.decision_tick, side: "T" as const, world_position: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0, alive: true, health: 2, armor: 0, has_helmet: false, inventory: [], fact_refs: cue.observable_fact_refs, missing_fields: [] };
   const context = { plan, cue, material, timeline: { ...timeline, player_state_tracks: [state] }, selectedPlayerId: timeline.selected_player_id };
   const reflection = { cueId: cue.id, selectedGoal: "TRADE" as const, response: "ANSWERED" as const, source: "USER" as const, limitations: [] };
-  expect(buildTeachingDiagnosisInput(context, reflection).decisionResources?.aliveTeammates).toBe(0);
+  expect(buildTeachingDiagnosisInput(context, reflection).decisionRoster?.aliveTeammates).toBe(0);
   snapshot.aliveCounts = { ...snapshot.aliveCounts, boundary: "GROUND_TRUTH" };
-  expect(buildTeachingDiagnosisInput(context, reflection).decisionResources?.aliveTeammates).toBeUndefined();
+  expect(buildTeachingDiagnosisInput(context, reflection).decisionRoster?.aliveTeammates).toBeUndefined();
   snapshot.aliveCounts = { ...snapshot.aliveCounts, boundary: "OBSERVABLE" };
   snapshot.decisionTick += 1;
-  expect(buildTeachingDiagnosisInput(context, reflection).decisionResources?.aliveTeammates).toBeUndefined();
+  expect(buildTeachingDiagnosisInput(context, reflection).decisionRoster?.aliveTeammates).toBeUndefined();
 });
 
 
