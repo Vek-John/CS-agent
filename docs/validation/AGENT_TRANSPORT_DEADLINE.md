@@ -2,6 +2,8 @@
 
 2026-09-26，基线7e1861b（产品6bc126b）。本轮只修改Agent客户端传输和复用的窄期限函数；不改Graph、Controller队列、事件schema、服务器执行或checkpoint/Memory。
 
+后续[checkpoint镜像归属与保存期限更新](CHECKPOINT_MIRROR_OWNERSHIP.md)已针对默认镜像中的两项HTTP保存增加期限；本记录保留当时不覆盖持久化的边界。
+
 ## A1 真实入口复现
 
 新`coach-agent-transport.test.ts`最初通过真实dispatchCoachAgentEvent和Stage3Controller.completeSession→dispatchSerial复现3红：fetch永不返回、headers成功但response.json永不返回、前一个请求挂起后第二个请求无法发出。Fake clock前进20秒后Promise仍未结算；没有用一个新helper的自测替代原入口失败。

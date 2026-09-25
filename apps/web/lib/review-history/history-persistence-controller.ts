@@ -25,6 +25,8 @@ export class HistoryPersistenceController {
   #revisionPromise?: Promise<string | undefined>;
   #reviewPromise?: Promise<string>;
   constructor(private readonly deps: HistoryPersistenceDeps) {}
+  /** Read-only ownership epoch; identity can initialize without changing this epoch. */
+  get ownershipGeneration() { return this.#generation; }
   get reviewId() { return this.#reviewId; }
   get revisionId() { return this.#revisionId; }
   reset(): void { this.#generation += 1; this.#reviewId = undefined; this.#revisionId = undefined; this.#demoId = undefined; this.#revisionMode = "REANALYZE"; this.#reviewPromise = undefined; this.#revisionPromise = undefined; }

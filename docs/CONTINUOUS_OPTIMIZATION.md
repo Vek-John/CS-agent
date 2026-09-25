@@ -2,12 +2,17 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
-## 当前任务：恢复点保存等待与会话归属（2026-09-26）
+## 已交付：恢复点保存等待与会话归属（2026-09-26）
 
 - 354d2e4已push/clean、owner release；01a0da00-4ec9-7211-b228-55e4def573c7串行独占mirrorAgentResult及其必要checkpoint保存API/小helper/tests/docs，主控只读，默认配置。
 - 证据：Controller.dispatchSerial/completeSession仍await onAgentResult；Host mirror先更新latestCheckpoint，await runtime STABLE_BOUNDARY后无当前身份guard直接accept，再取当前history controller保存旧durable。IndexedDB已有1.5秒transaction期限，但appendArtifact/commitRuntimeHead fetch/json无期限。只针对这条生产链先复现卡住/跨review，不展开其他callback扫描。
 - A1实际mirror入口+Controller/API deferred fixture，证明悬挂保存和A等存储时打开B的影响；A2当前保存有界且失败明确保留上一个恢复点，live合法结果/完成能继续，不直接detach乱序保存；A3请求前绑定session/run/recovery/generation/review/revision与实例，等待后旧结果不写B的checkpoint/record/artifact/head/error，正常首次checkpoint/同场保存不破坏；A4相关tests/TS/build；A5架构学习证据/任务板commit/push/release。
 - 风险/边界：只控制检查点保存的小JSON链，不把Demo/raw上传、所有历史API、服务端事务或重试架构纳入。先查artifact真实大小/语义再选deadline，尽量复用新helper并保留HTTP错误code；超时不证明服务器未写入、零自动retry，不将未完整提交叫耐久成功。5分钟复现/预算、20分钟窄修、10分钟验证，必要5分钟独审；0模型/Demo/UI服务/用户DB/密钥/部署main，owner清临时资源。
+
+- 本轮交付：提取生产mirror入口，实际跨review旧checkpoint/晚accept与晚取B controller、悬挂artifact三红→绿。写任何ref前匹配当前event/result/full identity，捕获generation/openEpoch/recovery/runtime/history ownershipGeneration和既有review/revision，每await及catch重核；首次无record合法缓存与同代pending revision正常完成保留。
+- 保存顺序：仅匹配READY/DEGRADED实际record可artifact→head→accept，拒绝draft fallback；DEGRADED内存结果可再由library耐久保存。SESSION_RECOVERY/head各20秒fetch+body，错误code/旧void JSON语义不变；其他artifact尤其AnalysisBundle不套期限，IDB原1.5秒保护不改。失败保留Host上次确认记录、已发服务端写未知，不宣称远端回滚或未提交。
+- 验证：生产入口3红→绿；新增mirror22/API9测试；相关11文件181tests、TypeScript及production build通过。真实START_CUE/内存Graph合法checkpoint→默认notify=true mirror挂起时deadline前后dispatch次数1→2，完成请求独立超时测试保留；原完成反馈/Agent与preparation期限/IDB/历史回归保持。隔离序列化DTO artifact1761B/head663B只是fixture，不外推全比赛；实际持久化限制256KiB/head128000B。见[验收](validation/CHECKPOINT_MIRROR_OWNERSHIP.md)。
+- 审查/release：默认checkpoint_mirror_review只读调查与终审实现无must-fix；其指出原completion测试不能独证serial tail，已补真实默认路径并验证。架构/学习/本卡先同步后commit/push/release，自有tests/build退出，无Demo/真实模型/浏览器服务/用户DB/密钥/Memory/部署安装。未扩revision创建、其他API、服务端事务或端到端持久化保证；原UI A5保持。
 
 ## 已交付：Agent传输等待上限（2026-09-26）
 

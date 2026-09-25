@@ -1,7 +1,7 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：5.9.3
+> 版本：5.9.4
 > 最后更新：2026-09-26
 > 适用范围：Web 2D 到桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
@@ -721,9 +721,18 @@ Host只有从当前请求得到身份全字段匹配、Graph/sessionStatus均COM
 
 超时先以AgentRequestTimeout（AGENT_REQUEST_TIMEOUT）结算本地Promise，再主动abort底层请求，即使transport不响应abort也释放当前网络等待；正文不能重新计时。成功、HTTP错误、JSON错误、取消和超时均清理本轮timer/父signal listener；迟到headers不再读body、迟到成功或拒绝不能替换既定结果。可选第三参AbortSignal向后兼容；未传signal的Host仍通过原token/generation/identity门隔离晚结果，不宣称所有接管都已主动abort。
 
-超时沿原Controller失败或diagnostics本地fallback处理，COMPLETE_SESSION沿既有有限失败总结保存链；网络Promise失败会释放dispatchSerial的tail供下一已排队事件继续。协议/schema/身份验证和eventId不变，不自动重试或增加模型请求。超时仅表示客户端未取得结果，服务器是否已执行或落盘仍未知，不能据此绕过原幂等。期限不含dispatchSerial排队前等待，也不覆盖其后的onAgentResult/checkpoint mirror或其他持久化Promise；这些仍可能独立阻塞，不属于网络期限已解决范围。
+超时沿原Controller失败或diagnostics本地fallback处理，COMPLETE_SESSION沿既有有限失败总结保存链；网络Promise失败会释放dispatchSerial的tail供下一已排队事件继续。协议/schema/身份验证和eventId不变，不自动重试或增加模型请求。超时仅表示客户端未取得结果，服务器是否已执行或落盘仍未知，不能据此绕过原幂等。Agent请求期限不含dispatchSerial排队前等待，也不覆盖其后的onAgentResult或其他持久化Promise；默认checkpoint镜像另按下述保存期限与归属规则处理，不把所有持久化算作已有期限。
 
 总结失败同样是可保存的收尾结果。Host 统一经 `completeAndSaveSessionWrapUp` 发布并写入既有 `SESSION_SUMMARY / session-wrap-up.v1`，无需升级 schema；三种本地失败 `MISSING_SESSION_SUMMARY`、`INVALID_PRESENTABLE_INPUT`、`SOURCE_LIMITATIONS_EXCEED_OUTPUT_LIMIT` 标记 `FALLBACK / DETERMINISTIC`，只保存有限原因，不存异常原文、不冒充 `NO_REPEATED_THEME`。恢复先经原 artifact/domain validator，再按保存的 status/manifest 呈现。历史缺失 summary 只表示「未保存、生成结果未知」，不推断失败原因或自动重新生成；旧成功正文、refs、manifest 原样使用。写入前及异步错误回调都核对 generation、session/run、review/revision 与 history open epoch；正常 COMPLETED 清理临时 recovery identity 后，同一 completed session 仍可接收其捕获 run 的收尾。保存失败只提示，完成与自由回看不依赖保存成功。
+
+
+默认Agent checkpoint镜像统一经`mirrorAgentCheckpoint`进入：在写latestAgentCheckpointRef之前，核对event/result与当前完整Agent身份、live session、recovery身份及记录，捕获generation、history-open epoch、runtime、history实例及其只读ownershipGeneration、当时已有的review/revision。首次尚无recovery record时，合法当前checkpoint仍可缓存供后续稳定边界使用；这是已观察的Graph结果，不是持久化确认。同一history实例adopt/reset必须使旧owner失效，正常同代首次revision由undefined初始化允许继续。
+
+镜像按runtime稳定边界保存→SESSION_RECOVERY artifact→runtime head→当前Host接收结果的顺序等待，每次await后及错误显示前复核归属。仅READY/DEGRADED且返回实际record、恢复/会话/路线/玩家/hash/checkpoint及boundary匹配时才继续，禁止用draft替代未确认record。匹配的DEGRADED内存记录仍可由资料库成功持久化；保留该降级状态，不伪称IndexedDB成功。旧A不能在await后取得已adopt B的控制器写A数据，晚错误不更新B；已发请求只绑定原A，客户端不能撤销或证明服务器未提交。
+
+仅历史API的SESSION_RECOVERY追加与runtime-head请求使用每次20秒fetch+JSON共用期限；复用requestJsonWithDeadline并保留非2xx JSON错误code、原2xx空/非法JSON的void成功语义。期限先本地结算再abort，迟到响应不继续提交后续head或发布结果。AnalysisBundle及其他artifact/历史操作不套新期限。SESSION_RECOVERY实际受smallJsonMaxBytes默认256KiB UTF-8存储限制，head请求上限128000字节；两端还会读取/验证既有AnalysisBundle，20秒是保守客户端等待策略，不是服务端SLA或新增保存证明。
+
+当前镜像保存失败时不发布新的已确认record/head，Host保留上次已确认记录并说明保存未确认，合法live Agent结果仍可继续。IndexedDB open/transaction沿原1.5秒保护；已写入的IDB缓存或已发HTTP可能在服务器生效，不做回滚/未提交保证。默认桌面激活会话在起点durabilityCommit（含beginRevision）结束后进行；本轮不扩创建review/revision、其他持久化Promise或整条队列的端到端期限，不新增自动重试。API成功后的正常artifact→head顺序、服务器原单调进度及幂等校验不变。
 
 
 ### 6.14 VideoWeakAnnotation（离线启动管线）

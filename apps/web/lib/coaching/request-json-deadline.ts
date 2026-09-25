@@ -5,6 +5,8 @@ interface RequestDeadline {
   timeoutError: () => Error;
   cancelMessage: string;
   invalidJsonError?: () => Error;
+  readErrorBody?: boolean;
+  allowInvalidJson?: boolean;
 }
 
 /** One owned fetch + JSON lifetime. Abort is best effort; settling does not depend on transport cooperation. */
@@ -39,15 +41,15 @@ export async function requestJsonWithDeadline(fetcher: Fetcher, endpoint: string
       try {
         const response = await fetcher(endpoint, { ...init, signal: controller.signal });
         if (settled) return; // A late header must not start reading a body.
-        if (!response.ok) { finish({ value: { ok: false, status: response.status } }); return; }
+        if (!response.ok && !options.readErrorBody) { finish({ value: { ok: false, status: response.status } }); return; }
         let payload: unknown;
         try { payload = await response.json(); }
         catch (error) {
-          if (!settled) finish({ error: options.invalidJsonError ? options.invalidJsonError() : error });
-          return;
+          if (settled) return;
+          if (!options.allowInvalidJson) { finish({ error: options.invalidJsonError ? options.invalidJsonError() : error }); return; }
         }
         if (settled) return;
-        finish({ value: { ok: true, status: response.status, payload } });
+        finish({ value: { ok: response.ok, status: response.status, payload } });
       } catch (error) {
         // Always observe late rejections; they cannot publish or replace our result.
         finish({ error });

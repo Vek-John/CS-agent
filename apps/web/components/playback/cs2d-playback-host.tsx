@@ -1,5 +1,7 @@
 "use client";
 
+import { mirrorAgentCheckpoint } from "../../lib/recovery/agent-checkpoint-mirror";
+
 import { focusRecoveryDemoPicker, isRecoveryDemoImportActive } from "../../lib/recovery/recovery-demo-picker";
 
 import { dispatchDiscardableLandingTimeout, HostRecoveryDiscard, recoveryDiscardFailureResult, hostRecoveryStatusDetail } from "../../lib/recovery/host-recovery-discard";
@@ -532,67 +534,16 @@ export function Cs2dPlaybackHost({
   }, [acceptRecoveryResult]);
 
   const mirrorAgentResult = useCallback(async (event: import("@cs-coach/coach-agent/client").CoachAgentEvent, result: CoachAgentResult) => {
-    if (result.status === "WAITING_TOOL" || event.type === "RESUME_TOOL" || event.type === "RECONNECT_REPLAY") return;
-    const checkpoint: RecoveryAgentCheckpointMeta = {
-      checkpointId: result.checkpoint.checkpointId,
-      activeCueId: result.state.activeCueId,
-      currentSessionPhase: result.state.currentSessionPhase,
-      routeCursor: result.state.routeCursor,
-      sessionStatus: result.state.sessionStatus,
-    };
-    latestAgentCheckpointRef.current = checkpoint;
-    const runtime = recoveryRuntimeRef.current;
-    const record = recoveryRecordRef.current;
-    if (!runtime || !record || result.identity.runId !== record.runId || result.identity.sessionId !== record.sessionId || result.identity.routeHash !== record.routeHash) return;
-    const stable = currentStableRecoveryRecord(checkpoint);
-    if (!stable || stable.agentCheckpointId !== checkpoint.checkpointId) return;
-    const persisted = await runtime.dispatch({
-      type: "STABLE_BOUNDARY_REACHED",
-      eventId: recoveryEventId("recovery-checkpoint"),
-      recoveryId: record.recoveryId,
-      boundary: stable.boundary,
-      cueProgress: stable.cueProgress,
-      routeReadiness: stable.routeReadiness,
-      narrationArtifacts: stable.narrationArtifacts,
-      agentCheckpointId: result.checkpoint.checkpointId,
-      updatedAt: Date.now(),
+    await mirrorAgentCheckpoint({ event, result,
+      read: () => ({ generation: generationRef.current, historyEpoch: historyOpenEpochRef.current,
+        sessionId: liveSessionRef.current?.id, identity: stage3IdentityRef.current, recoveryIdentity: recoveryIdentityRef.current,
+        runtime: recoveryRuntimeRef.current, record: recoveryRecordRef.current, history: historyPersistenceControllerRef.current,
+        takenOver: userTookOverRef.current, recovering: recoveryModeRef.current }),
+      checkpoint: checkpoint => { latestAgentCheckpointRef.current = checkpoint; },
+      stable: currentStableRecoveryRecord, accept: acceptRecoveryResult,
+      failure: () => setHistoryError("恢复点保存未确认；仍保留上次已确认的进度，基础回放可继续。"),
+      eventId: () => recoveryEventId("recovery-checkpoint"),
     });
-    acceptRecoveryResult(persisted);
-    const durable = persisted.record ?? stable;
-    // Only Agent-confirmed stable boundaries become durable library heads;
-    // PLAYBACK_STATE ticks intentionally never enter this path.
-    if (durable.boundary.kind === "CUE_PAUSED" || durable.boundary.kind === "WRAP_UP") {
-      if (!durable.agentCheckpointId) {
-        setHistoryError("这次进度尚未完整保存，上一个恢复点仍然有效。");
-        return;
-      }
-      const recoveryArtifactKey = `${durable.boundary.boundaryId}:${durable.agentCheckpointId}`;
-      try {
-        const history = historyPersistenceControllerRef.current;
-        if (!history) return;
-        await history.artifact(
-          "SESSION_RECOVERY",
-          recoveryArtifactKey,
-          durable as unknown as Record<string, unknown>,
-          "session-recovery-record.v2",
-        );
-        await history.stableHead({
-          recoveryArtifactKey,
-          sessionId: durable.sessionId, runId: durable.runId,
-          demoContentHash: durable.demoContentHash, selectedPlayerId: durable.selectedPlayerId, routeId: durable.routeId,
-          routeHash: durable.routeHash, recoveryBoundary: durable.boundary.kind,
-          checkpointThreadId: checkpointThreadIdForSession(durable.sessionId), checkpointNamespace: "", checkpointId: durable.agentCheckpointId,
-          ...(durable.boundary.kind === "CUE_PAUSED" ? { currentCueId: durable.boundary.cueId } : {}),
-          defaultRouteCursor: durable.boundary.segmentIndex, completedCueCount: durable.cueProgress.completedCueIds.length,
-          totalCueCount: (durable.frozenReviewPlan as ReviewPlan).cues.length, stableProgress: durable.cueProgress,
-          ...(durable.boundary.kind === "WRAP_UP"
-            ? { reviewStatus: "COMPLETED", completedAt: new Date(durable.updatedAt).toISOString() }
-            : { reviewStatus: "IN_PROGRESS" }),
-        });
-      } catch {
-        setHistoryError("稳定恢复点未能完整提交；上一个恢复点仍然有效。");
-      }
-    }
   }, [acceptRecoveryResult, currentStableRecoveryRecord]);
 
   const persistToolTransition = useCallback(async (transition: Stage3ToolLedgerTransition) => {

@@ -1,3 +1,4 @@
+import { requestJsonWithDeadline } from "../coaching/request-json-deadline";
 import type { ReviewSummary } from "@cs-coach/review-library";
 import type { ReviewHistoryItem } from "../../components/history/review-history-sidebar";
 import type { ManagedDemoSource, ReviewHistoryDetail } from "./history-restore-controller";
@@ -30,6 +31,21 @@ async function responseJson<T>(response: Response): Promise<T> {
     throw new ReviewHistoryApiError(code);
   }
   return body as T;
+}
+
+// Only checkpoint JSON mutations: SESSION_RECOVERY <=256 KiB stored JSON; head <=128,000 bytes.
+// Endpoints may materialize existing analysis for validation, so use a conservative local wait policy.
+export const CHECKPOINT_REQUEST_TIMEOUT_MS = 20_000;
+async function checkpointJson(fetcher: typeof fetch, endpoint: string, init: RequestInit): Promise<void> {
+  const response = await requestJsonWithDeadline(fetcher, endpoint, init, {
+    timeoutMs: CHECKPOINT_REQUEST_TIMEOUT_MS, timeoutError: () => new ReviewHistoryApiError("CHECKPOINT_SAVE_TIMEOUT"),
+    cancelMessage: "Checkpoint save cancelled", readErrorBody: true, allowInvalidJson: true,
+  });
+  if (!response.ok) {
+    const body = response.payload;
+    const code = body && typeof body === "object" && "code" in body && typeof body.code === "string" ? body.code : "REQUEST_FAILED";
+    throw new ReviewHistoryApiError(code);
+  }
 }
 
 function query(url: string, values: Record<string, string | undefined>): string {
@@ -108,10 +124,13 @@ export function createReviewHistoryApi(fetcher: typeof fetch = fetch) {
       }));
     },
     async appendArtifact(reviewId: string, input: { revisionId: string; artifactType: string; artifactKey: string; artifactRevision?: number; schemaVersion: string; payload: unknown; idempotencyKey: string }): Promise<void> {
-      await responseJson(await fetcher(`/api/review-history/${encodeURIComponent(reviewId)}/artifacts`, { method: "POST", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify(input) }));
+      const endpoint = `/api/review-history/${encodeURIComponent(reviewId)}/artifacts`;
+      const request = { method: "POST", headers: JSON_HEADERS, cache: "no-store" as const, body: JSON.stringify(input) };
+      if (input.artifactType === "SESSION_RECOVERY") await checkpointJson(fetcher, endpoint, request);
+      else await responseJson(await fetcher(endpoint, request));
     },
     async commitRuntimeHead(reviewId: string, input: Record<string, unknown>): Promise<void> {
-      await responseJson(await fetcher(`/api/review-history/${encodeURIComponent(reviewId)}/runtime-head`, { method: "PUT", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify(input) }));
+      await checkpointJson(fetcher, `/api/review-history/${encodeURIComponent(reviewId)}/runtime-head`, { method: "PUT", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify(input) });
     },
   };
 }

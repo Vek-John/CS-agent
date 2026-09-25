@@ -1831,3 +1831,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 预算依据：Next默认确定性，Graph每cue最多1 Policy，远端Policy route/provider均15秒；20秒是客户端等待政策，不是Graph最坏总执行保证。服务端是否执行/写入未知，保留幂等语义；可选signal未表示所有Host接管均主动abort。
 - 验证：真实dispatch fetch/body及Controller tail挂起3红→绿，17新Agent+8原preparation局部通过；11文件169tests、TS/Web production通过。包括真实Host总结timeout→既有失败artifact、默认diagnostics本地fallback、真实Graph合法WAITING_TOOL晚body在dispose后零post/mirror/UI，成功/HTTP/JSON/schema/取消和资源清理。
 - 限制：deadline从网络开始，不含之前排队或之后checkpoint mirror/持久化等待；不改服务端执行/队列/Memory，不以客户端abort宣称服务端未执行。无真实网络/模型/浏览器验收，原UI A5保持。详见[验收](validation/AGENT_TRANSPORT_DEADLINE.md)。
+
+## 2026-09-26：checkpoint镜像要捕获写入归属，再等待耐久确认
+
+- 问题：mirror先写latest checkpoint，await恢复runtime后先accept、再晚取当前history controller；A等待时切B会污染B ref/record或向B写A artifact。artifact/head fetch与JSON无期限还会卡住Controller等待。
+- 决定：生产镜像提取为窄入口，ref写前匹配event/result与live完整身份，捕获generation/openEpoch/recovery/runtime/history ownershipGeneration及已有review/revision；每await/catch重核。首次无record合法缓存保留，同代首次revision初始化不误拒；仅真实匹配READY/DEGRADED record走artifact→head→accept，拒绝draft fallback。
+- 预算：SESSION_RECOVERY实际存储256KiB UTF8、head请求128000B；隔离生产DTO测1761/663B仅为fixture。endpoint还会物化旧AnalysisBundle验证，故仅这两项JSON请求各20秒；IDB原1.5秒保留，重型AnalysisBundle等其他操作不套新期限。旧HTTP error code/2xx无JSON void语义保持。
+- 验证：实际入口3红→绿；mirror22/API9，最终11文件181tests、TS/Web production通过。正常/首次/DEGRADED、adopt/reset、pending revision、A/B跨await和晚错误、超时旧确认record保持均覆盖。独审纠正completeSession测试不代表serial tail，补真实START_CUE+真实Graph匹配checkpoint/default notify=true路径，deadline前后dispatch1→2验证。
+- 限制：合法live结果可继续不等于恢复点新head已确认；超时已发A请求可能服务端完成，不回滚IDB、不宣称服务器未提交，不自动retry。其他队列/初始化/持久化不在端到端保证内；无真实UI/用户数据操作，原UI A5保持。见[验收](validation/CHECKPOINT_MIRROR_OWNERSHIP.md)。
