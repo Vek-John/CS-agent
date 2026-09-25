@@ -1,0 +1,74 @@
+{
+  "date": "2026-09-25",
+  "baseline": "4fffe02",
+  "environment": "localhost development Host + prebuilt static Viewer, native Edge InPrivate",
+  "entry": "?teachingDiagnostics=off",
+  "provider": "RULE_BASELINE; external provider keys empty; Memory disabled",
+  "demoParsesThisRun": 1,
+  "routeCueCount": 4,
+  "startEvents": [
+    {
+      "event": "START_CUE",
+      "cue": "c1",
+      "status": "COMPLETED",
+      "capabilities": [],
+      "effects": [],
+      "completedCues": 1
+    },
+    {
+      "event": "START_CUE",
+      "cue": "c2",
+      "status": "COMPLETED",
+      "capabilities": [],
+      "effects": [],
+      "completedCues": 2
+    },
+    {
+      "event": "START_CUE",
+      "cue": "c3",
+      "status": "COMPLETED",
+      "capabilities": [],
+      "effects": [],
+      "completedCues": 3
+    },
+    {
+      "event": "START_CUE",
+      "cue": "c4",
+      "status": "COMPLETED",
+      "capabilities": [],
+      "effects": [],
+      "completedCues": 4
+    }
+  ],
+  "resumeToolEventCount": 0,
+  "totalEffects": 0,
+  "observedCueLandings": [
+    {
+      "cue": "c1",
+      "round": 1,
+      "canonicalTick": 3081
+    },
+    {
+      "cue": "c2",
+      "round": 3,
+      "canonicalTick": 19426
+    },
+    {
+      "cue": "c3",
+      "round": 5,
+      "canonicalTick": 31179
+    },
+    {
+      "cue": "c4",
+      "round": 7,
+      "canonicalTick": 45091
+    }
+  ],
+  "actualToolPauseAcceptance": "NOT_RUN_NO_ELIGIBLE_TOOL",
+  "notes": [
+    "Canonical ticks read from progress control after actual Demo parse; not fixture time.",
+    "All four cue UI states displayed 无需额外演示.",
+    "No forced tool, changed eligibility, model call or second parse.",
+    "No claim that other players/Demos or all product routes lack tools."
+  ]
+}

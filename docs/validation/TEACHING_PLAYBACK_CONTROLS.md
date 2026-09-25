@@ -1,6 +1,8 @@
 # 教学演示暂停/继续：阶段验证（2026-09-25）
 
-基线bb0bc11，分支codex/jev-decision-assessment。代码和自动检查通过；实际活动教学工具的暂停/继续验收尚未完成，原目标不标完成。本轮没有新Jev/DeepSeek质量实验，不能据此声称模型判断质量提升。
+最新状态（21:17续跑）：桌面控制已恢复，基线4fffe02的真实4个cue全部核实，但capabilities/effects均为空；原A5仍未完成，当前限制是该样本没有合法播放工具，已无锁屏或资源清理缺口。见文末续跑证据。
+
+原实现基线bb0bc11，分支codex/jev-decision-assessment。代码和自动检查通过；实际活动教学工具的暂停/继续验收尚未完成，原目标不标完成。本轮没有新Jev/DeepSeek质量实验，不能据此声称模型判断质量提升。
 
 ## 实现与使用
 
@@ -50,3 +52,27 @@ pnpm exec vitest run apps/web/lib/playback apps/web/lib/coaching/coach-agent-sta
 
 
 清理：唯一服务controller已停止，3000/5174无监听；所有测试和构建已退出，next-env没有生成差异。因Mac锁屏，本轮InPrivate窗口未能关闭；未强杀用户Edge、未触碰用户原普通窗口。解锁后需关闭或接续该专属窗口。阶段push后释放代码写入，接续前重新核实所有权；不合并main、不部署、不安装应用。
+
+
+## 21:17续跑：完整样本没有合法工具，A5仍未通过
+
+用户明确要求继续后，在最新4fffe02（产品886e9ad）干净基线重新检查桌面，原生Edge已可操作。旧专用窗口不在窗口列表中；新建本轮InPrivate窗口，保留原普通窗口及其他用户窗口。原goal工具仍显示blocked且没有resume接口，未另建目标、未将原目标标完成。
+
+复用原40分钟单控制器、最新Host和现有构建的静态Viewer；空Jev/DeepSeek provider、RULE_BASELINE、Memory关闭，入口`?teachingDiagnostics=off`。文件选择smoke成功后，只读导入原test_demo.dem并选Dog，**本轮仅一次解析**。本地CS-Net完成后自然进入4-cue路线，按“继续下一段”逐个播放完整结果并回到决策点，没有自由seek、强制Policy、注入工具或更改教学门。
+
+为避免仅凭UI文案推断，临时在本地Agent HTTP返回处记录event/cue/status/capability工具名/effect身份及完成计数的小摘要；不记录原始Replay、帧、玩家身份或密钥。全部验证后移除该日志代码，生产源码没有差异。可审阅的紧凑结果为[TEACHING_PLAYBACK_SAMPLE.json](TEACHING_PLAYBACK_SAMPLE.json)。
+
+| 实际cue | UI停靠位置（真实解析） | START_CUE能力/调用 | UI状态与累计完成 |
+|---|---|---|---|
+| c1 | R1 0:47，canonical tick 3081 | capabilities=[]，effects=[] | 无需额外演示；1 |
+| c2 | R3 0:58，canonical tick 19426 | capabilities=[]，effects=[] | 无需额外演示；2 |
+| c3 | R5 1:12，canonical tick 31179 | capabilities=[]，effects=[] | 无需额外演示；3 |
+| c4 | R7 1:30，canonical tick 45091 | capabilities=[]，effects=[] | 无需额外演示；4 |
+
+四次START_CUE均直接COMPLETED，全程工具effect为0、RESUME_TOOL为0，没有可供验证的真实播放tool/callId。每次静态停靠底部raw play均正确禁用，现有“无需额外演示”文案准确；此前建议的完成文案区分已由后续任务实现，不再列为待办。
+
+**验收判定**：环境阻塞已解除、所有4个自然cue的资格检查已完成；“实际教学工具暂停≥12秒、同次resume恰好一次完成，以及工具中seek/重连”均未运行。普通Session结果播放不能替代这些工具验收，四次COMPLETED也不代表工具完成。当前记录仅证明这个玩家/样本/当前基线路线没有可执行工具，不外推其他玩家/Demo或所有产品路线，不声称模型质量提升。
+
+本轮没有产品改动，未重复已通过的156/180测试或Host/Viewer构建，未重建Parser。无需继续在同一空capability集合上重试；下一步需要先核实资格来源，再在不降低教学门的前提下取得含合法自然工具的真实路线，补原A5，不以新的mock或Session“再看一遍”替代。主控只读发现teaching-gates的新focus集合与capability-builder/Host部分旧focus白名单可能未同步；这是待独立最小复现的接线线索，本轮不修改资格，也不直接认定样本事实不足。
+
+清理已完成：本轮InPrivate窗口已关闭，AX回到用户原普通新标签页；唯一controller67027退出，3000/5174无监听。临时Agent日志代码和next-env生成差异已去除，没有遗留测试/构建/解析任务。原Demo、用户窗口/SQLite/Memory、其他工作树均未修改；只提交本轮文档/去身份小摘要，push后释放写入与资源。

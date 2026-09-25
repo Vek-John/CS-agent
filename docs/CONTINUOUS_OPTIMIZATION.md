@@ -28,7 +28,11 @@
 - 本轮由原负责人独占当前树的必要修复/验证文档和唯一浏览器/Worker/服务controller。先只做轻量可操作性检查；若仍锁屏则不启动服务或解析、不反复尝试。若恢复，按原TEACHING_PLAYBACK_CONTROLS.md识别专用InPrivate窗口，保留用户其他窗口，单控制器40分钟、已有Demo一次解析、空provider/Memory关闭。
 - 原验收不变：仅实际合法Stage3播放tool/callId可计，暂停至少12秒后同实例续播一次完成，加必要显式seek与重连；不把Session重播或零工具FINISH算成功。先检查真实4cue资格，无合格工具则报告样本缺口，不强制制造。新发现必要修复相关tests/TS/build后同分支push；仅补UI证据不重复基线全套。完成或再次阻塞都明确清理/释放所有权。
 
-## 当前续跑入口（2026-09-25 21:04）
+- 21:17接续结果：桌面恢复，旧专用窗口已不存在；新InPrivate与单controller完成原Demo本轮一次解析，Dog自然4 cues逐一播放结果并停靠。c1/R1/3081、c2/R3/19426、c3/R5/31179、c4/R7/45091均显示无需额外演示；临时Agent小摘要确认每次START_CUE capabilities=[]/effects=[]、完成计数1→4，RESUME_TOOL总0。没有强制工具/改门/切模型/第二次解析，原A5仍未完成，当前阻塞不是锁屏。
+- 本轮只补实际验证文档与去身份摘要，生产diff零、不重复既有156/180测试/构建。临时遥测移除、next-env差异恢复，本轮InPrivate已关闭并回到用户普通新标签页；controller67027退出、3000/5174无监听。文档commit/push后释放写入/全部资源。
+- 原因尚未确证：主控只读发现teaching-gates新focus集合与capability-builder/Host部分旧focus白名单可能未同步。这是独立最小复现的后继线索，不能把本次空capabilities直接归因于事实不足，也不为完成A5直接放开工具。原goal工具仍blocked、无resume接口；不另建或标complete。后续先核实合法语义接线，再按真实工具证据补原A5。
+
+## 此前续跑入口（2026-09-25 21:04）
 
 - 最新已验证实现886e9ad，全部近期写任务已结束并释放资源，当前没有活动写入负责人。主控已核对真实关键diff和REAL_CUE_RESOURCE_CONSUMPTION证据；资源投影/未知说明/恢复消费中已确认的问题均已修复。没有新的失败，不再重复同一Demo、相同模型拒判输入、已通过测试或假设性全仓检查。
 - 下一优先项仍是原教学工具暂停A5：需出现明确桌面控制恢复的新证据或用户确认，再由01a0d77e-085f-7880-9331-c01becde48cd按原记录接续实际tool/callId的暂停≥12秒/同次续播/必要seek与重连。当前没有新的解锁证据；不因heartbeat或时间经过重复唤醒CUA、另开harness或强制制造工具。残留专用Edge窗口仍交原负责人处理。
@@ -43,7 +47,7 @@
 | 已push | 观察语义与联合证据协议 | 同上 | 6ba9e31；1073 tests/TS/Web/Viewer通过；27次live未证明Jev判断质量提高 |
 | 已push | 真实整场复盘体验与可靠性改进 | 01a0d72c-d1b6-7d31-9b5a-8705470ff0be（已结束，释放写入与进程） | d69a290；修复启动阻塞、已看cue回访跳过结果门；真实9回合/4cue到完成、刷新恢复、相关测试/TS/build通过；主控核对关键diff与验证记录 |
 | 已push、验收完成 | 暂停/播放保留带看意图 | 01a0d759-8472-7072-ae94-84ec101ece3b；已完成并释放写入/进程 | bf42aef修复；105测试/TS/build通过，锁屏恢复后原A5四条真实交互及Space/Return通过；见GUIDED_PAUSE_RESUME.md |
-| 用户要求续跑，待环境smoke | 教学演示暂停与继续 | 01a0d77e-085f-7880-9331-c01becde48cd；交接后独占验证/必要写入 | 214d743；156测试/Host与Viewer TS/Web与Viewer构建通过；锁屏阻塞原A5，不自动唤醒重试UI；解锁后先协调所有权再补验，见TEACHING_PLAYBACK_CONTROLS.md |
+| 实际4cue资格已核实，工具A5未完成 | 教学演示暂停与继续 | 01a0d77e-085f-7880-9331-c01becde48cd；文档阶段push后释放全部资源/写入 | 214d743实现；21:17基线4fffe02桌面恢复，原Demo一次解析、4cue均capabilities/effects空，无实际tool/callId；无产品改动，不重跑既有套件。待独立核实新版focus与工具资格接线，见TEACHING_PLAYBACK_CONTROLS.md |
 | 实现与本地验收完成 | 区分无需演示与实际工具完成 | 01a0d795-539b-7421-afbd-64e3f0e5c42a；阶段push后释放写入，无服务/浏览器 | 当前身份完成说明接入真实渲染；无演示、具体成功、失败与未知恢复准确区分；84测试/TS/production build通过，详见TEACHING_COMPLETION_STATUS.md；不关闭原工具暂停A5 |
 | 已push | 决策时公开回合时钟 | 01a0d7bb-d7ea-7e21-864f-54e7e2e17049，完成并释放写入 | 9150d51；44候选/38个有效时钟、4cue/3个教学包消费，148测试通过/1个既有缺产物跳过，TS/Web/Viewer构建通过；暂停补偿未知仍null，不据时间单独判错，见PUBLIC_ROUND_CLOCK.md |
 | 已push | 新解析器构建工具链配置 | 01a0d7ce-5686-7d33-84f4-717bae0a8401，完成并释放写入/进程 | 355e3f7；CI补WASM target/固定CLI0.2.125，保持Rust1.89；本地同toolchain预检和一次编译接线完成，21测试/真实parser与Viewer构建/TS/Web build通过；CI及1.89实际编译未运行，见PARSER_TOOLCHAIN.md |

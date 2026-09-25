@@ -1703,3 +1703,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 验证：第二次成功解析6079ms/至消费恢复6317ms，AnalysisBundle/Host输入往返一致；8个诊断输出恢复保持measurement/gate，额外diagnosis0/fetch0，16次确定性本地/compact消费。真实缺陷修复后180相关测试、TS/Web build通过。详见[完整证据](validation/REAL_CUE_RESOURCE_CONSUMPTION.md)。
 - 脚本教训：首smoke只有自动freeze skip，首次真实读取后恢复helper在普通SKIPPING误用ADVANCE_SEGMENT，且最后才输出摘要导致证据丢失。已立即报告；改用生产SKIP_SEGMENT、补普通skip和双cue smoke、先输出每cue证据/隔离恢复失败后，获协调明确授权补一次。总计2读，非一次；没有因此修改产品Session或伪造暂停状态。
 - 限制/清理：真实4cue没有unknown/false helmet、过期或跨回合拒绝、已知道具0，仍只由fixture覆盖；不声称专业质量或UI验证。无模型/浏览器/服务/用户DB/Memory/安装部署，Parser/Viewer未重建、原A5不动，无子代理。所有解析/测试/build退出，仅保留去身份小摘要，push后release。
+
+
+## 2026-09-25：真实工具验收先证明存在可执行能力
+
+- 问题：教学暂停A5原被锁屏阻塞，首cue的COMPLETED曾不能证明是否真做演示；后续完成文案已区分“无需额外演示”，仍需实际逐cue核实。
+- 决定：用户续跑后只用一个可操作Edge窗口/服务控制器和原Demo一次解析，走最新4fffe02的自然4-cue路线；用Agent返回处去身份小摘要核对capabilities/effects，不注入工具、改Policy、降门或切模型。
+- 验证：c1–c4均START_CUE→COMPLETED、capabilities/effects空、RESUME_TOOL为0，UI均“无需额外演示”和静态播放禁用。每cue停靠位置和摘要见[原A5续跑证据](validation/TEACHING_PLAYBACK_CONTROLS.md#2117续跑完整样本没有合法工具a5仍未通过)。该轮实际只检查工具资格，没有产品修改，不重复既有156/180测试或构建。
+- 限制：桌面已恢复，但此样本无合法活动工具，所以≥12秒暂停/同次续播/工具中seek与重连仍未验收；不外推所有路线都无工具。下一步先独立复现新版teaching focus与工具旧白名单是否接线不一致，不能直接将空能力归因于事实不足；需要真实合法工具，不拿静态COMPLETED或普通Session重播代替。专用窗口和服务均清理，临时日志代码移除，原goal不标完成。
