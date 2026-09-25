@@ -1,4 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import type { SessionWrapUpResult } from "@cs-coach/coach-agent/client";
+import { completeAndSaveSessionWrapUp } from "../coaching/session-wrap-up-completion";
+import { sessionWrapUpPresentation, SessionWrapUpPanel } from "../coaching/session-wrap-up-presentation";
+import { HistoryPersistenceController } from "./history-persistence-controller";
+import { describe, expect, it, vi } from "vitest";
 import { buildCs2dAnalysisBundle, type Cs2dReplay } from "@cs-coach/cs2d-analysis-adapter";
 import type { CommitRuntimeHeadInput, JsonValue, LoadedReview, ReviewArtifact } from "@cs-coach/review-library";
 import { createCoachingSession } from "@cs-coach/session";
@@ -262,5 +268,80 @@ describe("Review artifact domain validation", () => {
       routeId: detail.revision?.routeId,
       routeHash: detail.revision?.routeHash,
     })).not.toThrow();
+  });
+});
+
+
+describe("Host summary save → validated artifact → history restore → actual panel", () => {
+  it.each(["MISSING_SESSION_SUMMARY", "INVALID_PRESENTABLE_INPUT", "SOURCE_LIMITATIONS_EXCEED_OUTPUT_LIMIT", "NO_REPEATED_THEME", "CLOSED_SESSION_PROJECTION", "SAVED_DEEPSEEK", "LEGACY_MISSING"])("preserves %s without regeneration", async (reason) => {
+    const { loaded, head } = fixture();
+    const stored: ReviewArtifact[] = [...loaded.artifacts];
+    const appendArtifact = vi.fn(async (reviewId, input) => {
+      expect(reviewId).toBe("review-a");
+      validateReviewArtifactAppend(loaded, {
+        reviewRevisionId: input.revisionId, artifactType: input.artifactType, artifactKey: input.artifactKey,
+        artifactRevision: input.artifactRevision, schemaVersion: input.schemaVersion,
+        payload: json(input.payload), idempotencyKey: input.idempotencyKey,
+      });
+      stored.push({ ...stored[0], artifactId: "summary", reviewRevisionId: input.revisionId,
+        artifactType: input.artifactType, artifactKey: input.artifactKey, schemaVersion: input.schemaVersion,
+        artifactRevision: input.artifactRevision, payload: json(input.payload) });
+    });
+    const controller = new HistoryPersistenceController({ createReview: vi.fn(), startRevision: vi.fn(), appendArtifact,
+      commitRuntimeHead: vi.fn(), markFailed: vi.fn() });
+    controller.adopt("review-a", "revision-a", "managed-demo-a");
+    let original: SessionWrapUpResult | undefined;
+    const fetcher = vi.fn(() => { throw new Error("restore must not request generation"); });
+    vi.stubGlobal("fetch", fetcher);
+    try {
+      if (reason === "CLOSED_SESSION_PROJECTION" || reason === "SAVED_DEEPSEEK") {
+        const status = reason === "SAVED_DEEPSEEK" ? "SUCCEEDED" : "DISABLED";
+        original = { status, bundle: { schemaVersion: "coach-agent-session-wrap-up.v1",
+          themes: [{ focus: "saved", summary: { text: "旧总结正文", refs: ["saved-cue"] }, trainingAdvice: { text: "旧训练建议", refs: ["saved-advice"] } }], limitations: ["旧限定"] },
+          manifest: { status, provider: status === "SUCCEEDED" ? "DEEPSEEK" : "DETERMINISTIC", reason, limitations: [] } };
+        await controller.artifact("SESSION_SUMMARY", "session-summary", original, "session-wrap-up.v1");
+      } else if (reason !== "LEGACY_MISSING") {
+        await completeAndSaveSessionWrapUp({ persistence: controller, isCurrent: () => true,
+          buildInput: () => {
+            if (reason === "MISSING_SESSION_SUMMARY") return null;
+            if (reason !== "NO_REPEATED_THEME") throw new Error(reason);
+            return { summary: { schemaVersion: "coach-agent-session-summary.v1", themes: [], completedCues: [], limitations: [] }, presentableCues: {} };
+          }, onRequest: vi.fn(), onResult: result => { original = result; }, onSaveError: () => { throw new Error("save unexpectedly failed"); },
+        });
+      }
+      const writesBeforeRestore = appendArtifact.mock.calls.length;
+      const restored = restoreHistoryControlPlane({
+        review: { id: "review-a", demoId: "managed-demo-a", title: "saved", status: "COMPLETED", selectedPlayerId: "player-a" },
+        revision: { id: "revision-a", status: "READY", artifactContractVersion: 2, routeId: head.routeId, routeHash: head.routeHash },
+        artifacts: stored.map(a => ({ kind: a.artifactType, key: a.artifactKey, payload: a.payload })), runtimeHead: null,
+      });
+      const validated = validateStoredReviewArtifacts({ ...restored, selectedPlayerId: "player-a", demoContentHash: HASH });
+      expect(validated.summary).toEqual(original ?? null);
+      const presentation = sessionWrapUpPresentation(validated.summary);
+      const html = renderToStaticMarkup(createElement(SessionWrapUpPanel, { ...presentation, result: validated.summary ?? undefined, phase: "WRAP_UP", onComplete: () => {} }));
+      expect(html).toContain("完成本次复盘");
+      if (reason === "LEGACY_MISSING") {
+        expect(html).toContain("未保存");
+        expect(html).toContain("无法确认");
+        expect(html).not.toContain("未生成");
+        expect(writesBeforeRestore).toBe(0);
+      } else {
+        expect(writesBeforeRestore).toBe(1);
+        expect(appendArtifact.mock.calls[0][1]).toMatchObject({ revisionId: "revision-a", idempotencyKey: "revision-a:SESSION_SUMMARY:session-summary:v1" });
+        if (["MISSING_SESSION_SUMMARY", "INVALID_PRESENTABLE_INPUT", "SOURCE_LIMITATIONS_EXCEED_OUTPUT_LIMIT"].includes(reason)) {
+          expect(validated.summary).toMatchObject({ status: "FALLBACK", manifest: { reason, provider: "DETERMINISTIC" } });
+          expect(html).toContain("未生成");
+          expect(html).toContain("回看不受影响");
+          expect(JSON.stringify(validated.summary)).not.toContain("NO_REPEATED_THEME");
+        } else if (reason === "NO_REPEATED_THEME") expect(html).toContain("没有足够重复");
+        else {
+          expect(html).toContain("旧总结正文"); expect(html).toContain("旧训练建议"); expect(html).toContain("旧限定");
+          expect(presentation).toEqual({ status: "READY", error: undefined });
+        }
+      }
+      if (reason !== "NO_REPEATED_THEME") expect(html).not.toContain("没有足够重复");
+      expect(appendArtifact).toHaveBeenCalledTimes(writesBeforeRestore);
+      expect(fetcher).not.toHaveBeenCalled();
+    } finally { vi.unstubAllGlobals(); }
   });
 });

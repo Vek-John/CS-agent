@@ -702,6 +702,8 @@ Graph `sessionSummaryInput.themes[*].cueRefs` 是实际已完成的主题支持�
 
 Host 只发布匹配 run、捕获 generation 且 Graph/sessionStatus 均 COMPLETED 的总结；完成 Graph 请求前捕获 generation，返回后仍检查 generation/接管，防止迟到结果沿新 generation 写入。旧保存总结仍按原正文/manifest 恢复，不迁移引用或重算限制，不触发新分析/模型/Memory。该约束不改变 Session/Graph 完成门或单 cue 专业判断。
 
+总结失败同样是可保存的收尾结果。Host 统一经 `completeAndSaveSessionWrapUp` 发布并写入既有 `SESSION_SUMMARY / session-wrap-up.v1`，无需升级 schema；三种本地失败 `MISSING_SESSION_SUMMARY`、`INVALID_PRESENTABLE_INPUT`、`SOURCE_LIMITATIONS_EXCEED_OUTPUT_LIMIT` 标记 `FALLBACK / DETERMINISTIC`，只保存有限原因，不存异常原文、不冒充 `NO_REPEATED_THEME`。恢复先经原 artifact/domain validator，再按保存的 status/manifest 呈现。历史缺失 summary 只表示「未保存、生成结果未知」，不推断失败原因或自动重新生成；旧成功正文、refs、manifest 原样使用。写入前及异步错误回调都核对 generation、session/run、review/revision 与 history open epoch；正常 COMPLETED 清理临时 recovery identity 后，同一 completed session 仍可接收其捕获 run 的收尾。保存失败只提示，完成与自由回看不依赖保存成功。
+
 
 ### 6.14 VideoWeakAnnotation（离线启动管线）
 

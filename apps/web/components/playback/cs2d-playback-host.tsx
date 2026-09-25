@@ -62,7 +62,6 @@ import type {
   SessionWrapUpResult,
 } from "@cs-coach/coach-agent/client";
 import { checkpointThreadIdForSession, COACH_AGENT_GRAPH_VERSION, SessionRecoveryRecordSchema } from "@cs-coach/coach-agent/client";
-import { deterministicSessionWrapUpResult, SessionWrapUpRequestSchema } from "@cs-coach/coach-agent/client";
 import {
   deserializeCs2dAnalysisBundle,
   type Cs2dAnalysisBundle
@@ -116,10 +115,9 @@ import {
 } from "../../lib/coaching/cs2d-coaching-view";
 import { resolveItemPresentation } from "../../lib/assets/game-asset-display";
 import { loadLocalGameAssetCatalog } from "../../lib/assets/local-game-asset-catalog";
-import { requestSessionWrapUp } from "../../lib/coaching/deepseek-wrap-up";
-import { canPublishSessionWrapUp, sessionWrapUpPresentation, sessionWrapUpFailureMessage, SessionWrapUpPanel } from "../../lib/coaching/session-wrap-up-presentation";
+import { completeAndSaveSessionWrapUp } from "../../lib/coaching/session-wrap-up-completion";
+import { canPublishSessionWrapUp, isSessionWrapUpIdentityCurrent, sessionWrapUpPresentation, SessionWrapUpPanel } from "../../lib/coaching/session-wrap-up-presentation";
 import { buildStage3WrapUpInput } from "../../lib/coaching/coach-agent-stage3-wrap-up";
-import { buildSessionWrapUpRequest } from "@cs-coach/coach-agent/client";
 import {
   CoachAgentHostAdapter,
   dispatchCoachAgentEvent,
@@ -881,13 +879,10 @@ export function Cs2dPlaybackHost({
       setBundle(normalizedAnalysis); setPlan(restoredPlan); setRouteState(restoredRoute); setNarrationByCue(restoredNarration);
       setTeachingCases(validated.cueCases);
       setTeachingThreads(validated.learningThreads);
-      if (validated.summary) {
-        setStage3WrapUpResult(validated.summary);
-        setStage3WrapUpStatus("READY");
-      } else {
-        setStage3WrapUpResult(undefined);
-        setStage3WrapUpStatus("IDLE");
-      }
+      setStage3WrapUpResult(validated.summary ?? undefined);
+      const summaryPresentation = sessionWrapUpPresentation(validated.summary);
+      setStage3WrapUpStatus(summaryPresentation.status);
+      setStage3WrapUpError(summaryPresentation.error);
       let initial = recovered?.session ?? createCoachingSession(restoredPlan, identity.sessionId, restoredRoute);
       if (recovered) {
         for (const [cueId, readiness] of Object.entries(restoredRoute.readiness)) {
@@ -3061,47 +3056,34 @@ export function Cs2dPlaybackHost({
   const requestStage3WrapUp = useCallback(async (agentResult: import("@cs-coach/coach-agent/client").CoachAgentResult, generation: number, runId: string) => {
     if (!stage3Mode || !activePlan || !canPublishSessionWrapUp(agentResult, generation, generationRef.current, runId, userTookOverRef.current)) return;
     if (stage3WrapUpGenerationRef.current === generation) return;
+    const persistence = historyPersistenceControllerRef.current;
+    const reviewId = persistence?.reviewId;
+    const revisionId = persistence?.revisionId;
+    const openEpoch = historyOpenEpochRef.current;
+    const isCurrent = () => canPublishSessionWrapUp(agentResult, generation, generationRef.current, runId, userTookOverRef.current)
+      && isSessionWrapUpIdentityCurrent(agentResult, liveSessionRef.current, stage3IdentityRef.current?.runId)
+      && historyOpenEpochRef.current === openEpoch
+      && historyPersistenceControllerRef.current === persistence
+      && persistence?.reviewId === reviewId && persistence?.revisionId === revisionId;
+    if (!isCurrent()) return;
     stage3WrapUpGenerationRef.current = generation;
     setStage3WrapUpStatus("LOADING");
     setStage3WrapUpError(undefined);
-    const summaryInput = agentResult.state.sessionSummaryInput as SessionSummaryInput | null;
-    if (!summaryInput) {
-      const fallbackRequest = SessionWrapUpRequestSchema.parse({
-        schemaVersion: "coach-agent-session-wrap-up.v1",
-        themes: [],
-        completedCues: [],
-        limitations: ["Agent 没有返回可用的完成摘要。"],
-      });
-      setStage3WrapUpRequest(fallbackRequest);
-      setStage3WrapUpResult(deterministicSessionWrapUpResult(fallbackRequest, "MISSING_SESSION_SUMMARY"));
-      setStage3WrapUpStatus("FALLBACK");
-      setStage3WrapUpError("暂时没有完整的全场总结，已保留现有复盘结果。");
-      return;
-    }
-    try {
-      const projection = buildStage3WrapUpInput(activePlan, summaryInput, narrationByCue, bundle?.candidate_set);
-      const request = buildSessionWrapUpRequest(projection);
-      setStage3WrapUpRequest(request);
-      const result = await requestSessionWrapUp(projection);
-      if (generation !== generationRef.current || userTookOverRef.current || result === undefined) return;
-      setStage3WrapUpResult(result);
-      void historyPersistenceControllerRef.current?.artifact("SESSION_SUMMARY", "session-summary", result, "session-wrap-up.v1").catch(() => setHistoryError("全场总结保存失败。"));
-      const presentation = sessionWrapUpPresentation(result);
-      setStage3WrapUpStatus(presentation.status);
-      setStage3WrapUpError(presentation.error);
-    } catch (error) {
-      if (generation !== generationRef.current || userTookOverRef.current) return;
-      const fallbackRequest = SessionWrapUpRequestSchema.parse({
-        schemaVersion: "coach-agent-session-wrap-up.v1",
-        themes: [],
-        completedCues: [],
-        limitations: ["已完成片段的可展示资料不足，未强行生成主题。"],
-      });
-      setStage3WrapUpRequest(fallbackRequest);
-      setStage3WrapUpResult(deterministicSessionWrapUpResult(fallbackRequest, "INVALID_PRESENTABLE_INPUT"));
-      setStage3WrapUpStatus("FALLBACK");
-      setStage3WrapUpError(sessionWrapUpFailureMessage(error));
-    }
+    await completeAndSaveSessionWrapUp({
+      buildInput: () => {
+        const summaryInput = agentResult.state.sessionSummaryInput as SessionSummaryInput | null;
+        return summaryInput ? buildStage3WrapUpInput(activePlan, summaryInput, narrationByCue, bundle?.candidate_set) : null;
+      },
+      isCurrent, persistence,
+      onRequest: setStage3WrapUpRequest,
+      onResult: (result) => {
+        setStage3WrapUpResult(result);
+        const presentation = sessionWrapUpPresentation(result);
+        setStage3WrapUpStatus(presentation.status);
+        setStage3WrapUpError(presentation.error);
+      },
+      onSaveError: () => setHistoryError("全场总结保存失败。已完成的复盘和回看不受影响。"),
+    });
   }, [activePlan, bundle?.candidate_set, narrationByCue, stage3Mode]);
 
   useEffect(() => {

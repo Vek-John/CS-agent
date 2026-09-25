@@ -1,5 +1,5 @@
 import { createElement } from "react";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { CoachAgentResult, SessionWrapUpResult } from "@cs-coach/coach-agent/client";
 import { canPublishSessionWrapUp, sessionWrapUpPresentation, SessionWrapUpNotice } from "./session-wrap-up-presentation";
@@ -43,8 +43,16 @@ it("keeps completion and review available when the actual summary panel reports 
     completedCues: [{ cueId, focus: "verified", roundId: "round-2", evidenceRefs: ["fact"], adviceRefs: ["advice"] }],
   }, presentableCues: { [cueId]: { cueId, focus: "verified", coreIssue: { text: "已验证问题", refs: ["fact"], limitations: ["第九条必要限定"] }, betterPlay: { text: "已有建议", refs: ["advice"], limitations: [] }, advice: [{ id: "advice", text: "已有建议", refs: ["fact"] }] } } }).catch(error => error);
   expect(failed).toMatchObject({ name: "SessionWrapUpValidationError", message: "SOURCE_LIMITATIONS_EXCEED_OUTPUT_LIMIT" });
-  const error = sessionWrapUpFailureMessage(failed);
-  const props = { status: "FALLBACK", plan, phase: session.phase, error, onComplete: () => {} };
+  const { completeAndSaveSessionWrapUp } = await import("./session-wrap-up-completion");
+  let result: SessionWrapUpResult | undefined;
+  const onSaveError = vi.fn();
+  await completeAndSaveSessionWrapUp({ buildInput: () => { throw failed; }, isCurrent: () => true,
+    persistence: { artifact: async () => { throw new Error("storage unavailable"); } },
+    onRequest: () => {}, onResult: value => { result = value; }, onSaveError });
+  expect(onSaveError).toHaveBeenCalledOnce();
+  const error = sessionWrapUpPresentation(result).error;
+  expect(error).toBe(sessionWrapUpFailureMessage(failed));
+  const props = { status: "FALLBACK", result, plan, phase: session.phase, error, onComplete: () => {} };
   const html = renderToStaticMarkup(createElement(SessionWrapUpPanel, props));
   expect(html).toContain("未生成总结");
   expect(html).toContain("完成本次复盘");
@@ -68,4 +76,13 @@ it("renders retained source qualifications with the completed summary", async ()
   const html = renderToStaticMarkup(createElement(SessionWrapUpPanel, { status: "READY", result, phase: "COMPLETED", onComplete: () => {} }));
   expect(html).toContain("只在当时已确认的行动条件下适用。");
   expect(html).not.toContain("智能总结暂不可用");
+});
+
+it("restores an absent summary as unknown instead of no repeated theme", () => {
+  expect(sessionWrapUpPresentation(null)).toMatchObject({ status: "FALLBACK", error: expect.stringContaining("未保存") });
+});
+
+it("retains the exact bounded source-limit failure when presenting saved results", () => {
+  const result: SessionWrapUpResult = { ...local, status: "FALLBACK", manifest: { ...local.manifest, status: "FALLBACK", reason: "SOURCE_LIMITATIONS_EXCEED_OUTPUT_LIMIT" } };
+  expect(sessionWrapUpPresentation(result).error).toContain("限定超过当前上限");
 });

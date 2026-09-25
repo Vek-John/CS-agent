@@ -2,12 +2,16 @@
 
 更新时间：2026-09-25。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
-## 当前独立任务：总结失败状态恢复（2026-09-26）
+## 已交付：总结失败状态恢复（2026-09-26）
 
 - 上轮04e6b71已push、工作树干净、owner释放；93相关测试/TS/build通过。新任务01a0d964-7dcf-7062-8e43-7b08d87bfa18串行复用当前实现树，默认配置；独占总结Host/展示/必要历史artifact接线、tests及本轮docs，主控只读。
 - 真实依据：Host仅正常返回分支保存SESSION_SUMMARY，MISSING_SESSION_SUMMARY与INVALID_PRESENTABLE_INPUT只更新内存；历史restore有summary一律READY，无summary则IDLE，可能把失败/缺失错误显示成无重复主题。先通过生产恢复入口和隔离artifact复现，再做最小修复。
 - 目标/验收：A1失败、正常无主题、成功三者恢复可区分；A2失败记录当前身份绑定且恢复保留准确原因/完成回看能力，不冒充教学结论；A3旧保存正文不改写，无模型/分析/Memory副作用，取消/过期generation不写入；A4实际生产保存→validator→restore→展示路径、相关tests/TS/build；A5架构契约必要更新、学习/紧凑证据、commit/push/release。
 - 边界与风险：优先既有artifact/result契约，不扩大为DB重构，不改用户SQLite/Demo/密钥，不改判断与播放门；无浏览器/模型/服务/安装部署main。重点失败语义、旧缺失记录诚实提示、artifact写失败与迟到写入。8分钟复现、20分钟实现、10分钟检查，必要5分钟只读终审；owner负责自有测试/build及临时资源退出。
+
+- 本轮交付：统一Host完成保存入口，将三类失败保存为既有FALLBACK/DETERMINISTIC artifact并保留准确有限原因；旧缺失未知、正常无主题与成功明确区分，旧文本/refs/manifest不变且恢复0fetch/0写入。初始展示2红→绿；独立只读复核正常完成identity清理竞态1红→绿并闭合。
+- 验收：实际保存→strict append validator→control-plane restore→stored validator→共享面板SSR，保存失败不阻塞生产Session完成/自由seek；当前身份、迟到错误隔离通过。8文件84相关tests、TS/Web production build通过，架构/学习/紧凑证据同步；见[记录](validation/SESSION_SUMMARY_FAILURE_RECOVERY.md)。进程退出后同分支commit/push并release，无Demo/模型/浏览器/服务/用户DB/Memory/密钥或部署main，原A5未验。
+- 下一独立建议：小fixture核实Host SESSION_COMPLETED恢复dispatch迟到回调在切换review后是否会清除新identity；这是本轮复核发现的邻近边界，不在本轮扩改或假定必有影响。
 
 ## 已交付：封闭整场总结本地完成（2026-09-26）
 

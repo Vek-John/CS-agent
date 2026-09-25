@@ -1759,3 +1759,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：默认本地builder→deterministic→原closed/归属门，DISABLED/DETERMINISTIC/CLOSED_SESSION_PROJECTION正常READY，保留显式HTTP/Provider兼容。Host仅从Graph已完成theme.cueRefs复核同habit与合法advice，最后只传原代表；不将prepared-only、presentationOnly或不确定cue升格。
 - 修复/验证：真实内存Graph2完成→1代表/2support基线1红，新Host→local总结1主题；独立复核代表ref错位、主题/代表限制丢失2红→绿。限制>8明确typed拒绝、兼容HTTP400，实际Host SSR+Session完成/自由seek保持可用，旧gen/旧summary恢复边界保留。93相关tests/TS/build通过，当前总结HTTP+Provider1+1→0+0，未做真实延迟测量。
 - 限制/下一步：无新模型/Demo/UI/DB，原A5未验；本轮失败UI明确，但失败分支尚不保存SESSION_SUMMARY，可后续用隔离artifact fixture核实恢复是否丢失失败说明，不自动重生成或迁移旧正文。[记录](validation/LOCAL_SESSION_WRAP_UP.md)。
+
+
+## 2026-09-26：总结失败也是需要保存的收尾事实
+
+- 问题：Host 仅正常返回时写 SESSION_SUMMARY，缺摘要/输入失败只在内存提示；恢复有结果一律 READY、缺结果 IDLE，失败与未知可能被显示成无重复主题。展示缺失/超限原因两项基线回归先红。
+- 决定：复用当前 result/manifest/artifact schema，三种有限本地失败为 FALLBACK/DETERMINISTIC，统一生产完成保存入口；不让空主题的确定性 helper 将失败包装成 NO_REPEATED_THEME，不保存异常原文。恢复用同一 presentation，旧缺失保持未知，旧成功不改写/重生成。
+- 验证：生产完成保存入口→HistoryPersistenceController→append validator→restoreHistoryControlPlane→stored validator→实际面板 SSR，覆盖三失败、正常无主题、旧本地/DeepSeek、旧缺失。保存拒绝仍完成和自由 seek；generation/run/review/revision/接管变更拒绝迟到发布。只读复核发现正常完成清理临时identity会误丢同场总结，新增1红→绿，以保留session身份和COMPLETED状态承接。84相关tests、TS/Web production build；详见[验证](validation/SESSION_SUMMARY_FAILURE_RECOVERY.md)。
+- 限制/下一步：没有用户SQLite、真实模型/Demo/浏览器验证，原UI暂停A5仍未完成；不证明专业判断或真实延迟改善。保存层不可用时仅显示保存失败，重开仍诚实显示未保存。可独立检查Session完成恢复写入的迟到dispatch是否也需要捕获身份：当前Host完成回调清理recoveryIdentity/acceptRecoveryResult未见同级guard，先用小fixture证实再决定修复，不扩成框架重构。
