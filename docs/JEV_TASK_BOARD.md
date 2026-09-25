@@ -102,3 +102,17 @@ flowchart LR
 ### 最终审计
 
 前两目标轮均为progress，本轮也关闭了可编码事实/USER语义/凭证发现及协议问题。相同的可靠再次接触证据与教练留出标签缺口已连续三个目标轮核实；新WASM仍0 eligible，原目标未缩小。当前已没有能在现有证据上诚实完成该验收的独立步骤，继续猜测spotted/坐标语义或生成代理标签会违反目标。最终988测试通过/5既有跳过；模型请求22次（Jev16、生成6），总provider费用未知。目标阻塞，等待可追溯接触/曝光事实或人工动作注释及教练留出数据，不标全部完成。
+
+## 2026-09-26：原始弹药字段修复阶段交付
+
+基线85d0983，主控独占写；vendor_decoder_review_plan / lossless_ammo_boundary_review只读限定审查。详见[验收](validation/LOSSLESS_DECISION_AMMO.md)。
+
+| 验收 | 状态 |
+|---|---|
+| A1 真实SendTable/Field原wire无损解码 | 通过：先红后绿，CS2/非CS2边界测试 |
+| A2 vendor/相对Cargo override/lock/标准入口 | 通过：clean与reuse实际验证，标准build保留按锁联网能力，本次显式缓存离线 |
+| A3 strict-prior与独立ref消费 | fixture通过，31项弹药边界与零Demo实际消费smoke |
+| A4 唯一新增生产WASM真实验收 | 来源通过：2,960条有效记录；正式教学消费未通过：0/4，四点均有期间开火，不放宽门或重试 |
+| A5 测试、TS、Web/WASM/Viewer与阶段交付 | 已验证；文档记录失败范围并随分支提交，不部署/安装 |
+
+当前阶段保留正确decoder与可选消费链，旧数据缺字段仍unknown；原完整实际教学消费目标未完成，不标总目标完成。原UI暂停A5不在本轮。单阶段读取1/两轮累计3，41空clip是采样条数。下一候选仅为独立tick-end最近样本小缓存设计，需另行核对生命周期及来源时间，不在本轮实现。

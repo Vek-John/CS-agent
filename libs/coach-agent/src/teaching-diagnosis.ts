@@ -123,6 +123,7 @@ const PlayerStateSchema = z.object({
 
 /** Identity-free resource projection used when the full decision frame stays in Host. */
 export const DecisionResourcesSchema = z.object({
+  weaponAmmo: z.object({ weapon: z.string().min(1).max(96), clip: z.number().int().min(0).max(255), evidenceRefs: z.array(IdSchema).min(1).max(8) }).strict().optional(),
   health: z.number().finite().nonnegative().max(100).optional(),
   armor: z.number().finite().nonnegative().max(100).optional(),
   hasHelmet: z.boolean().optional(),
@@ -536,6 +537,7 @@ function resourceMeasurements(input: TeachingDiagnosisInput, snapshot = resource
   if (snapshot.money !== undefined) measurements.push({ id: `measurement-${input.cueId}-money`, label: "决策时存款", value: snapshot.money, unit: "$", evidenceRefs: refs });
   if (snapshot.equipmentValue !== undefined) measurements.push({ id: `measurement-${input.cueId}-equipment`, label: "决策时装备价值", value: snapshot.equipmentValue, unit: "$", evidenceRefs: refs });
   if (snapshot.utilityCount !== undefined) measurements.push({ id: `measurement-${input.cueId}-utility`, label: "决策时道具数量", value: snapshot.utilityCount, unit: "颗", evidenceRefs: refs });
+  if (snapshot.weaponAmmo) measurements.push({ id: `measurement-${input.cueId}-weapon-clip`, label: `${snapshot.weaponAmmo.weapon} 决策前最近记录弹匣`, value: snapshot.weaponAmmo.clip, unit: "发", evidenceRefs: snapshot.weaponAmmo.evidenceRefs });
   return measurements;
 }
 
@@ -677,9 +679,11 @@ export function executeDiagnostic(
   if (resources?.money !== undefined) known.push(`存款 ${resources.money}`);
   if (resources?.equipmentValue !== undefined) known.push(`装备价值 ${resources.equipmentValue}`);
   if (resources?.utilityCount !== undefined) known.push(`${resources.utilityCount} 颗道具`);
+  if (resources?.weaponAmmo) known.push(`${resources.weaponAmmo.weapon} 弹匣在决策前最近记录为 ${resources.weaponAmmo.clip} 发`);
   if (economy !== "UNKNOWN") known.push(`经济状态：${({ PISTOL: "手枪局", ECO: "经济局", FORCE: "强起", FULL: "完整购买" })[economy]}`);
   const unknown = [resources?.health === undefined ? "血量" : "", resources?.armor === undefined ? "护甲" : "", resources?.hasHelmet === undefined ? "头盔" : ""].filter(Boolean);
-  const resourceText = `${known.length ? `已知：${known.join("、")}。` : "当前没有可确认的本人资源数值。"}${unknown.length ? `${unknown.join("、")}未知。` : ""}`;
+  const ammoCaveat = resources?.weaponAmmo ? "弹药是决策前最近采样，不能确认采样后的换枪或换弹，不能当作决策瞬间精确余量；备弹未知，不能仅据弹匣数判错或建议换弹。" : "";
+  const resourceText = `${ammoCaveat}${known.length ? `已知：${known.join("、")}。` : "当前没有可确认的本人资源数值。"}${unknown.length ? `${unknown.join("、")}未知。` : ""}`;
   const explanation = constrained
     ? `${resourceText}已知条件表明资源背景受限；${negative ? "随后发生了负向接触结果，但不能单凭资源状态认定动作错误。" : "这不足以证明动作一定错误。"}`
     : status === "SUPPORTED"

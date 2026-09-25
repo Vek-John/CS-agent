@@ -301,6 +301,8 @@ export type MemoryPedagogyMode = Extract<PedagogyMode, "CHECK_TRANSFER" | "REINF
  * bounded diagnosis packet.
  */
 export interface DecisionResources {
+  /** Latest strictly pre-decision clip record; not exact ammo at the decision instant. Reserve remains unknown. */
+  weaponAmmo?: { weapon: string; clip: number; evidenceRefs: readonly string[] };
   /** Absent fields are unknown; known zero and false remain meaningful. */
   health?: number;
   armor?: number;

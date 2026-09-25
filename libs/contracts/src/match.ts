@@ -3,8 +3,12 @@ import type { Direction, WorldPoint } from "./geometry";
 export interface ActiveItem {
   item_id: string;
   item_class: string;
+  /** Verified packed active entity identity at this state sample; unknown when absent. */
+  entity_handle?: number;
   ammo_clip?: number;
   ammo_reserve?: number;
+  /** Optional tick-end clip provenance; absent in old saved data. Not a reserve count. */
+  ammo_evidence?: { source: "SOURCE2_ACTIVE_WEAPON"; phase: "TICK_END"; sampled_at_tick: number; weapon_handle: number; fact_ref: string };
 }
 
 export interface InventoryItem extends ActiveItem {

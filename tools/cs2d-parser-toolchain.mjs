@@ -1,7 +1,26 @@
-import { accessSync, constants, existsSync, readFileSync } from 'node:fs'
-import { delimiter, isAbsolute, resolve } from 'node:path'
+import { accessSync, constants, existsSync, readFileSync, realpathSync } from 'node:fs'
+import { delimiter, isAbsolute, resolve, relative } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
 import { spawnSync } from 'node:child_process'
+
+const source2Vendor = fileURLToPath(new URL('../vendor/source2-demo', import.meta.url))
+export function parserCargoArgs(parserDir) {
+  const manifest = resolve(source2Vendor, 'Cargo.toml')
+  if (!existsSync(manifest) || !/^version = "0\.5\.4"$/m.test(readFileSync(manifest, 'utf8'))) throw new Error('[parser dependency] Expected project vendor/source2-demo 0.5.4.')
+  return ['--config', `patch.crates-io.source2-demo.path=${JSON.stringify(relative(realpathSync(parserDir), realpathSync(source2Vendor)))}`]
+}
+
+export function verifyParserDependency(parserDir, checked, target = PARSER_WASM_TARGET) {
+  const result = spawnSync(checked.cargo, ['metadata', ...checked.cargoArgs, '--locked', '--filter-platform', target, '--format-version', '1'],
+    { cwd: parserDir, env: checked.env, encoding: 'utf8', timeout: 30_000, maxBuffer: 8 * 1024 * 1024 })
+  if (result.status !== 0) throw new Error(`[parser dependency] Locked metadata failed; apply the current parser patch stack first. ${result.stderr?.slice(-800) ?? result.error?.message ?? ''}`)
+  const metadata = JSON.parse(result.stdout)
+  const source2 = metadata.packages.find(pkg => pkg.name === 'source2-demo')
+  if (!source2 || source2.version !== '0.5.4' || source2.source !== null || resolve(source2.manifest_path) !== resolve(source2Vendor, 'Cargo.toml')
+    || !metadata.resolve.nodes.find(node => node.id === source2.id)?.features.includes('cs2')) throw new Error('[parser dependency] Build must resolve the project-local CS2 source2-demo 0.5.4.')
+  return source2.version
+}
 
 export const PARSER_RUST_VERSION = '1.89.0'
 export const PARSER_WASM_TARGET = 'wasm32-unknown-unknown'
@@ -71,11 +90,12 @@ export function preflightParserToolchain(parserDir, { env: inputEnv = process.en
   if (!bindgen) throw new Error(`[parser toolchain] wasm-bindgen is missing from the build PATH. Run: ${install}`)
   const actualBindgen = probe(bindgen, ['--version'], parserDir, selected, `wasm-bindgen cannot run. Run: ${install}`).match(/^wasm-bindgen (\S+)/)?.[1]
   if (actualBindgen !== expectedBindgen) throw new Error(`[parser toolchain] wasm-bindgen CLI ${actualBindgen ?? 'unknown'} does not match Cargo.lock ${expectedBindgen}. Run: ${install} --force`)
-  return { cargo, rustc, bindgen, toolchain: active, bindgenVersion: expectedBindgen, env: { ...selected, RUSTC: rustc } }
+  return { cargo, cargoArgs: parserCargoArgs(parserDir), rustc, bindgen, toolchain: active, bindgenVersion: expectedBindgen, env: { ...selected, RUSTC: rustc } }
 }
 
 export function buildParserWasm(parserDir, options = {}) {
   const checked = options.checked ?? preflightParserToolchain(parserDir, options)
+  verifyParserDependency(parserDir, checked)
   const targetDir = resolve(parserDir, 'target')
   // The pinned third-party parser still calls deprecated source2-demo APIs.
   // Narrowly keep those visible as warnings; preserve -D warnings for all other
@@ -88,7 +108,18 @@ export function buildParserWasm(parserDir, options = {}) {
     if (result.status !== 0) throw new Error(`[parser build] ${command} failed: ${result.error?.message ?? `exit ${result.status}`}`)
   }
   process.stdout.write(`[parser toolchain] ${checked.toolchain}; wasm-bindgen ${checked.bindgenVersion}\n`)
-  build(checked.cargo, ['build', '--locked', '--release', '--target', PARSER_WASM_TARGET, '--target-dir', targetDir, '--manifest-path', resolve(parserDir, 'Cargo.toml')], compilerEnv)
+  build(checked.cargo, ['build', ...checked.cargoArgs, '--locked', '--release', '--target', PARSER_WASM_TARGET, '--target-dir', targetDir, '--manifest-path', resolve(parserDir, 'Cargo.toml')], compilerEnv)
   build(checked.bindgen, [resolve(targetDir, PARSER_WASM_TARGET, 'release/cs2_demo_parser_wasm.wasm'), '--target', 'web', '--out-name', 'demo_parser', '--out-dir', resolve(parserDir, '../../apps/app/src/viewer/parser')])
   return checked
+}
+
+export function testParserNative(parserDir, { checked = preflightParserToolchain(parserDir) } = {}) {
+  verifyParserDependency(parserDir, checked)
+  for (const args of [
+    ['test', ...checked.cargoArgs, '--locked', '--no-default-features'],
+    ['test', ...checked.cargoArgs, '--locked', '-p', 'source2-demo', '--lib'],
+  ]) {
+    const result = spawnSync(checked.cargo, args, { cwd: parserDir, env: checked.env, stdio: 'inherit', timeout: 120_000 })
+    if (result.status !== 0) throw new Error(`[parser tests] Cargo failed: ${result.error?.message ?? result.status}`)
+  }
 }

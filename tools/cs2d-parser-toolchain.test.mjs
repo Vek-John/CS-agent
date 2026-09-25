@@ -20,7 +20,7 @@ const fs = require('node:fs'); const path = require('node:path');
 const root = ${JSON.stringify(root)}; const tool = ${JSON.stringify(tool)};
 const config = JSON.parse(fs.readFileSync(path.join(root, 'config.json'), 'utf8'));
 const args = process.argv.slice(2); const active = process.env.RUSTUP_TOOLCHAIN || '1.89.0-test-host';
-fs.appendFileSync(path.join(root, 'calls.jsonl'), JSON.stringify({tool,args,cwd:process.cwd(),auto:process.env.RUSTUP_AUTO_INSTALL,rustc:process.env.RUSTC,flags:process.env.RUSTFLAGS,encoded:process.env.CARGO_ENCODED_RUSTFLAGS})+'\\n');
+fs.appendFileSync(path.join(root, 'calls.jsonl'), JSON.stringify({tool,args,cwd:process.cwd(),auto:process.env.RUSTUP_AUTO_INSTALL,rustc:process.env.RUSTC,flags:process.env.RUSTFLAGS,encoded:process.env.CARGO_ENCODED_RUSTFLAGS,offline:process.env.CARGO_NET_OFFLINE})+'\\n');
 if (tool === 'rustup') {
   if (args[0] === 'show') console.log(active+' (directory override)');
   else if (args[0] === 'which') console.log(path.join(root,'bin',args.at(-1)));
@@ -28,6 +28,10 @@ if (tool === 'rustup') {
     if (!args.includes('--toolchain') || args.at(-1) !== active) throw Error('target queried for wrong toolchain');
     console.log(config.noTarget ? 'aarch64-apple-darwin' : 'aarch64-apple-darwin\\nwasm32-unknown-unknown');
   } else throw Error('unexpected rustup command');
+} else if (args[0] === 'metadata') {
+  const value = args[args.indexOf('--config')+1].split('=').slice(1).join('=');
+  const manifest = path.resolve(process.cwd(), JSON.parse(value), 'Cargo.toml');
+  console.log(JSON.stringify({ packages: [{ id: 'source2', name: 'source2-demo', version: '0.5.4', source: config.source2Registry ? 'registry+https://github.com/rust-lang/crates.io-index' : null, manifest_path: manifest }], resolve: { nodes: [{id: 'source2', features: ['cs2']}] } }));
 } else if (args[0] === '--version') console.log(tool+' '+(tool === 'wasm-bindgen' ? config.bindgen || '0.2.125' : config.rust || '1.89.0'));
 `, { mode: 0o755 })
   }
@@ -47,6 +51,11 @@ describe('parser toolchain preflight with executable command probes', () => {
     const builds = calls.filter(call => call.tool === 'cargo' && call.args[0] === 'build')
     expect(builds).toHaveLength(1)
     expect(builds[0].args).toEqual(expect.arrayContaining(['--locked', '--target', 'wasm32-unknown-unknown']))
+    const metadata = calls.find(call => call.tool === 'cargo' && call.args[0] === 'metadata')
+    expect(metadata.args).toEqual(expect.arrayContaining(['--locked', '--filter-platform', 'wasm32-unknown-unknown']))
+    expect(metadata.args[metadata.args.indexOf('--config') + 1]).toBe(builds[0].args[builds[0].args.indexOf('--config') + 1])
+    expect(builds[0].args).not.toContain('--offline')
+    expect(metadata.args).not.toContain('--offline')
     expect(builds[0].rustc).toBe(join(f.bin, 'rustc'))
     expect(builds[0].flags).toBe('-D warnings --force-warn deprecated')
     expect(checked.env.RUSTFLAGS).toBe('-D warnings')
@@ -54,6 +63,28 @@ describe('parser toolchain preflight with executable command probes', () => {
     expect(calls.filter(call => call.tool === 'wasm-bindgen' && call.args[0] !== '--version')).toHaveLength(1)
     expect(calls.some(call => call.args.includes('install') || call.args.includes('add'))).toBe(false)
   }, 20_000)
+
+  it('checks fresh checkout prerequisites before dependency resolution or patching', () => {
+    const f = fixture()
+    const upstream = join(f.parser, 'fresh-upstream')
+    mkdirSync(join(upstream, '.git'), { recursive: true })
+    mkdirSync(join(upstream, 'packages/parser'), { recursive: true })
+    writeFileSync(join(upstream, 'packages/parser/Cargo.lock'), readFileSync(join(f.parser, 'Cargo.lock')))
+    const result = spawnSync(process.execPath, [new URL('./apply-cs2d-host-patch.mjs', import.meta.url).pathname, '--check-parser'], {
+      env: { ...f.env, CS2D_UPSTREAM_DIR: upstream }, encoding: 'utf8',
+    })
+    expect(result.status, result.stderr).toBe(0)
+    expect(result.stdout).toContain('ready:')
+    expect(f.calls().some(call => ['metadata', 'build'].includes(call.args[0]))).toBe(false)
+  })
+
+  it('honors an explicit offline session for metadata and compilation', () => {
+    const f = fixture()
+    buildParserWasm(f.parser, { env: { ...f.env, CARGO_NET_OFFLINE: 'true' } })
+    const cargo = f.calls().filter(call => ['metadata', 'build'].includes(call.args[0]))
+    expect(cargo).toHaveLength(2)
+    expect(cargo.every(call => call.offline === 'true')).toBe(true)
+  })
 
   it.each([
     [{ missing: 'rustup' }, /rustup is missing.*build PATH/],
@@ -67,6 +98,12 @@ describe('parser toolchain preflight with executable command probes', () => {
     const f = fixture(config)
     expect(() => buildParserWasm(f.parser, { env: f.env })).toThrow(error)
     if (config.missing !== 'rustup') expect(f.calls().some(call => call.args[0] === 'build')).toBe(false)
+  })
+
+  it('rejects registry resolution before compilation instead of silently testing the old dependency', () => {
+    const f = fixture({ source2Registry: true })
+    expect(() => buildParserWasm(f.parser, { env: f.env })).toThrow(/project-local CS2 source2-demo/)
+    expect(f.calls().some(call => call.args[0] === 'build')).toBe(false)
   })
 
   it('does not validate one compiler and then let RUSTC invoke another', () => {

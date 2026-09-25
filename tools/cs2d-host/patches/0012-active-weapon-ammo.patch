@@ -1,0 +1,236 @@
+diff --git a/packages/parser/Cargo.toml b/packages/parser/Cargo.toml
+--- a/packages/parser/Cargo.toml
++++ b/packages/parser/Cargo.toml
+@@ -13,7 +13,7 @@
+ wasm = ["dep:wasm-bindgen", "dep:console_error_panic_hook", "dep:js-sys"]
+ 
+ [dependencies]
+-source2-demo = { version = "0.5.4", default-features = false, features = ["cs2"] }
++source2-demo = { version = "=0.5.4", default-features = false, features = ["cs2"] }
+ serde = { version = "1", features = ["derive"] }
+ serde_json = "1"
+ wasm-bindgen = { version = "0.2", optional = true }
+diff --git a/packages/parser/Cargo.lock b/packages/parser/Cargo.lock
+--- a/packages/parser/Cargo.lock
++++ b/packages/parser/Cargo.lock
+@@ -685,8 +685,6 @@
+ [[package]]
+ name = "source2-demo"
+ version = "0.5.4"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "db6170de7aadab77f20e70b8f78f550307fdf5a08976a56f6656ff623b044a57"
+ dependencies = [
+  "anyhow",
+  "bitflags",
+diff --git a/packages/parser/src/lib.rs b/packages/parser/src/lib.rs
+--- a/packages/parser/src/lib.rs
++++ b/packages/parser/src/lib.rs
+@@ -16,12 +16,13 @@
+ mod props;
+ mod schema;
+ mod weapons;
++mod weapon_ammo;
+ 
+ use assemble::{build_replay, build_voice_blob};
+ use collector::Collector;
+ 
+ const DEMO_TICK_RATE: f64 = 64.0;
+-const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2";
++const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v1";
+ 
+ /// Parses the bytes of a `.dem` in a single pass and returns `(Replay JSON, voice
+ /// blob)`. The `Replay` matches `replay-schema 2D`; the blob follows the `CLV2`
+diff --git a/packages/parser/src/weapons.rs b/packages/parser/src/weapons.rs
+--- a/packages/parser/src/weapons.rs
++++ b/packages/parser/src/weapons.rs
+@@ -216,3 +216,8 @@
+ fn is_pistol(label: &str) -> bool {
+     PISTOL_LABELS.contains(&label)
+ }
++
++/// Excludes utility, knife, C4 and Zeus; no synthetic one-round conventions.
++pub(crate) fn is_firearm_label(label: &str) -> bool {
++    GUN_LABELS.iter().any(|(_, known)| *known == label) && !NON_GUN_LABELS.contains(&label)
++}
+diff --git a/packages/parser/src/schema.rs b/packages/parser/src/schema.rs
+--- a/packages/parser/src/schema.rs
++++ b/packages/parser/src/schema.rs
+@@ -197,6 +197,10 @@
+     pub(crate) alive: bool,
+     pub(crate) side: String,
+     pub(crate) weapon: String,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub(crate) weapon_ammo: Option<crate::weapon_ammo::WeaponAmmo>,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub(crate) active_weapon_handle: Option<u32>,
+     /// Source-engine navigation place token (`m_szLastPlaceName`). This is a
+     /// parser fact; the host maps it to localized CS callouts.
+     #[serde(skip_serializing_if = "String::is_empty")]
+diff --git a/packages/parser/src/collector.rs b/packages/parser/src/collector.rs
+--- a/packages/parser/src/collector.rs
++++ b/packages/parser/src/collector.rs
+@@ -287,6 +287,9 @@
+         // after resume/reset, rather than subtracting guessed pause durations.
+         self.clock_pause_observed |= paused != Some(false) || total_paused_ticks != Some(0);
+         if let Some(frame) = self.frames.last_mut().filter(|frame| frame.tick == tick) {
++            for player in &mut frame.players {
++                player.weapon_ammo = crate::weapon_ammo::sample_weapon_ammo(ctx, &player.steam_id, &player.weapon);
++            }
+             frame.clock = Some(RoundClockSample {
+                 source: "SOURCE2_GAMERULES",
+                 sampled_at_tick: tick, server_tick, tick_interval: self.clock_tick_interval,
+@@ -420,6 +423,8 @@
+                 }
+             }
+ 
++            let active_weapon = active_weapon_label(ctx, pawn);
++            let active_weapon_handle = crate::weapon_ammo::frame_active_weapon_handle(ctx, &steam_id, &active_weapon);
+             players.push(PlayerState {
+                 steam_id,
+                 x: round1(world_coord(pawn, "CBodyComponent.m_cellX", "CBodyComponent.m_vecX")),
+@@ -429,7 +434,9 @@
+                 health: prop_i32(pawn, "m_iHealth"),
+                 alive: prop_i32(pawn, "m_lifeState") == 0,
+                 side: side.into(),
+-                weapon: active_weapon_label(ctx, pawn),
++                weapon: active_weapon,
++                active_weapon_handle,
++                weapon_ammo: None,
+                 last_place_name: prop_string(pawn, "m_szLastPlaceName"),
+                 primary: primary_weapon(ctx, pawn),
+                 money: prop_i32(ctrl, "m_pInGameMoneyServices.m_iAccount"),
+diff --git a/packages/parser/src/assemble.rs b/packages/parser/src/assemble.rs
+--- a/packages/parser/src/assemble.rs
++++ b/packages/parser/src/assemble.rs
+@@ -291,6 +291,8 @@
+                     alive: p.alive,
+                     side: p.side.clone(),
+                     weapon: p.weapon.clone(),
++                    weapon_ammo: p.weapon_ammo.clone(),
++                    active_weapon_handle: p.active_weapon_handle,
+                     last_place_name: p.last_place_name.clone(),
+                     primary: p.primary.clone(),
+                     money: p.money,
+diff --git a/packages/replay-core/src/schema.ts b/packages/replay-core/src/schema.ts
+--- a/packages/replay-core/src/schema.ts
++++ b/packages/replay-core/src/schema.ts
+@@ -264,6 +264,8 @@
+   alive: boolean
+   side: Side
+   /** Short label of the active weapon (e.g. "AK-47", "AWP", "HE"). */
++  activeWeaponHandle?: number
++  weaponAmmo?: { source: "SOURCE2_ACTIVE_WEAPON"; phase: "TICK_END"; sampledAtTick: number; weapon: string; weaponHandle: number; clip: number }
+   weapon: string
+   /** Source-engine navigation place token (`m_szLastPlaceName`). */
+   lastPlaceName?: string
+diff --git a/packages/parser/src/weapon_ammo.rs b/packages/parser/src/weapon_ammo.rs
+new file mode 100644
+--- /dev/null
++++ b/packages/parser/src/weapon_ammo.rs
+@@ -0,0 +1,106 @@
++//! Optional active-firearm clip facts. No inventory totals or reserve-unit guesses.
++use source2_demo::prelude::*;
++
++// CHandle on the wire: 14-bit index and low 10 serial bits; get_by_handle alone
++// ignores serial. This is NOT the native event pawn handle's 15-bit layout.
++fn matches_handle(handle: u32, index: u32, serial: u32) -> bool {
++    handle != 0 && handle < 0xffffff && index == (handle & 0x3fff)
++        && (serial & 0x3ff) == (handle >> 14)
++}
++
++// The project-controlled source2-demo decoder preserves m_iClip1's raw u32.
++// No signed inverse is allowed: high-bit wire values must remain distinguishable.
++fn clip_count(value: Option<&FieldValue>) -> Option<u32> {
++    match value {
++        Some(FieldValue::Unsigned32(raw)) => raw.checked_sub(1).filter(|count| *count <= 255),
++        _ => None,
++    }
++}
++
++#[derive(Clone, serde::Serialize)]
++#[serde(rename_all = "camelCase")]
++pub(crate) struct WeaponAmmo {
++    source: &'static str,
++    phase: &'static str,
++    sampled_at_tick: u32,
++    weapon: String,
++    weapon_handle: u32,
++    clip: u32,
++}
++
++fn verified_weapon<'a>(ctx: &'a Context, steam: &str, frame_weapon: &str) -> Option<(&'a Entity, u32, String)> {
++    use crate::props::{prop_i32, prop_u64};
++    let mut controllers = ctx.entities().iter().filter(|e| e.class().name() == "CCSPlayerController"
++        && prop_u64(e, "m_steamID").to_string() == steam);
++    let controller = controllers.next()?;
++    if controllers.next().is_some() { return None; }
++    let unsigned = |entity: &Entity, name: &str| match entity.get_property_by_name(name) {
++        Ok(FieldValue::Unsigned32(value)) => Some(*value), _ => None,
++    };
++    let pawn_handle = unsigned(controller, "m_hPlayerPawn")?;
++    let pawn = ctx.entities().get_by_index((pawn_handle & 0x3fff) as usize).ok()?;
++    if pawn.class().name() != "CCSPlayerPawn" || !matches_handle(pawn_handle, pawn.index(), pawn.serial())
++        || prop_i32(pawn, "m_iHealth") <= 0 { return None; }
++    let side = prop_i32(pawn, "m_iTeamNum");
++    if ![2, 3].contains(&side) || side != prop_i32(controller, "m_iTeamNum") { return None; }
++    match pawn.get_property_by_name("m_lifeState") {
++        Ok(FieldValue::Unsigned32(0) | FieldValue::Signed32(0) | FieldValue::Unsigned8(0)) => {}, _ => return None,
++    }
++    let handle = unsigned(pawn, "m_pWeaponServices.m_hActiveWeapon")?;
++    let entity = ctx.entities().get_by_index((handle & 0x3fff) as usize).ok()?;
++    if !matches_handle(handle, entity.index(), entity.serial()) { return None; }
++    let weapon = crate::weapons::active_weapon_label(ctx, pawn);
++    if weapon != frame_weapon || !crate::weapons::is_firearm_label(&weapon) { return None; }
++    Some((entity, handle, weapon))
++}
++
++pub(crate) fn sample_weapon_ammo(ctx: &Context, steam: &str, frame_weapon: &str) -> Option<WeaponAmmo> {
++    let (entity, handle, weapon) = verified_weapon(ctx, steam, frame_weapon)?;
++    let clip = clip_count(entity.get_property_by_name("m_iClip1").ok())?;
++    Some(WeaponAmmo { source: "SOURCE2_ACTIVE_WEAPON", phase: "TICK_END", sampled_at_tick: ctx.tick(), weapon, weapon_handle: handle, clip })
++}
++
++// Identity is collected at tick start independently of clip availability. The
++// ammo observation itself is collected only after this tick's entity updates.
++pub(crate) fn frame_active_weapon_handle(ctx: &Context, steam: &str, weapon: &str) -> Option<u32> {
++    verified_weapon(ctx, steam, weapon).map(|(_, handle, _)| handle)
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn clip_wire_values_do_not_turn_unknown_into_empty() {
++        assert_eq!(clip_count(None), None);
++        assert_eq!(clip_count(Some(&FieldValue::Unsigned32(0))), None);
++        assert_eq!(clip_count(Some(&FieldValue::Unsigned32(1))), Some(0));
++        assert_eq!(clip_count(Some(&FieldValue::Unsigned32(31))), Some(30));
++        assert_eq!(clip_count(Some(&FieldValue::Unsigned32(u32::MAX))), None);
++        assert_eq!(clip_count(Some(&FieldValue::Signed32(-1))), None);
++        assert_eq!(clip_count(Some(&FieldValue::Signed32(-16))), None);
++        assert_eq!(clip_count(Some(&FieldValue::Signed32(31))), None);
++        assert_eq!(clip_count(Some(&FieldValue::Signed32(0))), None);
++        assert_eq!(clip_count(Some(&FieldValue::Signed32(i32::MIN))), None);
++        assert_eq!(clip_count(Some(&FieldValue::Signed32(i32::MAX))), None);
++        assert_eq!(clip_count(Some(&FieldValue::Unsigned16(31))), None);
++        assert_eq!(clip_count(Some(&FieldValue::Signed16(-16))), None);
++    }
++    #[test]
++    fn preserved_wire_values_have_unambiguous_bounds() {
++        for raw in [0x80000000, 0xffffffe0, 0xfffffffe, u32::MAX, 257] {
++            assert_eq!(clip_count(Some(&FieldValue::Unsigned32(raw))), None);
++        }
++        for (raw, count) in [(1, 0), (31, 30), (41, 40), (101, 100), (256, 255)] {
++            assert_eq!(clip_count(Some(&FieldValue::Unsigned32(raw))), Some(count));
++        }
++    }
++    #[test]
++    fn handles_require_both_index_and_serial() {
++        let h = 9 | (7 << 14);
++        assert!(matches_handle(h, 9, 7));
++        assert!(matches_handle(h, 9, 7 + 1024));
++        assert!(!matches_handle(h, 9, 8));
++        assert!(!matches_handle(h, 10, 7));
++        for invalid in [0, 0xffffff, u32::MAX] { assert!(!matches_handle(invalid, invalid & 0x3fff, invalid >> 14)); }
++    }
++}

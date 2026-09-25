@@ -15,6 +15,7 @@
     "assets:valve-items": "node tools/fetch_valve_item_icons.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "check": "pnpm test && pnpm typecheck && pnpm build",
+    "cs2d:test-parser": "node tools/apply-cs2d-host-patch.mjs --reuse-patched-checkout --test-parser",
     "cs2d:check": "node tools/apply-cs2d-host-patch.mjs --clone --check-parser",
     "cs2d:build": "node tools/build-cs2d-viewer.mjs",
     "desktop:runtime:build": "pnpm --filter @cs-coach/desktop-runtime build",

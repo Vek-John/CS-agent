@@ -1802,3 +1802,10 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 验证/收敛：3个离线codec反例/规格通过；实验产品接线逐文件撤回，原parser与生成绑定恢复。私有研究快照保存，正式只交[调查记录](validation/DECISION_AMMO.md)、两次匿名摘要和上游建议diff，不将实验150tests/fixture消费称为实际功能或教学质量提升。
 - 恢复验收：7个upstream源文件与前快照一致，apps/libs/原patch工具无diff，普通WASM无probe导出；原Viewer构建、3项codec＋8项patch tests、恢复后TS/Web build通过，进程退出。
 - 限制：clip/reserve仍未知，原UI A5不变，无模型/用户DB/Memory/密钥操作。未来若修source层，必须保留独立strict-prior/实体端点/变化门和匿名compact，不因两端一致推断区间连续，不由数值产生换弹或判错结论。
+
+## 2026-09-26：原始弹匣无损修复与真实消费零覆盖
+
+- 问题：source2-demo 0.5.4 将 scalar m_iClip1 的 unsigned wire 按 int32 解码，后置 inverse 存在高位碰撞；修复源码还必须真正进入标准 WASM 构建。
+- 决定：仓库内固定 vendor 及双许可证，只在 CS2 字段构造前选 Unsigned32；消费端只接受 raw unsigned，checked_sub(1)并拒绝超界。标准 metadata/WASM/native 共用相对 Cargo patch，lock 固定版本；check 只预检，离线为显式环境选择，不让本次禁止下载变成新环境构建障碍。干净 checkout 先按完整序列 apply，不能要求最后补丁独立可应用。
+- 验证：真实 Field fixture 先红后绿，CS2/非CS2各2通过；parser6/vendor33、相关165及最终工具链26 tests、TS/Web/WASM/Viewer build与Viewer类型检查通过。隔离clean→check→12patches→reuse→local metadata通过。唯一新增真实解析9,198ms，目标7,239帧中2,960有效clip记录、41条空clip采样；不是41次打空事件。同Replay消融44候选与完整路线/4诊断判断建议不变。
+- 限制：4正式cue全部因prior→decision间本人开火拒用，真实教学消费0/4、A4消费未过，不宣称教学质量改善；不再解析或放宽门。现有frame采样间隔8tick，后续可独立设计每玩家最近tick-end小缓存，但尚未证明生命周期/覆盖，不能使用decision同tick结束信息。备弹未知，换弹/捡放事件覆盖未证完整。阶段证据见[验收](validation/LOSSLESS_DECISION_AMMO.md)，ARCHITECTURE仍是合同权威。

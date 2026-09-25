@@ -1,0 +1,110 @@
+{
+  "mode": "REAL_WASM_ONE_PARSE",
+  "demoReads": 1,
+  "parsePasses": 1,
+  "parseMs": 9198,
+  "totalMs": 9444,
+  "networkCalls": 0,
+  "sourceSummary": {
+    "frames": 7239,
+    "emitted": 2960,
+    "valid": true,
+    "zeroClips": 41
+  },
+  "candidates": 44,
+  "formalCues": 4,
+  "ammoCues": 0,
+  "consumedCues": 0,
+  "sameAssessments": true,
+  "samePlan": true,
+  "sameVerdictsAndAdvice": true,
+  "rows": [
+    {
+      "cue": "c1",
+      "round": 3,
+      "decision": 19426,
+      "binding": {
+        "currentTick": 19426,
+        "priorTick": 19418,
+        "strictPrior": true,
+        "priorAmmo": true,
+        "sameEntityAtEndpoints": true,
+        "interveningChanges": [
+          "WEAPON_FIRE",
+          "WEAPON_FIRE"
+        ]
+      },
+      "ammo": null,
+      "consumed": null,
+      "verdictUnchanged": true,
+      "status": "PARTIALLY_SUPPORTED"
+    },
+    {
+      "cue": "c2",
+      "round": 5,
+      "decision": 31179,
+      "binding": {
+        "currentTick": 31179,
+        "priorTick": 31171,
+        "strictPrior": true,
+        "priorAmmo": true,
+        "sameEntityAtEndpoints": true,
+        "interveningChanges": [
+          "WEAPON_FIRE",
+          "WEAPON_FIRE"
+        ]
+      },
+      "ammo": null,
+      "consumed": null,
+      "verdictUnchanged": true,
+      "status": "PARTIALLY_SUPPORTED"
+    },
+    {
+      "cue": "c3",
+      "round": 7,
+      "decision": 44507,
+      "binding": {
+        "currentTick": 44507,
+        "priorTick": 44499,
+        "strictPrior": true,
+        "priorAmmo": true,
+        "sameEntityAtEndpoints": true,
+        "interveningChanges": [
+          "WEAPON_FIRE"
+        ]
+      },
+      "ammo": null,
+      "consumed": null,
+      "verdictUnchanged": true,
+      "status": "PARTIALLY_SUPPORTED"
+    },
+    {
+      "cue": "c4",
+      "round": 7,
+      "decision": 45091,
+      "binding": {
+        "currentTick": 45091,
+        "priorTick": 45083,
+        "strictPrior": true,
+        "priorAmmo": true,
+        "sameEntityAtEndpoints": true,
+        "interveningChanges": [
+          "WEAPON_FIRE"
+        ]
+      },
+      "ammo": null,
+      "consumed": null,
+      "verdictUnchanged": true,
+      "status": "SUPPORTED"
+    }
+  ],
+  "acceptance": {
+    "rawDecoder": "PASS",
+    "realSource": "PASS",
+    "realFormalCueConsumption": "NOT_DEMONSTRATED",
+    "judgmentOrAdviceImprovement": "NOT_DEMONSTRATED",
+    "currentTaskDemoReads": 1,
+    "cumulativeInvestigationDemoReads": 3,
+    "stopReason": "All four formal cues have known WEAPON_FIRE after the latest prior ammo sample. No retry or gate relaxation."
+  }
+}

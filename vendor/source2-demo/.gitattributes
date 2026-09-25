@@ -1,0 +1,2 @@
+# Preserve the crates.io source line endings while checking actual whitespace.
+** whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

@@ -54,10 +54,29 @@ export function currentDiagnosisResources(context: TeachingDiagnosisHostContext,
     if (!bounded(player.armor, 100) || player.armor !== selected.armor) missing.push("armor");
     if (typeof player.helmet !== "boolean" || player.helmet !== selected.has_helmet) missing.push("helmet");
     if (!Array.isArray(player.grenades)) missing.push("inventory");
+    if (!player.weapon || player.weapon !== selected.active_item?.item_id) missing.push("active_item.ammo_clip");
     if (!bounded(player.money, 10_000_000) || player.money !== selected.money) missing.push("money");
     if (!bounded(player.equipmentValue, 10_000_000) || player.equipmentValue !== selected.equipment_value) missing.push("equipment_value");
   }
   if (["alive", "side", "current_side", "fresh_player_state"].some(key => hasMissing(missing, key))) return;
   if (!Array.isArray(selected.fact_refs) || selected.fact_refs.some(ref => typeof ref !== "string" || !ref.trim() || ref.length > 160)) return;
-  return projectDecisionResources({ ...selected, missing_fields: missing });
+  const projected = projectDecisionResources({ ...selected, missing_fields: missing });
+  delete projected.weaponAmmo;
+  const currentItem = selected.active_item;
+  if (!currentItem || hasMissing(missing, "active_item") || !Number.isSafeInteger(currentItem.entity_handle)) return projected;
+  // Latest strictly prior frame only: no fallback through a missing/invalid newer sample.
+  const prior = (context.timeline?.player_state_tracks ?? []).filter(state => state.player_id === context.selectedPlayerId
+    && tick(state.tick) && state.tick >= window.round.start_tick && state.tick < decisionTick).sort((a, b) => b.tick - a.tick);
+  const previous = prior[0];
+  const ammo = previous?.active_item?.ammo_evidence;
+  if (!previous || (prior[1] && prior[1].tick === previous.tick) || decisionTick - previous.tick > window.ageLimit
+    || previous.alive !== true || previous.side !== selected.side || !ammo
+    || ammo.sampled_at_tick !== previous.tick || previous.active_item?.item_id !== currentItem.item_id
+    || ammo.weapon_handle !== currentItem.entity_handle) return projected;
+  if (context.timeline?.match_events?.some(event =>
+    ["WEAPON_FIRE", "RELOAD", "ITEM_PICKUP", "ITEM_DROP"].includes(event.event_type) && event.actor_player_id === context.selectedPlayerId
+    && tick(event.tick) && event.tick > ammo.sampled_at_tick && event.tick <= decisionTick)) return projected;
+  const known = projectDecisionResources(previous, decisionTick).weaponAmmo;
+  if (known) projected.weaponAmmo = known;
+  return projected;
 }

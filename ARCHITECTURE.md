@@ -199,9 +199,13 @@ DecisionResources.health/armor/hasHelmet为可选字段，缺失是unknown，不
 
 诊断执行器优先显式compact，包括空投影；legacy rich仅在没有compact时按同一字段规则投影，不能合并填补缺项。strict schema保留数值边界和额外键拒绝，旧完整投影兼容。风险背景保持原health<=45、armor<=0、已知helmet=false、ECO/FORCE条件：任何明确低预算条件可说明受限；否则只有health/armor/helmet全部已知才可说明未触发原低预算门；缺项或空对象为UNVERIFIABLE，FULL/PISTOL单独不证明全部资源充足。风险Verdict仍INCONCLUSIVE，已知/未知在解释中分开，旧保存产物不重算不改写。
 
-### 2.12.4 弹药来源的当前限制
+### 2.12.4 决策前最近弹匣记录
 
-当前cs2d路径不提供已验证的本人弹匣或备弹教学字段。source2-demo 0.5.4将m_iClip1的unsigned wire按声明int32进行signed解码，可能丢失高位信息；调用端inverse不能无歧义恢复原wire，不能作为正式事实接入。下一步须在受控依赖层仅对该字段选择Unsigned32，保留raw0未知、raw1为空0及边界校验后才谈消费。备弹新旧Demo单位有差异，未建立时代/单位映射前保持未知，聚合total_ammo_left不可作clip。任何后续接入仍须独立采样时间/实体身份来源、strict prior与可证变化失效，不能由低弹药自动判错或建议换弹；本轮调查没有改变现有资源、诊断或历史契约。
+项目内`vendor/source2-demo`固定0.5.4，保留MIT/Apache许可证与来源。仅CS2 scalar `m_iClip1`声明int32时，在生产SendTable构造Field前选择Unsigned32，保留原wire；其他字段/数组/非CS2解码不变。cs2d consumer只接受Unsigned32，checked_sub(1)后限制0..255；raw0、高位及超界均未知，Signed32不得inverse。标准WASM/native构建以相对CLI Cargo patch指向该副本，按锁文件解析并用metadata验证来源和cs2 feature；不修改共享registry或全局Cargo配置。工具链check不提前解析尚未应用补丁的lock，显式离线运行用CARGO_NET_OFFLINE=true。
+
+Parser独立记录tick-start已验证active weapon handle，以及tick-end弹匣样本，核对controller/pawn/weapon实体index与serial、存活/阵营和支持的枪械类型。Adapter 1.9保留独立TICK_END来源、采样tick和ammo ref，不将其合并成tick-start资源。Host先通过既有本人/回合/生命/新鲜度与snapshot门，再选择同回合严格早于decision的最新唯一样本，最多半秒；同名武器及两端已验证实体handle均须一致，缺失/重复/冲突不得向前跳过。可证本人WEAPON_FIRE/RELOAD/ITEM_PICKUP/ITEM_DROP发生在采样之后、decision之前或同tick时使记录失效。
+
+匿名compact只传weapon/clip/独立evidenceRefs，不传handle、玩家身份或原tick。没有独立decision时间的legacy rich路径不投影新弹药。教学只称“决策前最近记录弹匣”：两端同实体不证明区间连续，换弹/拾取/丢弃事件覆盖尚未证明完整，不能称为决策瞬间精确余量。备弹时代/单位仍未知，total_ammo_left不得替代clip。低弹药不改变风险门、Verdict或Transfer建议；旧保存产物不重算。真实验收证明来源可产出，但当前样本4个正式cue均因期间开火而拒用，尚无真实教学消费或质量提升证据，见[本轮验收](docs/validation/LOSSLESS_DECISION_AMMO.md)。
 
 ### 2.13 托管 Demo 与会话恢复
 
