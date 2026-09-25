@@ -2,12 +2,17 @@
 
 更新时间：2026-09-25。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
-## 当前独立任务：决策前本人弹药证据（2026-09-26）
+## 已交付调查：决策前本人弹药证据（2026-09-26）
 
 - 82d234f已push且owner释放；01a0d989-e5a7-77c3-99fb-75a486bcd8a3负责有限来源调查及有证据才实施的弹药事实链，主控只读协调。默认配置，串行当前树。停止相邻Host回调扫描。
 - 依据：contracts/match已有active_item.ammo_clip/ammo_reserve，当前Cs2dPlayerState/normalizeState未提供；Python备用链total_ammo_left是聚合值，不是当前武器弹匣。目标减少讲解缺乏本人可知武器资源背景，绝不由低弹药直接判错或自动建议换弹。
 - A1查当前parser/一手源码确切字段、编码与武器实体身份，fixture先验证；A2若可靠，先给主控最小契约后实现parser事实→adapter→决策前新鲜同玩家同回合信息→实际Host/compact教学消费；未知不造0、aggregate不冒充clip、未来结果不回灌；A3必要时单次限120秒真实Demo探针（先编译成功+小smoke），只输出小摘要，证明实际覆盖与原判断不变；A4相关tests/TS/build及触及parser/viewer构建；A5架构/学习/紧凑证据、commit/push/release。有来源/收益阻塞则交可执行调查结论，不为了额度加字段。
 - 风险/阶段：10分钟来源调查、5分钟fixture，可靠才20分钟实现；一个原Demo解析owner、bulk留所属进程、禁止多次失败重跑/模型/用户DB/密钥/UI服务/安装部署main；来源编码/主动武器绑定/旧数据兼容为重点。deadline外置，build失败不得运行旧binary；owner清理所有probe/build资源，必要5分钟只读复核。原UI A5继续独立等待明确桌面条件。
+
+- 最终结论：本轮不发布弹药功能。第一次生产WASM来源0；明确追加第二次匿名诊断确认32005个合格end clip均为Signed32而被原门拒绝。source2 0.5.4 signed decoder有高位碰撞，后置inverse不能严格证明raw边界；第三次条件变更后未执行，累计Demo读/parse2，0模型。
+- 交付：撤回本轮未证产品与parser接线，保留[来源报告](validation/DECISION_AMMO.md)、两次小摘要、3项离线codec反例和source2局部Unsigned32 decoder建议；实验下游31/相关150tests与TS/build不冒称当前产品能力。私有可复用代码在.local-data/ammo-evidence/rejected-implementation，未提交产品链。
+- 恢复验收：原7个upstream源文件精确恢复，普通WASM无probe导出、原Viewer pipeline通过；3项离线codec＋8项patch tests、恢复后TS/Web build通过，自有进程退出，调查commit/push后release。
+- 下一有限任务：主控独立评估项目内受控vendor/fork＋固定版本Cargo path override，以正确原wire字段decoder替代有损inverse，不改共享registry/不安装依赖；先字段级fixture/构建，再单独授权真实预算。不能把无public override当项目整体等待，也不能未经来源验证宣称弹药判断提升。原UI A5保持。
 
 ## 已交付：恢复入口的等待选文件反馈（2026-09-26）
 

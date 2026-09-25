@@ -1,0 +1,11 @@
+diff --git a/src/parser/demo/commands.rs b/src/parser/demo/commands.rs
+--- a/src/parser/demo/commands.rs
++++ b/src/parser/demo/commands.rs
+@@ -115,0 +116,7 @@
++                    // CS2 m_iClip1 is unsigned on the wire despite its int32 declaration.
++                    // Preserve raw wire here; the consumer owns the +1 ammo convention.
++                    #[cfg(feature = "cs2")]
++                    if var_name == "m_iClip1" {
++                        decoder = FieldDecoder::Unsigned32;
++                    }
++

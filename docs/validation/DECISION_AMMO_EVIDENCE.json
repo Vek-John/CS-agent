@@ -1,0 +1,156 @@
+{
+  "schemaVersion": "ammo-source-investigation.v1",
+  "status": "BLOCKED_AT_RAW_FIELD_DECODER",
+  "demoReadsTotal": 2,
+  "parsePassesTotal": 2,
+  "thirdReadPerformed": false,
+  "firstProductionAttempt": {
+    "mode": "REAL_WASM_ONE_PARSE",
+    "demoReads": 1,
+    "parsePasses": 1,
+    "parseMs": 9093,
+    "totalMs": 9321,
+    "networkCalls": 0,
+    "sourceSummary": {
+      "frames": 7239,
+      "emitted": 0,
+      "valid": true,
+      "zeroClips": 0
+    },
+    "candidates": 44,
+    "formalCues": 4,
+    "ammoCues": 0,
+    "consumedCues": 0,
+    "sameAssessments": true,
+    "samePlan": true,
+    "sameVerdictsAndAdvice": true,
+    "rows": [
+      {
+        "cue": "c1",
+        "round": 3,
+        "decision": 19426,
+        "ammo": null,
+        "consumed": null,
+        "verdictUnchanged": true,
+        "status": "PARTIALLY_SUPPORTED"
+      },
+      {
+        "cue": "c2",
+        "round": 5,
+        "decision": 31179,
+        "ammo": null,
+        "consumed": null,
+        "verdictUnchanged": true,
+        "status": "PARTIALLY_SUPPORTED"
+      },
+      {
+        "cue": "c3",
+        "round": 7,
+        "decision": 44507,
+        "ammo": null,
+        "consumed": null,
+        "verdictUnchanged": true,
+        "status": "PARTIALLY_SUPPORTED"
+      },
+      {
+        "cue": "c4",
+        "round": 7,
+        "decision": 45091,
+        "ammo": null,
+        "consumed": null,
+        "verdictUnchanged": true,
+        "status": "SUPPORTED"
+      }
+    ]
+  },
+  "secondAuthorizedDiagnostic": {
+    "mode": "REAL_WASM_ONE_PARSE",
+    "demoReads": 1,
+    "parsePasses": 1,
+    "parseMs": 9150,
+    "totalMs": 9381,
+    "networkCalls": 0,
+    "sourceSummary": {
+      "frames": 7239,
+      "emitted": 0,
+      "valid": true,
+      "zeroClips": 0
+    },
+    "probeCounts": {
+      "end.attempt": 72273,
+      "end.clip.type.i32": 32005,
+      "end.clip.value.2to31": 11636,
+      "end.clip.value.minus16": 7774,
+      "end.clip.value.negative": 12512,
+      "end.clip.value.one": 83,
+      "end.clip_rejected": 32005,
+      "end.health_nonpositive": 18534,
+      "end.label_change": 315,
+      "end.life.type.u8": 53739,
+      "end.life.value.zero": 53739,
+      "end.not_firearm": 21419,
+      "end.pawn_handle.type.u32": 72273,
+      "end.weapon_handle.type.u32": 53739,
+      "start.attempt": 72273,
+      "start.clip.type.i32": 32158,
+      "start.clip.value.2to31": 11673,
+      "start.clip.value.minus16": 7822,
+      "start.clip.value.negative": 12583,
+      "start.clip.value.one": 80,
+      "start.clip_rejected": 32158,
+      "start.health_nonpositive": 18524,
+      "start.life.type.u8": 53749,
+      "start.life.value.zero": 53749,
+      "start.not_firearm": 21591,
+      "start.pawn_handle.type.u32": 72273,
+      "start.weapon_handle.type.u32": 53749
+    },
+    "candidates": 44,
+    "formalCues": 4,
+    "ammoCues": 0,
+    "consumedCues": 0,
+    "sameAssessments": true,
+    "samePlan": true,
+    "sameVerdictsAndAdvice": true,
+    "rows": [
+      {
+        "cue": "c1",
+        "round": 3,
+        "decision": 19426,
+        "ammo": null,
+        "consumed": null,
+        "verdictUnchanged": true,
+        "status": "PARTIALLY_SUPPORTED"
+      },
+      {
+        "cue": "c2",
+        "round": 5,
+        "decision": 31179,
+        "ammo": null,
+        "consumed": null,
+        "verdictUnchanged": true,
+        "status": "PARTIALLY_SUPPORTED"
+      },
+      {
+        "cue": "c3",
+        "round": 7,
+        "decision": 44507,
+        "ammo": null,
+        "consumed": null,
+        "verdictUnchanged": true,
+        "status": "PARTIALLY_SUPPORTED"
+      },
+      {
+        "cue": "c4",
+        "round": 7,
+        "decision": 45091,
+        "ammo": null,
+        "consumed": null,
+        "verdictUnchanged": true,
+        "status": "SUPPORTED"
+      }
+    ]
+  },
+  "productionIntegrationReleased": false,
+  "reserve": "unknown: era-dependent units not resolved"
+}

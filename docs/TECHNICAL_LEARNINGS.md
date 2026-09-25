@@ -1792,3 +1792,13 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：删除过早dispatch，入口仅同步导航，消除不必要的迟到回调；等待说明明确文件选择后才导入。保留真实Viewer IMPORT_REQUESTED/PROGRESS/SUCCEEDED/FAILED接线，用现有进度给面板导入反馈，不新造domain状态/取消事件。
 - 验证：DORMANT/REJECTED/DEGRADED重复导航和无事件保持原记录/可操作入口、0 runtime调用；真实Runtime无需REPLAY_LOADING即可完成REPLAY_READY→ANALYSIS_READY→RECOVERED。独立复核导入A切B残留progress，新提示会假忙；加requestId绑定和openHistory清进度，1红→绿并闭合。7文件138tests、TS/Web build、diffcheck通过。[记录](validation/RECOVERY_PICKER_FEEDBACK.md)。
 - 限制/下一步：仅Host入口、bridge adapter、Runtime/fakeIDB、SSR和patch契约测试，没有真实选择器取消/导入/浏览器验证，不变更Viewer/Parser/专业判断。无新增教学缺陷证据，不继续扩Host扫描；完整带看应回到已有自然动作回放材料及原暂停A5：仅明确桌面可用后由主控检查专属窗口缓存、限定预算接续，不在本轮新解析或尝试解锁。
+
+
+## 2026-09-26：弹药来源的类型错误不能用有损inverse掩盖
+
+- 问题：希望把本人可知弹匣背景送入讲解，现有contracts有ammo字段但parser未提供。一手源码确认active handle需额外serial校验、tick-start与tick-end不同，reserve单位随Demo时代变化。
+- 实验：fixture/下游消费链可行，但第一次最终WASM真读本人7239帧来源0；主控明确追加第二次匿名分支诊断，32005个合格tick-end clip全是Signed32，原Unsigned-only门全部拒绝。两次解析9093/9150ms，44候选与4cue判断对照不变，累计2次；无第三次。
+- 决定：小域inverse虽然能把-16还原wire31，但高位0xffffffe0也会碰撞成-16，0xfffffffe可碰撞成空弹匣。拒绝发布这一后置补偿，public API没有字段decoder override；给出source2构造Field前只对m_iClip1选Unsigned32的局部建议，受控vendor/fork另立任务。
+- 验证/收敛：3个离线codec反例/规格通过；实验产品接线逐文件撤回，原parser与生成绑定恢复。私有研究快照保存，正式只交[调查记录](validation/DECISION_AMMO.md)、两次匿名摘要和上游建议diff，不将实验150tests/fixture消费称为实际功能或教学质量提升。
+- 恢复验收：7个upstream源文件与前快照一致，apps/libs/原patch工具无diff，普通WASM无probe导出；原Viewer构建、3项codec＋8项patch tests、恢复后TS/Web build通过，进程退出。
+- 限制：clip/reserve仍未知，原UI A5不变，无模型/用户DB/Memory/密钥操作。未来若修source层，必须保留独立strict-prior/实体端点/变化门和匿名compact，不因两端一致推断区间连续，不由数值产生换弹或判错结论。

@@ -199,6 +199,10 @@ DecisionResources.health/armor/hasHelmet为可选字段，缺失是unknown，不
 
 诊断执行器优先显式compact，包括空投影；legacy rich仅在没有compact时按同一字段规则投影，不能合并填补缺项。strict schema保留数值边界和额外键拒绝，旧完整投影兼容。风险背景保持原health<=45、armor<=0、已知helmet=false、ECO/FORCE条件：任何明确低预算条件可说明受限；否则只有health/armor/helmet全部已知才可说明未触发原低预算门；缺项或空对象为UNVERIFIABLE，FULL/PISTOL单独不证明全部资源充足。风险Verdict仍INCONCLUSIVE，已知/未知在解释中分开，旧保存产物不重算不改写。
 
+### 2.12.4 弹药来源的当前限制
+
+当前cs2d路径不提供已验证的本人弹匣或备弹教学字段。source2-demo 0.5.4将m_iClip1的unsigned wire按声明int32进行signed解码，可能丢失高位信息；调用端inverse不能无歧义恢复原wire，不能作为正式事实接入。下一步须在受控依赖层仅对该字段选择Unsigned32，保留raw0未知、raw1为空0及边界校验后才谈消费。备弹新旧Demo单位有差异，未建立时代/单位映射前保持未知，聚合total_ammo_left不可作clip。任何后续接入仍须独立采样时间/实体身份来源、strict prior与可证变化失效，不能由低弹药自动判错或建议换弹；本轮调查没有改变现有资源、诊断或历史契约。
+
 ### 2.13 托管 Demo 与会话恢复
 
 页面刷新或关闭不会持久化 Replay。桌面首次导入时，用户选择的 `File` 先由 cs2d Viewer 使用 sidecar 签发的短期、一次性 IMPORT capability，经 Viewer 自己的 loopback authority 流式写入应用托管资料库；sidecar 同步计算 SHA-256、校验 Demo 文件头并完成内容寻址落盘，之后 Viewer 才把同一 `File` 交给现有 Worker/WASM 解析。Host、Agent、LLM、Memory、Checkpoint 和日志始终不能读取原始 bytes 或绝对路径。localhost/Web Adapter 不具备该桌面资料库时继续维持既有浏览器本地选择语义。
