@@ -1,0 +1,590 @@
+{
+  "schemaVersion": "real-action-replay-validation.v1",
+  "date": "2026-09-25",
+  "baseline": "458ec88",
+  "productBaseline": "b5da690",
+  "source": "existing authorized test_demo.dem; WASM sampling argument 8",
+  "playerOrdinalRule": "Preferred selection first; then original Replay.players order excluding preferred. Ordinals contain no player identity.",
+  "preferredSelection": "same selection as prior UI acceptance",
+  "processDeadlineSeconds": 120,
+  "processDeadlineOwner": "external Python subprocess supervisor; process group killed on timeout",
+  "real": {
+    "mode": "REAL_DEMO_RULE_ROUTE_SIMULATED_TRANSPORT",
+    "demoReads": 1,
+    "parsePasses": 1,
+    "parseMs": 6255,
+    "totalMs": 7053,
+    "fetchCalls": 0,
+    "route": "Adapter deterministic Director fallback; no CS-Net or model; not the earlier UI route",
+    "results": [
+      {
+        "player": 1,
+        "candidates": 44,
+        "cues": 4,
+        "ticks": 23,
+        "ordinarySkips": 9,
+        "sessionCompleted": true,
+        "rows": [
+          {
+            "cue": "c1",
+            "round": 3,
+            "window": {
+              "decision": 19426,
+              "reveal": 19429,
+              "end": 19685
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c1",
+              "outcomeEndTick": 19685,
+              "status": "COMPLETE",
+              "completedAtTick": 19685
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          },
+          {
+            "cue": "c2",
+            "round": 5,
+            "window": {
+              "decision": 31179,
+              "reveal": 31187,
+              "end": 31443
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c2",
+              "outcomeEndTick": 31443,
+              "status": "COMPLETE",
+              "completedAtTick": 31443
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          },
+          {
+            "cue": "c3",
+            "round": 7,
+            "window": {
+              "decision": 44507,
+              "reveal": 44515,
+              "end": 44771
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c3",
+              "outcomeEndTick": 44771,
+              "status": "COMPLETE",
+              "completedAtTick": 44771
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          },
+          {
+            "cue": "c4",
+            "round": 7,
+            "window": {
+              "decision": 45091,
+              "reveal": 45092,
+              "end": 45348
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c4",
+              "outcomeEndTick": 45348,
+              "status": "COMPLETE",
+              "completedAtTick": 45348
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          }
+        ]
+      },
+      {
+        "player": 2,
+        "candidates": 58,
+        "cues": 2,
+        "ticks": 17,
+        "ordinarySkips": 9,
+        "sessionCompleted": true,
+        "rows": [
+          {
+            "cue": "c1",
+            "round": 1,
+            "window": {
+              "decision": 4281,
+              "reveal": 4285,
+              "end": 4541
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c1",
+              "outcomeEndTick": 4541,
+              "status": "COMPLETE",
+              "completedAtTick": 4541
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          },
+          {
+            "cue": "c2",
+            "round": 5,
+            "window": {
+              "decision": 29635,
+              "reveal": 29643,
+              "end": 29899
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c2",
+              "outcomeEndTick": 29899,
+              "status": "COMPLETE",
+              "completedAtTick": 29899
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          }
+        ]
+      },
+      {
+        "player": 3,
+        "candidates": 63,
+        "cues": 2,
+        "ticks": 17,
+        "ordinarySkips": 9,
+        "sessionCompleted": true,
+        "rows": [
+          {
+            "cue": "c1",
+            "round": 2,
+            "window": {
+              "decision": 12473,
+              "reveal": 12481,
+              "end": 12737
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c1",
+              "outcomeEndTick": 12737,
+              "status": "COMPLETE",
+              "completedAtTick": 12737
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          },
+          {
+            "cue": "c2",
+            "round": 3,
+            "window": {
+              "decision": 19426,
+              "reveal": 19434,
+              "end": 19690
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c2",
+              "outcomeEndTick": 19690,
+              "status": "COMPLETE",
+              "completedAtTick": 19690
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          }
+        ]
+      },
+      {
+        "player": 4,
+        "candidates": 66,
+        "cues": 1,
+        "ticks": 13,
+        "ordinarySkips": 9,
+        "sessionCompleted": true,
+        "rows": [
+          {
+            "cue": "c1",
+            "round": 1,
+            "window": {
+              "decision": 7009,
+              "reveal": 7013,
+              "end": 7269
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c1",
+              "outcomeEndTick": 7269,
+              "status": "COMPLETE",
+              "completedAtTick": 7269
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          }
+        ]
+      },
+      {
+        "player": 5,
+        "candidates": 67,
+        "cues": 3,
+        "ticks": 21,
+        "ordinarySkips": 9,
+        "sessionCompleted": true,
+        "rows": [
+          {
+            "cue": "c1",
+            "round": 2,
+            "window": {
+              "decision": 13465,
+              "reveal": 13473,
+              "end": 13729
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c1",
+              "outcomeEndTick": 13729,
+              "status": "COMPLETE",
+              "completedAtTick": 13729
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          },
+          {
+            "cue": "c2",
+            "round": 2,
+            "window": {
+              "decision": 14481,
+              "reveal": 14483,
+              "end": 14739
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c2",
+              "outcomeEndTick": 14739,
+              "status": "COMPLETE",
+              "completedAtTick": 14739
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          },
+          {
+            "cue": "c3",
+            "round": 7,
+            "window": {
+              "decision": 42067,
+              "reveal": 42074,
+              "end": 42330
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c3",
+              "outcomeEndTick": 42330,
+              "status": "COMPLETE",
+              "completedAtTick": 42330
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          }
+        ]
+      },
+      {
+        "player": 6,
+        "candidates": 58,
+        "cues": 4,
+        "ticks": 23,
+        "ordinarySkips": 9,
+        "sessionCompleted": true,
+        "rows": [
+          {
+            "cue": "c1",
+            "round": 1,
+            "window": {
+              "decision": 8257,
+              "reveal": 8259,
+              "end": 8515
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c1",
+              "outcomeEndTick": 8515,
+              "status": "COMPLETE",
+              "completedAtTick": 8515
+            },
+            "actionAudit": {
+              "candidateActionCount": 1,
+              "cueActionRefs": [
+                "fact-cs2d-r1-event-123-action"
+              ],
+              "narrationActionRefs": [
+                "fact-cs2d-r1-event-123-action"
+              ],
+              "actions": [
+                {
+                  "id": "fact-cs2d-r1-event-123-action",
+                  "at": 8259,
+                  "demoSource": true,
+                  "selectedActor": true,
+                  "inWindow": true,
+                  "candidateBound": true,
+                  "cueBound": true,
+                  "factBound": true,
+                  "narrated": true
+                }
+              ]
+            },
+            "capabilities": [
+              {
+                "tool": "REPLAY_CUE_SLOW",
+                "purpose": "ACTION_FACT_REPLAY",
+                "refs": [
+                  "fact-cs2d-r1-event-123-state",
+                  "fact-cs2d-r1-event-123-alive-counts",
+                  "fact-cs2d-r1-event-123-score",
+                  "fact-cs2d-r1-event-123-clock",
+                  "fact-cs2d-r1-event-123-bomb",
+                  "fact-cs2d-r1-event-123-action",
+                  "fact-cs2d-r1-event-123-outcome",
+                  "e1",
+                  "evidence-candidate-r1-bomb-cs2d-r1-event-123"
+                ]
+              }
+            ],
+            "graphStatus": "WAITING_TOOL",
+            "effectCount": 1,
+            "fallbackReasons": [],
+            "command": {
+              "tool": "REPLAY_CUE_SLOW",
+              "startCanonicalTick": 8193,
+              "decisionCanonicalTick": 8257,
+              "outcomeEndCanonicalTick": 8515,
+              "speed": 0.5,
+              "callIdFromGraph": true,
+              "duplicateSuppressed": true
+            },
+            "simulatedAckClosed": true
+          },
+          {
+            "cue": "c2",
+            "round": 2,
+            "window": {
+              "decision": 12169,
+              "reveal": 12172,
+              "end": 12428
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c2",
+              "outcomeEndTick": 12428,
+              "status": "COMPLETE",
+              "completedAtTick": 12428
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          },
+          {
+            "cue": "c3",
+            "round": 6,
+            "window": {
+              "decision": 38819,
+              "reveal": 38820,
+              "end": 39076
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c3",
+              "outcomeEndTick": 39076,
+              "status": "COMPLETE",
+              "completedAtTick": 39076
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          },
+          {
+            "cue": "c4",
+            "round": 7,
+            "window": {
+              "decision": 45051,
+              "reveal": 45059,
+              "end": 45315
+            },
+            "focus": "REVIEW_UNCERTAINTY",
+            "assessment": "INSUFFICIENT_EVIDENCE",
+            "gate": {
+              "cueId": "c4",
+              "outcomeEndTick": 45315,
+              "status": "COMPLETE",
+              "completedAtTick": 45315
+            },
+            "actionAudit": {
+              "candidateActionCount": 0,
+              "cueActionRefs": [],
+              "narrationActionRefs": [],
+              "actions": []
+            },
+            "capabilities": [],
+            "graphStatus": "COMPLETED",
+            "effectCount": 0,
+            "fallbackReasons": [],
+            "rejection": "NO_PLAYER_ACTION_FACTS"
+          }
+        ]
+      }
+    ]
+  },
+  "smoke": {
+    "mode": "SYNTHETIC_SMOKE",
+    "demoReads": 0,
+    "parsePasses": 0,
+    "fetchCalls": 0
+  },
+  "smokeChecks": {
+    "cues": 2,
+    "ordinarySkips": 1,
+    "sessionCompleted": true,
+    "naturalEffects": 1
+  },
+  "limitations": [
+    "Deterministic Adapter rule routes, no CS-Net or model; not the prior UI route.",
+    "Canonical progress and one ACK were simulated; no Viewer/browser/desktop/pause/seek/reconnect acceptance.",
+    "Session reducer completed each route; Graph checked cue lifecycles and preceding observers, not trailing observers or COMPLETE_SESSION.",
+    "Only first six player routes inspected; stopped after consuming the complete first route with a legal case.",
+    "Action evidence demonstrates an occurred fact, not decision quality or exact action start."
+  ]
+}

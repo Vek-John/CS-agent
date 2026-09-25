@@ -26,11 +26,15 @@
 
 用户再次明确“怎么停了，继续”：锁屏只阻塞原UI A5，不代表项目整体应等待。主控继续推进不依赖桌面的真实数据、接线、恢复与学习；阶段交付后选择下一项有实际收益的独立工作。不能把无新UI条件当作停掉全部工作的依据，也不制造无价值变更或重复审计。heartbeat同样遵守这条纠正。
 
-当前任务01a0d91d-29b6-7b80-b935-ef39ee0d0966“验证真实路线的自然慢放资格”，基线7ba8d0a（产品b5da690），独占本轮脚本/紧凑证据/必要窄修复及文档，其他owner已release，主控只读。原A5/残留InPrivate窗口保持独立待恢复，不启动CUA。
+任务01a0d91d-29b6-7b80-b935-ef39ee0d0966“验证真实路线的自然慢放资格”已完成本地验收，实际起始基线458ec88（产品b5da690）；同分支commit/push后释放脚本/证据/docs写入，主控接续选择独立工作。原A5/残留InPrivate窗口保持独立待恢复，不启动CUA。
 
 - 目标/流程：已有Demo只解析一次→先Dog，再必要时同一Replay其余玩家逐个派生真实规则路线→生产Compiler/Narrator/Host当前purpose资格→默认Graph/Host command，形成自然可执行案例和具体拒绝原因；不强制cue/工具，不冒称UI通过。
 - 验收：A1先纯fixture贯通工具入口和状态机，确保smoke覆盖普通SKIP、多cue；A2一次WASM120秒、单进程拥有bulk且每player只留紧凑摘要，最多10人；A3自然候选与门逐项来源有据，默认Policy能自然effect或明确FINISH，至少一个合法case验证Host命令与原窗口/refs；A4真实缺陷先小fixture复现再窄修，相关tests/TS/build后push，无问题只交学习证据；A5记录真实数据与模拟执行界限、清理/释放和下一高价值建议。
 - 风险/阶段：5分钟小smoke、一次解析及所有派生总120秒，20分钟核对/必要修复，10分钟checks/build；每stage先写小摘要再进行下游步骤，不能因恢复辅助失败丢全部证据。只允许一次读Demo，不再新native/browser/harness；同基础设施两败先简化。命令端模拟只证明接线，不关闭真实pause≥12秒/seek/reconnect A5。无外部模型/用户DB/Memory/密钥/安装发布main合并，默认模型/推理，单写owner，不复制大数据。
+
+- 本轮结果：唯一Demo读取/解析各1次，6255ms解析/7053ms总计，外部120秒限时。按Dog优先顺序顺次派生6玩家、356候选、16自然cue；P6/c1/R1 decision8257/reveal8259/end8515得到自然ACTION_FACT_REPLAY→默认Graph→Host8193–8515/0.5倍速命令，15cue无PlayerActionFact正确FINISH。无产品缺陷，无Parser/Viewer/判断/路线改动。
+- 验证/局限：两cue/普通skip/自动freeze smoke先通过，真实各Session结果门由reducer到达；一条ACK明确模拟，原UI A5不变，规则路线无CS-Net/模型且不是此前UI同一路线。项目/脚本TS与production build通过（移走旧临时验收接口的过期Next dev类型缓存后）；独立5分钟只读real_route_evidence_review无must-fix，不重复257基线测试。见[记录](validation/REAL_ACTION_REPLAY.md)和匿名JSON。
+- 释放/下一步：全部parse/smoke/check/build退出，无浏览器/服务/用户DB/Memory/密钥操作；commit/push后release。下一独立方向：Adapter普通shot已进WEAPON_FIRE，但hasVerifiedAction仅RETURN_AND_FIRE/UTILITY/非爆炸BOMB；用小fixture证明确有合法shot时DEATH/HP_CHANGE窗口是否有事实传递缺口，不能从15无action臆断窗口实际有开火；不能将锁屏视为整体项目停止，也不能自动重读同一Demo。
 
 ## 新接线后的原A5接续（2026-09-25）
 
@@ -80,7 +84,7 @@
 
 | 已push，本地验收完成 | 现行教学主题与证据工具接线 | 01a0d8c0-2ca6-71e2-a54c-d210097d46b3；已release | b5da690；当前Compiler→Host红→绿，唯一ACTION_FACT_REPLAY保持动作/引用/完整结果窗口门，默认Graph自然effect；257相关用例/TS/build通过，真实UI待原A5 |
 
-| 执行中 | 真实路线自然慢放资格 | 01a0d91d-29b6-7b80-b935-ef39ee0d0966；独占本轮写入 | 基于b5da690新实现，用同一真实Replay验证默认路线/资格/Graph/Host命令，原UI锁屏不阻塞此线 |
+| 已完成本地验收，同分支交付 | 真实路线自然慢放资格 | 01a0d91d-29b6-7b80-b935-ef39ee0d0966；push后release | 一次解析6玩家16cue：1自然慢放、15无动作正确FINISH；生产Session门/Graph/Host接线通过，模拟ACK不关闭UI A5；见REAL_ACTION_REPLAY.md |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
 

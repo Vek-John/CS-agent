@@ -1727,3 +1727,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：不把前序smoke当作后续UI仍可用的保证；CUA明确锁屏后立即停止，不重复驱动/解析，不将点击尝试、旧空工具或集成自然effect当真实验收。
 - 验证：基线6cb402d一次真实解析到“解析完成/10人选择”，服务小摘要仅两次IDLE，无工具或START_CUE；controller退出、端口释放，临时遥测全部移除。无产品改动，不重跑既有257用例/构建。详见[原A5记录](validation/TEACHING_PLAYBACK_CONTROLS.md)。
 - 限制：原A5仍未完成，新接线真实工具效果未知；专属InPrivate因锁屏未关闭，解锁后先检查现有Replay可复用性，再继续原验收，不能为了补证无预算重解析。代码写入在文档push后释放。
+
+
+## 2026-09-25：真实规则路线可自然触发动作回放
+
+- 问题：b5da690 只通过合成主链证明动作事实演示接线；真实 UI 被锁屏阻塞，不能因此将其它项目验证全部暂停，也不能把模拟执行当 UI 通过。
+- 决定：单 Node owner 一次读/解析原 Demo，顺序派生原玩家及必要其他玩家，复用生产 Compiler/Narrator/Session/Host/默认 Graph。先用两 cue/普通 SKIP smoke 验证编排；Session 自动冻结跳过与 Graph observer 分别处理，不手写结果 gate。只保存匿名小摘要。
+- 验证：6255 ms 解析、7053 ms 总计，6 玩家/356 候选/16 自然 cue；P6/R1/8257–8515 的本人动作事实被 Narrator 引用，自然得到一条 0.5 倍慢放命令；15 个 cue 无 PlayerActionFact，正确 FINISH。0 网络/模型调用，外部 120 秒期限，真实阶段一次成功。Script smoke、项目/脚本 TS 与 production build 通过；构建过期 dev 类型缓存移走后恢复。独立只读复核无 must-fix。
+- 限制：规则路线未运行 CS-Net/模型，与旧 UI 选点不同；ACK/进度模拟不验证真实渲染、暂停/seek/重连。Session 完成不等于 Graph 尾段/整场完成。本轮没有产品缺陷或代码修复，也没有专业质量提升结论。下一步可用现有射击小材料调查死亡/受击候选的动作绑定覆盖：Adapter 普通 shot 已进入 WEAPON_FIRE，但 hasVerifiedAction 仅 RETURN_AND_FIRE/UTILITY/非爆炸 BOMB；先证明确有合法 shot 时是否丢失传递，再决定后续工作；不把缺动作直接判成来源遗漏。[证据](validation/REAL_ACTION_REPLAY.md)。
