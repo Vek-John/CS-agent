@@ -1606,4 +1606,6 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - **入口一致性**：时间轴、拖动和±15秒使用同一显式seek入口。只读独立审查发现无Session时pause latch会拦住旧独立seek路径，已修复并补对应回归。返回默认路线await也检查控制epoch，防止旧恢复撤销新选择。
 - **教学停靠取舍**：通用播放按钮在教学停靠/缓冲等非主动播放阶段禁用，用户使用既有卡片回看/继续，不让raw play绕过Outcome gate。已有Stage3教学工具播放时也不能用这个按钮暂停，可用自由seek接管取消；本轮没有重写工具播放生命周期。
 - **验证**：8文件105相关测试、TypeScript和production build通过。包含默认及已看manual结果窗口暂停，暂停期间旧大tick不推进、门不提前开放、续播只play且恰好一次完成，free seek仍接管，无Session seek正常，快速暂停续播/更新epoch和延迟自动skip。
-- **环境限制**：本轮真实页面验收尚未通过。Edge原生连接持续超时；内置浏览器能返回localhost DOM/截图，但文件入口的AX、DOM和坐标点击均报告目标不可用，未能导入Demo。已询问用户是否锁屏/远程断开；不能把上轮UI结果或本轮自动测试替代本轮实际交互验收。详细状态见[本轮证据](validation/GUIDED_PAUSE_RESUME.md)。
+- **环境限制**：初次真实页面验收受阻（后已补验通过）。Edge原生连接持续超时；内置浏览器能返回localhost DOM/截图，但文件入口的AX、DOM和坐标点击均报告目标不可用，未能导入Demo。后来工具明确报告Mac锁屏，三轮后goal进入blocked；15:23原生Edge控制恢复后，复用单控制器与一个新InPrivate窗口完成原四条UI验收，没有把上轮UI结果或自动测试替代实际交互。详细状态见[本轮证据](validation/GUIDED_PAUSE_RESUME.md)。
+
+- **补验结果**：默认片段暂停6秒保持同一点，Space续播保持带看；真实结果窗口8995暂停后Return续播、完成后回8969；已看cue manual回访9004暂停6秒后续播停回8969，返回默认恢复R2 2/4；暂停后显式后退15秒进入自由查看并保持6秒。四条真实路径通过，无新增代码改动，不重复已通过的105测试/TS/build。窗口和服务已清理。键盘Space/Return沿同一button入口工作，完整证据见上链。
