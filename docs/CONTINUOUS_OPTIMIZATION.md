@@ -2,6 +2,13 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 当前任务：手动回访完成后的有据追问（2026-09-26）
+
+- 9311269已push/clean、210tests/TS/build且owner release；01a0da50-848f-78d3-bb41-f028c8aed357串行独占问答上下文gate/visit状态key、必要窄Host和tests/docs，默认配置，主控只读。
+- 来源依据：Session BEGIN_MANUAL_CUE_VISIT重置outcome gate，finishOutcome完成本visit但故意不写global revealed；当前问答一律拒绝manual/takeover，导致已完整回看的合法诊断无法用3+4类既有问法。本轮只补问答，不新增manual重播或修改Session reducer/全局进度。
+- A1真实manual reducer从开始到结束证明fresh gate与global reveal区别，完成前不显示/不答；A2同visit PAUSED+匹配COMPLETE及原现代可信内容才支持既有问法，合法manual takeover可读、普通自由查看仍拒绝；A3key绑定visit_id，旧visit回调拒绝、同visit重渲染保留草稿，返回默认游标/consumed/presented不因提问改变，无额外诊断/Memory/历史写；A4相关tests/TS/build；A5架构/学习/简证/任务板commit/push/release。
+- 5分钟门契约、10分钟小改、10分钟验证；emil/apple沿用，不绕原本次visit播放门，不借global旧看过记录授权，不扩持久化/自由语义/新字段或重播控制。0Demo/模型/浏览器服务/用户DB密钥/安装部署main，证据为生产模块/Session/SSR，原UI A5独立等待。owner清自有进程。
+
 ## 已交付：已验证资源数值追问（2026-09-26）
 
 - 7913aac已push/clean且owner release，有限3类追问81tests/TS/build通过。01a0da41-5267-7a31-b26b-d7a55e040a59串行独占现有问答纯投影/必要Host来源接线/少量问法/tests/docs，主控只读，默认配置。
