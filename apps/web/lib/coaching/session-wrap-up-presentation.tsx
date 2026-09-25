@@ -1,4 +1,5 @@
 import type { CoachAgentResult, SessionWrapUpResult } from "@cs-coach/coach-agent/client";
+import type { ReviewPlan } from "@cs-coach/contracts";
 
 export function canPublishSessionWrapUp(result: CoachAgentResult, generation: number, currentGeneration: number, runId: string, takenOver: boolean): boolean {
   return generation === currentGeneration && !takenOver && result.identity.runId === runId
@@ -45,7 +46,27 @@ export function sessionWrapUpFailureMessage(error: unknown): string {
     ? "SOURCE_LIMITATIONS_EXCEED_OUTPUT_LIMIT" : "INVALID_PRESENTABLE_INPUT")!;
 }
 
-export function SessionWrapUpPanel({ status, result, request, plan, phase, error, onComplete }: {
+function representativeRoundLabels(theme: SessionWrapUpResult["bundle"]["themes"][number], plan?: ReviewPlan): string[] {
+  if (plan?.status !== "COMPLETE") return [];
+  const rounds = new Set<number>();
+  for (const ref of theme.summary.refs) {
+    const matches = plan.cues.filter(cue => cue.id === ref);
+    if (matches.length !== 1) continue;
+    const cue = matches[0];
+    // Summary refs can also name evidence. Only unambiguous, same-theme cue refs locate a case.
+    if (cue.primary_focus_code !== theme.focus || plan.cues.some(candidate =>
+      [...candidate.facts, ...candidate.inferences, ...candidate.advice, ...candidate.evidence,
+        ...(candidate.action_facts ?? []), ...(candidate.outcome_facts ?? [])].some(item => item.id === ref))) continue;
+    const segments = plan.segments.filter(segment => segment.id === cue.segment_id);
+    if (segments.length !== 1) continue;
+    const segment = segments[0];
+    if (!segment.cue_ids.includes(cue.id) || !Number.isSafeInteger(segment.round_number) || segment.round_number <= 0) continue;
+    rounds.add(segment.round_number);
+  }
+  return [...rounds].map(round => `第 ${round} 回合`);
+}
+
+export function SessionWrapUpPanel({ status, result, plan, phase, error, onComplete }: {
   status: string; result?: SessionWrapUpResult;
   request?: import("@cs-coach/coach-agent/client").SessionWrapUpRequest;
   plan?: import("@cs-coach/contracts").ReviewPlan;
@@ -56,14 +77,9 @@ export function SessionWrapUpPanel({ status, result, request, plan, phase, error
     {status === "LOADING" ? <p>正在整理已完成且可呈现的讲解点。</p> : null}
     <SessionWrapUpNotice error={error} />
     {(result?.bundle.themes.length ?? 0) > 0 ? <div>{result?.bundle.themes.slice(0, 3).map((theme, index) => {
-      const requestTheme = request?.themes.find(candidate => candidate.focus === theme.focus);
-      const roundLabels = [...new Set((requestTheme?.cueRefs ?? []).map(cueId => {
-        const cue = plan?.cues.find(cue => cue.id === cueId);
-        const segment = plan?.segments.find(segment => segment.id === cue?.segment_id);
-        return segment?.round_number ? `第 ${segment.round_number} 回合` : "准备阶段";
-      }))];
+      const roundLabels = representativeRoundLabels(theme, plan);
       return <article key={`${theme.focus}-${index}`} className="cs2d-coach-card">
-        <small>主题 {index + 1} · {roundLabels.join("、") || "已完成讲解点"}</small>
+        <small>主题 {index + 1} · {roundLabels.length ? `代表案例：${roundLabels.join("、")}` : "已完成讲解点"}</small>
         <p>{theme.summary.text}</p><p><b>训练建议：</b>{theme.trainingAdvice.text}</p>
       </article>;
     })}</div> : result && status !== "LOADING" && !error ? <p>本场没有足够重复且条件明确的证据，暂不归纳为习惯。</p> : null}

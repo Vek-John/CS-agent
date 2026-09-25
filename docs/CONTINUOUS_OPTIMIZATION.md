@@ -2,6 +2,13 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：历史总结的可验证代表案例回合（2026-09-26）
+
+- 基线 e25df67；01a0da91-8b1a-7941-a95c-6f833c9807ed 串行独占总结展示/tests/docs，主控只读复核真实 diff，无 must-fix。A1 默认 deterministic→实际内存保存/恢复校验→Panel SSR 得到回合丢失红例；A2 从保存 summary.refs 解析当前 COMPLETE plan 唯一同主题 cue 和反向 segment，正整数回合去重；A3 混合/旧/歧义引用保守降级；A4 相关 tests/TS/build；A5 学习日志/简证及 commit/push/RELEASE。
+- 只显示“代表案例”，不用临时 request 填整个主题回合，不把未知写成准备阶段。保留三主题、限定、失败状态和既有样式。未改 Host/Controller/Graph、总结生成政策、Memory、保存 schema 或架构契约。
+- 相关 5 文件 68 tests 通过，目标红例转绿；TypeScript 测试 refs 类型修复后通过，Web production build 通过。[验证记录](validation/SUMMARY_REPRESENTATIVE_ROUNDS.md)。单回合 authored summary projection 不验证 Graph 重复资格；旧缺 focus 仍降级；SSR/内存恢复不等于完整 Host/真实 UI/DB 验收，原 UI A5 保持。
+- 无真实 Demo/模型/浏览器服务/用户 DB 或密钥/安装部署/main 操作；不声称专业判断或性能提升。自有验证进程完成后 commit/push 并释放文件所有权。
+
 ## 已交付：历史回放入口有限等待与迟到失败隔离（2026-09-26）
 
 - 基线c8bba49已push/clean，产品1f7c091；01a0da83-62cf-77c2-8d01-0e4f7c5af15b串行独占7f2b功能分支的review-history API/Controller/Host source阶段及tests/docs，主控只读。未切main/新建旧基线或触用户主树修改。

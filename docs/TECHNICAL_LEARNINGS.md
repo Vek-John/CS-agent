@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：总结出处应跟随保存结果，而非临时请求
+
+- 问题：Panel 从 transient request.theme.cueRefs 推回合，历史恢复只有 result 时丢失出处；live 还可能把整个主题回合误当代表段落来源，缺 segment 被标为准备阶段。
+- 决定/落点：session-wrap-up-presentation 只解析保存 summary.refs。当前 COMPLETE plan 中唯一同 focus cue、无其他证据 ID 歧义、唯一且反向含 cue 的 segment 和正整数 round 才显示“代表案例”；去重后展示已核实子集，其余降级。保留 request prop 兼容，不读取它补造出处。
+- 验证：真实默认 deterministic 保存→内存恢复校验→Panel SSR 先红后绿；相关 5 文件 68 项通过，测试类型修复后 TS 通过，Web production build 通过。主控只读复核无 must-fix；[紧凑证据](validation/SUMMARY_REPRESENTATIVE_ROUNDS.md)。
+- 限制：测试构造的单回合总结投影不代表 Graph 重复主题资格；schema 合法也不等于语义出处验证。旧缺 focus cue 仍保守降级；无真实 Host/浏览器/DB/模型验证、无专业质量或性能提升结论。只改展示既有数据，未改变架构或持久化契约。
+
 ## 1. 维护规则
 
 以下变化合并时，同时更新本文：

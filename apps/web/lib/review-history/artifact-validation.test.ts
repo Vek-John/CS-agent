@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { SessionWrapUpResult } from "@cs-coach/coach-agent/client";
+import type { SessionWrapUpResult, SessionWrapUpRequest } from "@cs-coach/coach-agent/client";
+import type { ReviewPlan, NarrationBundle } from "@cs-coach/contracts";
 import { completeAndSaveSessionWrapUp } from "../coaching/session-wrap-up-completion";
 import { sessionWrapUpPresentation, SessionWrapUpPanel } from "../coaching/session-wrap-up-presentation";
 import { HistoryPersistenceController } from "./history-persistence-controller";
@@ -170,6 +171,51 @@ function fixture(): { loaded: LoadedReview; head: CommitRuntimeHeadInput } {
 }
 
 describe("Review artifact domain validation", () => {
+  it("restores the deterministic summary's representative round without its transient request", async () => {
+    const { loaded, head } = fixture();
+    const plan = loaded.artifacts.find(a => a.artifactType === "REVIEW_PLAN")!.payload as unknown as ReviewPlan;
+    const representative = plan.cues[0], focus = representative.primary_focus_code!;
+    const sameTheme = plan.cues.filter(cue => cue.primary_focus_code === focus);
+    expect(sameTheme.length).toBeGreaterThanOrEqual(1);
+    const narration = loaded.artifacts.find(a => a.artifactType === "NARRATION_BUNDLE" && a.artifactKey === representative.id)!.payload as unknown as NarrationBundle;
+    const advice = { id: "fixture-summary-advice", text: narration.betterPlay.text, fact_refs: [...narration.betterPlay.refs] };
+    const evidenceRefs = representative.facts.map(f => f.id);
+    const stored = [...loaded.artifacts];
+    const appendArtifact = vi.fn(async (_reviewId, input) => {
+      validateReviewArtifactAppend(loaded, { reviewRevisionId: input.revisionId, artifactType: input.artifactType, artifactKey: input.artifactKey,
+        artifactRevision: input.artifactRevision, schemaVersion: input.schemaVersion, payload: json(input.payload), idempotencyKey: input.idempotencyKey });
+      stored.push({ ...stored[0], artifactId: "summary", artifactType: input.artifactType, artifactKey: input.artifactKey, schemaVersion: input.schemaVersion, payload: json(input.payload) });
+    });
+    const persistence = new HistoryPersistenceController({ createReview: vi.fn(), startRevision: vi.fn(), appendArtifact, commitRuntimeHead: vi.fn(), markFailed: vi.fn() });
+    persistence.adopt("review-a", "revision-a", "managed-demo-a");
+    let result: SessionWrapUpResult | undefined, request: SessionWrapUpRequest | undefined;
+    // Authored summary projection exercises persistence/display, not Graph repetition eligibility.
+    const buildInput = vi.fn(() => ({
+      summary: { schemaVersion: "coach-agent-session-summary.v1" as const, themes: [{ focus, cueRefs: sameTheme.map(cue => cue.id), roundRefs: [],
+        evidenceRefs, occurrence: sameTheme.length, economyContext: "FULL" as const, repeated: true as const, conflictEvidence: false, adviceRefs: [advice.id], limitations: [] }],
+        completedCues: [{ cueId: representative.id, roundId: "round-1", focus, evidenceRefs, adviceRefs: [advice.id] }], limitations: [] },
+      presentableCues: { [representative.id]: { cueId: representative.id, focus,
+        coreIssue: { ...narration.coreIssue, refs: [...narration.coreIssue.refs], limitations: [] },
+        betterPlay: { ...narration.betterPlay, refs: [...narration.betterPlay.refs], limitations: [] },
+        advice: [{ id: advice.id, text: advice.text, refs: advice.fact_refs }] } },
+    }));
+    await completeAndSaveSessionWrapUp({ persistence, isCurrent: () => true, buildInput,
+      onRequest: value => { request = value; }, onResult: value => { result = value; }, onSaveError: () => { throw new Error("unexpected save failure"); } });
+    expect(result?.manifest.reason).toBe("CLOSED_SESSION_PROJECTION");
+    expect(result?.bundle.themes[0].summary.refs).toEqual([representative.id]);
+    const round = plan.segments.find(segment => segment.id === representative.segment_id)!.round_number;
+    const live = renderToStaticMarkup(createElement(SessionWrapUpPanel, { status: "READY", result, request, plan, phase: "COMPLETED", onComplete() {} }));
+    expect(live).toContain(`第 ${round} 回合`);
+    const writesBefore = appendArtifact.mock.calls.length;
+    const restored = restoreHistoryControlPlane({ review: { id: "review-a", demoId: "managed-demo-a", title: "saved", status: "COMPLETED", selectedPlayerId: "player-a" },
+      revision: { id: "revision-a", status: "READY", artifactContractVersion: 2, routeId: head.routeId, routeHash: head.routeHash },
+      artifacts: stored.map(a => ({ kind: a.artifactType, key: a.artifactKey, payload: a.payload })), runtimeHead: null });
+    const validated = validateStoredReviewArtifacts({ ...restored, selectedPlayerId: "player-a", demoContentHash: HASH, routeId: head.routeId, routeHash: head.routeHash });
+    expect(validated.summary).toEqual(result);
+    const recovered = renderToStaticMarkup(createElement(SessionWrapUpPanel, { status: "READY", result: validated.summary!, plan: validated.plan, phase: "COMPLETED", onComplete() {} }));
+    expect(recovered).toContain(`第 ${round} 回合`);
+    expect(appendArtifact).toHaveBeenCalledTimes(writesBefore); expect(buildInput).toHaveBeenCalledOnce();
+  });
   it("accepts legacy and visit-bound replay records while rejecting unbound identity and tick fields", () => {
     const { loaded, head } = fixture();
     const plan = loaded.artifacts.find(a => a.artifactType === "REVIEW_PLAN")!.payload as Record<string, JsonValue>;
