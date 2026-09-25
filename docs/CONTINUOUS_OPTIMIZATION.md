@@ -2,6 +2,12 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：保留教学建议已生成的适用限制（2026-09-26）
+
+- 基线 6c6c720 已 push/clean，前 owner RELEASE；01a0da9f-bb2d-7151-8e81-8e1502a03145 独占 Panel/tests/docs，主控只读，默认配置无子代理。风险集中在 slice4 再裁剪、改写语义及 12 条内容挤压操作；复用现有列表和滚动，不启动浏览器或服务。
+- A1 实际 diagnoseTeachingCue INCONCLUSIVE→Panel SSR 独有条件化句缺失红例；A2 transfer 区域完整展示已生成有界限制，保留当/做/除非与既有技术词投影，其他限制不删除；A3 fallback/旧无 transfer、回看/继续/异议和草稿保持；A4 相关 tests/TS/build；A5 学习/验证及 commit/push/RELEASE。
+- 已实现最小 showAll 接线，2 红→绿，相关 5 文件 160 tests、TS、Web production build 通过，主控关键 diff 只读复核无 must-fix。[紧凑证据](validation/TRANSFER_RULE_LIMITATIONS.md)。不改 Host/Graph/Session/producer/schema/Memory，不扩建议追问；JSON 往返/SSR 不等于真实 UI/DB。producer 满 12 条时追加条件化句可能被裁掉，单列为本轮之外限制。测试/build 进程均已退出，文档同批 commit/push 后 RELEASE。
+
 ## 已交付：历史总结的可验证代表案例回合（2026-09-26）
 
 - 基线 e25df67；01a0da91-8b1a-7941-a95c-6f833c9807ed 串行独占总结展示/tests/docs，主控只读复核真实 diff，无 must-fix。A1 默认 deterministic→实际内存保存/恢复校验→Panel SSR 得到回合丢失红例；A2 从保存 summary.refs 解析当前 COMPLETE plan 唯一同主题 cue 和反向 segment，正整数回合去重；A3 混合/旧/歧义引用保守降级；A4 相关 tests/TS/build；A5 学习日志/简证及 commit/push/RELEASE。

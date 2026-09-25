@@ -15,6 +15,13 @@
 - 验证：真实默认 deterministic 保存→内存恢复校验→Panel SSR 先红后绿；相关 5 文件 68 项通过，测试类型修复后 TS 通过，Web production build 通过。主控只读复核无 must-fix；[紧凑证据](validation/SUMMARY_REPRESENTATIVE_ROUNDS.md)。
 - 限制：测试构造的单回合总结投影不代表 Graph 重复主题资格；schema 合法也不等于语义出处验证。旧缺 focus cue 仍保守降级；无真实 Host/浏览器/DB/模型验证、无专业质量或性能提升结论。只改展示既有数据，未改变架构或持久化契约。
 
+## 2026-09-26：建议独有的限制必须跟随建议展示
+
+- 问题：createTransferRule 已生成的条件化归因限制不在 hinge/result/verdict 列表内，Panel 只显示当/做/除非，因此独有语义被遗漏；复用通用 Limitations 还会被前四条上限裁掉。
+- 决定/落点：TeachingDiagnosisPanel 建议区使用 Limitations 的 showAll，保留已生成的最多 12 条限制与既有去重/技术词投影；原建议原文、其他限制列表和交互不变。无新规则、持久化或架构契约。
+- 验证：真实 diagnoseTeachingCue INCONCLUSIVE→Panel SSR 以及 12 条 schema fixture 两红转绿；相关 5 文件 160 项、TS、Web production build 通过；主控只读复核无 must-fix。原建议、JSON 往返结果与 CueCase 不变，原重播/草稿测试通过；[证据](validation/TRANSFER_RULE_LIMITATIONS.md)。
+- 限制：producer 将追加限制后 slice12，满额时条件化句可能从未生成，本轮不扩 producer 修复；既有技术词投影与其他列表上限不改。无真实浏览器/桌面/DB/模型验收，不将 SSR 当视觉验证，也不声称判断准确性提高。
+
 ## 1. 维护规则
 
 以下变化合并时，同时更新本文：

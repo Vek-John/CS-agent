@@ -105,8 +105,9 @@ function DecisionFacts({ facts }: { facts: readonly Fact[] }) {
   );
 }
 
-function Limitations({ values }: { values: readonly string[] }) {
-  const shown = [...new Set(values.filter(Boolean).map(playerFacingLimitation))].slice(0, 4);
+function Limitations({ values, showAll = false }: { values: readonly string[]; showAll?: boolean }) {
+  const unique = [...new Set(values.filter(Boolean).map(playerFacingLimitation))];
+  const shown = showAll ? unique : unique.slice(0, 4);
   if (shown.length === 0) return null;
   return <ul className={styles.limitations}>{shown.map((value) => <li key={value}>{value}</li>)}</ul>;
 }
@@ -241,6 +242,7 @@ export function TeachingDiagnosisPanel({
         <p><b>当：</b>{transferRule.when}</p>
         <p><b>做：</b>{transferRule.do}</p>
         {transferRule.unless ? <p><b>除非：</b>{transferRule.unless}</p> : null}
+        <Limitations values={transferRule.limitations} showAll />
       </div>
       <Limitations values={[...hinge.limitations, ...diagnosticResult.limitations, ...verdict.limitations, ...(learningThread?.status === "REPEATED" ? ["本场再次出现了相似条件，会结合前面的复盘一起看。"] : [])]} />
       {showDisagreement ? (

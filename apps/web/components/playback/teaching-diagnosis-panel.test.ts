@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { diagnoseTeachingCue, DiagnosticResultSchema } from "@cs-coach/coach-agent/client";
+import { diagnoseTeachingCue, DiagnosticResultSchema, TransferRuleSchema } from "@cs-coach/coach-agent/client";
 import { TeachingDiagnosisPanel } from "./teaching-diagnosis-panel";
 
 function renderTradePanel(aliveTeammates?: number, legacy = false) {
@@ -84,6 +84,44 @@ function renderResourcePanel(cueCase = completeResourceDiagnosis(), trusted = tr
     hasTrustedDecisionContext: trusted, onSubmit() {}, onSkip() {}, onConfirm() {}, onDisagree() {}, onReplay() {},
   }));
 }
+
+it("shows the production inconclusive transfer qualification beside the original advice", () => {
+  const cueCase = completeResourceDiagnosis();
+  const rule = cueCase.transferRule!;
+  const qualification = "这条规则是条件化建议，不代表已确定归因。";
+  expect(cueCase.verdict?.type).toBe("INCONCLUSIVE");
+  expect(rule.limitations).toContain(qualification);
+  expect([...cueCase.hinge!.limitations, ...cueCase.diagnosticResult!.limitations, ...cueCase.verdict!.limitations]).not.toContain(qualification);
+  const before = JSON.stringify(cueCase);
+  const html = renderResourcePanel(cueCase);
+  const advice = html.split("下次记住什么</span>")[1].split("</div>")[0];
+  expect(advice).toContain(qualification);
+  for (const text of [rule.when, rule.do, ...(rule.unless ? [rule.unless] : [])]) expect(advice).toContain(text);
+  expect(renderResourcePanel(JSON.parse(before))).toBe(html);
+  expect(JSON.stringify(cueCase)).toBe(before);
+  for (const label of ["懂了，继续", "再看一遍", "我不同意这个结论"]) expect(html).toContain(label);
+});
+
+it("shows all twelve validated transfer limitations without truncation or rewriting", () => {
+  const cueCase = completeResourceDiagnosis();
+  const limitations = Array.from({ length: 12 }, (_, i) => `适用限制 ${i + 1}：只有上述条件成立时才适用，不能单凭结果确定归因。`);
+  cueCase.transferRule = TransferRuleSchema.parse({ ...cueCase.transferRule, limitations });
+  const html = renderResourcePanel(cueCase);
+  const advice = html.split("下次记住什么</span>")[1].split("</div>")[0];
+  expect([...advice.matchAll(/<li/g)]).toHaveLength(12);
+  for (const limitation of limitations) expect(advice).toContain(limitation);
+  expect(html).toContain("懂了，继续");
+});
+
+it("keeps fallback and missing-transfer histories out of the advice display", () => {
+  const cueCase = completeResourceDiagnosis();
+  for (const record of [{ ...cueCase, status: "FALLBACK" as const }, { ...cueCase, transferRule: undefined }]) {
+    const html = renderResourcePanel(record);
+    expect(html).toContain("基础讲解");
+    expect(html).toContain("看完了，继续下一段");
+    expect(html).not.toContain("下次记住什么");
+  }
+});
 
 it("renders all six real resource measurements in order, including zero utility and prior ammo", () => {
   const cueCase = completeResourceDiagnosis();
