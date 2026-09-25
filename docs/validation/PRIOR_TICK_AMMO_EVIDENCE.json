@@ -1,0 +1,148 @@
+{
+  "mode": "REAL_WASM_PRIOR_CACHE_ONE_PARSE",
+  "demoReads": 1,
+  "parsePasses": 1,
+  "parseMs": 7118,
+  "totalMs": 7363,
+  "networkCalls": 0,
+  "sourceSummary": {
+    "cacheMaxEntries": 10,
+    "sampleGapTicks": [
+      1
+    ],
+    "frames": 7239,
+    "emitted": 2970,
+    "valid": true,
+    "zeroClips": 41
+  },
+  "candidates": 44,
+  "formalCues": 4,
+  "ammoCues": 3,
+  "consumedCues": 3,
+  "sameAssessments": true,
+  "samePlan": true,
+  "sameVerdictsAndAdvice": true,
+  "rows": [
+    {
+      "cue": "c1",
+      "round": 3,
+      "decision": 19426,
+      "binding": {
+        "currentTick": 19426,
+        "containerTick": 19426,
+        "sampleTick": 19425,
+        "strictPrior": true,
+        "priorAmmo": true,
+        "sameEntityAtEndpoints": true,
+        "interveningChanges": [
+          {
+            "type": "WEAPON_FIRE",
+            "tick": 19426
+          }
+        ]
+      },
+      "ammo": null,
+      "consumed": null,
+      "verdictUnchanged": true,
+      "status": "PARTIALLY_SUPPORTED"
+    },
+    {
+      "cue": "c2",
+      "round": 5,
+      "decision": 31179,
+      "binding": {
+        "currentTick": 31179,
+        "containerTick": 31179,
+        "sampleTick": 31178,
+        "strictPrior": true,
+        "priorAmmo": true,
+        "sameEntityAtEndpoints": true,
+        "interveningChanges": []
+      },
+      "ammo": {
+        "weapon": "M4A4",
+        "clip": 11,
+        "evidenceRefs": [
+          "state-5-31179-weapon-ammo-end-at-31178"
+        ]
+      },
+      "consumed": {
+        "value": 11,
+        "refs": [
+          "state-5-31179-weapon-ammo-end-at-31178"
+        ],
+        "label": "M4A4 决策前最近记录弹匣"
+      },
+      "verdictUnchanged": true,
+      "status": "PARTIALLY_SUPPORTED"
+    },
+    {
+      "cue": "c3",
+      "round": 7,
+      "decision": 44507,
+      "binding": {
+        "currentTick": 44507,
+        "containerTick": 44507,
+        "sampleTick": 44506,
+        "strictPrior": true,
+        "priorAmmo": true,
+        "sameEntityAtEndpoints": true,
+        "interveningChanges": []
+      },
+      "ammo": {
+        "weapon": "FAMAS",
+        "clip": 12,
+        "evidenceRefs": [
+          "state-7-44507-weapon-ammo-end-at-44506"
+        ]
+      },
+      "consumed": {
+        "value": 12,
+        "refs": [
+          "state-7-44507-weapon-ammo-end-at-44506"
+        ],
+        "label": "FAMAS 决策前最近记录弹匣"
+      },
+      "verdictUnchanged": true,
+      "status": "PARTIALLY_SUPPORTED"
+    },
+    {
+      "cue": "c4",
+      "round": 7,
+      "decision": 45091,
+      "binding": {
+        "currentTick": 45091,
+        "containerTick": 45091,
+        "sampleTick": 45090,
+        "strictPrior": true,
+        "priorAmmo": true,
+        "sameEntityAtEndpoints": true,
+        "interveningChanges": []
+      },
+      "ammo": {
+        "weapon": "AK-47",
+        "clip": 14,
+        "evidenceRefs": [
+          "state-7-45091-weapon-ammo-end-at-45090"
+        ]
+      },
+      "consumed": {
+        "value": 14,
+        "refs": [
+          "state-7-45091-weapon-ammo-end-at-45090"
+        ],
+        "label": "AK-47 决策前最近记录弹匣"
+      },
+      "verdictUnchanged": true,
+      "status": "SUPPORTED"
+    }
+  ],
+  "acceptance": {
+    "lifecycleAndBoundedCache": "PASS",
+    "formalCueConsumption": "PASS_3_OF_4",
+    "remainingCue": "Rejected because WEAPON_FIRE occurs at decision tick 19426",
+    "judgmentOrAdviceImprovement": "NOT_CLAIMED",
+    "currentTaskDemoReads": 1,
+    "cumulativeDemoReads": 4
+  }
+}

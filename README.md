@@ -124,7 +124,7 @@ pnpm cs2d:setup
 
 `pnpm cs2d:check`只准备固定上游checkout并检查本地工具，不安装Rust/CLI、不编译parser；`desktop:prepare`先执行它，缺依赖会在昂贵资源构建前停止。预检在parser目录解析rustup所选工具链，检查该工具链的target，实际编译绑定相同Cargo/rustc，避免Homebrew或其他工具链的target造成误判。自定义`CARGO_HOME`受支持；冲突的`RUSTC`覆盖需先解除。
 
-Parser构建使用仓库内固定的`vendor/source2-demo` 0.5.4，只修复CS2弹匣原始字段解码；来源与许可证见[UPSTREAM.md](vendor/source2-demo/UPSTREAM.md)。标准构建和`pnpm cs2d:test-parser`通过同一相对Cargo override验证本地依赖，不需要改共享registry或全局Cargo配置；`CS2D_UPSTREAM_DIR`仍受支持。默认允许Cargo解析锁定依赖，需要仅用已有缓存时显式设`CARGO_NET_OFFLINE=true`。弹药实测与尚未通过的真实消费验收见[记录](docs/validation/LOSSLESS_DECISION_AMMO.md)。
+Parser构建使用仓库内固定的`vendor/source2-demo` 0.5.4，只修复CS2弹匣原始字段解码；来源与许可证见[UPSTREAM.md](vendor/source2-demo/UPSTREAM.md)。标准构建和`pnpm cs2d:test-parser`通过同一相对Cargo override验证本地依赖，不需要改共享registry或全局Cargo配置；`CS2D_UPSTREAM_DIR`仍受支持。默认允许Cargo解析锁定依赖，需要仅用已有缓存时显式设`CARGO_NET_OFFLINE=true`。独立此前采样已在真实Demo的3/4正式教学点消费，时间边界与剩余限制见[验收记录](docs/validation/PRIOR_TICK_AMMO.md)。
 
 
 `cs2d:build`与`cs2d:setup`保留一次实际parser WASM编译及bindgen生成，再构建Viewer，不会退回旧WASM。缺工具或CLI/lock不匹配时，错误会给出针对所选toolchain的命令；已有兼容CLI不会重复安装。升级parser锁依赖时需同步CI固定CLI版本。

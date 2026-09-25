@@ -16,8 +16,8 @@ export function projectDecisionResources(state: PlayerStateSample, decisionTick?
   const item = state.active_item;
   const ammo = item?.ammo_evidence;
   // Legacy rich input has no independently verified decision time: leave new ammo unknown.
-  if (Number.isSafeInteger(decisionTick) && state.tick < decisionTick! && !missing("active_item") && item?.item_class === "WEAPON" && ammo?.source === "SOURCE2_ACTIVE_WEAPON" && ammo.phase === "TICK_END"
-    && Number.isSafeInteger(ammo.sampled_at_tick) && ammo.sampled_at_tick === state.tick
+  if (Number.isSafeInteger(decisionTick) && ammo && ammo.sampled_at_tick < decisionTick! && !missing("active_item") && item?.item_class === "WEAPON" && ammo?.source === "SOURCE2_ACTIVE_WEAPON" && ammo.phase === "TICK_END"
+    && Number.isSafeInteger(ammo.sampled_at_tick) && (item.ammo_sampling_version === 2 ? ammo.version === 2 && ammo.sampled_at_tick < state.tick : ammo.version === undefined && ammo.sampled_at_tick === state.tick)
     && Number.isSafeInteger(ammo.weapon_handle) && ammo.weapon_handle > 0 && ammo.weapon_handle < 0xffffff
     && typeof ammo.fact_ref === "string" && ammo.fact_ref.length > 0 && ammo.fact_ref.length <= 160
     && item.item_id.length > 0 && item.item_id.length <= 96 && Number.isSafeInteger(item.ammo_clip) && bounded(item.ammo_clip, 255)) {

@@ -116,3 +116,17 @@ flowchart LR
 | A5 测试、TS、Web/WASM/Viewer与阶段交付 | 已验证；文档记录失败范围并随分支提交，不部署/安装 |
 
 当前阶段保留正确decoder与可选消费链，旧数据缺字段仍unknown；原完整实际教学消费目标未完成，不标总目标完成。原UI暂停A5不在本轮。单阶段读取1/两轮累计3，41空clip是采样条数。下一候选仅为独立tick-end最近样本小缓存设计，需另行核对生命周期及来源时间，不在本轮实现。
+
+## 2026-09-26：缩短决策前弹药采样空隙
+
+基线c460634（产品9092a71），本轮有限goal无token预算；主控独占parser缓存/adapter来源/Host投影与文档。默认只读ammo_lifecycle_review负责5分钟生命周期研究与限定终审；无并行写/独立Demo读取。完整证据：[PRIOR_TICK_AMMO](validation/PRIOR_TICK_AMMO.md)。
+
+| 验收 | 状态与证据 |
+|---|---|
+| A1 真实observer时间与异常tick | 通过：真实Parser/CNetMsgTick夹具；first/重复/跳跃/倒退未知，不猜tick-1 |
+| A2 O(players)最新缓存、来源身份失效 | 通过：单次controller遍历、batch replace；10,000tick不增历史，真实max10条 |
+| A3 独立sample时间、v1/v2与实际消费链 | 通过：43项ammo测试；最新缺失不回退、跨round/freshness/当前identity和同tick fire门，local/strict Graph一致 |
+| A4 构建后唯一真实验收 | 通过：frames仍7239、来源2970，formal消费3/4；第1点同decision tick19426开火仍拒绝；同Replay消融判断路线建议不变 |
+| A5 测试/TS/Web/WASM/Viewer、文档与分支交付 | 通过检查；随本轮commit/push交付，不部署或安装 |
+
+前阶段0/4的实际消费缺口由本轮3/4自然正式cue证据关闭，不改写历史失败结果。剩余未知备弹、事件完整性与专业质量不属于本轮新增承诺；原UI暂停A5仍未动。本轮read1/parse1，跨轮累计4；没有重试或放宽门。

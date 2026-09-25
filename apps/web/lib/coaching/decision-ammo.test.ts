@@ -115,3 +115,71 @@ it.each(["same", "replaced", "missing", "duplicate-prior"])("uses independent pr
   if (binding === "same") expect(ammo).toEqual({ weapon: "AK-47", clip: 7, evidenceRefs: ["start-state-weapon-ammo-end"] });
   else expect(ammo).toBeUndefined();
 });
+
+function cachedContext() {
+  const c = context();
+  const state = c.timeline.player_state_tracks[0];
+  const currentTick = c.cue.decision_tick;
+  state.tick = currentTick;
+  c.material.decisionSnapshot.sampledAtTick = currentTick;
+  state.active_item = { item_id: "AK-47", item_class: "WEAPON", entity_handle: 114697,
+    ammo_sampling_version: 2, ...normalizeWeaponAmmo({ ...sample(currentTick - 1), version: 2 }, "AK-47", currentTick, "cached-frame", true, 2) } as typeof state.active_item;
+  return c;
+}
+
+it("separates v2 source time from its current container without reinterpreting v1", () => {
+  const raw = { ...sample(99), version: 2 as const };
+  expect(normalizeWeaponAmmo(raw, "AK-47", 100, "frame", true, 2)).toMatchObject({ ammo_clip: 7, ammo_evidence: { version: 2, sampled_at_tick: 99, fact_ref: "frame-weapon-ammo-end-at-99" } });
+  expect(normalizeWeaponAmmo(raw, "AK-47", 100, "frame", true)).toEqual({});
+  expect(normalizeWeaponAmmo(sample(99), "AK-47", 100, "frame", true, 2)).toEqual({});
+  expect(normalizeWeaponAmmo({ ...raw, sampledAtTick: 100 }, "AK-47", 100, "frame", true, 2)).toEqual({});
+});
+
+it.each(["same-tick", "future", "stale-source", "previous-round", "missing-latest", "wrong-entity", "old-version"])("keeps v2 unknown for %s without falling back", reason => {
+  const c = cachedContext(); const current = c.timeline.player_state_tracks[0];
+  const older = structuredClone(current); older.tick -= 8;
+  older.active_item.ammo_evidence!.sampled_at_tick = older.tick - 1;
+  const ammo = current.active_item.ammo_evidence!;
+  if (reason === "same-tick") ammo.sampled_at_tick = current.tick;
+  if (reason === "future") ammo.sampled_at_tick = current.tick + 1;
+  if (reason === "stale-source") ammo.sampled_at_tick = current.tick - c.timeline.tick_rate;
+  if (reason === "previous-round") ammo.sampled_at_tick = c.timeline.rounds.find(r => r.round_number === 2)!.start_tick - 1;
+  if (reason === "missing-latest") delete current.active_item.ammo_evidence;
+  if (reason === "wrong-entity") ammo.weapon_handle++;
+  if (reason === "old-version") delete ammo.version;
+  c.timeline.player_state_tracks = [older, current];
+  expect(buildTeachingDiagnosisInput(c, reflection(c.cue.id)).decisionResources?.weaponAmmo).toBeUndefined();
+});
+
+it.each([-2, -1, 0])("uses the ammo sample time for fire invalidation, event offset %s", offset => {
+  const c = cachedContext();
+  c.timeline.match_events = [{ id: "fire", tick: c.cue.decision_tick + offset, event_type: "WEAPON_FIRE", actor_player_id: c.selectedPlayerId, payload: {}, source_parser_event: "fixture", fact_confidence: 1, fact_refs: [], missing_fields: [] }] as never;
+  const ammo = buildTeachingDiagnosisInput(c, reflection(c.cue.id)).decisionResources?.weaponAmmo;
+  if (offset < 0) expect(ammo?.clip).toBe(7); // source tick-end already includes same-sample-tick events
+  else expect(ammo).toBeUndefined(); // decision-tick fire stays forbidden
+});
+
+it("consumes v2 through adapter, actual Host local and strict compact Graph with independent refs", async () => {
+  const raw = fireReplay("DEATH");
+  const replay: Cs2dReplay = { ...raw, rounds: raw.rounds.map(r => ({ ...r, frames: r.frames.map(f => ({ ...f, players: f.players.map(p => ({ ...p, weapon: "AK-47", activeWeaponHandle: 114697, ammoSamplingVersion: 2 as const, weaponAmmo: { ...sample(f.tick - 1), version: 2 as const } })) })) })) };
+  const bundle = buildCs2dAnalysisBundle({ replay, selectedSteamId: self, demoId: "cached-ammo-fixture" });
+  const normalized = bundle.match_timeline.player_state_tracks![0];
+  expect(normalized.active_item).toMatchObject({ ammo_sampling_version: 2, ammo_evidence: { sampled_at_tick: normalized.tick - 1, version: 2 } });
+  expect(deserializeCs2dAnalysisBundle(JSON.stringify(bundle)).match_timeline.player_state_tracks![0]).toEqual(normalized);
+  const c = cachedContext(); const r = reflection(c.cue.id);
+  const event = buildTeachingDiagnosisSubmissionEvent(c, r, { eventType: "SUBMIT_REFLECTION", eventId: "cached-ammo", identity: { ...fixtureIdentity, selectedPlayerId: c.selectedPlayerId } });
+  expect(event.input.decisionResources?.weaponAmmo?.clip).toBe(7);
+  expect(JSON.stringify(event.input.decisionResources?.weaponAmmo)).not.toMatch(/version|sampled_at_tick|weapon_handle|player_id/);
+  const envelope = parseRemoteCoachAgentDispatchEnvelope(JSON.parse(JSON.stringify(createRemoteCoachAgentDispatchEnvelope(event))));
+  const graph = await createCoachAgentRuntime({ checkpoint: "memory" }).dispatch(envelope.event);
+  const local = runTeachingDiagnosis(c, r);
+  const noAmmo = structuredClone(c); delete noAmmo.timeline.player_state_tracks[0].active_item.ammo_evidence;
+  const baseline = runTeachingDiagnosis(noAmmo, r);
+  const refs = event.input.decisionResources!.weaponAmmo!.evidenceRefs;
+  for (const result of [local.cueCase.diagnosticResult, graph.state.cueCases[c.cue.id]?.diagnosticResult]) {
+    expect(result?.measurements.find(m => m.id.endsWith("weapon-clip"))).toMatchObject({ value: 7, evidenceRefs: refs });
+    expect(result?.status).toBe(baseline.cueCase.diagnosticResult?.status);
+  }
+  expect(local.cueCase.verdict).toEqual(baseline.cueCase.verdict);
+  expect(local.cueCase.transferRule).toEqual(baseline.cueCase.transferRule);
+});

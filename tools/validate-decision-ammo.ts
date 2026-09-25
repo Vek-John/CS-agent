@@ -13,7 +13,7 @@ const mode = process.argv[2];
 let replay: Cs2dReplay; let selected: string; let parseMs = 0; let demoHash = "a".repeat(64);
 if (mode === "--smoke") {
   const source = fireReplay("DEATH", []);
-  replay = { ...source, rounds: source.rounds.map(round => ({ ...round, frames: round.frames.map(frame => ({ ...frame, tick: frame.tick - 1, players: frame.players.map(p => ({ ...p, alive: frame.tick - 1 < 1408, health: frame.tick - 1 < 1408 ? 40 : 0, weapon: "AK-47", activeWeaponHandle: 114697, weaponAmmo: { source: "SOURCE2_ACTIVE_WEAPON" as const, phase: "TICK_END" as const, sampledAtTick: frame.tick - 1, weapon: "AK-47", weaponHandle: 114697, clip: 7 } })) })) })) };
+  replay = { ...source, rounds: source.rounds.map(round => ({ ...round, frames: round.frames.map(frame => ({ ...frame, tick: frame.tick, players: frame.players.map(p => ({ ...p, alive: frame.tick - 1 < 1408, health: frame.tick - 1 < 1408 ? 40 : 0, weapon: "AK-47", activeWeaponHandle: 114697, ammoSamplingVersion: 2 as const, weaponAmmo: { source: "SOURCE2_ACTIVE_WEAPON" as const, phase: "TICK_END" as const, version: 2 as const, sampledAtTick: frame.tick - 1, weapon: "AK-47", weaponHandle: 114697, clip: 7 } })) })) })) };
   selected = self;
 } else {
   assert(mode && process.argv[3], "Usage: --smoke | <authorized-demo.dem> <player-name>");
@@ -30,7 +30,9 @@ if (mode === "--smoke") {
 }
 const sourceSamples = replay.rounds.flatMap(r => r.frames.flatMap(f => f.players.filter(p => p.steamId === selected).map(p => ({ player: p, round: r.number, tick: f.tick }))));
 const emitted = sourceSamples.filter(s => s.player.weaponAmmo);
-const sourceSummary = { frames: sourceSamples.length, emitted: emitted.length, valid: emitted.every(s => s.player.weaponAmmo!.source === "SOURCE2_ACTIVE_WEAPON" && s.player.weaponAmmo!.sampledAtTick === s.tick && s.player.weaponAmmo!.weapon === s.player.weapon), zeroClips: emitted.filter(s => s.player.weaponAmmo!.clip === 0).length };
+const cacheMaxEntries = (replay as Cs2dReplay & { ammoCacheMaxEntries?: number }).ammoCacheMaxEntries;
+if (mode !== "--smoke") assert(Number.isSafeInteger(cacheMaxEntries) && cacheMaxEntries! <= replay.players.length, "BOUNDED_CACHE_REQUIRED");
+const sourceSummary = { cacheMaxEntries, sampleGapTicks: [...new Set(emitted.map(s => s.tick - s.player.weaponAmmo!.sampledAtTick))], frames: sourceSamples.length, emitted: emitted.length, valid: emitted.every(s => s.player.weaponAmmo!.source === "SOURCE2_ACTIVE_WEAPON" && s.player.weaponAmmo!.version === 2 && s.player.ammoSamplingVersion === 2 && s.player.weaponAmmo!.sampledAtTick < s.tick && s.player.weaponAmmo!.weapon === s.player.weapon), zeroClips: emitted.filter(s => s.player.weaponAmmo!.clip === 0).length };
 const enriched = buildCs2dAnalysisBundle({ replay, selectedSteamId: selected, demoId: "ammo-validation", demoContentHash: demoHash });
 // Same parsed Replay; temporarily remove only the new field. No second Demo read/parse.
 for (const row of emitted) delete (row.player as { weaponAmmo?: unknown }).weaponAmmo;
@@ -51,10 +53,12 @@ const rows = enriched.review_plan.cues.map(cue => {
   const consumed = result.cueCase.diagnosticResult?.measurements.find(m => m.id.endsWith("weapon-clip"));
   if (ammo && consumed) { assert.equal(consumed.value, ammo.clip); assert.deepEqual(consumed.evidenceRefs, ammo.evidenceRefs); }
   const states = context.timeline.player_state_tracks?.filter(s => s.player_id === selected && s.tick <= cue.decision_tick).sort((a,b) => b.tick-a.tick) ?? [];
-  const current = states[0]; const prior = states.find(s => s.tick < cue.decision_tick);
-  const changes = context.timeline.match_events?.filter(e => e.actor_player_id === selected && prior && e.tick > prior.tick && e.tick <= cue.decision_tick && ["WEAPON_FIRE", "RELOAD", "ITEM_PICKUP", "ITEM_DROP"].includes(e.event_type)).map(e => e.event_type) ?? [];
-  const binding = { currentTick: current?.tick, priorTick: prior?.tick,
-    strictPrior: Boolean(prior && prior.tick < cue.decision_tick), priorAmmo: Boolean(prior?.active_item?.ammo_evidence),
+  const current = states[0];
+  const prior = current?.active_item?.ammo_sampling_version === 2 ? current : states.find(s => s.tick < cue.decision_tick);
+  const sampleTick = prior?.active_item?.ammo_evidence?.sampled_at_tick;
+  const changes = context.timeline.match_events?.filter(e => e.actor_player_id === selected && sampleTick !== undefined && e.tick > sampleTick && e.tick <= cue.decision_tick && ["WEAPON_FIRE", "RELOAD", "ITEM_PICKUP", "ITEM_DROP"].includes(e.event_type)).map(e => ({ type: e.event_type, tick: e.tick })) ?? [];
+  const binding = { currentTick: current?.tick, containerTick: prior?.tick, sampleTick,
+    strictPrior: Boolean(sampleTick !== undefined && sampleTick < cue.decision_tick), priorAmmo: Boolean(prior?.active_item?.ammo_evidence),
     sameEntityAtEndpoints: Boolean(prior?.active_item?.ammo_evidence && prior.active_item.ammo_evidence.weapon_handle === current?.active_item?.entity_handle),
     interveningChanges: changes };
   return { cue: cue.id, round: context.material?.decisionSnapshot?.roundNumber, decision: cue.decision_tick,
@@ -63,6 +67,6 @@ const rows = enriched.review_plan.cues.map(cue => {
 });
 assert.equal(networkCalls, 0); assert(sourceSummary.valid);
 if (mode === "--smoke") assert(rows.some(row => row.consumed), "SMOKE_MUST_CONSUME_AMMO");
-console.log(JSON.stringify({ mode: mode === "--smoke" ? "SYNTHETIC_TIME_SMOKE" : "REAL_WASM_ONE_PARSE", demoReads, parsePasses, parseMs, totalMs: Math.round(performance.now() - began), networkCalls, sourceSummary,
+console.log(JSON.stringify({ mode: mode === "--smoke" ? "SYNTHETIC_TIME_CACHE_SMOKE" : "REAL_WASM_PRIOR_CACHE_ONE_PARSE", demoReads, parsePasses, parseMs, totalMs: Math.round(performance.now() - began), networkCalls, sourceSummary,
   candidates: enriched.candidate_set.candidates.length, formalCues: rows.length, ammoCues: rows.filter(r => r.ammo).length, consumedCues: rows.filter(r => r.consumed).length,
   sameAssessments: true, samePlan: true, sameVerdictsAndAdvice: true, rows }, null, 2));

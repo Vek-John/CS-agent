@@ -1,0 +1,378 @@
+--- a/packages/parser/src/assemble.rs
++++ b/packages/parser/src/assemble.rs
+@@ -293,6 +293,7 @@
+                     weapon: p.weapon.clone(),
+                     weapon_ammo: p.weapon_ammo.clone(),
+                     active_weapon_handle: p.active_weapon_handle,
++                    ammo_sampling_version: p.ammo_sampling_version,
+                     last_place_name: p.last_place_name.clone(),
+                     primary: p.primary.clone(),
+                     money: p.money,
+@@ -864,6 +865,7 @@
+         final_t_name,
+         pauses,
+         generated_by: GENERATED_BY.into(),
++        ammo_cache_max_entries: c.ammo_cache.max_entries,
+     }
+ }
+ 
+--- a/packages/parser/src/collector.rs
++++ b/packages/parser/src/collector.rs
+@@ -146,6 +146,7 @@
+     pub(crate) defuse_ends: Vec<(u32, bool)>,
+     /// userid (game event slot) -> steamId, built from events that carry both.
+     pub(crate) userid_to_steam: HashMap<i32, String>,
++    pub(crate) ammo_cache: crate::weapon_ammo::AmmoCache,
+     pub(crate) frames: Vec<RawFrame>,
+     pub(crate) events: Vec<RawEvent>,
+     /// `buytime_ended` ticks, used to bound each round's buy window.
+@@ -272,6 +273,7 @@
+     // Entities and CNetMsgTick for this canonical tick have now been processed.
+     #[on_tick_end]
+     fn on_clock_tick_end(&mut self, ctx: &Context) -> ObserverResult {
++        self.ammo_cache.capture_end(ctx);
+         let (tick, server_tick) = (ctx.tick(), ctx.net_tick());
+         if tick == u32::MAX { return Ok(()); }
+         let continuous = self.previous_clock_ticks.map(|(demo, server)|
+@@ -287,9 +289,6 @@
+         // after resume/reset, rather than subtracting guessed pause durations.
+         self.clock_pause_observed |= paused != Some(false) || total_paused_ticks != Some(0);
+         if let Some(frame) = self.frames.last_mut().filter(|frame| frame.tick == tick) {
+-            for player in &mut frame.players {
+-                player.weapon_ammo = crate::weapon_ammo::sample_weapon_ammo(ctx, &player.steam_id, &player.weapon);
+-            }
+             frame.clock = Some(RoundClockSample {
+                 source: "SOURCE2_GAMERULES",
+                 sampled_at_tick: tick, server_tick, tick_interval: self.clock_tick_interval,
+@@ -310,6 +309,7 @@
+     #[on_tick_start]
+     fn on_tick_start(&mut self, ctx: &Context) -> ObserverResult {
+         let tick = ctx.tick();
++        self.ammo_cache.begin_tick(tick, crate::weapon_ammo::round_identity(ctx));
+         if tick == u32::MAX {
+             return Ok(());
+         }
+@@ -424,7 +424,9 @@
+             }
+ 
+             let active_weapon = active_weapon_label(ctx, pawn);
+-            let active_weapon_handle = crate::weapon_ammo::frame_active_weapon_handle(ctx, &steam_id, &active_weapon);
++            let identity = crate::weapon_ammo::frame_weapon_identity(ctx, ctrl, &active_weapon);
++            let active_weapon_handle = identity.as_ref().map(|id| id.handle());
++            let weapon_ammo = self.ammo_cache.for_frame(tick, &steam_id, identity.as_ref());
+             players.push(PlayerState {
+                 steam_id,
+                 x: round1(world_coord(pawn, "CBodyComponent.m_cellX", "CBodyComponent.m_vecX")),
+@@ -436,7 +438,8 @@
+                 side: side.into(),
+                 weapon: active_weapon,
+                 active_weapon_handle,
+-                weapon_ammo: None,
++                ammo_sampling_version: 2,
++                weapon_ammo,
+                 last_place_name: prop_string(pawn, "m_szLastPlaceName"),
+                 primary: primary_weapon(ctx, pawn),
+                 money: prop_i32(ctrl, "m_pInGameMoneyServices.m_iAccount"),
+--- a/packages/parser/src/lib.rs
++++ b/packages/parser/src/lib.rs
+@@ -22,7 +22,7 @@
+ use collector::Collector;
+ 
+ const DEMO_TICK_RATE: f64 = 64.0;
+-const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v1";
++const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2";
+ 
+ /// Parses the bytes of a `.dem` in a single pass and returns `(Replay JSON, voice
+ /// blob)`. The `Replay` matches `replay-schema 2D`; the blob follows the `CLV2`
+--- a/packages/parser/src/schema.rs
++++ b/packages/parser/src/schema.rs
+@@ -23,6 +23,8 @@
+     #[serde(skip_serializing_if = "Vec::is_empty")]
+     pub(crate) pauses: Vec<Pause>,
+     pub(crate) generated_by: String,
++    /// Bounded cache telemetry only; no per-tick history.
++    pub(crate) ammo_cache_max_entries: usize,
+ }
+ 
+ /// A pause in the match (the game rules went into timeout / waiting-for-resume).
+@@ -201,6 +203,7 @@
+     pub(crate) weapon_ammo: Option<crate::weapon_ammo::WeaponAmmo>,
+     #[serde(skip_serializing_if = "Option::is_none")]
+     pub(crate) active_weapon_handle: Option<u32>,
++    pub(crate) ammo_sampling_version: u8,
+     /// Source-engine navigation place token (`m_szLastPlaceName`). This is a
+     /// parser fact; the host maps it to localized CS callouts.
+     #[serde(skip_serializing_if = "String::is_empty")]
+--- a/packages/parser/src/weapon_ammo.rs
++++ b/packages/parser/src/weapon_ammo.rs
+@@ -22,18 +22,31 @@
+ pub(crate) struct WeaponAmmo {
+     source: &'static str,
+     phase: &'static str,
++    // V2 explicitly carries an earlier tick-end in a later tick-start frame.
++    version: u8,
+     sampled_at_tick: u32,
+     weapon: String,
+     weapon_handle: u32,
+     clip: u32,
+ }
+ 
+-fn verified_weapon<'a>(ctx: &'a Context, steam: &str, frame_weapon: &str) -> Option<(&'a Entity, u32, String)> {
+-    use crate::props::{prop_i32, prop_u64};
+-    let mut controllers = ctx.entities().iter().filter(|e| e.class().name() == "CCSPlayerController"
+-        && prop_u64(e, "m_steamID").to_string() == steam);
+-    let controller = controllers.next()?;
+-    if controllers.next().is_some() { return None; }
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub(crate) struct WeaponIdentity {
++    controller: (u32, u32),
++    pawn_handle: u32,
++    pawn_serial: u32,
++    weapon_handle: u32,
++    weapon_serial: u32,
++    side: i32,
++    weapon: String,
++}
++impl WeaponIdentity {
++    pub(crate) fn handle(&self) -> u32 { self.weapon_handle }
++}
++
++// No player search: the caller already owns the controller from one entity pass.
++fn verified_weapon<'a>(ctx: &'a Context, controller: &Entity) -> Option<(&'a Entity, WeaponIdentity)> {
++    use crate::props::prop_i32;
+     let unsigned = |entity: &Entity, name: &str| match entity.get_property_by_name(name) {
+         Ok(FieldValue::Unsigned32(value)) => Some(*value), _ => None,
+     };
+@@ -50,20 +63,84 @@
+     let entity = ctx.entities().get_by_index((handle & 0x3fff) as usize).ok()?;
+     if !matches_handle(handle, entity.index(), entity.serial()) { return None; }
+     let weapon = crate::weapons::active_weapon_label(ctx, pawn);
+-    if weapon != frame_weapon || !crate::weapons::is_firearm_label(&weapon) { return None; }
+-    Some((entity, handle, weapon))
+-}
+-
+-pub(crate) fn sample_weapon_ammo(ctx: &Context, steam: &str, frame_weapon: &str) -> Option<WeaponAmmo> {
+-    let (entity, handle, weapon) = verified_weapon(ctx, steam, frame_weapon)?;
+-    let clip = clip_count(entity.get_property_by_name("m_iClip1").ok())?;
+-    Some(WeaponAmmo { source: "SOURCE2_ACTIVE_WEAPON", phase: "TICK_END", sampled_at_tick: ctx.tick(), weapon, weapon_handle: handle, clip })
+-}
+-
+-// Identity is collected at tick start independently of clip availability. The
+-// ammo observation itself is collected only after this tick's entity updates.
+-pub(crate) fn frame_active_weapon_handle(ctx: &Context, steam: &str, weapon: &str) -> Option<u32> {
+-    verified_weapon(ctx, steam, weapon).map(|(_, handle, _)| handle)
++    if !crate::weapons::is_firearm_label(&weapon) { return None; }
++    Some((entity, WeaponIdentity { controller: (controller.index(), controller.serial()), pawn_handle,
++        pawn_serial: pawn.serial(), weapon_handle: handle, weapon_serial: entity.serial(), side, weapon }))
++}
++
++pub(crate) fn frame_weapon_identity(ctx: &Context, controller: &Entity, weapon: &str) -> Option<WeaponIdentity> {
++    let (_, identity) = verified_weapon(ctx, controller)?;
++    (identity.weapon == weapon).then_some(identity)
++}
++
++pub(crate) type RoundIdentity = (i32, u32);
++pub(crate) fn round_identity(ctx: &Context) -> Option<RoundIdentity> {
++    let count = crate::props::gamerules_i32(ctx, "m_pGameRules.m_totalRoundsPlayed")?;
++    let start = crate::props::gamerules_float(ctx, "m_pGameRules.m_fRoundStartTime")?;
++    (count >= 0 && start.is_finite() && start >= 0.0).then_some((count, start.to_bits()))
++}
++
++#[derive(Clone)]
++struct CachedAmmo { identity: WeaponIdentity, ammo: WeaponAmmo }
++
++#[derive(Default)]
++pub(crate) struct AmmoCache {
++    latest: std::collections::HashMap<String, CachedAmmo>,
++    ended_tick: Option<u32>,
++    started_tick: Option<u32>,
++    round: Option<RoundIdentity>,
++    usable_at: Option<u32>,
++    pub(crate) max_entries: usize,
++}
++impl AmmoCache {
++    // Called once per actual tick-end. Replacing the batch removes invalid,
++    // missing, dead, duplicate or disappeared players instead of retaining history.
++    pub(crate) fn capture_end(&mut self, ctx: &Context) {
++        use crate::props::prop_u64;
++        let mut samples = std::collections::HashMap::new();
++        let mut seen = std::collections::HashSet::new();
++        for ctrl in ctx.entities().iter().filter(|e| e.class().name() == "CCSPlayerController") {
++            let steam = prop_u64(ctrl, "m_steamID");
++            if steam == 0 { continue; }
++            let key = steam.to_string();
++            if !seen.insert(steam) { samples.remove(&key); continue; }
++            let Some((entity, identity)) = verified_weapon(ctx, ctrl) else { continue; };
++            let Some(clip) = clip_count(entity.get_property_by_name("m_iClip1").ok()) else { continue; };
++            let ammo = WeaponAmmo { source: "SOURCE2_ACTIVE_WEAPON", phase: "TICK_END", version: 2,
++                sampled_at_tick: ctx.tick(), weapon: identity.weapon.clone(), weapon_handle: identity.weapon_handle, clip };
++            samples.insert(key, CachedAmmo { identity, ammo });
++        }
++        self.replace_end(ctx.tick(), round_identity(ctx), samples);
++    }
++
++    fn replace_end(&mut self, tick: u32, round: Option<RoundIdentity>, samples: std::collections::HashMap<String, CachedAmmo>) {
++        self.latest.clear();
++        self.usable_at = None;
++        if tick != u32::MAX && round.is_some() && self.ended_tick.is_none_or(|old| tick > old) {
++            self.latest = samples;
++        }
++        self.max_entries = self.max_entries.max(self.latest.len());
++        self.ended_tick = Some(tick);
++        self.round = round;
++    }
++
++    // Validate the observed end tick, never synthesize it as current_tick - 1.
++    pub(crate) fn begin_tick(&mut self, tick: u32, round: Option<RoundIdentity>) {
++        self.usable_at = None;
++        if tick != u32::MAX && self.started_tick.is_none_or(|old| tick > old)
++            && self.ended_tick.and_then(|old| old.checked_add(1)) == Some(tick)
++            && round.is_some() && round == self.round {
++            self.usable_at = Some(tick);
++        } else { self.latest.clear(); }
++        self.started_tick = Some(tick);
++    }
++
++    pub(crate) fn for_frame(&self, tick: u32, steam: &str, current: Option<&WeaponIdentity>) -> Option<WeaponAmmo> {
++        if self.usable_at != Some(tick) { return None; }
++        let entry = self.latest.get(steam)?;
++        if Some(&entry.identity) != current || entry.ammo.sampled_at_tick >= tick { return None; }
++        Some(entry.ammo.clone())
++    }
+ }
+ 
+ #[cfg(test)]
+@@ -103,4 +180,112 @@
+         assert!(!matches_handle(h, 10, 7));
+         for invalid in [0, 0xffffff, u32::MAX] { assert!(!matches_handle(invalid, invalid & 0x3fff, invalid >> 14)); }
+     }
+-}
++    fn identity() -> WeaponIdentity {
++        WeaponIdentity { controller: (1, 2), pawn_handle: 3 | (4 << 14), pawn_serial: 4,
++            weapon_handle: 9 | (7 << 14), weapon_serial: 7, side: 2, weapon: "AK-47".into() }
++    }
++    fn sample(tick: u32, clip: u32) -> std::collections::HashMap<String, CachedAmmo> {
++        let id = identity();
++        std::collections::HashMap::from([("self".into(), CachedAmmo { ammo: WeaponAmmo {
++            source: "SOURCE2_ACTIVE_WEAPON", phase: "TICK_END", version: 2, sampled_at_tick: tick,
++            weapon: id.weapon.clone(), weapon_handle: id.weapon_handle, clip }, identity: id })])
++    }
++    const ROUND: Option<RoundIdentity> = Some((3, 42));
++
++    #[test]
++    fn cache_invalidates_missing_latest_and_all_identity_boundaries() {
++        let mut cache = AmmoCache::default();
++        cache.begin_tick(100, ROUND);
++        assert!(cache.for_frame(100, "self", Some(&identity())).is_none());
++        cache.replace_end(100, ROUND, sample(100, 7));
++        cache.begin_tick(101, ROUND);
++        assert_eq!(cache.for_frame(101, "self", Some(&identity())).unwrap().ammo_tick_and_clip(), (100, 7));
++        for index in 0..7 {
++            let mut changed = identity();
++            match index { 0 => changed.controller.1 += 1, 1 => changed.pawn_handle += 1,
++                2 => changed.pawn_serial += 1, 3 => changed.weapon_handle += 1,
++                4 => changed.weapon_serial += 1, 5 => changed.side = 3, _ => changed.weapon = "M4A4".into() }
++            assert!(cache.for_frame(101, "self", Some(&changed)).is_none());
++        }
++        assert!(cache.for_frame(101, "self", None).is_none()); // dead/invalid current identity
++        cache.replace_end(101, ROUND, Default::default()); // dead/missing/invalid newest source
++        cache.begin_tick(102, ROUND);
++        assert!(cache.for_frame(102, "self", Some(&identity())).is_none());
++        cache.replace_end(102, ROUND, sample(102, 9));
++        cache.begin_tick(103, Some((4, 43)));
++        assert!(cache.for_frame(103, "self", Some(&identity())).is_none());
++        cache.replace_end(103, ROUND, sample(103, 9));
++        cache.begin_tick(104, ROUND);
++        cache.begin_tick(104, ROUND); // duplicate callback, not duplicate commands
++        assert!(cache.for_frame(104, "self", Some(&identity())).is_none());
++        cache.replace_end(104, ROUND, sample(104, 9));
++        cache.replace_end(104, ROUND, sample(104, 10));
++        cache.begin_tick(105, ROUND);
++        assert!(cache.for_frame(105, "self", Some(&identity())).is_none());
++    }
++
++    #[test]
++    fn cache_is_latest_only_not_a_tick_history() {
++        let mut cache = AmmoCache::default();
++        for tick in 0..10_000 {
++            cache.replace_end(tick, ROUND, sample(tick, 7));
++            cache.begin_tick(tick + 1, ROUND);
++            assert_eq!(cache.latest.len(), 1);
++        }
++        assert_eq!(cache.max_entries, 1);
++        cache.replace_end(10_000, None, sample(10_000, 7));
++        assert!(cache.latest.is_empty());
++    }
++
++    impl WeaponAmmo {
++        fn ammo_tick_and_clip(&self) -> (u32, u32) { (self.sampled_at_tick, self.clip) }
++    }
++    #[derive(Default)]
++    struct LifecycleProbe { cache: AmmoCache, starts: Vec<(u32, Option<(u32, u32)>)>, ends: Vec<u32> }
++    #[observer]
++    impl LifecycleProbe {
++        #[on_tick_start]
++        fn start(&mut self, ctx: &Context) -> ObserverResult {
++            self.cache.begin_tick(ctx.tick(), ROUND);
++            self.starts.push((ctx.tick(), self.cache.for_frame(ctx.tick(), "self", Some(&identity())).map(|a| a.ammo_tick_and_clip())));
++            Ok(())
++        }
++        #[on_tick_end]
++        fn end(&mut self, ctx: &Context) -> ObserverResult {
++            self.ends.push(ctx.tick());
++            // Synthetic ammo stand-in records a real processed CNetMsgTick value.
++            // No filesystem Demo or fabricated canonical time is involved.
++            self.cache.replace_end(ctx.tick(), ROUND, sample(ctx.tick(), ctx.net_tick()));
++            Ok(())
++        }
++    }
++    #[test]
++    fn real_parser_observer_caches_completed_messages_before_next_start() {
++        use source2_demo::proto::{CDemoFileInfo, CDemoPacket, CNetMsgTick};
++        use source2_demo::writer::{write_demo_message, BitstreamWriter, BitsWriter};
++        let mut bytes = b"PBDEMS2\0".to_vec();
++        bytes.extend_from_slice(&16_u32.to_le_bytes()); bytes.extend_from_slice(&[0; 4]);
++        write_demo_message(&mut bytes, EDemoCommands::DemFileInfo, 0, &CDemoFileInfo::default().encode_to_vec()).unwrap();
++        write_demo_message(&mut bytes, EDemoCommands::DemSyncTick, 0, &[]).unwrap();
++        for (tick, marker) in [(100, 7), (100, 6), (101, 5), (104, 4), (105, 3), (103, 2)] {
++            let payload = CNetMsgTick { tick: Some(marker), ..Default::default() }.encode_to_vec();
++            let mut packet = Vec::new();
++            { let mut bits = BitstreamWriter::new(&mut packet);
++              bits.write_ubit_var(NetMessages::NetTick as u32).unwrap();
++              bits.write_var_u32(payload.len() as u32).unwrap(); bits.write_bytes(&payload).unwrap(); bits.flush().unwrap(); }
++            write_demo_message(&mut bytes, EDemoCommands::DemPacket, tick, &CDemoPacket { data: Some(packet) }.encode_to_vec()).unwrap();
++        }
++        let mut parser = Parser::from_slice(&bytes).unwrap();
++        let probe = parser.register_observer::<LifecycleProbe>();
++        parser.run_to_end().unwrap();
++        let p = probe.borrow();
++        assert!(p.starts.contains(&(100, None)));
++        assert!(p.starts.contains(&(101, Some((100, 6))))); // both same-tick messages processed
++        assert!(p.starts.contains(&(104, None))); // actual end101 is not invented end103
++        assert!(p.starts.contains(&(105, Some((104, 4)))));
++        assert!(p.starts.contains(&(103, None))); // backward tick
++        assert_eq!(p.starts.iter().filter(|(t, _)| *t == 100).count(), 1);
++        assert_eq!(p.ends.iter().filter(|t| **t == 100).count(), 1);
++    }
++
++}
+--- a/packages/replay-core/src/schema.ts
++++ b/packages/replay-core/src/schema.ts
+@@ -37,6 +37,7 @@
+   pauses?: Pause[]
+   /** Generator version, useful for format migrations. */
+   generatedBy: string
++  ammoCacheMaxEntries?: number
+ }
+ 
+ /** A pause in the match: a tactical timeout or an admin/technical pause. */
+@@ -265,7 +266,8 @@
+   side: Side
+   /** Short label of the active weapon (e.g. "AK-47", "AWP", "HE"). */
+   activeWeaponHandle?: number
+-  weaponAmmo?: { source: "SOURCE2_ACTIVE_WEAPON"; phase: "TICK_END"; sampledAtTick: number; weapon: string; weaponHandle: number; clip: number }
++  ammoSamplingVersion?: 2
++  weaponAmmo?: { source: "SOURCE2_ACTIVE_WEAPON"; phase: "TICK_END"; version?: 2; sampledAtTick: number; weapon: string; weaponHandle: number; clip: number }
+   weapon: string
+   /** Source-engine navigation place token (`m_szLastPlaceName`). */
+   lastPlaceName?: string

@@ -1809,3 +1809,10 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：仓库内固定 vendor 及双许可证，只在 CS2 字段构造前选 Unsigned32；消费端只接受 raw unsigned，checked_sub(1)并拒绝超界。标准 metadata/WASM/native 共用相对 Cargo patch，lock 固定版本；check 只预检，离线为显式环境选择，不让本次禁止下载变成新环境构建障碍。干净 checkout 先按完整序列 apply，不能要求最后补丁独立可应用。
 - 验证：真实 Field fixture 先红后绿，CS2/非CS2各2通过；parser6/vendor33、相关165及最终工具链26 tests、TS/Web/WASM/Viewer build与Viewer类型检查通过。隔离clean→check→12patches→reuse→local metadata通过。唯一新增真实解析9,198ms，目标7,239帧中2,960有效clip记录、41条空clip采样；不是41次打空事件。同Replay消融44候选与完整路线/4诊断判断建议不变。
 - 限制：4正式cue全部因prior→decision间本人开火拒用，真实教学消费0/4、A4消费未过，不宣称教学质量改善；不再解析或放宽门。现有frame采样间隔8tick，后续可独立设计每玩家最近tick-end小缓存，但尚未证明生命周期/覆盖，不能使用decision同tick结束信息。备弹未知，换弹/捡放事件覆盖未证完整。阶段证据见[验收](validation/LOSSLESS_DECISION_AMMO.md)，ARCHITECTURE仍是合同权威。
+
+## 2026-09-26：把最新tick-end小样本携带到下一帧，避免8tick采样空隙
+
+- 问题：无损decoder已提供弹匣事实，但按每秒8帧在同frame tick-end附值，Host严格prior必须退到早8ticks的frame；4个正式cue期间有开火，全部失效。
+- 决定：先从真实source2 runner/observer确认end旧tick→start新tick→消息处理。每tick-end单次controller遍历、index查pawn/weapon、整批替换O(players)小缓存；绑定完整实体世代与round。下一start只接受真实相邻end样本，frame不再被同tick-end覆写。v2独立sample时间/refs与明确缺失标记，Host按source的round/freshness/strict-prior和变化门判断，旧v1不重解释。
+- 验证：真实Parser/CNetMsgTick Observer夹具验证同tick多命令、跳跃/倒退和真实来源时间；首次夹具缺sync暴露prologue差异，补全协议后通过。parser9/vendor33、相关180tests、TS/Web/WASM/Viewer及ViewerTS通过，clean13patch与0012→0013受控升级通过。本轮唯一真实解析7,118ms/总7,363ms，7,239frames不变、cache实测max10、2,970条有效ammo、正式消费3/4（M4A4=11、FAMAS=12、AK47=14），44候选/全路线/4诊断判断建议消融一致。
+- 限制：c1仍因WEAPON_FIRE与decision同tick19426而拒绝，不能用该tick结束信息解锁。41空clip为记录不是事件；单次耗时非性能基准。备弹与完整换弹/捡放来源仍未知，端点一致不是连续性证明，专业判断质量未提升结论。详见[真实验收](validation/PRIOR_TICK_AMMO.md)。

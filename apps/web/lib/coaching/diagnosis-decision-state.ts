@@ -64,14 +64,20 @@ export function currentDiagnosisResources(context: TeachingDiagnosisHostContext,
   delete projected.weaponAmmo;
   const currentItem = selected.active_item;
   if (!currentItem || hasMissing(missing, "active_item") || !Number.isSafeInteger(currentItem.entity_handle)) return projected;
-  // Latest strictly prior frame only: no fallback through a missing/invalid newer sample.
+  // Legacy v1 uses the latest strictly prior frame; v2 below uses its own source time.
   const prior = (context.timeline?.player_state_tracks ?? []).filter(state => state.player_id === context.selectedPlayerId
     && tick(state.tick) && state.tick >= window.round.start_tick && state.tick < decisionTick).sort((a, b) => b.tick - a.tick);
-  const previous = prior[0];
+  // V2 latest frame carries the newest earlier end sample, including explicit missing.
+  // Never fall back to older frames when this latest cache entry was invalidated.
+  const cached = currentItem.ammo_sampling_version === 2;
+  const previous = cached ? selected : prior[0];
   const ammo = previous?.active_item?.ammo_evidence;
-  if (!previous || (prior[1] && prior[1].tick === previous.tick) || decisionTick - previous.tick > window.ageLimit
+  if (!previous || (!cached && prior[1] && prior[1].tick === previous.tick) || decisionTick - previous.tick > window.ageLimit
     || previous.alive !== true || previous.side !== selected.side || !ammo
-    || ammo.sampled_at_tick !== previous.tick || previous.active_item?.item_id !== currentItem.item_id
+    || !tick(ammo.sampled_at_tick) || ammo.sampled_at_tick < window.round.start_tick
+    || ammo.sampled_at_tick >= decisionTick || decisionTick - ammo.sampled_at_tick > window.ageLimit
+    || (cached ? ammo.version !== 2 || ammo.sampled_at_tick >= previous.tick : ammo.version !== undefined || ammo.sampled_at_tick !== previous.tick)
+    || previous.active_item?.item_id !== currentItem.item_id
     || ammo.weapon_handle !== currentItem.entity_handle) return projected;
   if (context.timeline?.match_events?.some(event =>
     ["WEAPON_FIRE", "RELOAD", "ITEM_PICKUP", "ITEM_DROP"].includes(event.event_type) && event.actor_player_id === context.selectedPlayerId

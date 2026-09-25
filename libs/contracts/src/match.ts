@@ -8,7 +8,8 @@ export interface ActiveItem {
   ammo_clip?: number;
   ammo_reserve?: number;
   /** Optional tick-end clip provenance; absent in old saved data. Not a reserve count. */
-  ammo_evidence?: { source: "SOURCE2_ACTIVE_WEAPON"; phase: "TICK_END"; sampled_at_tick: number; weapon_handle: number; fact_ref: string };
+  ammo_sampling_version?: 2;
+  ammo_evidence?: { version?: 2; source: "SOURCE2_ACTIVE_WEAPON"; phase: "TICK_END"; sampled_at_tick: number; weapon_handle: number; fact_ref: string };
 }
 
 export interface InventoryItem extends ActiveItem {

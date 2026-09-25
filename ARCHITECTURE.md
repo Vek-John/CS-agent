@@ -1,8 +1,8 @@
 # CS2 AI Demo Coach 长期架构设计
 
 > **文档状态：长期维护、架构唯一事实来源（Normative）**
-> 版本：5.9.0
-> 最后更新：2026-09-24
+> 版本：5.9.1
+> 最后更新：2026-09-26
 > 适用范围：Web 2D 到桌面端长期产品
 > 产品定义：[PRD.md](./PRD.md)
 > 当前产品范围：[MVP_SCOPE.md](./MVP_SCOPE.md)
@@ -203,9 +203,13 @@ DecisionResources.health/armor/hasHelmet为可选字段，缺失是unknown，不
 
 项目内`vendor/source2-demo`固定0.5.4，保留MIT/Apache许可证与来源。仅CS2 scalar `m_iClip1`声明int32时，在生产SendTable构造Field前选择Unsigned32，保留原wire；其他字段/数组/非CS2解码不变。cs2d consumer只接受Unsigned32，checked_sub(1)后限制0..255；raw0、高位及超界均未知，Signed32不得inverse。标准WASM/native构建以相对CLI Cargo patch指向该副本，按锁文件解析并用metadata验证来源和cs2 feature；不修改共享registry或全局Cargo配置。工具链check不提前解析尚未应用补丁的lock，显式离线运行用CARGO_NET_OFFLINE=true。
 
-Parser独立记录tick-start已验证active weapon handle，以及tick-end弹匣样本，核对controller/pawn/weapon实体index与serial、存活/阵营和支持的枪械类型。Adapter 1.9保留独立TICK_END来源、采样tick和ammo ref，不将其合并成tick-start资源。Host先通过既有本人/回合/生命/新鲜度与snapshot门，再选择同回合严格早于decision的最新唯一样本，最多半秒；同名武器及两端已验证实体handle均须一致，缺失/重复/冲突不得向前跳过。可证本人WEAPON_FIRE/RELOAD/ITEM_PICKUP/ITEM_DROP发生在采样之后、decision之前或同tick时使记录失效。
+Parser在真实tick-end回调对controllers做一次遍历，按index读取并验证pawn/weapon，只保留每玩家最新可信弹匣小样本；整批替换使缺失、无效、死亡、重复身份立即失效，不保存逐tick流或增加Replay帧率。样本记录回调的真实tick、controller/pawn/weapon完整实体身份、阵营及round signature。下一tick-start只有实测前置end与当前tick相邻、回合和当前已验证身份一致时才能携带；首次/跳tick/倒退/重复回调均不猜测来源时间。frame生成后不再被同tick-end ammo覆写。
 
-匿名compact只传weapon/clip/独立evidenceRefs，不传handle、玩家身份或原tick。没有独立decision时间的legacy rich路径不投影新弹药。教学只称“决策前最近记录弹匣”：两端同实体不证明区间连续，换弹/拾取/丢弃事件覆盖尚未证明完整，不能称为决策瞬间精确余量。备弹时代/单位仍未知，total_ammo_left不得替代clip。低弹药不改变风险门、Verdict或Transfer建议；旧保存产物不重算。真实验收证明来源可产出，但当前样本4个正式cue均因期间开火而拒用，尚无真实教学消费或质量提升证据，见[本轮验收](docs/validation/LOSSLESS_DECISION_AMMO.md)。
+Parser ammo_sampling_version=2与ammo.version=2明确“当前tick-start容器携带此前tick-end样本”；Adapter 1.10保留独立sampled_at_tick、version、原sample时间ref和当前武器handle。v2 marker在最新ammo缺失时仍存在，Host只检查当前最新容器中的记录，禁止退回更旧frame；v1/1.9仍要求ammo sample==容器tick，只从严格prior旧frame读取，不能把旧tick-end字段误解释成更早。legacy rich没有独立decision时间时仍不投影ammo。
+
+Host先通过既有本人/当前回合/生命/新鲜度与snapshot门，再独立检查ammo来源tick：属于当前round、严格早于decision且最多半秒旧；v2还须早于容器tick，端点武器名/已验证handle一致。跨round来源不能因容器归入新round而合法化。可证本人WEAPON_FIRE/RELOAD/ITEM_PICKUP/ITEM_DROP满足sample<event<=decision时仍失效，包括决策同tick开火。当前或最新ammo缺失/重复/冲突不得回退。匿名compact只传weapon/clip/独立evidenceRefs，不传handle、玩家身份或原tick。
+
+教学只称“决策前最近记录弹匣”：两端同实体不证明区间连续，换弹/拾取/丢弃事件覆盖尚未证明完整，不能称为决策瞬间精确余量。备弹时代/单位仍未知，total_ammo_left不得替代clip。低弹药不改变风险门、Verdict或Transfer建议；旧保存产物不重算。[真实验收](docs/validation/PRIOR_TICK_AMMO.md)在帧数不变时将此前0/4正式消费提升到3/4，余下1点因decision同tick开火正确拒绝；这是事实输入与实际measurement的改善，不是专业判断质量提升证据。
 
 ### 2.13 托管 Demo 与会话恢复
 

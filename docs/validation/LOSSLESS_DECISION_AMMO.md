@@ -2,6 +2,8 @@
 
 2026-09-26，基线 `85d0983`，分支 `codex/jev-decision-assessment`。这是前次[来源调查](DECISION_AMMO.md)之后的独立实现阶段。工程修复落地，但当前 Demo 的正式教学消费仍 **0/4**，不宣称教学质量、判断或建议提升。
 
+后续阶段已在保持边界的条件下实现3/4真实消费，见[独立此前采样验收](PRIOR_TICK_AMMO.md)。以下保留本阶段0/4的历史结果。
+
 ## 交付与证据
 
 - 项目内受控 source2-demo 0.5.4，仅对 CS2 scalar `m_iClip1: int32` 在真实 SendTable→Field 构造前选择 Unsigned32。保留原 wire；cs2d 再 checked_sub(1)，raw0/高位/超界未知。共享 registry 与全局 Cargo 配置未改。来源、许可、局部差异见 [UPSTREAM.md](../../vendor/source2-demo/UPSTREAM.md)。
