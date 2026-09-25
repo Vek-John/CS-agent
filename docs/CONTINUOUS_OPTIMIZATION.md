@@ -97,7 +97,9 @@
 
 | 已push，验收完成 | 真实路线自然慢放资格 | 01a0d91d-29b6-7b80-b935-ef39ee0d0966；已release | 6ef784a；一次解析6玩家/16cue，1个P6 C4类自然慢放及15个无动作正确FINISH，0fetch；模拟ACK不关闭A5 |
 
-| 执行中 | 处理窗口内本人开火事实 | 01a0d92a-c3dd-7143-9894-d5eaadcec0a8；独占本轮写入 | 先证明既有shot向DEATH/HP_CHANGE动作事实传递缺口，只补事实不改判断或选点 |
+| 已push，验收完成 | 处理窗口内本人开火事实 | 01a0d92a-c3dd-7143-9894-d5eaadcec0a8；已release | 69ca18e；10窗口/9shot，4cue路线与判断不变，0→2自然慢放；326tests/1旧skip/TS/build通过，模拟ACK不关闭A5 |
+
+| 执行中 | 封闭讲解本地快路径 | 01a0d93c-fe09-7401-8afc-6a05fea80a91；独占本轮写入 | 已批准且只允许逐字复制的讲解避免重复模型请求，先语义等价/调用计数验证 |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
 
