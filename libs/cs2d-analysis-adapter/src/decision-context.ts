@@ -1,3 +1,4 @@
+import { readRoundClock, publicRoundClockFact } from "./round-clock";
 import type { DecisionSnapshot, DecisionValue, DecisionCheck, ObservableDecisionContext, ObservableState } from "@cs-coach/contracts";
 import { MAX_DECISION_SNAPSHOT_BYTES, MAX_DECISION_SNAPSHOT_PLAYERS } from "@cs-coach/contracts";
 import type { Cs2dRound, Cs2dPlayerState } from "./index";
@@ -29,7 +30,7 @@ export function buildDecisionSnapshot(input: {
   const allies = side ? all.filter((player) => player.side === side && player.alive === true) : [];
   const teammates = allies.filter((player) => player.steamId !== selectedPlayerId);
   const noTeammates = complete && side !== null && teammates.length === 0;
-  const missingFields = ["enemy_visibility", "observer_audibility", "team_communication", "trade_window", "safe_reachable_cover", "round_timer", "bomb_timer", "damage_source", "utility_purpose"];
+  const missingFields = ["enemy_visibility", "observer_audibility", "team_communication", "trade_window", "safe_reachable_cover", "bomb_timer", "damage_source", "utility_purpose"];
   if (!complete) missingFields.push("complete_current_roster");
   if (!fresh) missingFields.push("fresh_player_state");
   if (!side) missingFields.push("current_side");
@@ -71,16 +72,19 @@ export function buildDecisionSnapshot(input: {
     check("flashAvailable", flash === null ? "UNVERIFIABLE" : flash ? "APPLICABLE" : "INAPPLICABLE", flash === null ? "无法确认你携带的道具。" : flash ? "你当时携带闪光弹。" : "你当时没有闪光弹。", flash === null ? ["inventory"] : [], "OBSERVABLE"),
     check("flashPurpose", "UNVERIFIABLE", "尚不能验证闪光的作用位置和时机。", ["utility_purpose"])
   ];
+  const clock = readRoundClock(round, frame, decisionTick, tickRate);
+  const hasRoundClock = typeof clock.value?.remainingSeconds === "number";
+  if (!hasRoundClock) missingFields.push("round_timer");
   const snapshot: DecisionSnapshot = {
     version: "decision-snapshot.v1", snapshotId, roundNumber: round.number, selectedPlayerId, decisionTick, sampledAtTick: frame?.tick ?? null,
     selectedPlayer: value(fresh && selected ? { side, alive: boolOrNull(selected.alive), health: numberOrNull(selected.health), armor: numberOrNull(selected.armor), helmet: boolOrNull(selected.helmet), weapon: textOrNull(selected.weapon), grenades: Array.isArray(selected.grenades) ? selected.grenades.slice(0, 8).map((name) => textOrNull(name) ?? "未知道具") : null, money: numberOrNull(selected.money), equipmentValue: numberOrNull(selected.equipValue), hasDefuseKit: boolOrNull(selected.defuser), callout: mirageChineseCallout(selected.lastPlaceName) ?? null } : null, "OBSERVABLE", fresh ? [] : ["决策前缺少足够新的玩家状态。"]),
     aliveCounts: value(complete && side ? { allies: allies.length, enemies: all.filter((player) => player.side !== side && player.alive === true).length, includesSelectedPlayer: true } : null, "OBSERVABLE"),
     players: all.slice(0, MAX_DECISION_SNAPSHOT_PLAYERS).map((player: Cs2dPlayerState) => ({ playerId: player.steamId, side: sideOrNull(player.side), alive: boolOrNull(player.alive), health: numberOrNull(player.health), boundary: "APPLICABILITY_ONLY" })),
     score: value(numberOrNull(round.scoreT) !== null && numberOrNull(round.scoreCt) !== null ? { t: round.scoreT, ct: round.scoreCt } : null, "OBSERVABLE"),
-    clock: value({ phase: decisionTick < round.startTick ? "FREEZE" : decisionTick >= round.decidedTick ? "POST_ROUND" : "LIVE", elapsedSeconds: Number.isSafeInteger(round.startTick) ? Math.max(0, (decisionTick - round.startTick) / tickRate) : null, remainingSeconds: null }, "OBSERVABLE", ["回放未提供可靠的剩余回合时间，不能用最终回合长度反推。"]),
+    clock,
     bomb: { ...value({ state: bombState, carriedBySelectedPlayer, remainingSeconds: null }, bombBoundary, ["回放未提供可靠的 C4 倒计时。"]), evidenceRefs: bombEvent ? [`cs2d-r${round.number}-event-${round.events.indexOf(bombEvent) + 1}`] : sourceRefs },
     supportChecks,
-    pressureChecks: [check("objectiveAllowsDelay", "UNVERIFIABLE", "缺少可靠的剩余时间，无法确认等待是否可行。", ["round_timer", "bomb_timer"])],
+    pressureChecks: [check("objectiveAllowsDelay", "UNVERIFIABLE", hasRoundClock ? "剩余时间本身不足以确认等待是否可行，仍缺目标、路线和接触条件。" : "缺少可靠的剩余时间，无法确认等待是否可行。", hasRoundClock ? ["objective_timing", "safe_reachable_cover", "line_of_sight", "bomb_timer"] : ["round_timer", "bomb_timer"])],
     spatialChecks: [check("safeReachableCover", "UNVERIFIABLE", "尚不能验证可到达的安全掩体。", ["safe_reachable_cover"]), check("knownAlternateRoute", "UNVERIFIABLE", "尚不能验证玩家已知的可行替代路线。", ["observable_alternate_route"])],
     missingFields,
     limitations: ["存活名单来自当前阵营；队友存在不等于能够协同。", "全图状态只用于否决建议，不能当成玩家知道的敌情。", "伤害来源、视野、声音和安全空间尚不能可靠还原。"]
@@ -96,6 +100,8 @@ export function buildObservableDecisionContext(snapshot: DecisionSnapshot, state
   if (self) publicFacts.push(`你的血量${self.health === null ? "未知" : `为 ${self.health}`}，护甲${self.armor === null ? "未知" : `为 ${self.armor}`}，手持${self.weapon ?? "未知"}。`);
   if (snapshot.aliveCounts.value) publicFacts.push(`当时己方 ${snapshot.aliveCounts.value.allies} 人存活${self?.alive ? "（包括你）" : ""}，对方 ${snapshot.aliveCounts.value.enemies} 人存活。`);
   if (snapshot.score.value) publicFacts.push(`当时比分：进攻方 ${snapshot.score.value.t}，防守方 ${snapshot.score.value.ct}。`);
+  const clockFact = publicRoundClockFact(snapshot.clock);
+  if (clockFact) publicFacts.push(clockFact);
   const bombNames = { NOT_CARRIED: "未携带", CARRIED: "携带中", DROPPED: "掉落", PLANTED: "已安放", DEFUSED: "已拆除", EXPLODED: "已爆炸", UNKNOWN: "未知" };
   if (snapshot.bomb.boundary === "OBSERVABLE" && snapshot.bomb.value) publicFacts.push(`C4 状态：${bombNames[snapshot.bomb.value.state]}。`);
   return { version: "observable-decision-context.v1", boundary: "OBSERVABLE", state: JSON.parse(JSON.stringify({ ...state, claims })) as ObservableState, snapshotId: snapshot.snapshotId, source: "DEMO_OBSERVER_EVIDENCE", publicFacts, freshness: { sampledAtTick: snapshot.sampledAtTick, ageTicks: snapshot.sampledAtTick === null ? null : snapshot.decisionTick - snapshot.sampledAtTick }, confidence: snapshot.selectedPlayer.value ? 0.75 : 0, missingFields: snapshot.missingFields, limitations: snapshot.limitations };
@@ -143,6 +149,9 @@ export function assertDecisionContextShape(snapshot: DecisionSnapshot): void {
     for (const value of [selected.weapon, selected.callout]) if (value !== null && typeof value !== "string") throw new Error("DecisionSnapshot text is invalid.");
     if (selected.grenades !== null) assertStrings(selected.grenades);
   }
+  const clock = snapshot.clock.value;
+  if (clock && (!["FREEZE", "LIVE", "POST_ROUND", "UNKNOWN"].includes(clock.phase) ||
+    [clock.elapsedSeconds, clock.remainingSeconds].some(value => value !== null && (numberOrNull(value) === null || value < 0)))) throw new Error("DecisionSnapshot clock is invalid.");
   const alive = snapshot.aliveCounts.value;
   if (alive && (alive.includesSelectedPlayer !== true || ![alive.allies, alive.enemies].every((count) => Number.isInteger(count) && count >= 0 && count <= 5))) throw new Error("DecisionSnapshot alive counts are invalid.");
   for (const player of snapshot.players) {

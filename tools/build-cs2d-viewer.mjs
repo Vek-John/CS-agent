@@ -22,7 +22,8 @@ function run(command, args, options = {}) {
   }
 }
 
-const patchArgs = ["--clone", "--reuse-patched-checkout"];
+// Parser source patches must reach the WASM used by the Worker, including clean checkouts.
+const patchArgs = ["--clone", "--reuse-patched-checkout", "--build-parser"];
 if (!existsSync(resolve(upstream, "node_modules"))) patchArgs.push("--install");
 run(process.execPath, [patcher, ...patchArgs]);
 // Clone and install the pinned upstream before syncing model/runtime assets.

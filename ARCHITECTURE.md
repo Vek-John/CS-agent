@@ -95,6 +95,14 @@ Demo
 
 `OutcomeCompletionGate` 是**呈现授权**，不是后台计算授权。最终 Narrator 可以在用户播放前读取严格分离、已校验的 `CoachingPackage` 与 `OutcomePackage`，提前生成密封的 `NarrationBundle`；该 bundle 在 gate 完成前只能处于 `PREPARED`，Host、问答、总结和可见事件不得读取其正文。播放器确认到达 `outcome_end_tick` 后，Session 才把对应 bundle 标记为 `PRESENTABLE`。字段级引用防火墙仍保证当前情况和建议不以结果倒推玩家当时的认知。
 
+### 2.4.1 决策前公开回合时钟
+
+Parser在每个已采样frame对应Demo tick的消息结束后附加可选clock来源事实，绑定`sampledAtTick`，不以服务器tick替代canonical tick。来源包括GameRules回合时长/服务器开始时间、真实ServerInfo tick interval、网络tick、回合序号和阶段/暂停状态；原始服务器字段留在Replay所属进程，不授予模型公开知识。旧Replay没有clock时兼容为unknown。
+
+Adapter只取不晚于decisionTick、同回合且最多半秒旧的样本，不外推到决策时刻。仅明确正常live、未植包、字段/时间域有效、服务器与Demo tick增量一致、无暂停或不明暂停历史时计算`duration - (serverTick * interval - roundStartTime)`，以有采样误差的约秒公开事实进入DecisionSnapshot、ObservableContext和既有CoachingPackage。不得用默认回合时长、最终winner/decidedTick/endTick反推；异常计算保持null，不能钳为0。植包后普通回合时钟失效，不推算C4时间。冻结、未知字段、暂停及无法确认补偿的暂停后状态保持未知剩余秒；当前实现发现暂停或不明暂停字段后对该Demo剩余部分保守禁用。
+
+时钟公开事实拥有当时采样来源与可用时间，不能单独批准等待、接敌或路线建议；`objectiveAllowsDelay`和缺LOS的RETURN_AND_FIRE判断门不因此放宽。模型不自行补数或复刻HUD取整。Viewer生产构建必须包含当前parser源码补丁编译的WASM，不能只更新Rust源码而使用旧parser二进制。
+
 ### 2.5 事实、推断、建议分层
 
 - `Fact`：Demo 可直接验证；

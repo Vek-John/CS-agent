@@ -1,0 +1,183 @@
+diff --git a/packages/parser/src/assemble.rs b/packages/parser/src/assemble.rs
+--- a/packages/parser/src/assemble.rs
++++ b/packages/parser/src/assemble.rs
+@@ -300,6 +300,7 @@
+                 })
+                 .collect();
+             rounds[idx].frames.push(Frame {
++                clock: rf.clock.clone(),
+                 tick: rf.tick,
+                 t: round1((rf.tick as f64 - start as f64) / DEMO_TICK_RATE),
+                 players,
+diff --git a/packages/parser/src/collector.rs b/packages/parser/src/collector.rs
+--- a/packages/parser/src/collector.rs
++++ b/packages/parser/src/collector.rs
+@@ -2,7 +2,7 @@
+ //! and events, later assembled into the `Replay` by `crate::assemble`.
+ 
+ use crate::props::*;
+-use crate::schema::{PlayerMeta, PlayerState};
++use crate::schema::{PlayerMeta, PlayerState, RoundClockSample};
+ use crate::weapons::*;
+ use source2_demo::prelude::*;
+ use source2_demo::proto::{
+@@ -11,6 +11,7 @@
+ use std::collections::HashMap;
+ 
+ pub(crate) struct RawFrame {
++    pub(crate) clock: Option<RoundClockSample>,
+     pub(crate) tick: u32,
+     pub(crate) players: Vec<PlayerState>,
+ }
+@@ -83,6 +84,9 @@
+ 
+ #[derive(Default)]
+ pub(crate) struct Collector {
++    clock_tick_interval: Option<f32>,
++    previous_clock_ticks: Option<(u32, u32)>,
++    clock_pause_observed: bool,
+     pub(crate) map_name: String,
+     pub(crate) meta_order: Vec<String>,
+     pub(crate) meta: HashMap<String, PlayerMeta>,
+@@ -189,6 +193,7 @@
+     // The map name comes in ServerInfo, right at the start of the demo.
+     #[on_message]
+     fn on_server_info(&mut self, _ctx: &Context, msg: CSvcMsgServerInfo) -> ObserverResult {
++        self.clock_tick_interval = msg.tick_interval.filter(|v| v.is_finite() && *v > 0.0 && *v <= 1.0);
+         if let Some(m) = msg.map_name {
+             if !m.is_empty() {
+                 // May arrive as a path (e.g. "workshop/123/de_x"); keep just the name.
+@@ -260,6 +265,41 @@
+         // Speech amplitude in this packet (feeds the timeline waveform).
+         let level = audio.voice_level.unwrap_or(0.0);
+         self.voice.push((steam, tick, level, data));
++        Ok(())
++    }
++
++    // Entities and CNetMsgTick for this canonical tick have now been processed.
++    #[on_tick_end]
++    fn on_clock_tick_end(&mut self, ctx: &Context) -> ObserverResult {
++        let (tick, server_tick) = (ctx.tick(), ctx.net_tick());
++        if tick == u32::MAX { return Ok(()); }
++        let continuous = self.previous_clock_ticks.map(|(demo, server)|
++            tick > demo && server_tick != u32::MAX && server_tick > server &&
++            tick - demo == server_tick - server).unwrap_or(false);
++        self.previous_clock_ticks = Some((tick, server_tick));
++        let flags = ["m_bGamePaused", "m_bMatchWaitingForResume", "m_bCTTimeOutActive", "m_bTerroristTimeOutActive"]
++            .map(|name| gamerules_bool(ctx, &format!("m_pGameRules.{name}")));
++        let paused = if flags.iter().any(|v| *v == Some(true)) { Some(true) }
++            else if flags.iter().all(|v| *v == Some(false)) { Some(false) } else { None };
++        let total_paused_ticks = gamerules_i32(ctx, "m_pGameRules.m_nTotalPausedTicks");
++        // No documented general pause compensation: stay conservative even
++        // after resume/reset, rather than subtracting guessed pause durations.
++        self.clock_pause_observed |= paused != Some(false) || total_paused_ticks != Some(0);
++        if let Some(frame) = self.frames.last_mut().filter(|frame| frame.tick == tick) {
++            frame.clock = Some(RoundClockSample {
++                source: "SOURCE2_GAMERULES",
++                sampled_at_tick: tick, server_tick, tick_interval: self.clock_tick_interval,
++                round_duration_seconds: gamerules_i32(ctx, "m_pGameRules.m_iRoundTime"),
++                rounds_played: gamerules_i32(ctx, "m_pGameRules.m_totalRoundsPlayed"),
++                round_start_time_seconds: gamerules_float(ctx, "m_pGameRules.m_fRoundStartTime"),
++                freeze: gamerules_bool(ctx, "m_pGameRules.m_bFreezePeriod"),
++                warmup: gamerules_bool(ctx, "m_pGameRules.m_bWarmupPeriod"),
++                bomb_planted: gamerules_bool(ctx, "m_pGameRules.m_bBombPlanted"),
++                round_win_status: gamerules_i32(ctx, "m_pGameRules.m_iRoundWinStatus"),
++                paused, total_paused_ticks, pause_observed: self.clock_pause_observed,
++                clock_continuous: continuous,
++            });
++        }
+         Ok(())
+     }
+ 
+@@ -399,7 +439,7 @@
+                 grenades: grenade_inventory(ctx, pawn),
+             });
+         }
+-        self.frames.push(RawFrame { tick, players });
++        self.frames.push(RawFrame { tick, players, clock: None });
+ 
+         // Grenade projectile flight points on this sampled tick.
+         for e in ctx.entities().iter() {
+diff --git a/packages/parser/src/props.rs b/packages/parser/src/props.rs
+--- a/packages/parser/src/props.rs
++++ b/packages/parser/src/props.rs
+@@ -205,3 +205,14 @@
+         _ => String::new(),
+     }
+ }
++
++
++pub(crate) fn gamerules_bool(ctx: &Context, name: &str) -> Option<bool> {
++    let proxy = ctx.entities().get_by_class_name("CCSGameRulesProxy").ok()?;
++    match proxy.get_property_by_name(name) { Ok(FieldValue::Boolean(v)) => Some(*v), _ => None }
++}
++
++pub(crate) fn gamerules_float(ctx: &Context, name: &str) -> Option<f32> {
++    let proxy = ctx.entities().get_by_class_name("CCSGameRulesProxy").ok()?;
++    match proxy.get_property_by_name(name) { Ok(FieldValue::Float(v)) if v.is_finite() => Some(*v), _ => None }
++}
+diff --git a/packages/parser/src/schema.rs b/packages/parser/src/schema.rs
+--- a/packages/parser/src/schema.rs
++++ b/packages/parser/src/schema.rs
+@@ -139,8 +139,31 @@
+     pub(crate) steam_id: Option<String>,
+ }
+ 
++/// End-of-demo-tick sample; raw network values are not themselves public facts.
++#[derive(Serialize, Clone)]
++#[serde(rename_all = "camelCase")]
++pub(crate) struct RoundClockSample {
++    pub(crate) source: &'static str,
++    pub(crate) sampled_at_tick: u32,
++    pub(crate) server_tick: u32,
++    pub(crate) tick_interval: Option<f32>,
++    pub(crate) round_duration_seconds: Option<i32>,
++    pub(crate) rounds_played: Option<i32>,
++    pub(crate) round_start_time_seconds: Option<f32>,
++    pub(crate) freeze: Option<bool>,
++    pub(crate) warmup: Option<bool>,
++    pub(crate) bomb_planted: Option<bool>,
++    pub(crate) round_win_status: Option<i32>,
++    pub(crate) paused: Option<bool>,
++    pub(crate) total_paused_ticks: Option<i32>,
++    pub(crate) pause_observed: bool,
++    pub(crate) clock_continuous: bool,
++}
++
+ #[derive(Serialize)]
+ pub(crate) struct Frame {
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub(crate) clock: Option<RoundClockSample>,
+     pub(crate) tick: u32,
+     pub(crate) t: f64,
+     pub(crate) players: Vec<PlayerState>,
+diff --git a/packages/replay-core/src/schema.ts b/packages/replay-core/src/schema.ts
+--- a/packages/replay-core/src/schema.ts
++++ b/packages/replay-core/src/schema.ts
+@@ -214,7 +214,26 @@
+   carrierSteamId?: string
+ }
+ 
++export interface RoundClockSample {
++  readonly source: "SOURCE2_GAMERULES";
++  readonly sampledAtTick: number;
++  readonly serverTick: number;
++  readonly tickInterval: number | null;
++  readonly roundDurationSeconds: number | null;
++  readonly roundStartTimeSeconds: number | null;
++  readonly roundsPlayed: number | null;
++  readonly freeze: boolean | null;
++  readonly warmup: boolean | null;
++  readonly bombPlanted: boolean | null;
++  readonly roundWinStatus: number | null;
++  readonly paused: boolean | null;
++  readonly totalPausedTicks: number | null;
++  readonly pauseObserved: boolean;
++  readonly clockContinuous: boolean;
++}
++
+ export interface Frame {
++  clock?: RoundClockSample
+   tick: number
+   /** Seconds since the round `freezeStartTick` (t = 0 is the start of freeze). */
+   t: number

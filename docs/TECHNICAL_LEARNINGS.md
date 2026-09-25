@@ -1626,3 +1626,12 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：仅新增瞬时completionNotice，生产结果入口绑定session/run/cue/generation/visit及已校验call结果。成功需本次SUCCEEDED且completed；失败结果即使流程收敛也显示未完成。无需工具需最近对应POLICY的无选择记录及无当前工具结果/历史，恢复信息不足保持中性。Host用同一投影函数渲染，并按身份阻止旧成功或详情泄漏。
 - 验证：4文件84相关测试、TS与Web生产构建通过；真实内存Graph测试实际零capability/主动FINISH/成功ACK后接入渲染投影，另覆盖失败、取消、回访切换与未知恢复。详见[验证记录](validation/TEACHING_COMPLETION_STATUS.md)。
 - 限制：没有启动浏览器或真实Demo；此窄文案修复不证明原暂停/继续A5已通过，不产生模型质量提升结论。不改Graph生命周期、Session门、预算/计数或持久化，保持原aria-live、布局、键盘及辅助样式。
+
+
+## 2026-09-25：公开回合时钟必须使用服务器时间域与已到期采样
+
+- 问题：DecisionSnapshot.remainingSeconds一直null；沿最终回合长度反推会引入后见之明，round_start.timelimit在真实样本中为0，也不能当默认时长。Demo tick与server netTick存在偏移。
+- 决定：源头native探针一次确认GameRules duration/startTime与ServerInfo interval；parser补丁0009在on_tick_end附加可选clock。Adapter严格检查同回合、非未来/新鲜样本、阶段、暂停历史、连续网络时间，仅把计算后的约秒公开事实交教学包。原始网络字段不进入模型。未知/冻结/植包/暂停及补偿不明时不计算，旧回放正常unknown；不改变objectiveAllowsDelay与专业判断门。
+- 验证：已有Demo源头探针1.45s；最终单一WASM消费链一次解析6185ms、至教学包6351ms，44候选中38个snapshot有效，4cue中3个CoachingPackage含约秒事实，历史往返通过。148测试通过/1个既有缺WebGPU产物对照跳过；TS、Web/Viewer构建与Viewer TS、Rust现有1测试通过。细节见[验证记录](validation/PUBLIC_ROUND_CLOCK.md)。
+- 学习：公开HUD值可被观察，不意味着所有GameRules原始网络字段都是玩家知识。必须分开数据来源、时间可用性和知识边界；累计暂停字段没有可证公式时宁可缺失。构建还需同步重新编译parser WASM，否则源代码加字段不会在Worker落地。
+- 限制：没有真实暂停段HUD对照，早期缺暂停字段也会禁用整份Demo后续时钟；没有C4精确计时和HUD取整复刻。两次读取分别用于源头可行性与最终一次解析消费，未重复大模型实验、导出bulk或操作浏览器。覆盖率改进不等于教学准确率提升，原工具暂停A5仍独立阻塞。

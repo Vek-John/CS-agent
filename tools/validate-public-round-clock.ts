@@ -1,0 +1,23 @@
+import { readFileSync } from 'node:fs';
+import { initSync, parse_demo } from '../.local-data/upstream/cs2d/apps/app/src/viewer/parser/demo_parser.js';
+import { buildCs2dAnalysisBundle, serializeCs2dAnalysisBundle, deserializeCs2dAnalysisBundle } from '../libs/cs2d-analysis-adapter/src/index';
+import { buildCoachingPackage } from '../libs/review-planner/src/narration-package-builder';
+// Run after pnpm cs2d:build. Replay/frames stay in this one process; stdout is a small summary.
+const [demoPath, playerName] = process.argv.slice(2);
+if (!demoPath || !playerName) throw new Error('Usage: pnpm exec tsx tools/validate-public-round-clock.ts <existing.dem> <player-name>');
+const begin=performance.now();
+initSync({ module: readFileSync('.local-data/upstream/cs2d/apps/app/src/viewer/parser/demo_parser_bg.wasm') });
+const result=parse_demo(readFileSync(demoPath),8,undefined);
+const replay=JSON.parse(result.replay); result.free();
+const parsedMs=performance.now()-begin;
+const selected=replay.players.find((p:any)=>p.name===playerName); if(!selected)throw Error('Existing selected player not found');
+const bundle=buildCs2dAnalysisBundle({replay,selectedSteamId:selected.steamId,demoId:'round-clock-real-validation'});
+const restored=deserializeCs2dAnalysisBundle(serializeCs2dAnalysisBundle(bundle));
+const samples=replay.rounds.flatMap((r:any)=>r.frames.map((f:any)=>({round:r.number,tick:f.tick,clock:f.clock})));
+const proof=samples.find((s:any)=>s.tick===3081);
+const clocks=bundle.candidate_set.materials.filter(m=>typeof m.decisionSnapshot?.clock.value?.remainingSeconds==='number');
+const packages=restored.review_plan.cues.map(c=>({cue:c,pack:buildCoachingPackage(c,restored.candidate_set,restored.observation_evidence)}));
+const consumers=packages.filter(({pack})=>pack.decisionContext.facts.some(f=>f.text.includes('回合剩余时间')));
+if(!clocks.length || !consumers.length)throw Error(`Clock consumption missing: ${clocks.length} snapshots, ${consumers.length} packages`);
+if(packages.some(({pack})=>/"(?:serverTick|tickInterval|roundStartTimeSeconds|totalPausedTicks)"/.test(JSON.stringify(pack))))throw Error('Raw network clock leaked to teaching');
+console.log(JSON.stringify({parsePasses:1,parsedMs:Math.round(parsedMs),totalMs:Math.round(performance.now()-begin),rounds:replay.rounds.length,frames:samples.length,clockFrames:samples.filter((s:any)=>s.clock).length,proof,candidates:bundle.candidate_set.materials.length,snapshotsWithClock:clocks.length,cues:packages.length,packagesWithClock:consumers.length,historyRoundTrip:true,examples:consumers.slice(0,3).map(({cue,pack})=>({decisionTick:cue.decision_tick,clockFacts:pack.decisionContext.facts.filter(f=>f.text.includes('回合剩余时间')).map(f=>({text:f.text,availableAtTick:f.available_at_tick})),publicFacts:pack.observableContext?.publicFacts.filter(f=>f.includes('回合剩余时间')),assessment:pack.assessment.kind,delay:clocks.find(m=>m.candidateId===cue.candidate_id)?.decisionSnapshot?.pressureChecks.find(p=>p.code==='objectiveAllowsDelay')}))},null,2));

@@ -1,3 +1,5 @@
+import type { Cs2dRoundClockSample } from "./round-clock";
+import { publicRoundClockFact } from "./round-clock";
 import { nominateReturnAndFire } from "./return-and-fire";
 import { buildDecisionSnapshot, buildObservableDecisionContext, assertDecisionSnapshot } from "./decision-context";
 export { buildDecisionSnapshot, buildObservableDecisionContext, assertDecisionSnapshot } from "./decision-context";
@@ -119,6 +121,7 @@ export interface Cs2dPlayerState {
 }
 
 export interface Cs2dFrame {
+  readonly clock?: Cs2dRoundClockSample;
   readonly tick: number;
   readonly t: number;
   readonly players: readonly Cs2dPlayerState[];
@@ -948,6 +951,7 @@ function buildCanonicalGeneratorInput(
       // These already-generated facts are the candidate-owned public evidence.
       // Keep their original sourceRefs on the facts, not as dangling model refs.
       selectedPlayer: { ...sourceSnapshot.selectedPlayer, evidenceRefs: sourceSnapshot.selectedPlayer.value && raw.state ? [stateFactId] : [] },
+      clock: { ...sourceSnapshot.clock, evidenceRefs: publicRoundClockFact(sourceSnapshot.clock) ? [`fact-${raw.sourceRef}-clock`] : [] },
       aliveCounts: { ...sourceSnapshot.aliveCounts, evidenceRefs: sourceSnapshot.aliveCounts.value ? [`fact-${raw.sourceRef}-alive-counts`] : [] },
       supportChecks: sourceSnapshot.supportChecks.map((check) =>
       check.status === "APPLICABLE" && check.boundary === "OBSERVABLE"
@@ -980,7 +984,8 @@ function buildCanonicalGeneratorInput(
     const counts = decisionSnapshot.aliveCounts.value;
     if (counts) addPublicFact("alive-counts", `当时己方 ${counts.allies} 人存活${decisionSnapshot.selectedPlayer.value?.alive ? "（包括你）" : ""}，对方 ${counts.enemies} 人存活。`, sourceSnapshot.aliveCounts.evidenceRefs, sampledAt);
     if (decisionSnapshot.score.value) addPublicFact("score", `当时比分：进攻方 ${decisionSnapshot.score.value.t}，防守方 ${decisionSnapshot.score.value.ct}。`, [`round-${raw.round.number}-score-before`], raw.round.startTick);
-    addPublicFact("clock", "当前回合的剩余时间无法从记录确认。", [`round-${raw.round.number}-clock`], raw.decisionTick, ["round_timer"]);
+    const clockFact = publicRoundClockFact(decisionSnapshot.clock);
+    addPublicFact("clock", clockFact ?? "当前回合的剩余时间无法从记录确认。", clockFact ? sourceSnapshot.clock.evidenceRefs : [`round-${raw.round.number}-clock`], clockFact ? sampledAt : raw.decisionTick, clockFact ? [] : ["round_timer"]);
     if (decisionSnapshot.bomb.boundary === "OBSERVABLE" && decisionSnapshot.bomb.value) {
       const bombNames = { NOT_CARRIED: "未携带", CARRIED: "携带中", DROPPED: "掉落", PLANTED: "已安放", DEFUSED: "已拆除", EXPLODED: "已爆炸", UNKNOWN: "未知" };
       addPublicFact("bomb", `C4 状态：${bombNames[decisionSnapshot.bomb.value.state]}。`, decisionSnapshot.bomb.evidenceRefs, raw.decisionTick);

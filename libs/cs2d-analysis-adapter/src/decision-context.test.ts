@@ -58,7 +58,7 @@ describe("trusted compact decision snapshots", () => {
   });
   it("does not guess timers from match settings or eventual round duration", () => {
     const value = snapshot({ ...round(), events: [{ type: "bomb_planted", tick: 100, t: 1.5625, playerSteamId: "p5" }] });
-    expect(value.clock.value).toEqual({ phase: "LIVE", elapsedSeconds: 1, remainingSeconds: null });
+    expect(value.clock.value).toEqual({ phase: "UNKNOWN", elapsedSeconds: null, remainingSeconds: null });
     expect(value.bomb).toMatchObject({ boundary: "OBSERVABLE", value: { state: "PLANTED", remainingSeconds: null } });
     expect(check(value, "objectiveAllowsDelay")?.status).toBe("UNVERIFIABLE");
   });
