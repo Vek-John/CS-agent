@@ -33,9 +33,18 @@
 | 阶段已push，真实验收未完成 | 教学演示暂停与继续 | 01a0d77e-085f-7880-9331-c01becde48cd；已释放写入，服务已停 | 214d743；156测试/Host与Viewer TS/Web与Viewer构建通过；锁屏阻塞原A5，不自动唤醒重试UI；解锁后先协调所有权再补验，见TEACHING_PLAYBACK_CONTROLS.md |
 | 实现与本地验收完成 | 区分无需演示与实际工具完成 | 01a0d795-539b-7421-afbd-64e3f0e5c42a；阶段push后释放写入，无服务/浏览器 | 当前身份完成说明接入真实渲染；无演示、具体成功、失败与未知恢复准确区分；84测试/TS/production build通过，详见TEACHING_COMPLETION_STATUS.md；不关闭原工具暂停A5 |
 | 已push | 决策时公开回合时钟 | 01a0d7bb-d7ea-7e21-864f-54e7e2e17049，完成并释放写入 | 9150d51；44候选/38个有效时钟、4cue/3个教学包消费，148测试通过/1个既有缺产物跳过，TS/Web/Viewer构建通过；暂停补偿未知仍null，不据时间单独判错，见PUBLIC_ROUND_CLOCK.md |
-| 已分配 | 新解析器构建工具链配置 | 01a0d7ce-5686-7d33-84f4-717bae0a8401，独占当前树本轮写入 | Viewer build新增--build-parser，但desktop CI仅配置aarch64目标，缺WASM target/匹配wasm-bindgen；补齐明确依赖、前置失败提示和必要CI/开发说明，不运行发布或完整性审计 |
+| 实现与本地验收完成 | 新解析器构建工具链配置 | 01a0d7ce-5686-7d33-84f4-717bae0a8401，独占当前树本轮写入 | CI补WASM target/固定CLI0.2.125，保持Rust1.89；本地同toolchain预检和一次编译接线完成，21测试/真实parser与Viewer构建/TS/Web build通过；CI及1.89实际编译未运行，见PARSER_TOOLCHAIN.md |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
+
+## 本轮任务卡：Parser WASM构建工具链（2026-09-25）
+
+- 基线1e39be4干净，01a0d7ce-5686-7d33-84f4-717bae0a8401独占写入，有限goal已建。A1核实实际lock/MSRV/CI；A2显式target和匹配CLI；A3所选toolchain本地早期预检；A4受控命令失败路径及现有工具真实构建/TS/Web build；A5README/日志/任务板与commit/push。无浏览器、模型、Demo或发布操作。
+- 已核实：parser锁定bindgen0.2.125；现有依赖声明最高Rust1.85，CLI官方声明1.86，沿用CI1.89而不升级。普通shell实际Homebrew Rust与构建原先优先~/.cargo/bin不同；预检与执行必须使用parser目录选择出的同一rustup toolchain和compiler。
+- 范围：补WASM target/固定CLI的CI安装声明，仅parser Cargo恢复deprecated warning，保留桌面原-D warnings（action默认-D warnings会阻塞上游parser）；只读预检禁用隐式安装，缺cargo/rustup/target/CLI及版本不匹配先失败并提示操作。desktop:prepare先check，无自动本机升级或重复完整构建。主控自行完成，构建10分钟上限，负责所有进程清理。
+
+- 最终证据：21项小范围测试通过，含执行实际CI安装shell的隔离命令探针，缺/错CLI安装一次、正确CLI零安装。真实cs2d:check、一次parser/Viewer构建、TS与production build通过，本机实际Rust1.97.1/CLI0.2.125。主控复查后将豁免缩到parser Cargo的deprecated lint；支持普通与encoded flags，严格父环境实际构建和相关测试再验通过，桌面-D warnings保持。
+- 限制与清理：未运行GitHub CI或Rust1.89实际编译、未触发发布、不安装/升级本机工具或删除缓存；原A5不动。测试临时目录已清理，所有本轮进程退出；文档/README同步，commit/push后释放写入。不因验证不足声称干净CI实际通过，下一次正常CI运行再确认该环境。
 
 ## 本轮任务卡：决策时公开回合时钟（2026-09-25）
 

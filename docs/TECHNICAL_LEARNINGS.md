@@ -1635,3 +1635,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 验证：已有Demo源头探针1.45s；最终单一WASM消费链一次解析6185ms、至教学包6351ms，44候选中38个snapshot有效，4cue中3个CoachingPackage含约秒事实，历史往返通过。148测试通过/1个既有缺WebGPU产物对照跳过；TS、Web/Viewer构建与Viewer TS、Rust现有1测试通过。细节见[验证记录](validation/PUBLIC_ROUND_CLOCK.md)。
 - 学习：公开HUD值可被观察，不意味着所有GameRules原始网络字段都是玩家知识。必须分开数据来源、时间可用性和知识边界；累计暂停字段没有可证公式时宁可缺失。构建还需同步重新编译parser WASM，否则源代码加字段不会在Worker落地。
 - 限制：没有真实暂停段HUD对照，早期缺暂停字段也会禁用整份Demo后续时钟；没有C4精确计时和HUD取整复刻。两次读取分别用于源头可行性与最终一次解析消费，未重复大模型实验、导出bulk或操作浏览器。覆盖率改进不等于教学准确率提升，原工具暂停A5仍独立阻塞。
+
+
+## 2026-09-25：WASM源码落地需要同一套可执行工具链
+
+- 问题：Viewer开始默认编译parser后，desktop CI只装Apple Silicon Rust target，没有WASM target和匹配bindgen。普通shell与构建PATH还可能分别选中Homebrew和rustup；已安装某个target不意味着实际编译器可用。Rust setup action默认-D warnings也会把上游parser的deprecated warning转成失败。
+- 决定：沿用CI Rust1.89.0，显式补WASM target和固定CLI0.2.125，匹配版本不重复安装，保留桌面-D warnings，仅parser Cargo子进程追加--force-warn deprecated使上游弃用警告保持可见。共享只读预检在parser cwd解析active toolchain，检查锁文件、所选target及实际版本，并将绝对Cargo/rustc/CLI用于同一次构建。禁用隐式安装、不升级用户工具；desktop:prepare先预检，失败给操作指引。
+- 验证：21项命令探针/patch测试通过，真实CI安装shell在隔离假工具PATH中验证缺失/错版/匹配三种分支；pnpm cs2d:check、真实parser/Viewer构建、TS/Web生产构建通过；收到作用域复查后只重验相关工具链测试与-D warnings父环境的实际parser构建，确认不改桌面警告策略。见[验证记录](validation/PARSER_TOOLCHAIN.md)。
+- 限制：真实本地编译为已有Rust1.97.1/CLI0.2.125；CI1.89沿用现有固定版本且满足已核对的依赖声明，但没有在本轮安装1.89或运行GitHub CI/desktop发布。没有改架构边界、模型或原锁屏A5，所有子进程退出并释放写入。

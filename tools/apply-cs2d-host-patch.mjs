@@ -1,7 +1,7 @@
+import { buildParserWasm, preflightParserToolchain } from './cs2d-parser-toolchain.mjs'
 import { existsSync, readFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
-import { delimiter, dirname, resolve } from 'node:path'
-import { homedir } from 'node:os'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { spawnSync } from 'node:child_process'
 
@@ -479,6 +479,13 @@ async function main(argv = process.argv.slice(2)) {
     run('git', ['checkout', '--detach', CS2D_PIN], { cwd: upstream })
   }
 
+  const parserToolchain = flags.has('--build-parser') || flags.has('--check-parser')
+    ? preflightParserToolchain(resolve(upstream, 'packages/parser')) : undefined
+  if (flags.has('--check-parser')) {
+    process.stdout.write(`[parser toolchain] ready: ${parserToolchain.toolchain}; wasm-bindgen ${parserToolchain.bindgenVersion}\n`)
+    return
+  }
+
   const inspection = reuse ? inspectPatchedCheckout(upstream) : null
   if (inspection?.decision === CS2D_REUSE_DECISIONS.EXACT_APPLIED) {
     process.stdout.write(`[cs2d-host] reused exact patched checkout at ${CS2D_PIN.slice(0, 7)}\n`)
@@ -518,16 +525,7 @@ async function main(argv = process.argv.slice(2)) {
     run('pnpm', ['install', '--frozen-lockfile'], { cwd: upstream })
   }
 
-  if (flags.has('--build-parser')) {
-    const cargoBin = resolve(homedir(), '.cargo/bin')
-    run('bash', [resolve(upstream, 'packages/parser/build.sh')], {
-      cwd: resolve(upstream, 'packages/parser'),
-      env: {
-        ...process.env,
-        PATH: [cargoBin, process.env.PATH].filter(Boolean).join(delimiter),
-      },
-    })
-  }
+  if (flags.has('--build-parser')) buildParserWasm(resolve(upstream, 'packages/parser'), { checked: parserToolchain })
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

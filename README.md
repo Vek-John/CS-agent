@@ -99,7 +99,21 @@ Tauri 只监督一个直接 child：固定 Node `24.19.0` 运行的 desktop runt
 
 ## 开发者快速开始
 
-开发仓库与普通用户安装包不同。开发者需要 Node、pnpm、Rust/WASM 和固定上游源码：
+开发仓库与普通用户安装包不同。开发者需要 Node、pnpm、Rust/WASM 和固定上游源码。当前构建支持 Rust **1.89.0 或更新版本**（CI固定1.89.0），所选工具链必须安装 `wasm32-unknown-unknown` target；parser的Cargo.lock锁定 `wasm-bindgen 0.2.125`，CLI必须同为 **0.2.125**。macOS还需Xcode Command Line Tools提供本机linker；普通安装包用户不需要这些工具。
+
+先显式准备工具链（以下是开发者自行执行的安装命令，构建脚本不会自动安装或全局升级）：
+
+```bash
+# 安装rustup的方法见 https://rustup.rs；将它的工具放到当前shell PATH。
+export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
+rustup toolchain install 1.89.0 --profile minimal
+rustup target add wasm32-unknown-unknown --toolchain 1.89.0
+cargo +1.89.0 install wasm-bindgen-cli --version 0.2.125 --locked
+# 可只在当前shell选择，不必改变全局默认工具链。
+export RUSTUP_TOOLCHAIN=1.89.0
+```
+
+随后准备项目：
 
 ```bash
 git clone https://github.com/Vek-John/CS-agent.git
@@ -107,6 +121,10 @@ cd CS-agent
 pnpm install --frozen-lockfile
 pnpm cs2d:setup
 ```
+
+`pnpm cs2d:check`只准备固定上游checkout并检查本地工具，不安装Rust/CLI、不编译parser；`desktop:prepare`先执行它，缺依赖会在昂贵资源构建前停止。预检在parser目录解析rustup所选工具链，检查该工具链的target，实际编译绑定相同Cargo/rustc，避免Homebrew或其他工具链的target造成误判。自定义`CARGO_HOME`受支持；冲突的`RUSTC`覆盖需先解除。
+
+`cs2d:build`与`cs2d:setup`保留一次实际parser WASM编译及bindgen生成，再构建Viewer，不会退回旧WASM。缺工具或CLI/lock不匹配时，错误会给出针对所选toolchain的命令；已有兼容CLI不会重复安装。升级parser锁依赖时需同步CI固定CLI版本。
 
 桌面常用命令：
 
