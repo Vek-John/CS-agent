@@ -2,6 +2,13 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 当前任务：整场完成同步失败反馈（2026-09-26）
+
+- 4de4a91基线clean，前产品f9d9cbd已完成/release，01a0d9e3-8904-7a40-a998-a6ed8a7558df串行独占本轮Stage3 Controller完成结果/Host收尾/既有总结fallback/tests/docs，主控只读，默认配置。
+- 新证据：Controller.completeSession catch返回undefined，CONFIRMED去重和身份不符也返回undefined；Host完成effect只在result存在调用requestStage3WrapUp。Graph不可用而本地诊断/Session已经走完时，摘要可停在IDLE无result，面板空白。先真实controller→Host入口fixture复现，不预设必须新增模型/数据契约。
+- A1区分实际失败、pending/已确认去重、过期/取消；A2当前会话失败明确提示未生成并可完成/回看，若存储可用复用既有失败artifact语义；A3重复effect不得把已保存成功覆盖为失败，旧会话不写新UI，默认diagnostics本地fallback可收尾且恢复不重新调用；A4相关tests/TS/production build；A5必要架构/学习/证据/任务板commit/push/release。
+- 风险/边界：只修有证据的完成请求→收尾展示，不全Host审计、不重写Graph/恢复/重试框架、不伪造Graph已完成或无重复主题、不改Session完成门。5分钟复现、15分钟实现、10分钟检查，必要5分钟只读review；无Demo/模型/UI服务/用户DB/密钥/部署main。纯fixture/fake transport，owner清自有测试资源。
+
 ## 最新交付：弹药真实教学消费已闭合（2026-09-26）
 
 - f9d9cbd已push，主控核对真实diff与PRIOR_TICK_AMMO_EVIDENCE.json；工作树干净、owner01a0d9c5-a6c6-78d3-9b79-acc3620a154e完成goal并release。3/4正式cue消费此前一tick弹匣记录，c1同decision tick开火继续未知，不追求4/4；原9092a71阶段A4缺口已被新证据闭合，已通知原owner仅更新goal。
