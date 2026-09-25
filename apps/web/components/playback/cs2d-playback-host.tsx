@@ -132,7 +132,8 @@ import {
   Stage2AckTimeoutController,
   type Stage2ToolContext
 } from "../../lib/coaching/coach-agent-host-adapter";
-import { requestTeachingDiagnosisReplay } from "../../lib/coaching/diagnosis-replay";
+import { requestCurrentOutcomeReplay, HostOutcomeReplayGuard, outcomeReplayInteractionKey, newManualVisitId } from "../../lib/coaching/diagnosis-replay";
+import type { OutcomeReplayTarget } from "@cs-coach/session";
 import { buildCurrentCueQuestionContext, currentCueQuestionState, updateCurrentCueQuestions, type CurrentCueQuestionState } from "../../lib/coaching/current-cue-questions";
 import { CurrentCueQuestionsPanel } from "./current-cue-questions-panel";
 import { CurrentCueResourceCache } from "../../lib/coaching/current-cue-resource-source";
@@ -431,7 +432,7 @@ export function Cs2dPlaybackHost({
   const stage3InputRef = useRef<Stage3HostAdapterInput | undefined>(undefined);
   const stage3DefaultInputRef = useRef<Stage3HostAdapterInput | undefined>(undefined);
   const stage3IdentityRef = useRef<Stage3IdentityInput | undefined>(undefined);
-  const manualVisitSequenceRef = useRef(0);
+  const outcomeReplayGuardRef = useRef(new HostOutcomeReplayGuard());
   const replayHashRef = useRef<string | undefined>(undefined);
   const liveSessionRef = useRef<CoachingSessionState | undefined>(undefined);
   const liveCueRef = useRef<ReviewPlan["cues"][number] | undefined>(undefined);
@@ -2118,7 +2119,15 @@ export function Cs2dPlaybackHost({
   const transition = useCallback((action: SessionAction) => {
     const activePlan = planRef.current;
     if (!activePlan) return;
-    clearUserTakeover();
+    if (action.type === "REPLAY_OUTCOME") {
+      if (!outcomeReplayGuardRef.current.begin({
+        plan: activePlan, session: liveSessionRef.current, action, control: transportRef.current,
+        busy: ["STARTING", "FOCUSING", "RESUMING"].includes(stage2Status) || Boolean(stage3ControllerRef.current?.busy)
+          || ["STARTING", "FOCUSING", "RESUMING"].includes(stage3State.status)
+          || Boolean(diagnosticBusyCueId && diagnosticBusyCueId === liveSessionRef.current?.current_cue_id), takenOver: userTookOverRef.current,
+        notifyTransport, invalidateSeek: invalidateGuidedSeek, clearTakeover: clearUserTakeover,
+      })) return;
+    } else clearUserTakeover();
     // Stage 3 normally emits the terminal event that records CUE_PRESENTED.
     // Adaptive diagnosis deliberately does not start that visual controller,
     // so close the same boundary when the player leaves the adaptive surface
@@ -2150,10 +2159,11 @@ export function Cs2dPlaybackHost({
     });
     const activeSession = liveSessionRef.current;
     if (activeSession) {
-      const key = `${activeSession.id}:${action.type}:${activeSession.current_cue_id ?? activeSession.current_segment_index}`.slice(0, 160);
+      const key = action.type === "REPLAY_OUTCOME" ? outcomeReplayInteractionKey(activeSession, action)
+        : `${activeSession.id}:${action.type}:${activeSession.current_cue_id ?? activeSession.current_segment_index}`.slice(0, 160);
       void historyPersistenceControllerRef.current?.artifact("USER_INTERACTION", key, { action, sessionId: activeSession.id, cueId: activeSession.current_cue_id ?? null }, "user-interaction.v1").catch(() => setHistoryError("复盘操作保存失败。"));
     }
-  }, [clearUserTakeover, diagnosticsEnabled]);
+  }, [clearUserTakeover, diagnosticsEnabled, diagnosticBusyCueId, invalidateGuidedSeek, notifyTransport, stage2Status, stage3State.status]);
 
   const transitionKey = session ? guidedTransitionKey(session) : "idle";
   useEffect(() => {
@@ -2629,12 +2639,14 @@ export function Cs2dPlaybackHost({
     }
   }, [activePlan, buildStage3Identity, cue, diagnosisContext, isTeachingDiagnosisRequestLive, mirrorAgentResult, replay?.demoContentHash, routeState, stage3IdentityContext, synchronizeTeachingDiagnosis]);
 
-  const replayTeachingDiagnosis = useCallback((sessionId: string, cueId: string) => {
-    requestTeachingDiagnosisReplay({ sessionId, cueId }, () => ({
-      session: liveSessionRef.current, cueCase: teachingCasesRef.current[cueId],
-      busy: agentToolBusy || Boolean(stage3ControllerRef.current?.busy) || diagnosticBusyCueId === cueId,
+  const replayControlEpoch = transportRef.current.epoch;
+  const replayCurrentOutcome = useCallback((target: OutcomeReplayTarget, requireDiagnosis: boolean, expectedEpoch: number) => {
+    requestCurrentOutcomeReplay(target, () => ({
+      plan: planRef.current, session: liveSessionRef.current, cueCase: teachingCasesRef.current[target.cueId],
+      busy: agentToolBusy || Boolean(stage3ControllerRef.current?.busy) || diagnosticBusyCueId === target.cueId,
       takenOver: userTookOverRef.current,
-    }), transition);
+      intentEpoch: transportRef.current.epoch,
+    }), transition, requireDiagnosis, expectedEpoch);
   }, [agentToolBusy, diagnosticBusyCueId, transition]);
 
   const confirmTeachingDiagnosis = useCallback(() => {
@@ -3042,7 +3054,7 @@ export function Cs2dPlaybackHost({
     if (!activePlan || !currentSession || !nearestManualCue || !canBeginManualCueVisit(nearestManualReadiness, true, Boolean(currentSession.manual_cue_visit))) return;
     transportRef.current.reset();
     notifyTransport();
-    const visitId = `manual-${currentSession.id}-${nearestManualCue.cue.id}-${++manualVisitSequenceRef.current}`.replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 160);
+    const visitId = newManualVisitId();
     setSession((current) => current ? reduceCoachingSession(activePlan, current, { type: "BEGIN_MANUAL_CUE_VISIT", visitId, cueId: nearestManualCue.cue.id }) : current);
   }, [nearestManualCue, nearestManualReadiness, notifyTransport]);
 
@@ -3307,7 +3319,7 @@ export function Cs2dPlaybackHost({
               onSubmit={submitTeachingReflection}
               onSkip={skipTeachingReflection}
               onConfirm={confirmTeachingDiagnosis}
-              onReplay={session.manual_cue_visit ? undefined : () => replayTeachingDiagnosis(session.id, cue.id)}
+              onReplay={() => replayCurrentOutcome({ sessionId: session.id, cueId: cue.id, ...(session.manual_cue_visit ? { visitId: session.manual_cue_visit.visit_id } : {}) }, true, replayControlEpoch)}
               replayDisabled={agentToolBusy}
               onDisagree={disagreeTeachingDiagnosis}
             />
@@ -3385,10 +3397,10 @@ export function Cs2dPlaybackHost({
                   ) : null}
                 </section>
               ) : null}
-              {!session.manual_cue_visit ? <div className="cs2d-coach-result-actions">
-                <button type="button" disabled={agentToolBusy} onClick={() => transition({ type: "REPLAY_OUTCOME" })}>再看一遍</button>
-                <button className="cs2d-coach-primary" type="button" disabled={agentToolBusy} onClick={() => transition({ type: "ADVANCE_SEGMENT" })}>继续下一段</button>
-              </div> : null}
+              <div className="cs2d-coach-result-actions">
+                <button type="button" disabled={agentToolBusy || diagnosticBusyCueId === cue.id} onClick={() => replayCurrentOutcome({ sessionId: session.id, cueId: cue.id, ...(session.manual_cue_visit ? { visitId: session.manual_cue_visit.visit_id } : {}) }, false, replayControlEpoch)}>再看一遍</button>
+                {!session.manual_cue_visit ? <button className="cs2d-coach-primary" type="button" disabled={agentToolBusy} onClick={() => transition({ type: "ADVANCE_SEGMENT" })}>继续下一段</button> : null}
+              </div>
             </section>
           ) : null}
 

@@ -100,6 +100,18 @@ function interaction(value: unknown, schemaVersion: string, cueIds: ReadonlySet<
     typeof (item.action as Record<string, unknown>).type !== "string" ||
     !SESSION_ACTION_TYPES.has((item.action as Record<string, unknown>).type as string)
   ) throw new Error("Invalid user interaction artifact.");
+  const action = item.action as Record<string, unknown>;
+  if (action.type === "REPLAY_OUTCOME") {
+    if (Object.keys(action).some(key => key !== "type" && key !== "target")) throw new Error("Invalid replay action fields.");
+    if (action.target === undefined) return; // Existing default-route records remain valid.
+    if (!action.target || typeof action.target !== "object" || Array.isArray(action.target)) throw new Error("Invalid replay target.");
+    const target = action.target as Record<string, unknown>;
+    if (Object.keys(target).some(key => !["sessionId", "cueId", "visitId"].includes(key))
+      || target.sessionId !== item.sessionId || target.cueId !== item.cueId || !cueIds.has(target.cueId as string)
+      || (target.visitId !== undefined && (typeof target.visitId !== "string" || !target.visitId.trim() || target.visitId.length > 160))) {
+      throw new Error("Replay target does not match its interaction.");
+    }
+  }
 }
 
 function recoveryMatchesHead(record: SessionRecoveryRecord, head: CommitRuntimeHeadInput): boolean {

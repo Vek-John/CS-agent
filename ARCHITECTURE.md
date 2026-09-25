@@ -622,7 +622,9 @@ LLM 只能选择 `capabilityId`；速度、cue 范围、actor/annotation/callout
 
 ### 6.8 Playback
 
-默认教学诊断在完整结果态提供“再看一遍”：仅当前Session/cue、已完成结果门、已揭示且保存反思/完整诊断、无未提交异议草稿及工具/诊断忙碌时可用。展开的异议编辑器及收起后仍有内容或目标的草稿均不提供重播，避免Panel卸载丢失输入；ManualCueVisit沿用原控制，不新增该入口。Host校验当前身份与接管状态后复用既有`transition(REPLAY_OUTCOME)`，保留暂停意图重置与幂等USER_INTERACTION记录，不旁路Session或Reflection Gate。既有guided播放从决策前置上下文播至outcome end，再停回同cue的decision point并呈现保存的诊断。重播不提交反思、重跑诊断/Provider、消费cue或新增LearningThread；只有原确认动作继续路线，不因此开放Stage3工具。
+基础讲解与完整教学诊断均可在本次处理完成后“再看一遍”，包括ManualCueVisit。REPLAY_OUTCOME可携带target:{sessionId,cueId,visitId?}：默认旧无target调用兼容且仍须global revealed；manual必须携带匹配当前session/cue/非空visit_id的target，PAUSED且本次gate的cue/outcomeEnd/completedAt完整匹配，不依赖global已看过标记。动作不接受任意播放tick，范围由frozen cue派生；重播沿原guided指令从决策前置上下文播至outcome end，回同visit/cue/decision，保留已完成gate、default cursor与原case/thread/问答key。诊断仍须保存反思/完整结果，无未提交异议（含收起后的草稿）及工具/诊断忙碌才显示/允许入口。重播不提交反思、重跑诊断/Provider、呈现/消费cue或新增LearningThread，不开放新Stage3工具。
+
+Host在任何transport reset或操作记录前调用Session共享资格函数，并以暂停状态对象去重尚未发布的重复点击，reducer再复核。UI捕获渲染时transport epoch，实时入口拒绝旧epoch（含自由seek已开始但取消manual尚在React队列中）；epoch不进入领域动作。默认重播沿原clearUserTakeover；manual只reset transport、通知播放状态并使旧seek失效，保留接管态与返回/取消控制，避免重启默认observer。新的visit使用manual-UUID，避免长session/cue拼接截尾吞掉序号；同visit重播不创建新visit。USER_INTERACTION/user-interaction.v1保留，target严格校验字段并绑定outer session/cue；旧无target记录继续可读。manual幂等key由既有stable identity token方法覆盖完整session/cue/visit生成有界标识，不用截尾丢visit；双击零额外记录，同visit之后的明确重播仍可执行并复用同一逻辑记录。
 
 Host将普通暂停/继续与自由接管分开：在Session的PLAYING、REVEALING、REPLAYING、SKIPPING阶段（包括ManualCueVisit），暂停只设置瞬时transport意图，不发送USER_TAKEOVER，不修改cue、默认游标、呈现/消费记录或OutcomeCompletionGate。暂停和等待pause确认期间阻止TICK、自动跳段及会移动播放头的后台命令。继续只发送play；相同Session transition不能再次seek到结果起点。快速pause/play先等待单一有序iframe流的暂停回报，再续播；播放回报不能改变用户意图，排队的Session更新需匹配控制epoch。
 
@@ -1506,7 +1508,7 @@ Memory Brief 的 structured recall 优先于语义召回，最多返回 2 个 ac
 
 职业案例未接入检索时不编造，语音/战术补充只作为未验证假设，不回写事实或改判；错误前提不被接受，不明确/越界问法给具体可问范围。文本不触发seek、工具、推进或回看，控制沿用已有明确按钮。提问不发送Reflection/Disagreement/Graph/Memory事件，不消耗诊断attempt，不新增模型请求。
 
-Host持有一份有界页面状态（300字草稿、最近4条问答），来源key由generation、session/plan/cue、manual实际visit_id（默认路径为null）及稳定case revision/当前投影内容构成。回调重新检查live来源与门；同visit同来源重渲染保留，默认路径重播返回保留，换visit/cue/session或诊断修订不显示旧答案。新visit播放中及完成后均不能复用旧visit提交回调；不承诺跨visit永久保留草稿，也不新增manual重播入口或改变REPLAY_OUTCOME的全局门。快捷问题不覆盖另行编辑的草稿。此首版不写历史artifact/Session事件或恢复快照，刷新后清空，不支持跨重启恢复，也不进入总结/长期记忆；不得把下述既有持久化/生成式问答契约描述为此入口已实现。
+Host持有一份有界页面状态（300字草稿、最近4条问答），来源key由generation、session/plan/cue、manual实际visit_id（默认路径为null）及稳定case revision/当前投影内容构成。回调重新检查live来源与门；同visit同来源重渲染及重播返回保留，换visit/cue/session或诊断修订不显示旧答案。新visit播放中及完成后均不能复用旧visit提交回调；不承诺跨visit永久保留草稿；manual重播按6.8的本次完成门执行，不改变默认路线全局门。快捷问题不覆盖另行编辑的草稿。此首版不写历史artifact/Session事件或恢复快照，刷新后清空，不支持跨重启恢复，也不进入总结/长期记忆；不得把下述既有持久化/生成式问答契约描述为此入口已实现。
 
 ### 12.2 生成式与领域问答的通用边界
 

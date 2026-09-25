@@ -2,12 +2,17 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
-## 当前任务：手动回访中的同次重播（2026-09-26）
+## 已交付：手动回访中的同次重播（2026-09-26）
 
 - 1bb88e2已push/clean且owner release；01a0da66-e866-7c11-a7d8-aa863864691b串行独占Session重播动作的visit绑定、Host/诊断/基础面板窄入口及tests/docs，主控只读，默认配置。
 - 证据：PRD7.6要求重放当前片段；manual完成不写global revealed，REPLAY_OUTCOME却要求global revealed，Host在manual隐藏基础和诊断重播入口。本轮补同visit完成后的重播，不借旧全局标记、不重新开visit。
 - A1真实reducer已看/未看manual完整播放后现动作/入口缺口；A2明确session/cue/visit匹配与本次完整gate才允许重播，继续使用frozen窗口/现有directive，结束回同visit/decision；A3保留manual接管/取消与默认cursor，重置普通暂停意图但不误回默认，旧visit双击/晚回调拒绝，诊断/问答保留且无重复模型/Memory/呈现计数；A4相关tests/TS/build；A5架构学习证据/任务板commit/push/release。
 - 先5分钟给最小动作契约（可沿既有REPLAY_OUTCOME增加可选visit/cue绑定，default旧调用兼容），15分钟实现、10分钟验证，必要5分钟独立时间/visit审查。无新任意seek/Graph工具、cue时间/完成门不降低；无Demo/模型/UI服务/用户DB密钥/部署main，SSR/生产链fixture不冒称真实浏览器。owner清进程，原UI A5独立等待。
+
+- 交付：REPLAY_OUTCOME可选target身份，manual必须匹配本session/cue/visit与本次完整gate，不依global；default旧调用/global门保留。基础/完整诊断入口已接同一guard，原异议草稿保护不变。manual重置transport/seek但保留接管与返回/取消，结束同visit/decision且defaultcursor/case/thread/QA不变。
+- 归属/记录：共享Session资格预检和reducer复核，Host同paused对象去重双击；独审发现free seek先reset而取消state排队的空隙，补render捕获epoch实时校验。旧长ID截尾counter碰撞已证，改manual-UUID；USER_INTERACTION v1 target strict/outer绑定，旧无target兼容，既有有界token key包含完整visit。回到停靠后同visit仍可再明确重播，复用同一幂等逻辑记录。
+- 验证：已看/未看manual 2红→绿；实际Panel default/manual callback、basic生产入口、reducer/directive/transport、保存校验/QA/Stage3回归10文件234tests、TS/build通过。仅补同visit第二次合法回看断言后受影响29tests/TS再过。默认manual_replay_boundary_review只读审查指出epoch缺口已闭合，主控实际diff无其他must-fix；[证据](validation/MANUAL_VISIT_REPLAY.md)。
+- 文档/release：架构/学习/本卡/validation同批commit/push/release，自有测试/build退出。SSR/fixture及basic Host源审不冒称完整Host/浏览器/iframe，原UI A5保持；无跨visit/重启草稿保存、新Graph工具、Demo/模型/UI服务/用户DB密钥/安装部署main，未扩其他confirm或ID体系。
 
 ## 已交付：手动回访完成后的有据追问（2026-09-26）
 

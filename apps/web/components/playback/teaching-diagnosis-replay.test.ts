@@ -72,11 +72,11 @@ it("restores replay after closing an empty disagreement editor",()=>{
   expect(button(view.tree,"再看一遍")).toBeDefined();
 });
 
-it("drives the real panel callback through the Host replay guard, Session and existing playback directives back to the same diagnosis",async()=>{
+it.each([false, true])("drives the real panel callback through Host replay and back to the same diagnosis, manual=%s",async(manual)=>{
   const {createSyntheticMirageTimeline}=await import("@cs-coach/demo-domain");
   const {createFixtureReviewPlan}=await import("@cs-coach/review-planner");
   const {createCoachingSession,reduceCoachingSession}=await import("@cs-coach/session");
-  const {requestTeachingDiagnosisReplay}=await import("../../lib/coaching/diagnosis-replay");
+  const {requestTeachingDiagnosisReplay,HostOutcomeReplayGuard,outcomeReplayInteractionKey}=await import("../../lib/coaching/diagnosis-replay");
   const {guidedPlaybackDirective,guidedTransitionKey}=await import("../../lib/coaching/cs2d-guided-session");
   const {HostPlaybackControl}=await import("../../lib/playback/cs2d-playback-host");
   const plan=createFixtureReviewPlan(createSyntheticMirageTimeline());const cue=plan.cues[0];
@@ -89,23 +89,27 @@ it("drives the real panel callback through the Host replay guard, Session and ex
   const diagnose=vi.fn(diagnoseTeachingCue);
   const output=diagnose({cueId:cue.id,reflection:{cueId:cue.id,rawText:"等队友同步",selectedGoal:"OTHER",response:"ANSWERED",source:"USER",limitations:[]},decisionFacts:[],playerActionFacts:[],outcomeFacts:[]});
   session=reduceCoachingSession(plan,session,{type:"RECORD_TEACHING_CASE",cueCase:output.cueCase,learningThread:output.learningThread});
+  if(manual){
+    session=reduceCoachingSession(plan,session,{type:"BEGIN_MANUAL_CUE_VISIT",cueId:cue.id,visitId:"panel-manual"});
+    session=reduceCoachingSession(plan,session,{type:"TICK",tick:cue.outcome_end_tick});
+  }
+  let takenOver=manual;const guard=new HostOutcomeReplayGuard();
   const before=structuredClone(session);const control=new HostPlaybackControl();control.pause();expect(control.holding).toBe(true);
   const interactions=new Map<string,unknown>();const transition=vi.fn((action:{type:"REPLAY_OUTCOME"})=>{
-    // Same reset performed by Host transition's clearUserTakeover; no private replay channel.
-    control.reset();
-    const key=`${session.id}:${action.type}:${session.current_cue_id}`;
+    if(!guard.begin({plan,session,action,busy:false,takenOver,control,notifyTransport(){},invalidateSeek(){},clearTakeover(){control.reset();takenOver=false;}}))return;
+    const key=outcomeReplayInteractionKey(session,action);
     interactions.set(key,action);session=reduceCoachingSession(plan,session,action);
   });
   const input:TeachingDiagnosisPanelProps={cue,decisionFacts:[],cueCase:output.cueCase,learningThread:output.learningThread,hasTrustedDecisionContext:true,
     onSubmit:vi.fn(),onSkip:vi.fn(),onDisagree:vi.fn(),onConfirm:vi.fn(()=>{
       session=reduceCoachingSession(plan,session,{type:"CONFIRM_TEACHING_CASE",cueId:cue.id});
-      session=reduceCoachingSession(plan,session,{type:"CUE_PRESENTED",cueId:cue.id});
-      session=reduceCoachingSession(plan,session,{type:"ADVANCE_SEGMENT"});
+      session=reduceCoachingSession(plan,session,{type:"CUE_PRESENTED",cueId:cue.id,...(session.manual_cue_visit?{visitId:session.manual_cue_visit.visit_id}:{})});
+      session=reduceCoachingSession(plan,session,manual?{type:"CANCEL_MANUAL_CUE_VISIT"}:{type:"ADVANCE_SEGMENT"});
     }),
-    onReplay:()=>{requestTeachingDiagnosisReplay({sessionId:before.id,cueId:cue.id},()=>({session,cueCase:output.cueCase,busy:false,takenOver:false}),transition);}};
+    onReplay:()=>{requestTeachingDiagnosisReplay({sessionId:before.id,cueId:cue.id,...(before.manual_cue_visit?{visitId:before.manual_cue_visit.visit_id}:{})},()=>({plan,session,cueCase:output.cueCase,busy:false,takenOver}),transition);}};
   const first=capture(input);const replay=button(first.tree,"再看一遍")!;
   (replay.props.onClick as ()=>void)();(replay.props.onClick as ()=>void)();
-  expect(transition).toHaveBeenCalledOnce();expect(interactions.size).toBe(1);expect(session.phase).toBe("REPLAYING");expect(control.holding).toBe(false);
+  expect(transition).toHaveBeenCalledOnce();expect(interactions.size).toBe(1);expect(session.phase).toBe("REPLAYING");expect(control.holding).toBe(false);expect(takenOver).toBe(manual);
   const key=`${session.id}:${guidedTransitionKey(session)}`;expect(control.claimTransition(key)).toBe(true);expect(control.claimTransition(key)).toBe(false);
   const start=guidedPlaybackDirective(plan,session,64);expect(start.commands).toContainEqual({type:"play"});expect(start.commands.every(command=>control.allows(command))).toBe(true);
   expect(start.commands).toContainEqual({type:"seekCanonicalTick",canonicalTick:Math.max(plan.segments[session.current_segment_index].start_tick,cue.decision_tick-64)});
@@ -118,8 +122,9 @@ it("drives the real panel callback through the Host replay guard, Session and ex
   expect(session.cue_cases).toEqual(before.cue_cases);expect(session.learning_threads).toEqual(before.learning_threads);expect(session.consumed_cue_ids).toEqual(before.consumed_cue_ids);expect(session.presented_cue_ids).toEqual(before.presented_cue_ids);
   expect(session.outcome_completion).toEqual(before.outcome_completion);
   expect(session.user_events.filter(e=>e.type==="REFLECTION_SUBMITTED"||e.type==="DIAGNOSTIC_COMPLETED")).toEqual(before.user_events.filter(e=>e.type==="REFLECTION_SUBMITTED"||e.type==="DIAGNOSTIC_COMPLETED"));
-  expect(session.user_events.filter(e=>e.type==="OUTCOME_REPLAYED")).toHaveLength(1);
+  expect(session.user_events.filter(e=>e.type==="OUTCOME_REPLAYED")).toHaveLength(before.user_events.filter(e=>e.type==="OUTCOME_REPLAYED").length+1);
   const restored=capture(input);expect(restored.html).toContain("等队友同步");expect(restored.html).toContain(output.cueCase.verdict!.explanation);
   expect(diagnose).toHaveBeenCalledOnce();expect(input.onSubmit).not.toHaveBeenCalled();expect(input.onSkip).not.toHaveBeenCalled();expect(input.onDisagree).not.toHaveBeenCalled();expect(input.onConfirm).not.toHaveBeenCalled();
-  (button(restored.tree,"懂了，继续")!.props.onClick as ()=>void)();expect(input.onConfirm).toHaveBeenCalledOnce();expect(session.current_segment_index).toBeGreaterThan(before.current_segment_index);expect(session.default_route_cursor).toEqual(reduceCoachingSession(plan, before, {type:"ADVANCE_SEGMENT"}).default_route_cursor);expect(session.consumed_cue_ids.filter(id=>id===cue.id)).toHaveLength(1);
+  (button(restored.tree,"懂了，继续")!.props.onClick as ()=>void)();expect(input.onConfirm).toHaveBeenCalledOnce();if(manual){expect(session.manual_cue_visit).toBeUndefined();expect(session.default_route_cursor).toEqual(before.default_route_cursor);expect(session.consumed_cue_ids).toEqual(before.consumed_cue_ids);}
+  else {expect(session.current_segment_index).toBeGreaterThan(before.current_segment_index);expect(session.default_route_cursor).toEqual(reduceCoachingSession(plan, before, {type:"ADVANCE_SEGMENT"}).default_route_cursor);expect(session.consumed_cue_ids.filter(id=>id===cue.id)).toHaveLength(1);}
 });

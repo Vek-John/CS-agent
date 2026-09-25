@@ -11,6 +11,9 @@ import type {
   SessionUserEvent
 } from "@cs-coach/contracts";
 
+export interface OutcomeReplayTarget { sessionId: string; cueId: string; visitId?: string }
+export type OutcomeReplayAction = { type: "REPLAY_OUTCOME"; target?: OutcomeReplayTarget };
+
 export type SessionAction =
   | { type: "START" }
   | { type: "TICK"; tick: number }
@@ -24,7 +27,7 @@ export type SessionAction =
   | { type: "SKIP_SEGMENT" }
   | { type: "EXPAND_SKIP" }
   | { type: "REVEAL_OUTCOME" }
-  | { type: "REPLAY_OUTCOME" }
+  | OutcomeReplayAction
   | { type: "ADVANCE_SEGMENT" }
   | { type: "QUESTION_ASKED"; question: string }
   | {
@@ -36,6 +39,20 @@ export type SessionAction =
     }
   | { type: "CONFIRM_TEACHING_CASE"; cueId: string }
   | { type: "COMPLETE_SESSION" };
+
+/** Shared with Host before transport side effects; reducer remains the final authority. */
+export function canReplayOutcome(plan: ReviewPlan, state: CoachingSessionState, action: OutcomeReplayAction): boolean {
+  const cue = getCurrentCue(plan, state);
+  if (state.review_plan_id !== plan.id || state.phase !== "PAUSED_FOR_COACHING" || !cue) return false;
+  const target = action.target;
+  const visit = state.manual_cue_visit;
+  if (target && (target.sessionId !== state.id || target.cueId !== cue.id || target.visitId !== visit?.visit_id)) return false;
+  if (!visit) return state.revealed_cue_ids.includes(cue.id); // Preserve legacy default-route calls.
+  const gate = state.outcome_completion;
+  return Boolean(target && visit.visit_id.trim() && visit.cue_id === cue.id && target.visitId === visit.visit_id
+    && gate?.cueId === cue.id && gate.status === "COMPLETE" && gate.outcomeEndTick === cue.outcome_end_tick
+    && Number.isSafeInteger(gate.completedAtTick) && gate.completedAtTick! >= cue.outcome_end_tick);
+}
 
 /** Session owns this one-way authorization; PlanCompiler only owns route/tick shape. */
 export function createOutcomeCompletionGate(
@@ -559,13 +576,7 @@ function reduceCoachingSessionInner(
     }
 
     case "REPLAY_OUTCOME": {
-      if (
-        state.phase !== "PAUSED_FOR_COACHING" ||
-        !cue ||
-        !state.revealed_cue_ids.includes(cue.id)
-      ) {
-        return state;
-      }
+      if (!cue || !canReplayOutcome(plan, state, action)) return state;
       return {
         ...state,
         phase: "REPLAYING",

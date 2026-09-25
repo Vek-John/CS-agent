@@ -67,6 +67,32 @@ function completeManualCue(plan: ReviewPlan, state: ReturnType<typeof createCoac
 }
 
 describe("ManualCueVisit separates temporary presentation from the default route", () => {
+  it.each([true, false])("replays only the completed matching visit, default-seen=%s", seen => {
+    const plan = planWithManualTargets();
+    const cue = seen ? plan.cues[0] : plan.cues.at(-1)!;
+    const paused = firstCuePaused(plan);
+    const target = { sessionId: paused.id, cueId: cue.id, visitId: "manual-replay" };
+    const action = { type: "REPLAY_OUTCOME" as const, target };
+    let state = reduceCoachingSession(plan, paused, { type: "BEGIN_MANUAL_CUE_VISIT", cueId: cue.id, visitId: target.visitId });
+    expect(state.outcome_completion).toBeUndefined();
+    expect(reduceCoachingSession(plan, state, action)).toBe(state);
+    state = reduceCoachingSession(plan, state, { type: "TICK", tick: cue.decision_tick });
+    expect(reduceCoachingSession(plan, state, action)).toBe(state);
+    state = reduceCoachingSession(plan, state, { type: "TICK", tick: cue.outcome_end_tick });
+    expect(state.revealed_cue_ids.includes(cue.id)).toBe(seen);
+    const stale = { type: "REPLAY_OUTCOME" as const, target: { ...target, visitId: "stale-visit" } };
+    expect(reduceCoachingSession(plan, state, stale)).toBe(state);
+    const replaying = reduceCoachingSession(plan, state, action);
+    expect(replaying.phase).toBe("REPLAYING");
+    expect(replaying.manual_cue_visit).toEqual(state.manual_cue_visit);
+    expect(replaying.default_route_cursor).toEqual(paused.default_route_cursor);
+    const returned = reduceCoachingSession(plan, replaying, { type: "TICK", tick: cue.outcome_end_tick });
+    expect(returned.current_tick).toBe(cue.decision_tick);
+    expect(returned.manual_cue_visit).toEqual(state.manual_cue_visit);
+    expect(returned.revealed_cue_ids).toEqual(state.revealed_cue_ids);
+    expect(returned.consumed_cue_ids).toEqual(state.consumed_cue_ids);
+    expect(returned.presented_cue_ids).toEqual(state.presented_cue_ids);
+  });
   it("runs a frozen cue through outcome and gate without changing the paused default cursor", () => {
     const plan = planWithManualTargets();
     const cue1 = plan.cues[0]!;

@@ -170,6 +170,25 @@ function fixture(): { loaded: LoadedReview; head: CommitRuntimeHeadInput } {
 }
 
 describe("Review artifact domain validation", () => {
+  it("accepts legacy and visit-bound replay records while rejecting unbound identity and tick fields", () => {
+    const { loaded, head } = fixture();
+    const plan = loaded.artifacts.find(a => a.artifactType === "REVIEW_PLAN")!.payload as Record<string, JsonValue>;
+    const cueId = (plan.cues as readonly Record<string, JsonValue>[])[0].id as string;
+    const base = { reviewRevisionId: "revision-a", artifactType: "USER_INTERACTION" as const, artifactKey: "manual-replay-test", artifactRevision: 1, schemaVersion: "user-interaction.v1", idempotencyKey: "manual-replay-test" };
+    const target = { sessionId: "session-a", cueId, visitId: "manual-uuid" };
+    for (const action of [{ type: "REPLAY_OUTCOME" }, { type: "REPLAY_OUTCOME", target: { sessionId: "session-a", cueId } }, { type: "REPLAY_OUTCOME", target }]) {
+      const payload = json({ action, sessionId: "session-a", cueId });
+      expect(() => validateReviewArtifactAppend(loaded, { ...base, payload })).not.toThrow();
+      expect(() => validateReadyRevisionArtifacts({ ...loaded, artifacts: [...loaded.artifacts, { ...loaded.artifacts[0], ...base, payload }] }, head)).not.toThrow();
+    }
+    for (const action of [
+      { type: "REPLAY_OUTCOME", target: { ...target, sessionId: "other" } },
+      { type: "REPLAY_OUTCOME", target: { ...target, cueId: "other" } },
+      { type: "REPLAY_OUTCOME", target: { ...target, visitId: " " } },
+      { type: "REPLAY_OUTCOME", target: { ...target, tick: 123 } },
+      { type: "REPLAY_OUTCOME", tick: 123 },
+    ]) expect(() => validateReviewArtifactAppend(loaded, { ...base, payload: json({ action, sessionId: "session-a", cueId }) })).toThrow(/replay/i);
+  });
   it("accepts a real current Analysis/Plan/Narration/Recovery set and rejects cross-boundary drift", () => {
     const { loaded, head } = fixture();
     expect(() => validateReadyRevisionArtifacts(loaded, head)).not.toThrow();

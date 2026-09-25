@@ -1880,3 +1880,12 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：只改问答gate/key。普通默认路径保持未接管＋global revealed；manual校验当前cue和非空实际visit_id，允许本visit takeover并复用原PAUSED/完整outcomeEnd/completedAt门。key以visit_id或null区分，避免合法名“default”碰撞；不修改Session/播放事件，也不新增manual重播。
 - 验证：两种真实Session begin→LOCKED→finish基线2红→绿；实际Panel旧callback在新visit未完成/完成后拒绝，同visit草稿保留，cancel后原默认游标/正常推进保持。资源4问和同源cache不退化，QA前后case/thread/attempt/progress不变。新增5项并扩既有测试，6文件136tests、TS/Web production build通过；主控集中复核。[记录](validation/MANUAL_VISIT_QUESTIONS.md)。
 - 限制：保留同visit页面状态，不跨visit/cue/重启永久存草稿。真实Panel callback/SSR与生产Session fixture不是完整Host取消流程或浏览器验收；无Demo/模型/服务/用户DB/密钥/安装部署，原UI A5不变。既有三类＋四类问法不等于开放语义问答。
+
+
+## 2026-09-26：同visit重播必须同时保护身份和最新播放意图
+
+- 问题：manual完成不写global revealed，原REPLAY_OUTCOME却只认global且无身份；Host隐藏两种manual回看入口，统一clear takeover还会隐藏返回控制。真实已看/未默认看过Session复现旧身份接受/合法重播拒绝2红。长session/cue截尾会吞掉旧visit counter，匿名fixture证实碰撞。
+- 决定：动作可选身份target，manual必需且Session共享资格函数/reducer双检本次完整gate；default旧无target/global门兼容。Host guard在reset/log前拒绝旧身份和双击，manual仅reset transport/seek保留takeover，范围仍由frozen cue决定。visit改UUID，USER_INTERACTION v1严格target/outer绑定且旧记录可读，完整visit身份经既有有界token构成幂等key。
+- 审查发现：free seek同步reset而CANCEL仅排队，旧live Session短暂仍合法；补渲染时transport epoch→实时请求比较，旧意图在副作用前拒绝。epoch不进领域action/存储，pause重渲染后新按钮仍合法。独立manual_replay_boundary_review与主控实际diff复核后无其他must-fix。
+- 验证：实际诊断Panel callback的default/manual链、basic生产入口、Session/directive/transport、artifact append/ready兼容、QA草稿答案与默认cursor保持；10文件234tests、TS/Web production build通过。随后同visit再次明确重播/同key断言及受影响29tests、TS再次通过。详见[验收](validation/MANUAL_VISIT_REPLAY.md)。
+- 限制：完整Host/basic内联区为源接线复核，SSR/回调不是浏览器/iframe实测；原UI A5保持。同visit多次合法播放复用同一逻辑操作记录，不是跨visit/重启草稿持久化。无新工具/模型/Demo/UI服务/用户DB密钥/安装部署，未扩confirm或其他ID扫描。

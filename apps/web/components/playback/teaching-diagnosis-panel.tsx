@@ -49,7 +49,7 @@ export interface TeachingDiagnosisPanelProps {
   onSubmit: (reflection: UserReflection) => void | Promise<void>;
   onSkip: () => void | Promise<void>;
   onConfirm: () => void;
-  /** Only supplied for the default route; manual visits retain their own controls. */
+  /** Host binds replay to the current session/cue and, for manual visits, visit identity. */
   onReplay?: () => void;
   replayDisabled?: boolean;
   onDisagree: (reflection: UserReflection) => void | Promise<void>;
