@@ -30,9 +30,23 @@
 | 已push | 观察语义与联合证据协议 | 同上 | 6ba9e31；1073 tests/TS/Web/Viewer通过；27次live未证明Jev判断质量提高 |
 | 已push | 真实整场复盘体验与可靠性改进 | 01a0d72c-d1b6-7d31-9b5a-8705470ff0be（已结束，释放写入与进程） | d69a290；修复启动阻塞、已看cue回访跳过结果门；真实9回合/4cue到完成、刷新恢复、相关测试/TS/build通过；主控核对关键diff与验证记录 |
 | 已push、验收完成 | 暂停/播放保留带看意图 | 01a0d759-8472-7072-ae94-84ec101ece3b；已完成并释放写入/进程 | bf42aef修复；105测试/TS/build通过，锁屏恢复后原A5四条真实交互及Space/Return通过；见GUIDED_PAUSE_RESUME.md |
-| 已分配 | 教学演示暂停与继续 | 01a0d77e-085f-7880-9331-c01becde48cd，独占当前工作树本轮写入 | 基线1c16100；核实Stage3 slow replay/grenade播放时底部控件被教学停靠门禁用的路径，补齐合法暂停/续播与工具生命周期验证，保持原已通过四路径 |
+| 阶段实现，真实验收未完成 | 教学演示暂停与继续 | 01a0d77e-085f-7880-9331-c01becde48cd；阶段push后释放写入，服务已停 | 基线bb0bc11；同次工具控制、活动时间预算、重载失效和晚RESULTED防复活已实现；156测试/Host与Viewer TS/Web与Viewer构建通过；真实工具验收受锁屏阻塞，见TEACHING_PLAYBACK_CONTROLS.md |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
+
+## 本轮任务卡：教学演示暂停与继续（2026-09-25）
+
+- 基线bb0bc11，工作树干净；01a0d77e-085f-7880-9331-c01becde48cd独占写入，有限goal已建立。只扩展活动Stage3播放工具的用户控制，不重做普通暂停或Jev实验。
+- A1已核实：静态教学PAUSED_FOR_COACHING也可能有REPLAY_CUE_SLOW/SHOW_GRENADE_TRACE执行；Host现有通用播放门一律禁用，Controller10秒ACK墙钟继续计时。默认诊断模式不启动这些工具，真实验证使用既有teachingDiagnostics=off入口，不新增强制工具或改教学资格。
+- A2/A3：Controller绑定session/cue/run/callId/effect generation，只有已post的活动播放工具可暂停；新增身份限定的Viewer transport命令，保持同一工具和位置，不计暂停墙钟、不以暂停当完成；seek、取消、失败、超时及重连作显式终止或恢复收敛，拒绝旧控制和ACK。
+- A4/A5：保留Session结果门、普通暂停/manual/free seek；先红测试，再相关Host/controller/协议/Viewer回归、TS和production/Viewer构建；实际至少一种播放工具暂停超过原超时后续播完成，其他工具仅模拟则明确记录。
+- A6：架构、学习日志、最小验证记录、commit/push；不合并main、不部署/安装。主控单一浏览器/Worker/server控制器40分钟，原Demo只读、bulk留页面、空provider，无新模型调用；先轻量click smoke再解析。
+- 分工：teaching_viewer_review继承默认模型/推理，先只读诊断后负责contracts Playback bridge与Viewer补丁/helper测试，20分钟阶段上限，不写apps/web/docs、不启动浏览器或大Demo。主控负责Controller/Host及文档、集成构建、真实UI、清理。风险集中在身份、晚到自动play/watch和暂停deadline。
+
+- 阶段结果：原Host门禁31绿/1红；修复后相关13文件156测试通过，Host/Viewer TypeScript与Web/Viewer构建通过。独立复查的iframe reload仍保留contentWindow、RESULTED持久化await后晚取消两处问题，已用额外4条红→绿回归修复。
+- 真实界面：已解析一次原test_demo.dem/Dog并进入teachingDiagnostics=off；当前4 cues首点为静态不确定讲解，未取得实际tool/callId起止证据，其余3 cues尚未验证。“教学工具已完成”可能只是零capability FINISH，不能当作实际演示成功。此后Mac锁屏、自动解锁失败，已请求手动解锁，不重复重试或另开harness。
+- 原A5和goal保持未完成；统筹已授权带明确缺口的阶段commit/push。解锁后只补真实工具暂停至少12秒再同次续播完成，以及必要seek/重连交互；不重复模型实验、不放松教学门、不强制制造工具。
+- 清理：唯一服务controller已停止，3000/5174无监听；测试/构建全部退出，next-env无差异。新建InPrivate窗口因锁屏不能关闭，未强杀用户Edge；解锁后需要只关闭本轮窗口。阶段push后释放代码写入，下一次接续先核实所有权。一个后继建议是区分零工具FINISH与实际工具完成状态文案，本轮不扩展功能。
 
 ## 本轮任务卡：暂停/继续保留带看意图（2026-09-25）
 

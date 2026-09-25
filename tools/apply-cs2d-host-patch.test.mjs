@@ -18,8 +18,9 @@ const cleanBase = {
 
 describe("cs2d patched checkout seam", () => {
   it("keeps managed Demo support in the controlled patch stack", () => {
-    expect(CS2D_PATCH_FILES.at(-2)).toMatch(/0006-managed-demo-load-races\.patch$/);
-    expect(CS2D_PATCH_FILES.at(-1)).toMatch(/0007-cs2d-shot-actor\.patch$/);
+    expect(CS2D_PATCH_FILES.at(-3)).toMatch(/0006-managed-demo-load-races\.patch$/);
+    expect(CS2D_PATCH_FILES.at(-2)).toMatch(/0007-cs2d-shot-actor\.patch$/);
+    expect(CS2D_PATCH_FILES.at(-1)).toMatch(/0008-teaching-playback\.patch$/);
     const patch = CS2D_PATCH_FILES.map((file) => readFileSync(file, "utf8")).join("\n");
     expect(patch).toMatch(/DEMO_IMPORT_REQUESTED/);
     expect(patch).toMatch(/await uploadManagedDemo[\s\S]*await parser\.parse\(pending\.file\)/);
@@ -42,7 +43,7 @@ describe("cs2d patched checkout seam", () => {
     expect(patch).toMatch(/requestId: replay\.managedSource\.requestId/);
   });
   it("preserves only event-resolved optional shot actors in the parser patch", () => {
-    const patch = readFileSync(CS2D_PATCH_FILES.at(-1), "utf8");
+    const patch = readFileSync(CS2D_PATCH_FILES.find((path) => path.endsWith("0007-cs2d-shot-actor.patch")), "utf8");
     expect(patch).toContain("steam_from_pawn_handle(self, ctx, ph)");
     expect(patch).toContain("shooter_steam_id: shooter.clone()");
     expect(patch).toContain("shooter_steam_id: Option<String>");

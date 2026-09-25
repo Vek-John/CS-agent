@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AgentToolRequestSchema, type CoachAgentResult } from "@cs-coach/coach-agent/client";
-import { createCoachAgentRuntime, type PolicyAdapter } from "@cs-coach/coach-agent";
+import { createCoachAgentRuntime, deterministicPolicyOutput, type PolicyAdapter } from "@cs-coach/coach-agent";
 import type {
+  PlaybackCommand,
   CandidateMaterial,
   CoachingRouteState,
   NarrationBundle,
@@ -19,6 +20,9 @@ import {
   type Stage3HostAdapterInput,
 } from "./coach-agent-stage3-host-adapter";
 import { CoachAgentStage3Controller } from "./coach-agent-stage3-controller";
+
+import { createCoachingSession, reduceCoachingSession } from "@cs-coach/session";
+import { HostPlaybackControl, issueHostUserCommand } from "../playback/cs2d-playback-host";
 
 const HASH = "c".repeat(64);
 
@@ -298,4 +302,49 @@ describe("Stage 3 Host ↔ Coach Agent black-box integration", () => {
     expect(events.filter((type) => type === "RESUME_TOOL")).toHaveLength(1);
     expect(controller.currentState.status).toBe("COMPLETED");
   });
+});
+
+
+it("runs Host pause/continue through a real tool registry and Graph without reopening or recounting the cue", async () => {
+  const input = fixtureInput();
+  const runtime = createCoachAgentRuntime({ policy: { selectCapability: async packet => deterministicPolicyOutput(packet) } });
+  const events: string[] = [];
+  const posted: PlaybackCommand[] = [];
+  let finalResult: CoachAgentResult | undefined;
+  const controller = new CoachAgentStage3Controller({
+    dispatch: async event => { events.push(event.type); finalResult = await runtime.dispatch(event); return finalResult; },
+    post: command => posted.push(command), bridgeAvailable: () => true, isLive: () => true,
+  });
+  try {
+    controller.start(input);
+    await vi.waitFor(() => expect(controller.currentState.playback).toBeDefined());
+    expect(controller.currentState.tool).toBe("REPLAY_CUE_SLOW");
+    const playback = controller.currentState.playback!;
+    let session = reduceCoachingSession(input.plan, createCoachingSession(input.plan, input.sessionId), { type: "START" });
+    session = reduceCoachingSession(input.plan, session, { type: "ADVANCE_SEGMENT" });
+    session = reduceCoachingSession(input.plan, session, { type: "TICK", tick: input.cue.outcome_end_tick });
+    const callsBefore = [...events];
+    const takeover = vi.fn();
+    const rawPost = vi.fn();
+    const host = { session, userTookOver: false, control: new HostPlaybackControl(), teachingPlayback: playback,
+      controlTeachingPlayback: (expected: typeof playback, paused: boolean) => controller.setPlaybackPaused(expected, paused),
+      takeover, send: rawPost };
+    issueHostUserCommand({ type: "pause" }, host);
+    expect(controller.currentState.playback?.paused).toBe(true);
+    issueHostUserCommand({ type: "play" }, { ...host, teachingPlayback: controller.currentState.playback });
+    expect(controller.currentState.playback?.paused).toBe(false);
+    expect(events).toEqual(callsBefore);
+    expect(rawPost).not.toHaveBeenCalled();
+    expect(takeover).not.toHaveBeenCalled();
+    expect(posted.filter(command => command.type === "teachingTool")).toHaveLength(1);
+    const completion: TeachingToolAckEvent = { type: "TEACHING_TOOL_ACK", schemaVersion: "cs2d-teaching-tool-ack.v1",
+      tool: "REPLAY_CUE_SLOW", callId: playback.callId, runId: playback.runId, cueId: playback.cueId,
+      generation: playback.generation, status: "SUCCEEDED", observationCode: "CUE_PLAYED", completed: true, limitations: [] };
+    controller.acceptAck(completion);
+    await vi.waitFor(() => expect(controller.currentState.status).toBe("COMPLETED"));
+    controller.acceptAck(completion);
+    expect(events.filter(type => type === "RESUME_TOOL")).toHaveLength(1);
+    expect(finalResult!.state.toolHistory).toHaveLength(1);
+    expect(finalResult!.state.completedCueIds.filter(id => id === input.cue.id)).toHaveLength(1);
+  } finally { controller.dispose(); }
 });

@@ -250,6 +250,7 @@ export type ManagedDemoLoadMode = "RESTORE" | "REANALYZE" | "SELECT_PLAYER";
 export type PlaybackCommand =
   | { type: "play" }
   | { type: "pause" }
+  | { type: "teachingPlayback"; callId: string; runId: string; cueId: string; generation: number; action: "pause" | "resume" | "cancel" }
   | { type: "seekCanonicalTick"; canonicalTick: number }
   /** Strict recovery/player-selection command; the iframe resolves the id locally. */
   | { type: "selectPlayer"; playerId: string }
@@ -456,6 +457,11 @@ export function isPlaybackCommandEnvelope(value: unknown): value is PlaybackComm
   const payload = value.payload;
   if (!isRecord(payload) || typeof payload.type !== "string") return false;
   if (payload.type === "play" || payload.type === "pause") return exactKeys(payload, ["type"]);
+  if (payload.type === "teachingPlayback") {
+    return exactKeys(payload, ["type", "callId", "runId", "cueId", "generation", "action"]) &&
+      nonEmpty(payload.callId) && nonEmpty(payload.runId) && nonEmpty(payload.cueId) && safeIndex(payload.generation) &&
+      (payload.action === "pause" || payload.action === "resume" || payload.action === "cancel");
+  }
   if (payload.type === "seekCanonicalTick") return exactKeys(payload, ["type", "canonicalTick"]) && finite(payload.canonicalTick);
   if (payload.type === "selectPlayer") return exactKeys(payload, ["type", "playerId"]) && nonEmpty(payload.playerId) && payload.playerId.length <= 160;
   if (payload.type === "selectRound") return exactKeys(payload, ["type", "roundIndex"]) && safeIndex(payload.roundIndex);

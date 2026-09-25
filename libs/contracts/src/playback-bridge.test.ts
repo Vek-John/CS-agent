@@ -6,6 +6,24 @@ import {
   isPlaybackEventEnvelope
 } from "./playback-bridge";
 
+describe("identity-bound teaching playback", () => {
+  const payload = { type: "teachingPlayback", callId: "call-1", runId: "run-1", cueId: "cue-1", generation: 2, action: "pause" };
+  const envelope = (value: unknown) => ({ channel: "cs2d-playback-bridge.v1", direction: "command", payload: value });
+  it("accepts pause/resume/cancel for one identified tool", () => {
+    for (const action of ["pause", "resume", "cancel"]) expect(isPlaybackCommandEnvelope(envelope({ ...payload, action }))).toBe(true);
+  });
+  it("rejects incomplete, invalid or widened transport commands", () => {
+    for (const key of Object.keys(payload)) {
+      const incomplete = { ...payload } as Record<string, unknown>;
+      delete incomplete[key];
+      expect(isPlaybackCommandEnvelope(envelope(incomplete))).toBe(false);
+    }
+    for (const invalid of [{ action: "play" }, { generation: -1 }, { generation: 0.5 }, { callId: " " }, { runId: "" }, { cueId: "" }, { extra: true }]) {
+      expect(isPlaybackCommandEnvelope(envelope({ ...payload, ...invalid }))).toBe(false);
+    }
+  });
+});
+
 const ready = {
   channel: PLAYBACK_BRIDGE_CHANNEL,
   direction: "event",

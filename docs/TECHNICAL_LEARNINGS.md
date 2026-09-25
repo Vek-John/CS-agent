@@ -1609,3 +1609,12 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - **环境限制**：初次真实页面验收受阻（后已补验通过）。Edge原生连接持续超时；内置浏览器能返回localhost DOM/截图，但文件入口的AX、DOM和坐标点击均报告目标不可用，未能导入Demo。后来工具明确报告Mac锁屏，三轮后goal进入blocked；15:23原生Edge控制恢复后，复用单控制器与一个新InPrivate窗口完成原四条UI验收，没有把上轮UI结果或自动测试替代实际交互。详细状态见[本轮证据](validation/GUIDED_PAUSE_RESUME.md)。
 
 - **补验结果**：默认片段暂停6秒保持同一点，Space续播保持带看；真实结果窗口8995暂停后Return续播、完成后回8969；已看cue manual回访9004暂停6秒后续播停回8969，返回默认恢复R2 2/4；暂停后显式后退15秒进入自由查看并保持6秒。四条真实路径通过，无新增代码改动，不重复已通过的105测试/TS/build。窗口和服务已清理。键盘Space/Return沿同一button入口工作，完整证据见上链。
+
+
+## 2026-09-25：教学演示暂停必须保持同次工具身份
+
+- 问题：Stage3慢放/道具轨迹在Session的PAUSED_FOR_COACHING中播放，但Host把该阶段全部禁用；原Controller按10秒墙钟等待ACK，单纯暂停Viewer会被当成失败。仅开放raw play还可能越过教学门、重启或接管原调用。
+- 决定：Controller拥有同次工具暂停意图，只有POSTED后的播放工具暴露控制；session/run/cue/callId/generation绑定，暂停不改Session或Graph、不重新START、不重复呈现/Memory。Viewer补丁0008维持活动对象，守住nextTick和完成watch；计时仅消耗活动时间，slow预算覆盖0.5倍速的实际窗口。
+- 生命周期复查：contentWindow在iframe重载后仍存在，不能作为旧工具连接身份仍有效的证明；load/error明确通知Controller进入恢复。RESULTED持久化期间取消/重连也必须在await后重新核对token和pending对象；两处已由回归复现并修复。
+- 验证：原Host门禁红测试失败后修复；额外生命周期4红→4绿。相关156项、Host TS、Web生产构建以及Viewer TS/构建的最终结果见[验证记录](validation/TEACHING_PLAYBACK_CONTROLS.md)。真实Agent runtime集成验证单次派发、单次RESUME/完成计数；两种Viewer播放工具由补丁原始helper行为测试覆盖，不等于真实UI完成。
+- 限制：实际已有Demo进入teachingDiagnostics=off、完成本地解析和CS-Net后只观察到首个静态讲解点，未确认活动播放工具；随后Mac锁屏，无法完成暂停超过旧超时后续播的UI验收。不得将零capability FINISH的“教学工具已完成”文案视为实际演示证据，不为找通过案例放松教学门或强制注入工具。原目标保留未完成。

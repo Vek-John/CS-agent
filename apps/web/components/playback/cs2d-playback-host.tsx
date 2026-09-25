@@ -1149,9 +1149,11 @@ export function Cs2dPlaybackHost({
 
   const issueUserCommand = useCallback((command: PlaybackCommand) => {
     issueHostUserCommand(command, { session: liveSessionRef.current, userTookOver: userTookOverRef.current,
-      control: transportRef.current, takeover: markUserTookOver, send });
+      control: transportRef.current, teachingPlayback: stage3State.playback,
+      controlTeachingPlayback: (expected, paused) => stage3ControllerRef.current?.setPlaybackPaused(expected, paused) ?? false,
+      takeover: markUserTookOver, send });
     notifyTransport();
-  }, [markUserTookOver, notifyTransport, send]);
+  }, [markUserTookOver, notifyTransport, send, stage3State.playback]);
 
   const seekFromTimeline = useCallback((canonicalTick: number) => {
     issueUserCommand({
@@ -2218,10 +2220,11 @@ export function Cs2dPlaybackHost({
     }
   }, [playback !== undefined, replay?.tickRate, send, transitionKey, transportVersion, userTookOver]);
 
-  const transportPaused = transportRef.current.paused;
-  const transportPlaying = !transportPaused && Boolean(playback?.playing);
-  const transportToggleAllowed = canToggleHostPlayback(session, userTookOver);
-  const transportLabel = transportPaused ? "继续播放" : transportPlaying ? "暂停" : "播放";
+  const teachingPlayback = stage3State.playback;
+  const transportPaused = teachingPlayback?.paused ?? transportRef.current.paused;
+  const transportPlaying = teachingPlayback ? !teachingPlayback.paused : !transportPaused && Boolean(playback?.playing);
+  const transportToggleAllowed = canToggleHostPlayback(session, userTookOver, teachingPlayback);
+  const transportLabel = teachingPlayback ? (teachingPlayback.paused ? "继续演示" : "暂停演示") : transportPaused ? "继续播放" : transportPlaying ? "暂停" : "播放";
   const activePlan = plan ?? bundle?.review_plan;
   const segment = activePlan && session ? getCurrentSegment(activePlan, session) : undefined;
   const cue = activePlan && session ? getCurrentCue(activePlan, session) : undefined;
@@ -3208,8 +3211,14 @@ export function Cs2dPlaybackHost({
             src={config.url}
             title="cs2d 本地 Demo 回放"
             allow="fullscreen; cross-origin-isolated"
-            onLoad={() => setPhase((current) => current === "BOOTING" ? "WAITING_FOR_DEMO" : current)}
-            onError={() => setPhase("ERROR")}
+            onLoad={() => {
+              stage3ControllerRef.current?.bridgeLost();
+              setPhase((current) => current === "BOOTING" ? "WAITING_FOR_DEMO" : current);
+            }}
+            onError={() => {
+              stage3ControllerRef.current?.bridgeLost();
+              setPhase("ERROR");
+            }}
           />
         </div>
 
@@ -3222,7 +3231,7 @@ export function Cs2dPlaybackHost({
             <div>
               <p className="cs2d-coach-kicker"><Sparkles aria-hidden="true" />私教会话</p>
               {selected ? <p className="cs2d-coach-focus" title={selected.displayName}>正在复盘：{selected.displayName}</p> : null}
-              <h2>{transportPaused && session && (!userTookOver || session.manual_cue_visit) ? "已暂停带看" : userTookOver ? "自由查看" : session ? phaseText[session.phase] : selected ? (routeState && !routeState.routeFrozen ? "等待教学路线冻结" : `正在分析 ${selected.displayName}`) : replay ? "先在地图内选择玩家" : "等待 Demo"}</h2>
+              <h2>{teachingPlayback?.paused ? "演示已暂停" : transportPaused && session && (!userTookOver || session.manual_cue_visit) ? "已暂停带看" : userTookOver ? "自由查看" : session ? phaseText[session.phase] : selected ? (routeState && !routeState.routeFrozen ? "等待教学路线冻结" : `正在分析 ${selected.displayName}`) : replay ? "先在地图内选择玩家" : "等待 Demo"}</h2>
             </div>
             <span
               className="cs2d-coach-badge"
@@ -3362,7 +3371,7 @@ export function Cs2dPlaybackHost({
               {stage3Mode && stage3Cue?.id === cue.id ? (
                 <section className={`cs2d-coach-card${stage3State.status === "FAILED" || stage3State.status === "CANCELLED" || stage3State.status === "RECOVERY_REQUIRED" ? " cs2d-coach-card--muted" : ""}`} role="status" aria-live="polite">
                   <small>
-                    {stage3State.status === "FOCUSING" && stage3State.tool
+                    {stage3State.playback?.paused ? "演示已暂停" : stage3State.status === "FOCUSING" && stage3State.tool
                       ? stage3ToolStatusLabel(stage3State.tool)
                       : stage3State.status === "RESUMING"
                         ? "正在准备下一段"
@@ -3493,7 +3502,7 @@ export function Cs2dPlaybackHost({
               disabled={!replay || !transportToggleAllowed}
               title={transportToggleAllowed ? transportLabel : "请使用讲解卡中的回看或继续操作"}
               aria-label={transportToggleAllowed ? transportLabel : "播放不可用，请使用讲解卡操作"}
-              onClick={() => issueUserCommand({ type: transportPlaying ? "pause" : "play" })}
+              onClick={() => issueUserCommand({ type: (teachingPlayback ? !teachingPlayback.paused : transportPlaying) ? "pause" : "play" })}
             >
               {transportPlaying
                 ? <Pause size={17} strokeWidth={2.2} aria-hidden="true" />

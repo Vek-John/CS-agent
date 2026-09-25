@@ -11,6 +11,7 @@ import {
   type ReplayReadyEvent,
   type ReviewPlan
 } from "@cs-coach/contracts";
+import type { Stage3PlaybackState } from "../coaching/coach-agent-stage3-controller";
 import { buildCoachingCueView, type CoachingCueView } from "../coaching/cs2d-coaching-view";
 
 export const DEFAULT_CS2D_HOST_URL = "http://localhost:5174/?host=1";
@@ -543,9 +544,12 @@ export class HostPlaybackControl {
   }
 }
 
-export function canToggleHostPlayback(session: CoachingSessionState | undefined, takeover: boolean): boolean {
+export function canToggleHostPlayback(session: CoachingSessionState | undefined, takeover: boolean, teachingPlayback?: Stage3PlaybackState): boolean {
   if (!session || (takeover && !session.manual_cue_visit)) return true;
-  // A teaching stop has explicit replay/continue actions and its own tool gate.
+  if (teachingPlayback && session.phase === "PAUSED_FOR_COACHING" &&
+    teachingPlayback.sessionId === session.id && teachingPlayback.cueId === session.current_cue_id &&
+    session.outcome_completion?.status === "COMPLETE") return true;
+  // A teaching stop without a live demonstration retains its explicit actions.
   return ["PLAYING", "REVEALING", "REPLAYING", "SKIPPING"].includes(session.phase);
 }
 
@@ -554,11 +558,18 @@ export function issueHostUserCommand(command: PlaybackCommand, input: {
   session: CoachingSessionState | undefined;
   userTookOver: boolean;
   control: HostPlaybackControl;
+  teachingPlayback?: Stage3PlaybackState;
+  controlTeachingPlayback?: (expected: Stage3PlaybackState, paused: boolean) => boolean;
   takeover: () => void;
   send: (command: PlaybackCommand) => void;
 }): void {
   if (command.type === "pause" || command.type === "play") {
-    if (!canToggleHostPlayback(input.session, input.userTookOver)) return;
+    if (!canToggleHostPlayback(input.session, input.userTookOver, input.teachingPlayback)) return;
+    if (input.teachingPlayback) {
+      // A stale tool control must never fall back to raw playback or takeover.
+      input.controlTeachingPlayback?.(input.teachingPlayback, command.type === "pause");
+      return;
+    }
     const commands = command.type === "pause" ? input.control.pause() : input.control.resume();
     commands.forEach(command => input.send(command));
     return;

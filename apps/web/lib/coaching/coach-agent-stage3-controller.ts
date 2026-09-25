@@ -28,8 +28,18 @@ export type Stage3ControllerStatus =
   | "CANCELLED"
   | "RECOVERY_REQUIRED";
 
+export interface Stage3PlaybackState {
+  readonly sessionId: string;
+  readonly runId: string;
+  readonly cueId: string;
+  readonly callId: string;
+  readonly generation: number;
+  readonly paused: boolean;
+}
+
 export interface Stage3ControllerState {
   readonly status: Stage3ControllerStatus;
+  readonly playback?: Stage3PlaybackState;
   readonly cueId?: string;
   readonly tool?: AgentToolRequest["tool"];
   readonly presentation?: TeachingToolCommandArgs;
@@ -41,9 +51,11 @@ export interface Stage3ControllerState {
 export interface Stage3ControllerScheduler {
   setTimeout(callback: () => void, timeoutMs: number): unknown;
   clearTimeout(handle: unknown): void;
+  now?(): number;
 }
 
 const defaultScheduler: Stage3ControllerScheduler = {
+  now: () => performance.now(),
   setTimeout: (callback, timeoutMs) => globalThis.setTimeout(callback, timeoutMs),
   clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
 };
@@ -86,7 +98,15 @@ function agentStateSummary(
   };
 }
 
+function isPlaybackTool(tool: AgentToolRequest["tool"]): boolean {
+  return tool === "REPLAY_CUE_SLOW" || tool === "SHOW_GRENADE_TRACE";
+}
+
 interface PendingTool {
+  posted?: boolean;
+  paused?: boolean;
+  remainingMs?: number;
+  deadline?: number;
   readonly request: AgentToolRequest;
   readonly context: Stage3ToolContext;
   readonly input: Stage3HostAdapterInput;
@@ -125,6 +145,7 @@ export class CoachAgentStage3Controller {
   private lifecycleTail: Promise<void> = Promise.resolve();
   private readonly lifecyclePromises = new Map<string, Promise<CoachAgentResult | undefined>>();
   private timeoutHandle: unknown;
+  private timeoutEpoch = 0;
   private token = 0;
   private resumeSequence = 0;
   private state: Stage3ControllerState = { status: "IDLE" };
@@ -147,6 +168,7 @@ export class CoachAgentStage3Controller {
   }
 
   private clearTimeout(): void {
+    this.timeoutEpoch++;
     if (this.timeoutHandle === undefined) return;
     this.scheduler.clearTimeout(this.timeoutHandle);
     this.timeoutHandle = undefined;
@@ -271,26 +293,80 @@ export class CoachAgentStage3Controller {
     return true;
   }
 
+  private now(): number { return this.scheduler.now?.() ?? performance.now(); }
+
+  private playbackState(pending: PendingTool): Stage3PlaybackState {
+    return { sessionId: pending.input.sessionId, runId: pending.request.runId,
+      cueId: pending.request.cueId, callId: pending.request.callId,
+      generation: pending.commandGeneration, paused: Boolean(pending.paused) };
+  }
+
+  private postPlayback(pending: PendingTool, action: "pause" | "resume" | "cancel"): void {
+    this.options.post({ type: "teachingPlayback", action, callId: pending.request.callId,
+      runId: pending.request.runId, cueId: pending.request.cueId, generation: pending.commandGeneration });
+  }
+
+  private cancelPlayback(pending = this.pending): void {
+    if (!pending?.posted || !isPlaybackTool(pending.request.tool)) return;
+    pending.posted = false;
+    this.postPlayback(pending, "cancel");
+  }
+
+  /** Only the live, already-posted demonstration owns this transport control. */
+  setPlaybackPaused(expected: Stage3PlaybackState, paused: boolean): boolean {
+    const pending = this.pending;
+    if (!pending?.posted || !isPlaybackTool(pending.request.tool) || this.state.status !== "FOCUSING" ||
+      !this.isCurrent(pending.input, pending.token)) return false;
+    const current = this.playbackState(pending);
+    if (expected.sessionId !== current.sessionId || expected.runId !== current.runId ||
+      expected.cueId !== current.cueId || expected.callId !== current.callId || expected.generation !== current.generation) return false;
+    if (!this.options.bridgeAvailable()) {
+      this.clearTimeout();
+      this.cancelPlayback(pending);
+      this.pending = undefined;
+      this.adapter.cancel(pending.input.generation);
+      this.setState({ status: "RECOVERY_REQUIRED", cueId: pending.input.cue.id, error: "演示连接已中断，请恢复工具状态。" });
+      return false;
+    }
+    if (Boolean(pending.paused) === paused) return true;
+    if (paused) pending.remainingMs = Math.max(0, (pending.deadline ?? this.now()) - this.now());
+    pending.paused = paused;
+    this.armTimeout(pending);
+    this.postPlayback(pending, paused ? "pause" : "resume");
+    this.setState({ ...this.state, playback: this.playbackState(pending) });
+    return true;
+  }
+
   private armTimeout(pending: PendingTool): void {
     this.clearTimeout();
+    const epoch = this.timeoutEpoch;
+    const paused = Boolean(pending.paused);
+    const remaining = pending.remainingMs ?? STAGE3_ACK_TIMEOUT_MS;
+    if (!paused) pending.deadline = this.now() + remaining;
     this.timeoutHandle = this.scheduler.setTimeout(() => {
+      if (epoch !== this.timeoutEpoch || this.pending !== pending || !this.isCurrent(pending.input, pending.token)) return;
       this.timeoutHandle = undefined;
-      if (this.pending?.token !== pending.token || !this.isCurrent(pending.input, pending.token)) return;
       if (!this.options.bridgeAvailable()) {
+        this.cancelPlayback(pending);
         this.pending = undefined;
         this.adapter.cancel(pending.input.generation);
         this.setState({ status: "RECOVERY_REQUIRED", cueId: pending.input.cue.id, tool: pending.request.tool, error: "回放桥接未连接；恢复连接后可重新关闭这次工具等待。基础回放仍可继续。" });
         return;
       }
-      // The iframe is still reachable, so close the checkpoint with a strict
-      // FAILED result. The Graph may choose one registered alternative once.
-      void this.resumeWithResult(pending, failedResult(pending.request, "教学画面未在限定时间内回应。"));
-    }, STAGE3_ACK_TIMEOUT_MS);
+      if (paused) {
+        // Pause has no playback deadline. Only check whether the bridge remains
+        // present; silence from a deliberately stopped clock is not failure.
+        this.armTimeout(pending);
+        return;
+      }
+      void this.resumeWithResult(pending, failedResult(pending.request, "教学画面未在限定活动时间内回应。"));
+    }, paused ? STAGE3_ACK_TIMEOUT_MS : remaining);
   }
 
   private async resumeWithResult(pending: PendingTool, result: AgentToolResult): Promise<void> {
     if (this.pending?.token !== pending.token || !this.isCurrent(pending.input, pending.token)) return;
     this.clearTimeout();
+    if (result.status !== "SUCCEEDED") this.cancelPlayback(pending);
     const eventId = `stage3-resume-${pending.input.cue.id}-${pending.commandGeneration}-${++this.resumeSequence}`.replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 160);
     let event: CoachAgentEvent | undefined;
     try {
@@ -311,6 +387,7 @@ export class CoachAgentStage3Controller {
       ...(pending.manualVisitId ? { manualVisitId: pending.manualVisitId } : {}),
     });
     if (typeof resultedPersistence !== "boolean") await resultedPersistence;
+    if (this.pending !== pending || !this.isCurrent(pending.input, pending.token)) return;
     this.pending = undefined;
     this.setState({ status: "RESUMING", cueId: pending.input.cue.id, tool: pending.request.tool, presentation: this.state.presentation });
     try {
@@ -408,7 +485,6 @@ export class CoachAgentStage3Controller {
       ...(manualVisitId ? { manualVisitId } : {}),
     };
     this.pending = pending;
-    this.armTimeout(pending);
     this.setState({ status: "FOCUSING", cueId: input.cue.id, tool: request.tool, presentation: command.args });
     const postedPersistence = this.persistToolTransition({
       status: "POSTED",
@@ -432,7 +508,16 @@ export class CoachAgentStage3Controller {
       return;
     }
     if (!this.isCurrent(input, token) || this.pending?.token !== token) return;
+    pending.remainingMs = command.args.tool === "REPLAY_CUE_SLOW"
+      ? Math.max(STAGE3_ACK_TIMEOUT_MS, Math.ceil((command.args.outcomeEndCanonicalTick - command.args.startCanonicalTick) /
+        (input.tickRate > 0 ? input.tickRate : 64) / command.args.speed * 1000) + 2_000)
+      : STAGE3_ACK_TIMEOUT_MS;
+    pending.posted = true;
+    this.armTimeout(pending);
     this.options.post(command);
+    if (isPlaybackTool(request.tool) && this.pending === pending) {
+      this.setState({ ...this.state, playback: this.playbackState(pending) });
+    }
   }
 
   start(input: Stage3HostAdapterInput): void {
@@ -544,6 +629,7 @@ export class CoachAgentStage3Controller {
     try {
       result = this.adapter.acceptTeachingToolAck(pending.request, ack, pending.context);
     } catch (error) {
+      this.cancelPlayback(pending);
       this.pending = undefined;
       this.clearTimeout();
       this.setState({ status: "FAILED", cueId: pending.input.cue.id, tool: pending.request.tool, error: shortError(error, "工具 ACK 未通过 Host 校验；基础回放仍可继续。") });
@@ -554,6 +640,7 @@ export class CoachAgentStage3Controller {
   }
 
   cancel(generation: number, error = "已由你接管，当前 Agent 工具已取消；基础回放仍可继续。"): void {
+    this.cancelPlayback();
     this.token += 1;
     this.clearTimeout();
     this.pending = undefined;
@@ -571,6 +658,7 @@ export class CoachAgentStage3Controller {
     // posting a second iframe side effect.  A COMPLETED controller state stays
     // marked so an already-finished cue cannot regain a TeachingMove.
     const rewalkInFlightCue = this.busy || this.pending !== undefined;
+    this.cancelPlayback();
     this.token += 1;
     this.clearTimeout();
     this.pending = undefined;
@@ -616,6 +704,7 @@ export class CoachAgentStage3Controller {
 
   /** Establishes USER_TAKEOVER before the first default cue has an active input. */
   takeoverIdentity(input: Stage3IdentityInput, reason = "用户接管了自由回放。", generation = 0): Promise<boolean> {
+    this.cancelPlayback();
     this.token += 1;
     this.clearTimeout();
     this.pending = undefined;
@@ -712,8 +801,19 @@ export class CoachAgentStage3Controller {
     return result;
   }
 
+  /** iframe load/error invalidates transport identity even if contentWindow survives. */
+  bridgeLost(): void {
+    if (!this.busy && !this.pending) return;
+    this.cancelPlayback();
+    this.clearTimeout();
+    this.token++;
+    this.pending = undefined;
+    this.setState({ status: "RECOVERY_REQUIRED", cueId: this.state.cueId, error: "回放连接已变化，等待工具账本恢复。" });
+  }
+
   /** Recovery uses the same serialized dispatch/result seam as live cues. */
   reconnect(event: Extract<CoachAgentEvent, { type: "RECONNECT_REPLAY" }>): Promise<CoachAgentResult> {
+    this.bridgeLost();
     return this.dispatchSerial(event);
   }
 
@@ -728,6 +828,7 @@ export class CoachAgentStage3Controller {
   recover(input: Stage3HostAdapterInput): void {
     if (this.busy) return;
     this.startedCueIds.delete(input.cue.id);
+    this.cancelPlayback();
     this.token += 1;
     this.clearTimeout();
     this.pending = undefined;
@@ -738,6 +839,7 @@ export class CoachAgentStage3Controller {
   }
 
   reset(): void {
+    this.cancelPlayback();
     this.token += 1;
     this.clearTimeout();
     this.pending = undefined;
@@ -752,6 +854,7 @@ export class CoachAgentStage3Controller {
   }
 
   dispose(): void {
+    this.cancelPlayback();
     this.token += 1;
     this.clearTimeout();
     this.pending = undefined;

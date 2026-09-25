@@ -16,6 +16,7 @@ export const CS2D_PATCH_FILES = Object.freeze([
   resolve(root, 'tools/cs2d-host/patches/0005-managed-demo-library.patch'),
   resolve(root, 'tools/cs2d-host/patches/0006-managed-demo-load-races.patch'),
   resolve(root, 'tools/cs2d-host/patches/0007-cs2d-shot-actor.patch'),
+  resolve(root, 'tools/cs2d-host/patches/0008-teaching-playback.patch'),
 ])
 
 export const CS2D_REUSE_DECISIONS = Object.freeze({
@@ -51,6 +52,7 @@ const CONTROLLED_EXACT_PATHS = new Set([
   'pnpm-lock.yaml',
   'apps/app/src/viewer/analysis/csNetWinRate.worker.ts',
   'apps/app/src/viewer/player/hostBridge.ts',
+  'apps/app/src/viewer/player/teachingPlayback.ts',
 ])
 
 const CONTROLLED_PATH_PREFIXES = [
@@ -66,6 +68,18 @@ const CONTROLLED_ORT_ASSETS = new Set([
 ])
 
 const REQUIRED_MARKERS = [
+  {
+    name: 'identity-bound teaching playback control',
+    teachingPlayback: true,
+    path: 'apps/app/src/viewer/player/teachingPlayback.ts',
+    pattern: /export function controlTeachingPlayback/,
+  },
+  {
+    name: 'teaching playback viewer bridge handler',
+    teachingPlayback: true,
+    path: 'apps/app/src/viewer/player/ViewerStage.vue',
+    pattern: /teachingPlayback: \(command\) =>/,
+  },
   {
     name: 'event-resolved shot actor',
     shotActor: true,
@@ -322,11 +336,12 @@ function diffCheck(upstream) {
   }
 }
 
-function markerErrors(upstream, includeManagedLibrary = true, includeShotActor = true) {
+function markerErrors(upstream, includeManagedLibrary = true, includeShotActor = true, includeTeachingPlayback = true) {
   const errors = []
   for (const marker of REQUIRED_MARKERS) {
     if (!includeManagedLibrary && marker.managedLibrary) continue
     if (!includeShotActor && marker.shotActor) continue
+    if (!includeTeachingPlayback && marker.teachingPlayback) continue
     const file = resolve(upstream, marker.path)
     if (!existsSync(file)) {
       errors.push(`${marker.name}: missing ${marker.path}`)
@@ -386,24 +401,31 @@ function inspectPatchedCheckout(upstream) {
   const patchesExactlyApplied = reverseStates.every(Boolean)
   // A reusable checkout may be a validated controlled superset (for example,
   // generated model assets make older reverse checks intentionally inexact).
-  // Only the two explicitly supported tail upgrades can advance that checkout,
+  // Only the explicitly supported tail upgrades can advance that checkout,
   // and only when each applies cleanly on top of all other validated markers.
-  const managedLibraryPatch = CS2D_PATCH_FILES.at(-2)
-  const pendingManagedLibraryPatch = !reverseStates.at(-2) && Boolean(managedLibraryPatch) &&
+  const managedLibraryPatch = CS2D_PATCH_FILES.at(-3)
+  const pendingManagedLibraryPatch = !reverseStates.at(-3) && Boolean(managedLibraryPatch) &&
     run('git', ['apply', '--check', managedLibraryPatch], {
       cwd: upstream,
       capture: true,
       allowFailure: true,
     }).status === 0
-  const shotActorPatch = CS2D_PATCH_FILES.at(-1)
-  const pendingShotActorPatch = !reverseStates.at(-1) && Boolean(shotActorPatch) &&
+  const shotActorPatch = CS2D_PATCH_FILES.at(-2)
+  const pendingShotActorPatch = !reverseStates.at(-2) && Boolean(shotActorPatch) &&
     run('git', ['apply', '--check', shotActorPatch], {
       cwd: upstream,
       capture: true,
       allowFailure: true,
     }).status === 0
+  const teachingPlaybackPatch = CS2D_PATCH_FILES.at(-1)
+  const pendingTeachingPlaybackPatch = !reverseStates.at(-1) && Boolean(teachingPlaybackPatch) &&
+    run('git', ['apply', '--check', teachingPlaybackPatch], {
+      cwd: upstream,
+      capture: true,
+      allowFailure: true,
+    }).status === 0
   const errors = paths.length > 0 || patchesExactlyApplied
-    ? markerErrors(upstream, !pendingManagedLibraryPatch, !pendingShotActorPatch)
+    ? markerErrors(upstream, !pendingManagedLibraryPatch, !pendingShotActorPatch, !pendingTeachingPlaybackPatch)
     : []
   const decision = classifyPatchedCheckout({
     head,
@@ -412,7 +434,7 @@ function inspectPatchedCheckout(upstream) {
     patchesExactlyApplied,
     markerErrors: errors,
   })
-  return { decision, head, paths, diffCheck: check, patchesExactlyApplied, markerErrors: errors, pendingManagedLibraryPatch, pendingShotActorPatch }
+  return { decision, head, paths, diffCheck: check, patchesExactlyApplied, markerErrors: errors, pendingManagedLibraryPatch, pendingShotActorPatch, pendingTeachingPlaybackPatch }
 }
 
 function applyPatches(upstream) {
@@ -455,8 +477,9 @@ async function main(argv = process.argv.slice(2)) {
     process.stdout.write(`[cs2d-host] reused exact patched checkout at ${CS2D_PIN.slice(0, 7)}\n`)
   } else if (inspection?.decision === CS2D_REUSE_DECISIONS.CONTROLLED_SUPERSET) {
     const pendingPatches = [
-      ...(inspection.pendingManagedLibraryPatch ? [CS2D_PATCH_FILES.at(-2)] : []),
-      ...(inspection.pendingShotActorPatch ? [CS2D_PATCH_FILES.at(-1)] : []),
+      ...(inspection.pendingManagedLibraryPatch ? [CS2D_PATCH_FILES.at(-3)] : []),
+      ...(inspection.pendingShotActorPatch ? [CS2D_PATCH_FILES.at(-2)] : []),
+      ...(inspection.pendingTeachingPlaybackPatch ? [CS2D_PATCH_FILES.at(-1)] : []),
     ]
     for (const patch of pendingPatches) {
       if (!patch) throw new Error('pending patch missing from controlled stack')

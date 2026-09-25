@@ -14,7 +14,7 @@ import type { CoachAgentStage3HostAdapter, Stage3HostAdapterInput, Stage3Identit
 function input(): Stage3HostAdapterInput {
   return {
     cue: { id: "cue-1" },
-    generation: 1,
+    generation: 1, sessionId: "session-1", runId: "run-1", tickRate: 64,
     outcomeGate: { cueId: "cue-1", outcomeEndTick: 100, status: "COMPLETE" },
   } as unknown as Stage3HostAdapterInput;
 }
@@ -30,6 +30,7 @@ function result(status: CoachAgentResult["status"], effects: unknown[] = []): Co
 
 function harness(options: {
   bridgeAvailable?: boolean;
+  tool?: "REPLAY_CUE_SLOW" | "SHOW_GRENADE_TRACE";
   dispatch?: (event: CoachAgentEvent) => Promise<CoachAgentResult>;
   capabilities?: unknown[];
   command?: PlaybackCommand | undefined;
@@ -42,18 +43,22 @@ function harness(options: {
     runId: "run-1",
     cueId: "cue-1",
     capabilityId: "cap-cue-1-map-focus",
-    tool: "FOCUS_MAP_EVIDENCE",
+    tool: options.tool ?? "FOCUS_MAP_EVIDENCE",
     evidenceRefs: ["annotation-1"],
   });
   const command: PlaybackCommand = {
     type: "teachingTool",
     schemaVersion: "cs2d-teaching-tool-command.v2",
-    tool: "FOCUS_MAP_EVIDENCE",
+    tool: options.tool ?? "FOCUS_MAP_EVIDENCE",
     callId: request.callId,
     runId: request.runId,
     generation: 1,
     cueId: request.cueId,
-    args: { tool: "FOCUS_MAP_EVIDENCE", annotationRef: "annotation-1", focusWorld: { x: 1, y: 2 }, label: "证据" },
+    args: options.tool === "REPLAY_CUE_SLOW"
+      ? { tool: "REPLAY_CUE_SLOW", startCanonicalTick: 0, decisionCanonicalTick: 32, outcomeEndCanonicalTick: 128, speed: 0.5 }
+      : options.tool === "SHOW_GRENADE_TRACE"
+        ? { tool: "SHOW_GRENADE_TRACE", trajectoryRefs: ["trajectory-1"], landingRefs: ["landing-1"] }
+        : { tool: "FOCUS_MAP_EVIDENCE", annotationRef: "annotation-1", focusWorld: { x: 1, y: 2 }, label: "证据" },
   };
   const resumeEvent = {} as CoachAgentEvent;
   const adapter = {
@@ -96,9 +101,13 @@ function harness(options: {
     cancel: vi.fn(),
     reset: vi.fn(),
   } as unknown as CoachAgentStage3HostAdapter;
+  let now = 0;
+  const delays: number[] = [];
   const scheduled: (() => void)[] = [];
   const scheduler: Stage3ControllerScheduler = {
-    setTimeout: vi.fn((callback) => {
+    now: () => now,
+    setTimeout: vi.fn((callback, timeoutMs) => {
+      delays.push(timeoutMs);
       scheduled.push(callback);
       return callback;
     }),
@@ -123,7 +132,7 @@ function harness(options: {
     onAgentResult: options.onAgentResult,
     onToolLedgerTransition: options.onToolLedgerTransition,
   });
-  return { controller, adapter, request, scheduled, posted, dispatched, states };
+  return { controller, adapter, request, scheduled, posted, dispatched, states, delays, advance: (ms: number) => { now += ms; } };
 }
 
 const ack: TeachingToolAckEvent = {
@@ -491,4 +500,122 @@ describe("CoachAgentStage3Controller", () => {
     expect(await second).toBe(summaryResult);
     expect(h.dispatched).toHaveLength(1);
   });
+});
+
+
+describe("same-demonstration playback controls", () => {
+  it.each(["REPLAY_CUE_SLOW", "SHOW_GRENADE_TRACE"] as const)("pauses %s beyond the wall-clock limit without another call or Graph resume", async tool => {
+    const h = harness({ tool });
+    h.controller.start(input()); await flush();
+    const current = h.controller.currentState.playback!;
+    expect(current).toMatchObject({ sessionId: "session-1", runId: "run-1", callId: "call-1", cueId: "cue-1", generation: 1, paused: false });
+    h.advance(4_000);
+    expect(h.controller.setPlaybackPaused(current, true)).toBe(true);
+    h.advance(30_000);
+    h.scheduled[0]!(); // Cleared but queued old expiry must be inert.
+    h.scheduled.at(-1)!(); // Pause monitor: available bridge, no failure.
+    await flush();
+    expect(h.controller.currentState.playback?.paused).toBe(true);
+    expect(h.dispatched).toHaveLength(1);
+    expect(h.adapter.createResumeEvent).not.toHaveBeenCalled();
+    expect(h.controller.setPlaybackPaused(current, false)).toBe(true);
+    expect(h.delays.at(-1)).toBe(6_000);
+    expect(h.posted.filter(c => c.type === "teachingTool")).toHaveLength(1);
+    expect(h.posted.filter(c => c.type === "teachingPlayback")).toEqual([
+      { type: "teachingPlayback", action: "pause", callId: "call-1", runId: "run-1", cueId: "cue-1", generation: 1 },
+      { type: "teachingPlayback", action: "resume", callId: "call-1", runId: "run-1", cueId: "cue-1", generation: 1 },
+    ]);
+    vi.mocked(h.adapter.acceptTeachingToolAck).mockReturnValue({ callId: "call-1", status: "SUCCEEDED",
+      observation: { code: tool === "REPLAY_CUE_SLOW" ? "CUE_PLAYED" : "EVIDENCE_SHOWN", completed: true }, limitations: [] });
+    h.controller.acceptAck({ ...ack, tool, status: "SUCCEEDED", completed: true }); await flush();
+    expect(h.controller.currentState.status).toBe("COMPLETED");
+    expect(h.controller.currentState.playback).toBeUndefined();
+    expect(h.controller.setPlaybackPaused(current, false)).toBe(false);
+    expect(h.adapter.createResumeEvent).toHaveBeenCalledTimes(1);
+    h.controller.dispose();
+  });
+
+  it("rejects mismatched identities and stops a paused tool on explicit takeover", async () => {
+    const h = harness({ tool: "REPLAY_CUE_SLOW" });
+    h.controller.start(input()); await flush();
+    const current = h.controller.currentState.playback!;
+    for (const mismatch of [{ sessionId: "old" }, { runId: "old" }, { cueId: "old" }, { callId: "old" }, { generation: 0 }]) {
+      expect(h.controller.setPlaybackPaused({ ...current, ...mismatch }, true)).toBe(false);
+    }
+    expect(h.posted).toHaveLength(1);
+    h.controller.setPlaybackPaused(current, true);
+    await h.controller.takeover(input());
+    expect(h.posted.at(-1)).toMatchObject({ type: "teachingPlayback", action: "cancel", callId: current.callId });
+    expect(h.controller.setPlaybackPaused(current, false)).toBe(false);
+    h.controller.acceptAck({ ...ack, tool: "REPLAY_CUE_SLOW" });
+    h.scheduled[0]!(); await flush();
+    expect(h.adapter.createResumeEvent).not.toHaveBeenCalled();
+  });
+
+  it("uses only remaining active time after repeated pauses and cancels on real timeout", async () => {
+    const h = harness({ tool: "SHOW_GRENADE_TRACE" });
+    h.controller.start(input()); await flush();
+    const current = h.controller.currentState.playback!;
+    h.advance(4_000); h.controller.setPlaybackPaused(current, true);
+    h.advance(100_000); h.controller.setPlaybackPaused(current, false);
+    h.advance(2_000); h.controller.setPlaybackPaused(current, true);
+    h.advance(100_000); h.controller.setPlaybackPaused(current, false);
+    expect(h.delays.at(-1)).toBe(4_000);
+    h.scheduled.at(-1)!(); await flush(); await flush();
+    expect(h.posted.at(-1)).toMatchObject({ type: "teachingPlayback", action: "cancel" });
+    expect(h.adapter.createResumeEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not expose controls before the durable POSTED barrier and invalidates them on reconnect", async () => {
+    let release!: () => void;
+    const persisted = new Promise<void>(resolve => { release = resolve; });
+    const h = harness({ tool: "REPLAY_CUE_SLOW", onToolLedgerTransition: t => t.status === "POSTED" ? persisted : undefined });
+    h.controller.start(input()); await flush();
+    expect(h.controller.currentState.playback).toBeUndefined();
+    expect(h.posted).toEqual([]);
+    release(); await flush();
+    const current = h.controller.currentState.playback!;
+    expect(current).toBeDefined();
+    h.controller.setPlaybackPaused(current, true);
+    await h.controller.reconnect({ type: "RECONNECT_REPLAY" } as Extract<CoachAgentEvent, { type: "RECONNECT_REPLAY" }>);
+    expect(h.posted.at(-1)).toMatchObject({ type: "teachingPlayback", action: "cancel" });
+    expect(h.controller.setPlaybackPaused(current, false)).toBe(false);
+    expect(h.controller.currentState.status).toBe("RECOVERY_REQUIRED");
+  });
+
+  it("treats a lost bridge while paused as recovery, not a fabricated tool result", async () => {
+    const options = { tool: "REPLAY_CUE_SLOW" as const, bridgeAvailable: true };
+    const h = harness(options); h.controller.start(input()); await flush();
+    h.controller.setPlaybackPaused(h.controller.currentState.playback!, true);
+    options.bridgeAvailable = false;
+    h.scheduled.at(-1)!(); await flush();
+    expect(h.controller.currentState.status).toBe("RECOVERY_REQUIRED");
+    expect(h.adapter.createResumeEvent).not.toHaveBeenCalled();
+  });
+  it.each(["cancel", "reconnect", "bridgeLost"] as const)("ignores a RESULTED write completing after %s", async (boundary) => {
+    let release!: () => void;
+    const persisted = new Promise<void>(resolve => { release = resolve; });
+    const h = harness({ tool: "REPLAY_CUE_SLOW", onToolLedgerTransition: t => t.status === "RESULTED" ? persisted : undefined });
+    h.controller.start(input()); await flush();
+    h.controller.acceptAck({ ...ack, tool: "REPLAY_CUE_SLOW" }); await flush();
+    if (boundary === "cancel") h.controller.cancel(1);
+    else if (boundary === "bridgeLost") h.controller.bridgeLost();
+    else await h.controller.reconnect({ type: "RECONNECT_REPLAY" } as Extract<CoachAgentEvent, { type: "RECONNECT_REPLAY" }>);
+    release(); await flush(); await flush();
+    expect(h.dispatched.filter(event => event.type === "RESUME_TOOL")).toHaveLength(0);
+    expect(h.controller.currentState.status).toBe(boundary === "cancel" ? "CANCELLED" : "RECOVERY_REQUIRED");
+  });
+
+  it("invalidates paused playback on an iframe lifecycle boundary even while contentWindow exists", async () => {
+    const h = harness({ tool: "REPLAY_CUE_SLOW", bridgeAvailable: true });
+    h.controller.start(input()); await flush();
+    const playback = h.controller.currentState.playback!;
+    h.controller.setPlaybackPaused(playback, true);
+    h.controller.bridgeLost();
+    expect(h.controller.currentState.status).toBe("RECOVERY_REQUIRED");
+    expect(h.controller.setPlaybackPaused(playback, false)).toBe(false);
+    h.scheduled.at(-1)!(); await flush();
+    expect(h.adapter.createResumeEvent).not.toHaveBeenCalled();
+  });
+
 });

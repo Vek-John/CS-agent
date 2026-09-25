@@ -516,3 +516,22 @@ describe("Host pause intent at the Session/Agent handoff", () => {
   });
 
 });
+
+
+it("routes the teaching-stop pause button to the same active demonstration instead of takeover/raw play", () => {
+  const plan = createFixtureReviewPlan(createSyntheticMirageTimeline());
+  let session = reduceCoachingSession(plan, createCoachingSession(plan), { type: "START" });
+  session = reduceCoachingSession(plan, session, { type: "ADVANCE_SEGMENT" });
+  session = reduceCoachingSession(plan, session, { type: "TICK", tick: plan.cues[0]!.outcome_end_tick });
+  const playback = { sessionId: session.id, runId: "run-1", cueId: session.current_cue_id!, callId: "call-1", generation: 1, paused: false };
+  const controlTeachingPlayback = vi.fn(() => true);
+  const takeover = vi.fn();
+  const send = vi.fn();
+  expect(canToggleHostPlayback(session, false, playback)).toBe(true);
+  issueHostUserCommand({ type: "pause" }, { session, userTookOver: false, control: new HostPlaybackControl(),
+    teachingPlayback: playback, controlTeachingPlayback, takeover, send });
+  expect(controlTeachingPlayback).toHaveBeenCalledExactlyOnceWith(playback, true);
+  expect(takeover).not.toHaveBeenCalled();
+  expect(send).not.toHaveBeenCalled();
+  expect(canToggleHostPlayback(session, false)).toBe(false);
+});

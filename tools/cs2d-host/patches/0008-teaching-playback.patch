@@ -1,0 +1,215 @@
+diff --git a/apps/app/src/viewer/player/hostBridge.ts b/apps/app/src/viewer/player/hostBridge.ts
+--- a/apps/app/src/viewer/player/hostBridge.ts
++++ b/apps/app/src/viewer/player/hostBridge.ts
+@@ -177,6 +177,7 @@
+ export type PlaybackCommand =
+   | { type: 'play' }
+   | { type: 'pause' }
++  | { type: 'teachingPlayback'; callId: string; runId: string; cueId: string; generation: number; action: 'pause' | 'resume' | 'cancel' }
+   | { type: 'seekCanonicalTick'; canonicalTick: number }
+   | { type: 'selectPlayer'; playerId: string }
+   | { type: 'selectRound'; roundIndex: number }
+@@ -338,6 +339,13 @@
+     case 'play':
+     case 'pause':
+       return Object.keys(payload).length === 1
++    case 'teachingPlayback':
++      return hasExactKeys(payload, ['type', 'callId', 'runId', 'cueId', 'generation', 'action']) &&
++        typeof payload.callId === 'string' && !!payload.callId.trim() &&
++        typeof payload.runId === 'string' && !!payload.runId.trim() &&
++        typeof payload.cueId === 'string' && !!payload.cueId.trim() &&
++        isFiniteNumber(payload.generation) && Number.isInteger(payload.generation) && payload.generation >= 0 &&
++        (payload.action === 'pause' || payload.action === 'resume' || payload.action === 'cancel')
+     case 'seekCanonicalTick':
+       return Object.keys(payload).length === 2 && isFiniteNumber(payload.canonicalTick)
+     case 'selectPlayer':
+@@ -430,6 +438,7 @@
+     selectRound: (roundIndex: number) => void
+     setSpeed: (speed: number) => void
+     setCamera: (mode: PlaybackCameraMode) => void
++    teachingPlayback?: (command: Extract<PlaybackCommand, { type: 'teachingPlayback' }>) => void
+     teachingTool: (command: Extract<PlaybackCommand, { type: 'teachingTool' }>) => void
+     focusMapEvidence: (command: Extract<PlaybackCommand, { type: 'focusMapEvidence' }>) => void
+   },
+@@ -445,6 +454,9 @@
+         break
+       case 'pause':
+         handlers.pause()
++        break
++      case 'teachingPlayback':
++        handlers.teachingPlayback?.(command)
+         break
+       case 'seekCanonicalTick':
+         handlers.seekCanonicalTick(command.canonicalTick)
+diff --git a/apps/app/src/viewer/player/teachingPlayback.ts b/apps/app/src/viewer/player/teachingPlayback.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/app/src/viewer/player/teachingPlayback.ts
+@@ -0,0 +1,38 @@
++type TeachingIdentity = { callId: string; runId: string; cueId: string; generation: number }
++export type TeachingPlaybackRun = {
++  command: TeachingIdentity
++  phase: 'PLAYING' | 'RETURNING'
++  paused: boolean
++}
++type TeachingPlaybackControl = TeachingIdentity & { action: 'pause' | 'resume' | 'cancel' }
++
++/** Local execution guard shared by the tick watcher and deferred startup. */
++export function canAdvanceTeachingPlayback(active: TeachingPlaybackRun | null, expected: TeachingPlaybackRun): boolean {
++  return active === expected && expected.phase === 'PLAYING' && !expected.paused
++}
++
++export function playWithoutTeachingTool(active: TeachingPlaybackRun | null, play: () => void): void {
++  if (!active) play()
++}
++
++/** Controls only the existing visual effect; never starts a new tool or emits completion. */
++export function controlTeachingPlayback(
++  active: TeachingPlaybackRun | null,
++  control: TeachingPlaybackControl,
++  effects: { play(): void; pause(): void; cancel(): void; emitState(): void },
++): boolean {
++  if (!active || active.command.callId !== control.callId || active.command.runId !== control.runId ||
++    active.command.cueId !== control.cueId || active.command.generation !== control.generation) return false
++  if (control.action === 'cancel') {
++    active.paused = true
++    effects.pause()
++    effects.cancel()
++  } else {
++    if (active.phase !== 'PLAYING') return false
++    active.paused = control.action === 'pause'
++    if (active.paused) effects.pause()
++    else effects.play()
++  }
++  effects.emitState()
++  return true
++}
+diff --git a/apps/app/src/viewer/player/ViewerStage.vue b/apps/app/src/viewer/player/ViewerStage.vue
+--- a/apps/app/src/viewer/player/ViewerStage.vue
++++ b/apps/app/src/viewer/player/ViewerStage.vue
+@@ -29,6 +29,8 @@
+ import { SIDE_COLOR } from '@/viewer/domain/colors'
+ import { useI18n } from '@/app/i18n'
+ import { emitPlaybackEvent, listenForPlaybackCommands, type PlaybackCommand } from '@/viewer/player/hostBridge'
++
++import { canAdvanceTeachingPlayback, controlTeachingPlayback, playWithoutTeachingTool } from '@/viewer/player/teachingPlayback'
+ 
+ const { t } = useI18n()
+ 
+@@ -92,6 +94,7 @@
+ type HostSlowReplay = {
+   command: Extract<PlaybackCommand, { type: 'teachingTool' }>
+   phase: 'PLAYING' | 'RETURNING'
++  paused: boolean
+ }
+ const hostSlowReplay = ref<HostSlowReplay | null>(null)
+ type HostGrenadeReplay = {
+@@ -102,6 +105,7 @@
+   returnRoundIndex: number
+   returnCanonicalTick: number
+   phase: 'PLAYING' | 'RETURNING'
++  paused: boolean
+ }
+ const hostGrenadeReplay = ref<HostGrenadeReplay | null>(null)
+ 
+@@ -216,7 +220,7 @@
+ onMounted(() => {
+   if (!props.hostMode) return
+   stopHostBridge = listenForPlaybackCommands({
+-    play: r.play,
++    play: () => playWithoutTeachingTool(hostSlowReplay.value ?? hostGrenadeReplay.value, r.play),
+     pause: () => {
+       r.pause()
+       emitHostPlaybackState()
+@@ -244,6 +248,22 @@
+         hostTeachingDetails.value = null
+       }
+     },
++    teachingPlayback: (command) => {
++      const active = hostSlowReplay.value ?? hostGrenadeReplay.value
++      controlTeachingPlayback(active, command, {
++        play: r.play,
++        pause: r.pause,
++        cancel: () => {
++          if (hostSlowReplay.value === active) hostSlowReplay.value = null
++          if (hostGrenadeReplay.value === active) hostGrenadeReplay.value = null
++          r.speed.value = 1
++          hostPreviewPaths.value = null
++          hostTeachingBanner.value = null
++          hostTeachingDetails.value = null
++        },
++        emitState: emitHostPlaybackState,
++      })
++    },
+     teachingTool: (command) => {
+       if (handledTeachingCallIds.has(command.callId)) return
+       handledTeachingCallIds.add(command.callId)
+@@ -252,11 +272,13 @@
+         hostPreviewPaths.value = null
+         hostTeachingBanner.value = '正在看完整处理'
+         hostTeachingDetails.value = null
+-        hostSlowReplay.value = { command, phase: 'PLAYING' }
++        hostGrenadeReplay.value = null
++        hostSlowReplay.value = { command, phase: 'PLAYING', paused: false }
++        const active = hostSlowReplay.value
+         r.pause()
+         r.speed.value = 0.5
+         r.seekCanonicalTick(args.startCanonicalTick)
+-        void nextTick(() => r.play())
++        void nextTick(() => { if (canAdvanceTeachingPlayback(hostSlowReplay.value, active)) r.play() })
+         return
+       }
+       if (args.tool === 'FOCUS_MAP_EVIDENCE') {
+@@ -278,6 +300,7 @@
+           return
+         }
+         hostPreviewPaths.value = []
++        hostSlowReplay.value = null
+         hostGrenadeReplay.value = {
+           command,
+           paths: window.paths,
+@@ -286,11 +309,13 @@
+           returnRoundIndex: r.roundIndex.value,
+           returnCanonicalTick: canonicalTick.value,
+           phase: 'PLAYING',
++          paused: false,
+         }
+         r.pause()
+         r.speed.value = 1
+         r.seekCanonicalTick(window.startCanonicalTick)
+-        void nextTick(() => r.play())
++        const active = hostGrenadeReplay.value
++        void nextTick(() => { if (canAdvanceTeachingPlayback(hostGrenadeReplay.value, active)) r.play() })
+         return
+       }
+       hostTeachingBanner.value = args.tool === 'SHOW_WIN_RATE_IMPACT' ? '正在展示胜率影响' : '正在展示经济语境'
+@@ -314,14 +339,19 @@
+   emit('host-ready')
+   void nextTick(emitHostPlaybackState)
+ })
+-onUnmounted(() => stopHostBridge?.())
++onUnmounted(() => {
++  hostSlowReplay.value = null
++  hostGrenadeReplay.value = null
++  r.pause()
++  stopHostBridge?.()
++})
+ 
+ watch(canonicalTick, (tick) => {
+   const slow = hostSlowReplay.value
+   if (slow) {
+     const args = slow.command.args
+     if (args.tool === 'REPLAY_CUE_SLOW') {
+-      if (slow.phase === 'PLAYING' && tick >= args.outcomeEndCanonicalTick) {
++      if (canAdvanceTeachingPlayback(hostSlowReplay.value, slow) && tick >= args.outcomeEndCanonicalTick) {
+         // Viewer owns only its local clock. It must reach the outcome boundary,
+         // pause, and seek back before the Host receives CUE_PLAYED.
+         r.pause()
+@@ -341,6 +371,7 @@
+   const grenade = hostGrenadeReplay.value
+   if (!grenade) return
+   if (grenade.phase === 'PLAYING') {
++    if (!canAdvanceTeachingPlayback(hostGrenadeReplay.value, grenade)) return
+     const currentT = r.currentT.value
+     hostPreviewPaths.value = grenade.paths
+       .map((path) => ({ ...path, points: path.points.filter((point) => point.t <= currentT) }))
