@@ -251,6 +251,10 @@ Coach Agent 对 manual visit 使用独立的结构化事件和 visit ID。该事
 
 `ReviewRuntimeHead` 保存完整 session/run、Demo hash、selected player、route hash、合法 RecoveryBoundary、精确 checkpoint pointer，以及唯一 `SESSION_RECOVERY` Artifact 的 `artifactId + artifactKey + artifactRevision` 三元身份。任意 playback tick 只作非权威 UI 进度；Session 恢复仍由 `libs/session` 从 frozen plan 推导。历史列表只查询分页摘要，不加载 Artifact。点击历史先恢复标题、路线、全部已生成 Narration、CueCase/Verdict/LearningThread、ToolResult、总结与稳定进度，再后台恢复 Viewer；RESTORE 在 bridge 分发入口丢弃所有迟到 `ANALYSIS_*` 事件，已完成的 Artifact 不触发任何 LLM、Embedding 或胜率 Worker。
 
+历史回放的`viewer-source` capability小DTO请求有20秒fetch＋JSON共同期限，复用共享request deadline；父signal取消和非合作transport均可本地结算，迟到headers不读body、迟到body/error不再发布。保留原HTTP code与坏JSON兼容行为，不自动重试。这个期限不覆盖携带AnalysisBundle的detail、大Demo文件流、Viewer解析或此前控制面恢复，也不保证服务器未签发capability。VIEW capability仍Demo绑定、默认60秒有效且首次使用尝试消费；客户端取消不撤销已签发的token，未使用的token遵循原过期规则。
+
+Controller在attachViewerSource成功和失败后都验证generation/parent abort，过期失败统一为STALE_REQUEST。Host的真实共用source阶段在激活Viewer/写expected source前，以及任何错误UI写入前复核openEpoch；即使Controller尚未换代也不得写旧状态。当前RESTORE source失败保留已恢复讲解/进度与READY控制面，提示入口暂不可用或超时并允许用户重试；REANALYZE/SELECT_PLAYER当前source失败说明操作尚未启动，原记录未改，不混同产物身份/版本校验失败。Revision创建/幂等、Graph、Memory和后续Viewer加载契约不变。
+
 行为记忆的机会身份稳定为 `user + demoContentHash + selectedPlayerId + stableCueSourceId + taxonomyCode`。分析证据 Revision 只版本化 provenance；同一机会的新分析不得增加 occurrence/opportunity，`COUNT(DISTINCT demoContentHash)` 也不得增加。数据库 unique claim、MemoryWritePolicy 与稳定 event idempotency key 三层共同执行该规则。`REVIEW_OPENED`、`REPLAY_STARTED` 和 `CUE_REWATCHED` 永不产生 MemoryProposal。删除 Review/Demo 保留最小 evidence tombstone，使删后重新导入相同内容不能复活或重复计数。
 
 ## 3. 系统上下文与演进

@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：历史回放入口有限等待与迟到失败隔离（2026-09-26）
+
+- 基线c8bba49已push/clean，产品1f7c091；01a0da83-62cf-77c2-8d01-0e4f7c5af15b串行独占7f2b功能分支的review-history API/Controller/Host source阶段及tests/docs，主控只读。未切main/新建旧基线或触用户主树修改。
+- A1真实问题：Controller只对成功检查generation，AbortError/普通晚失败穿透Host内catch写B提示；source fetch/body无界。先将真实Host阶段提取并接回，生产API/Controller/Host seam 6红（含Host epoch先失效、Controller代未变）。A2只给source小DTO20秒fetch+JSON期限；A3成功/失败双归属及三mode准确反馈；A4相关tests/TS/build；A5同批文档commit/push/RELEASE。
+- 实现：复用共享deadline不改其行为，原HTTPcode/坏JSON和父取消保持，不合作transport也settle，late headers/body不再使用，timer/listener清理。Controller attach失败按generation/abort转STALE；Host expected source/Viewer激活和错误UI写前复核epoch。当前RESTORE保留READY讲解/进度，REANALYZE/SELECT_PLAYER源失败不误报产物校验。
+- 验证：6红→绿；新增29项真实模块定时/竞态fixture，相关7文件99tests、TypeScript、Web production build通过。[验收](validation/HISTORY_VIEWER_SOURCE_LIFETIME.md)。默认viewer_source_race_review有限只读审查及主控实际diff复核无must-fix，root独占写入。
+- 边界/release：20秒不覆盖大detail/AnalysisBundle、Demo流/解析或控制面恢复；取消不证明服务器未发capability，默认60秒/首次尝试消费/原过期语义保持，零自动retry。原Revision/Graph/Memory不动，无真实Demo/模型/UI/用户DB密钥/安装部署/main操作，原UI A5仍未验。测试/build退出、文档同步后commit/push并释放写入。
+- 主控研究衔接真实结论：tools/verify-jev-real-smoke.ts逐候选验证packet后只输出统计，现有.local-data/real-cue-resources/replayed-projections.json仅资源/roster而非完整cue；目前没有已核实能直接打包的新完整标注材料，本轮不为纸面包重复解析旧Demo。该结论不阻塞本次恢复修复。
+
 ## 已交付：专业判断评估来源与最小标注路径（2026-09-26）
 
 - 基线1f7c091 clean且原owner RELEASE；主控01a0c8ea-9dca-7332-b03d-3b38b88ed630有限goal负责一手来源/本地评估契约，独占本板与TECHNICAL_LEARNINGS。expert_eval_sources默认模型/推理只读核实最多3源，已交付，无写入/进程/下载；主控复核关键原文。

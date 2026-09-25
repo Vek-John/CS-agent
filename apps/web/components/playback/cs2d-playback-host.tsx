@@ -1,5 +1,7 @@
 "use client";
 
+import { attachHistoryViewerSource } from "../../lib/review-history/attach-history-viewer-source";
+
 import { mirrorAgentCheckpoint } from "../../lib/recovery/agent-checkpoint-mirror";
 
 import { focusRecoveryDemoPicker, isRecoveryDemoImportActive } from "../../lib/recovery/recovery-demo-picker";
@@ -772,11 +774,11 @@ export function Cs2dPlaybackHost({
             ? "正在打开托管 Demo，请选择另一名玩家。"
             : "正在从托管 Demo 创建新分析版本。",
         });
-        const withViewer = await controller.attachViewerSource(restored, mode);
-        assertCurrentOpen();
-        if (!withViewer.managedSource) throw new Error("Managed Viewer source is unavailable.");
-        expectedManagedSourceRef.current = withViewer.managedSource;
-        controller.activate(withViewer, mode);
+        await attachHistoryViewerSource({ controller, restored, mode,
+          isCurrent: () => historyOpenEpochRef.current === openEpoch,
+          expectSource: source => { expectedManagedSourceRef.current = source; },
+          feedback: value => { setReviewPreparationStatus(value.preparation); setHistoryError(value.message); },
+        });
         return;
       }
 
@@ -889,17 +891,11 @@ export function Cs2dPlaybackHost({
       if (missingNarrationCount > 0 || (restored.detail.artifactIssues?.length ?? 0) > 0) {
         setHistoryError(`已恢复可用产物；${missingNarrationCount} 个讲解或损坏产物需要显式重新分析。`);
       }
-      try {
-        const withViewer = await controller.attachViewerSource(restored, "RESTORE");
-        assertCurrentOpen();
-        if (!withViewer.managedSource) throw new Error("Managed Viewer source is unavailable.");
-        expectedManagedSourceRef.current = withViewer.managedSource;
-        controller.activate(withViewer, "RESTORE");
-      } catch (error) {
-        if (error instanceof HistoryRestoreError && error.code === "STALE_REQUEST") throw error;
-        setReviewPreparationStatus({ phase: "READY", detail: "已恢复标题、讲解、回答与进度，回放暂时无法加载。" });
-        setHistoryError("已恢复讲解与进度，但保存的比赛暂时无法加载；可以重试或在设置中检查资料库。");
-      }
+      await attachHistoryViewerSource({ controller, restored, mode: "RESTORE",
+        isCurrent: () => historyOpenEpochRef.current === openEpoch,
+        expectSource: source => { expectedManagedSourceRef.current = source; },
+        feedback: value => { setReviewPreparationStatus(value.preparation); setHistoryError(value.message); },
+      });
     } catch (error) {
       if (historyOpenEpochRef.current !== openEpoch || (error instanceof HistoryRestoreError && error.code === "STALE_REQUEST")) return;
       setReviewPreparationStatus({ phase: "ERROR", detail: "保存的产物未通过身份或版本校验。" });

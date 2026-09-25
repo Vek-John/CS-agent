@@ -228,11 +228,14 @@ export class HistoryRestoreController {
       throw new HistoryRestoreError("STALE_REQUEST", "已切换到另一条复盘。");
     }
     if (controlPlane.missingArtifacts.length > 0 && mode === "RESTORE") return controlPlane;
-    const source = await this.deps.requestViewerSource(
-      controlPlane.detail.review.id,
-      request.abort.signal,
-    );
-    if (request.generation !== this.#generation) throw new HistoryRestoreError("STALE_REQUEST", "已切换到另一条复盘。");
+    let source: ManagedDemoSource;
+    try {
+      source = await this.deps.requestViewerSource(controlPlane.detail.review.id, request.abort.signal);
+    } catch (error) {
+      if (request.generation !== this.#generation || request.abort.signal.aborted) throw new HistoryRestoreError("STALE_REQUEST", "已切换到另一条复盘。");
+      throw error;
+    }
+    if (request.generation !== this.#generation || request.abort.signal.aborted) throw new HistoryRestoreError("STALE_REQUEST", "已切换到另一条复盘。");
     const withViewer = { ...controlPlane, managedSource: source };
     this.#requests.set(withViewer, request);
     return withViewer;

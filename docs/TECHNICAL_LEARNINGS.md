@@ -1902,3 +1902,12 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 可执行下一步：先检查本地是否保存了一个未用于旧9例的新候选的完整受限材料；能取得时只制作一个待标注包，明确 Demo/玩家/回合/决策截点、可知事实及 refs、contact/语音/掩体/资源缺口。标签保持 UNLABELED；输入不足记 UNLABELABLE，不让 Agent 自填专家答案。不为做材料包重新运行旧拒判集，也不把结果摘要还原成原始证据。
 - 评估设计建议（项目推论）：先在隐藏结果的决策资料上独立标注风险、可行替代和上下文充分性，再另看结果；记录证据、缺失条件和多种可接受判断。可先6–8例与两位真实合格标注者验证流程并裁决分歧，不能据小样本宣称准确率；按 Demo/回合/战术家族隔离开发与评估。建议借鉴[Baron与Hershey原始研究](https://bear.warrington.ufl.edu/brenner/mar7588/Papers/baron-hershey-jpsp1988.pdf)的结果偏差发现，研究不是CS专项验证；标注盲法不改变产品“先完整播放、再回决策点讲解”的契约。
 - 验证：主控核对生产 packet/validator、语义 fixtures/eval 的真实标签来源；子代理 expert_eval_sources 默认配置只读核实三源，主控复核论文原文。仅学习与任务板更新，无产品/架构契约变化，未重跑既有测试/TS/build；没有新 Demo 解析、模型调用、数据下载、安装或服务。现有本地证据文件是聚合/消费摘要，尚未证明存在可直接交付标注的完整新案例；专业质量仍未验证，UI A5独立保留。
+
+
+## 2026-09-26：历史source失败也必须核对归属，入口等待不依赖abort配合
+
+- 问题：attachViewerSource只在成功后检查generation，旧请求AbortError/普通晚失败穿透到Host RESTORE内catch；该catch没有openEpoch检查，会覆盖新复盘READY/detail/error。source fetch和JSON也无期限。提取原Host source阶段为实际共用入口并保留旧行为，生产API/Controller/Host seam共6红。
+- 决定：仅viewer-source小DTO复用20秒共同deadline，保留父signal、HTTPcode和坏JSON旧语义；Controller失败路径将旧generation/abort转STALE，Host成功与任何失败UI写前都重核openEpoch。RESTORE保留控制面，另两种mode明确source失败/尚未启动，不再误说产物校验错误。共享helper/detail/大Demo/Revision不改，不自动retry。
+- 验证：先Controller/API改动使5红通过，单独Host epoch（Controller代未变）仍红；补Host门后全部通过。新增29项含三mode当前HTTP/timeout与切B晚成功/失败、父取消、不合作transport、late headers不读body、body晚reject及timer/listener清理。相关7文件99tests、TS/Web production build通过；默认viewer_source_race_review只读与主控真实diff复核无must-fix。[证据](validation/HISTORY_VIEWER_SOURCE_LIFETIME.md)。
+- 限制：20秒是本地等待政策，不是端到端保障或服务端回滚。source route不materialize外置大产物；VIEW token默认60秒、首次尝试消费，超时可能已签发，未使用按原规则过期。无真实浏览器/桌面/数据库/Demo/模型，原UI A5不变。
+- 研究衔接：主控已核实real-cue-resources/replayed-projections.json只保存资源/roster；本轮旁证verify-jev-real-smoke.ts逐候选校验packet后只报告统计。因此目前没有已核实可直接打包的新完整标注材料，不为纸面包重复解析旧Demo；不将聚合摘要当专业gold。

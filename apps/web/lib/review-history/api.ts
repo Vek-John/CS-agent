@@ -4,6 +4,8 @@ import type { ReviewHistoryItem } from "../../components/history/review-history-
 import type { ManagedDemoSource, ReviewHistoryDetail } from "./history-restore-controller";
 
 const JSON_HEADERS = { "content-type": "application/json" };
+// Small capability DTO only. This bounds client waiting, not issuance or Demo loading on the server/Viewer.
+export const VIEWER_SOURCE_REQUEST_TIMEOUT_MS = 20_000;
 
 export class ReviewHistoryApiError extends Error {
   constructor(readonly code: string) { super(code); }
@@ -84,7 +86,19 @@ export function createReviewHistoryApi(fetcher: typeof fetch = fetch) {
       return responseJson(await fetcher(`/api/review-history/${encodeURIComponent(reviewId)}`, { cache: "no-store", signal }));
     },
     async viewerSource(reviewId: string, signal?: AbortSignal): Promise<ManagedDemoSource> {
-      return responseJson(await fetcher(`/api/review-history/${encodeURIComponent(reviewId)}/viewer-source`, { method: "POST", headers: JSON_HEADERS, cache: "no-store", signal, body: "{}" }));
+      const response = await requestJsonWithDeadline(fetcher,
+        `/api/review-history/${encodeURIComponent(reviewId)}/viewer-source`,
+        { method: "POST", headers: JSON_HEADERS, cache: "no-store", body: "{}" }, {
+          timeoutMs: VIEWER_SOURCE_REQUEST_TIMEOUT_MS,
+          timeoutError: () => new ReviewHistoryApiError("VIEWER_SOURCE_TIMEOUT"),
+          cancelMessage: "Viewer source request cancelled", readErrorBody: true, allowInvalidJson: true,
+        }, signal);
+      if (!response.ok) {
+        const body = response.payload;
+        const code = body && typeof body === "object" && "code" in body && typeof body.code === "string" ? body.code : "REQUEST_FAILED";
+        throw new ReviewHistoryApiError(code);
+      }
+      return response.payload as ManagedDemoSource;
     },
     async importCapability(input: { requestId: string; originalFilename: string; byteSize: number }): Promise<{ requestId: string; capabilityToken: string }> {
       return responseJson(await fetcher("/api/review-history/import-capability", { method: "POST", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify(input) }));
