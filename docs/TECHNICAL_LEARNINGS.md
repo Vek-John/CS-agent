@@ -1847,3 +1847,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：只对默认完整结果且无未提交草稿提供“再看一遍”；手动回访沿用原门/游标。Host小guard校验当前session/cue、结果门、case、busy和接管，再调用原transition(REPLAY_OUTCOME)，保留transport暂停重置与幂等USER_INTERACTION。不另走reducer私有通道、不重复反思/诊断/学习写入。
 - 验证：原生产Panel入口1红→绿；SSR真实hook及按钮callback、生产guard/reducer/directive/transport覆盖原诊断回归、暂停、重复请求、草稿关闭/重开和manual不变。继续测试纠正冻结段自动跳过的索引假设，按既有路线行为核对。新增27、相关11文件239tests，TypeScript与Web production build通过；独立只读终审无must-fix。[验收记录](validation/DIAGNOSIS_OUTCOME_REPLAY.md)。
 - 限制：SSR回调与状态fixture不等于完整Host挂载/真实iframe/浏览器操作；没有草稿跨重挂持久化，只在存在草稿时不提供新入口。未调用真实模型/Demo/Memory或用户DB，不证明判断质量和性能提升。原UI A5仍独立未验，不扩新表单系统或浏览器harness。
+
+
+## 2026-09-26：有界数值证据不应固定只呈现前四项
+
+- 问题：实际resourceMeasurements可生成health/armor/money/equipment/utility/ammo共6项，而Panel固定slice(0,4)；后两项虽可能在解释长文出现，却从数值列表静默消失。
+- 决定：沿用既有最多16项schema，完整按原顺序map，不加排序/分页/折叠。数值列表显式可访问名称，按容器宽度auto-fit，长标签/值允许换行；原标签、单位、0和“决策前最近记录”措辞保持。不改Limitations、来源、判决、trust gate或操作。
+- 验证：真实6项diagnoseTeachingCue→实际Panel SSR以及schema验证16项，两红→绿；只新增3项渲染测试，复用现有unknown/history/回看/异议测试，2文件20项、TS/Web production build通过。[紧凑证据](validation/DIAGNOSIS_MEASUREMENTS_DISPLAY.md)。
+- 限制：SSR不计算布局，窄栏换行仅经CSS审查/构建，未做浏览器视觉或辅助技术检查；不证明数据覆盖、诊断质量或性能提升。无Demo/模型/UI服务/用户DB/密钥操作，原UI A5不变。架构契约未变。

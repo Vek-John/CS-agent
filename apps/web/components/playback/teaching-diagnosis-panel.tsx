@@ -228,7 +228,7 @@ export function TeachingDiagnosisPanel({
         <span>证据结论 · {resultLabel(diagnosticResult.status)}</span>
         <p>{diagnosticResult.explanation}</p>
         {diagnosticResult.measurements.length > 0 ? (
-          <ul className={styles.measurements}>{diagnosticResult.measurements.slice(0, 4).map((measurement) => <li key={measurement.id}><b>{measurement.label}</b><span>{String(measurement.value)}{measurement.unit ?? ""}</span></li>)}</ul>
+          <ul className={styles.measurements} role="list" aria-label="诊断数值证据">{diagnosticResult.measurements.map((measurement) => <li key={measurement.id}><b>{measurement.label}</b><span>{String(measurement.value)}{measurement.unit ?? ""}</span></li>)}</ul>
         ) : null}
       </div>
       <div className={styles.verdictBox}>

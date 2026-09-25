@@ -154,10 +154,10 @@
 .transferBox { border-color: rgba(48, 209, 88, 0.25); background: rgba(48, 209, 88, 0.055); }
 .transferBox > span { color: #93f2aa; }
 
-.measurements { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.32rem; margin: 0.55rem 0 0; padding: 0; list-style: none; }
-.measurements li { display: flex; justify-content: space-between; gap: 0.35rem; padding: 0.38rem; border-radius: 0.48rem; background: rgba(0, 0, 0, 0.14); font-size: 0.59rem; }
-.measurements b { color: var(--text-tertiary, #9da2aa); font-weight: 600; }
-.measurements li span { color: #eaf5ff; font: 650 0.6rem/1 ui-monospace, monospace; letter-spacing: 0; }
+.measurements { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: 0.32rem; margin: 0.55rem 0 0; padding: 0; list-style: none; }
+.measurements li { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.35rem; min-width: 0; padding: 0.38rem; border-radius: 0.48rem; background: rgba(0, 0, 0, 0.14); font-size: 0.59rem; line-height: 1.45; }
+.measurements b { min-width: 0; overflow-wrap: anywhere; color: var(--text-tertiary, #9da2aa); font-weight: 600; }
+.measurements li span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; color: #eaf5ff; font: 650 0.6rem/1.45 ui-monospace, monospace; letter-spacing: 0; }
 .limitations { margin: 0.56rem 0 0; padding-left: 1rem; color: #b9bdc7; font-size: 0.6rem; line-height: 1.48; }
 .error { margin: 0.55rem 0 0; color: #ffaaa4; font-size: 0.65rem; line-height: 1.45; }
 

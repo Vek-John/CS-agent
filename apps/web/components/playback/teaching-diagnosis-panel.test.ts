@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { diagnoseTeachingCue } from "@cs-coach/coach-agent/client";
+import { diagnoseTeachingCue, DiagnosticResultSchema } from "@cs-coach/coach-agent/client";
 import { TeachingDiagnosisPanel } from "./teaching-diagnosis-panel";
 
 function renderTradePanel(aliveTeammates?: number, legacy = false) {
@@ -66,4 +66,53 @@ it("keeps known living teammates distinct from unknown contact conditions", () =
   expect(html).not.toContain("还缺少队友是否存活");
   expect(html).toContain("双方能否看到同一个对手");
   expect(html).toContain("懂了，继续");
+});
+
+function completeResourceDiagnosis() {
+  return diagnoseTeachingCue({
+    cueId: "cue-resources",
+    reflection: { cueId: "cue-resources", selectedGoal: "OTHER", response: "ANSWERED", source: "USER", limitations: [] },
+    decisionFacts: [], playerActionFacts: [], outcomeFacts: [],
+    decisionResources: { health: 100, armor: 100, hasHelmet: true, money: 800, equipmentValue: 4100, utilityCount: 0,
+      weaponAmmo: { weapon: "M4A4", clip: 0, evidenceRefs: ["prior-ammo"] }, evidenceRefs: ["resources"] },
+  }).cueCase;
+}
+
+function renderResourcePanel(cueCase = completeResourceDiagnosis(), trusted = true) {
+  return renderToStaticMarkup(createElement(TeachingDiagnosisPanel, {
+    cue: { id: cueCase.cueId, title: "处理复盘", question: "你的目标是什么？" }, decisionFacts: [], cueCase,
+    hasTrustedDecisionContext: trusted, onSubmit() {}, onSkip() {}, onConfirm() {}, onDisagree() {}, onReplay() {},
+  }));
+}
+
+it("renders all six real resource measurements in order, including zero utility and prior ammo", () => {
+  const cueCase = completeResourceDiagnosis();
+  const measurements = cueCase.diagnosticResult!.measurements;
+  expect(measurements).toHaveLength(6);
+  const html = renderResourcePanel(cueCase);
+  // Check the numeric rows, not the explanation which already mentioned the omitted facts.
+  const rows = [...html.matchAll(/<li[^>]*><b>(.*?)<\/b><span>(.*?)<\/span><\/li>/g)].map(match => [match[1], match[2]]);
+  expect(rows).toEqual(measurements.map(item => [item.label, `${item.value}${item.unit ?? ""}`]));
+  expect(rows.slice(-2)).toEqual([["决策时道具数量", "0颗"], ["M4A4 决策前最近记录弹匣", "0发"]]);
+  expect(html).toContain("不能当作决策瞬间精确余量");
+});
+
+it("renders the validated 16-measurement limit without truncating labels, values or units", () => {
+  const cueCase = completeResourceDiagnosis();
+  cueCase.diagnosticResult = DiagnosticResultSchema.parse({ ...cueCase.diagnosticResult, measurements: Array.from({ length: 16 }, (_, index) => ({
+    id: `measurement-${index}`, label: `${index} 较长的已保存数值证据标签 LongUnbrokenWeaponLabel`, value: index, unit: "单位", evidenceRefs: [],
+  })) });
+  const html = renderResourcePanel(cueCase);
+  expect([...html.matchAll(/<li[^>]*><b>/g)]).toHaveLength(16);
+  expect(html).toContain("15 较长的已保存数值证据标签 LongUnbrokenWeaponLabel</b><span>15单位");
+  expect(html).toContain('role="list" aria-label="诊断数值证据"');
+  expect(renderResourcePanel(cueCase, false)).not.toContain("LongUnbrokenWeaponLabel");
+});
+
+it("omits an empty measurement list while retaining diagnosis actions", () => {
+  const cueCase = completeResourceDiagnosis();
+  cueCase.diagnosticResult = { ...cueCase.diagnosticResult!, measurements: [] };
+  const html = renderResourcePanel(cueCase);
+  expect(html).not.toContain('aria-label="诊断数值证据"');
+  for (const label of ["懂了，继续", "再看一遍", "我不同意这个结论"]) expect(html).toContain(label);
 });
