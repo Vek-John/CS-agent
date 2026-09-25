@@ -22,6 +22,12 @@
 
 大型Demo或浏览器测试先smoke，bulk留在所属Worker/页面，由一个控制器负责整个进程生命周期；超时有退出和清理。同一基础设施边界失败两次先简化harness。保护未提交工作、真实Demo、SQLite/Memory及密钥；不force push，不擅自部署、发布或安装用户应用。缺信息时完成独立可做项；无新信息的失败路径不无限重试。
 
+## 新接线后的原A5接续（2026-09-25）
+
+- 基线b5da690干净且已push，接线owner已release；主控核对currentEvidenceBound/currentActionRefs、默认Graph自然effect及CURRENT_FOCUS_ACTION_REPLAY记录。唯一新增ACTION_FACT_REPLAY仍要求真实动作、同cue/candidate/frozen窗口、Narrator引用、Outcome实际完成；不改变assessment或专业门。
+- 原owner01a0d77e-085f-7880-9331-c01becde48cd重新独占UI/服务/必要窄修复与A5文档。实际代码变化提供新的验证条件；先桌面可操作smoke，仍锁屏即停UI，不换驱动。可用时单controller40分钟，现有静态Viewer/最新Host、空provider/Memory关闭、同Demo一次解析，自然路线/Policy，绝不强制tool。
+- 原A5保持：真实合法工具callId暂停≥12秒且不超时/不新建调用，续播同实例一次完成，必要seek/重连失效；无工具时精确记录缺失条件，不再猜已成功。新capability只是集成通过，不等于真实4cue已拥有工具；地图/道具等新purpose未开放。实际问题最小修复及相关checks后push；无代码改动只补证据，退出清理专用窗口/服务并release。
+
 ## 用户主动续跑：补齐原工具暂停A5（2026-09-25）
 
 - 用户在记录等待条件后明确发送“继续”。这授权接续工作及一次当前桌面可操作性检查，不等于已确认解锁成功。原负责人01a0d77e-085f-7880-9331-c01becde48cd优先接回A5，基线cb49754（最新产品886e9ad）；其他任务全部release。
@@ -47,7 +53,7 @@
 | 已push | 观察语义与联合证据协议 | 同上 | 6ba9e31；1073 tests/TS/Web/Viewer通过；27次live未证明Jev判断质量提高 |
 | 已push | 真实整场复盘体验与可靠性改进 | 01a0d72c-d1b6-7d31-9b5a-8705470ff0be（已结束，释放写入与进程） | d69a290；修复启动阻塞、已看cue回访跳过结果门；真实9回合/4cue到完成、刷新恢复、相关测试/TS/build通过；主控核对关键diff与验证记录 |
 | 已push、验收完成 | 暂停/播放保留带看意图 | 01a0d759-8472-7072-ae94-84ec101ece3b；已完成并释放写入/进程 | bf42aef修复；105测试/TS/build通过，锁屏恢复后原A5四条真实交互及Space/Return通过；见GUIDED_PAUSE_RESUME.md |
-| 实际4cue资格已核实，工具A5未完成 | 教学演示暂停与继续 | 01a0d77e-085f-7880-9331-c01becde48cd；文档阶段push后释放全部资源/写入 | 214d743实现；21:17基线4fffe02桌面恢复，原Demo一次解析、4cue均capabilities/effects空，无实际tool/callId；无产品改动，不重跑既有套件。待独立核实新版focus与工具资格接线，见TEACHING_PLAYBACK_CONTROLS.md |
+| 新接线后接续原A5 | 教学演示暂停与继续 | 01a0d77e-085f-7880-9331-c01becde48cd；交接后独占UI及必要写入 | a35614d已证实原4cue全部空工具；现在b5da690修复现行focus动作慢放接线，再按原标准实测，未通过前不关闭goal |
 | 实现与本地验收完成 | 区分无需演示与实际工具完成 | 01a0d795-539b-7421-afbd-64e3f0e5c42a；阶段push后释放写入，无服务/浏览器 | 当前身份完成说明接入真实渲染；无演示、具体成功、失败与未知恢复准确区分；84测试/TS/production build通过，详见TEACHING_COMPLETION_STATUS.md；不关闭原工具暂停A5 |
 | 已push | 决策时公开回合时钟 | 01a0d7bb-d7ea-7e21-864f-54e7e2e17049，完成并释放写入 | 9150d51；44候选/38个有效时钟、4cue/3个教学包消费，148测试通过/1个既有缺产物跳过，TS/Web/Viewer构建通过；暂停补偿未知仍null，不据时间单独判错，见PUBLIC_ROUND_CLOCK.md |
 | 已push | 新解析器构建工具链配置 | 01a0d7ce-5686-7d33-84f4-717bae0a8401，完成并释放写入/进程 | 355e3f7；CI补WASM target/固定CLI0.2.125，保持Rust1.89；本地同toolchain预检和一次编译接线完成，21测试/真实parser与Viewer构建/TS/Web build通过；CI及1.89实际编译未运行，见PARSER_TOOLCHAIN.md |
@@ -59,7 +65,7 @@
 | 已push、本地验收完成 | 可信部分资源的独立测量 | 01a0d870-79b9-7d22-ae10-fc28ec2ceb6b；完成并释放写入/进程 | 70HP/80甲与未知helmet两红→绿，partial compact和三值资源背景落地；177测试/TS/build通过，见PARTIAL_DIAGNOSTIC_RESOURCES.md |
 | 已push、本地验收完成 | 真实教学点诊断消费验证 | 01a0d88c-619b-7e72-8133-40fae1e40057；完成并释放写入/进程 | 实际4cue均age0，partial库存未知/独立人数/8输出恢复通过；发现正人数被文案说未知并窄修，180测试/TS/build通过；首次harness失败后获准补读，总2次，见REAL_CUE_RESOURCE_CONSUMPTION.md |
 
-| 待执行 | 现行教学主题与证据工具接线 | 01a0d8c0-2ca6-71e2-a54c-d210097d46b3；交接后独占当前树 | 真实4cue空工具后发现新assessment focus与旧工具focus规则可能脱节；先最小复现，按证据和实际演示目的窄对齐，不为A5放松门 |
+| 已push，本地验收完成 | 现行教学主题与证据工具接线 | 01a0d8c0-2ca6-71e2-a54c-d210097d46b3；已release | b5da690；当前Compiler→Host红→绿，唯一ACTION_FACT_REPLAY保持动作/引用/完整结果窗口门，默认Graph自然effect；257相关用例/TS/build通过，真实UI待原A5 |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
 
