@@ -132,6 +132,7 @@ import {
   Stage2AckTimeoutController,
   type Stage2ToolContext
 } from "../../lib/coaching/coach-agent-host-adapter";
+import { requestTeachingDiagnosisReplay } from "../../lib/coaching/diagnosis-replay";
 import { TeachingDiagnosisPanel } from "./teaching-diagnosis-panel";
 import {
   baselineCueCase,
@@ -2592,6 +2593,14 @@ export function Cs2dPlaybackHost({
     }
   }, [activePlan, buildStage3Identity, cue, diagnosisContext, isTeachingDiagnosisRequestLive, mirrorAgentResult, replay?.demoContentHash, routeState, stage3IdentityContext, synchronizeTeachingDiagnosis]);
 
+  const replayTeachingDiagnosis = useCallback((sessionId: string, cueId: string) => {
+    requestTeachingDiagnosisReplay({ sessionId, cueId }, () => ({
+      session: liveSessionRef.current, cueCase: teachingCasesRef.current[cueId],
+      busy: agentToolBusy || Boolean(stage3ControllerRef.current?.busy) || diagnosticBusyCueId === cueId,
+      takenOver: userTookOverRef.current,
+    }), transition);
+  }, [agentToolBusy, diagnosticBusyCueId, transition]);
+
   const confirmTeachingDiagnosis = useCallback(() => {
     const currentCue = liveCueRef.current ?? cue;
     const active = planRef.current ?? activePlan;
@@ -3262,6 +3271,8 @@ export function Cs2dPlaybackHost({
               onSubmit={submitTeachingReflection}
               onSkip={skipTeachingReflection}
               onConfirm={confirmTeachingDiagnosis}
+              onReplay={session.manual_cue_visit ? undefined : () => replayTeachingDiagnosis(session.id, cue.id)}
+              replayDisabled={agentToolBusy}
               onDisagree={disagreeTeachingDiagnosis}
             />
           ) : null}

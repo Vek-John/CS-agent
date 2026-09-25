@@ -2,12 +2,17 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
-## 当前任务：诊断结果回看当前处理（2026-09-26）
+## 已交付：诊断结果回看当前处理（2026-09-26）
 
 - 6a33ca6已push/clean，181tests/TS/build且owner release；01a0da19-8171-7750-8265-b47a9d50a442串行独占TeachingDiagnosisPanel/Host重播窄接线及相关tests/docs，主控只读，默认配置。
 - 证据：默认diagnostics面板只有确认/异议，无回看入口；基础面板已有REPLAY_OUTCOME按钮。诊断后玩家需离开默认教学流程才能重看支撑结论的处理。优先复用Session既有重播动作，不自动启用Graph可视化工具。
 - A1生产面板+Host/reducer入口复现可用动作差异；A2诊断完成后显式重看完整当前处理，结束回同cue/原诊断，不自动前进、不再提交反思或调用模型；A3确认下一段、manual默认游标、暂停/取消/接管/忙碌兼容，未提交反思或异议草稿不因重播丢失（可限定入口展示时机，不重写表单系统）；A4相关tests/TS/build，实际层次如实说明不冒称锁屏UI已验；A5架构/学习/证据/任务板commit/push/release。
 - 5分钟现状/小复现、15分钟接线、10分钟检查，必要5分钟只读复核；必须emil/apple，复用样式与reduced motion/transparency。不改新判断、cue时刻/完成门/Replay帧/自动工具/Memory，不解析Demo、不起锁屏UI服务、不读用户DB密钥、不安装部署main。owner清测试资源，原UI A5继续独立等待。
+
+- 本轮交付：默认完整诊断结果增加“再看一遍”，经当前身份/结果门/反思与诊断/busy/接管guard调用原transition(REPLAY_OUTCOME)，保留暂停意图reset和幂等USER_INTERACTION，既有播放结束回同cue/decision与保存的诊断。只确认继续才推进，不重复反思、诊断或学习线程。manual不提供新入口，不改其默认游标。
+- 草稿边界：反思编辑、异议展开或收起仍有内容/目标时不提供回看；关闭空异议恢复入口。不是将草稿持久化跨Panel卸载，也未新增表单状态系统。
+- 验证：原生产Panel无入口1红→绿；新增27项SSR实际按钮回调/状态、生产guard、Session/directive/transport与manual边界。相关11文件239tests、TypeScript和production build通过；独立diagnosis_replay_review只读终审无must-fix。参见[验证](validation/DIAGNOSIS_OUTCOME_REPLAY.md)。
+- 文档/release：ARCHITECTURE/TECHNICAL_LEARNINGS/验证与本卡同步后commit/push/release，自有tests/build退出。无Demo/真实模型/浏览器或服务/用户DB/密钥/安装部署main。SSR/fixture不冒称完整Host挂载、iframe或浏览器验收，原UI A5保持未完成；不宣称专业质量或性能提升。
 
 ## 已交付：恢复点保存等待与会话归属（2026-09-26）
 

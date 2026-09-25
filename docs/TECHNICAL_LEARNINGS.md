@@ -1839,3 +1839,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 预算：SESSION_RECOVERY实际存储256KiB UTF8、head请求128000B；隔离生产DTO测1761/663B仅为fixture。endpoint还会物化旧AnalysisBundle验证，故仅这两项JSON请求各20秒；IDB原1.5秒保留，重型AnalysisBundle等其他操作不套新期限。旧HTTP error code/2xx无JSON void语义保持。
 - 验证：实际入口3红→绿；mirror22/API9，最终11文件181tests、TS/Web production通过。正常/首次/DEGRADED、adopt/reset、pending revision、A/B跨await和晚错误、超时旧确认record保持均覆盖。独审纠正completeSession测试不代表serial tail，补真实START_CUE+真实Graph匹配checkpoint/default notify=true路径，deadline前后dispatch1→2验证。
 - 限制：合法live结果可继续不等于恢复点新head已确认；超时已发A请求可能服务端完成，不回滚IDB、不宣称服务器未提交，不自动retry。其他队列/初始化/持久化不在端到端保证内；无真实UI/用户数据操作，原UI A5保持。见[验收](validation/CHECKPOINT_MIRROR_OWNERSHIP.md)。
+
+
+## 2026-09-26：诊断结果回看应复用原播放转换，先保护编辑态
+
+- 问题：默认TeachingDiagnosisPanel完成结果没有基础讲解已有的重播入口；重播会卸载Panel，直接加按钮可能丢失未提交异议，包括已收起的草稿。
+- 决定：只对默认完整结果且无未提交草稿提供“再看一遍”；手动回访沿用原门/游标。Host小guard校验当前session/cue、结果门、case、busy和接管，再调用原transition(REPLAY_OUTCOME)，保留transport暂停重置与幂等USER_INTERACTION。不另走reducer私有通道、不重复反思/诊断/学习写入。
+- 验证：原生产Panel入口1红→绿；SSR真实hook及按钮callback、生产guard/reducer/directive/transport覆盖原诊断回归、暂停、重复请求、草稿关闭/重开和manual不变。继续测试纠正冻结段自动跳过的索引假设，按既有路线行为核对。新增27、相关11文件239tests，TypeScript与Web production build通过；独立只读终审无must-fix。[验收记录](validation/DIAGNOSIS_OUTCOME_REPLAY.md)。
+- 限制：SSR回调与状态fixture不等于完整Host挂载/真实iframe/浏览器操作；没有草稿跨重挂持久化，只在存在草稿时不提供新入口。未调用真实模型/Demo/Memory或用户DB，不证明判断质量和性能提升。原UI A5仍独立未验，不扩新表单系统或浏览器harness。

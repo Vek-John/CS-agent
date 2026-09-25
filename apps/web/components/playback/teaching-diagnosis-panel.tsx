@@ -49,6 +49,9 @@ export interface TeachingDiagnosisPanelProps {
   onSubmit: (reflection: UserReflection) => void | Promise<void>;
   onSkip: () => void | Promise<void>;
   onConfirm: () => void;
+  /** Only supplied for the default route; manual visits retain their own controls. */
+  onReplay?: () => void;
+  replayDisabled?: boolean;
   onDisagree: (reflection: UserReflection) => void | Promise<void>;
 }
 
@@ -119,6 +122,8 @@ export function TeachingDiagnosisPanel({
   onSubmit,
   onSkip,
   onConfirm,
+  onReplay,
+  replayDisabled = false,
   onDisagree,
 }: TeachingDiagnosisPanelProps) {
   const [selectedGoal, setSelectedGoal] = useState<ReflectionGoal>();
@@ -201,6 +206,8 @@ export function TeachingDiagnosisPanel({
 
   const { hinge, diagnosticResult, verdict, transferRule } = cueCase;
   const showDisagreement = disagreeing && cueCase.attemptBudget.disagreement < 1;
+  // Replay unmounts this panel. Do not discard even a temporarily closed draft.
+  const hasUnsubmittedDisagreement = cueCase.attemptBudget.disagreement < 1 && (disagreeing || Boolean(disagreement) || Boolean(disagreementGoal));
   return (
     <section className={styles.panel} aria-live="polite" aria-labelledby={`${cue.id}-diagnosis-title`}>
       <div className={styles.topline}>
@@ -252,6 +259,7 @@ export function TeachingDiagnosisPanel({
       ) : null}
       <div className={styles.actions}>
         <button type="button" className={styles.primary} disabled={busy} onClick={onConfirm}>懂了，继续</button>
+        {onReplay && !hasUnsubmittedDisagreement ? <button type="button" className={styles.secondary} disabled={busy || replayDisabled} onClick={onReplay} title="重播当前完整处理，结束后回到这次诊断">再看一遍</button> : null}
         {!showDisagreement && cueCase.attemptBudget.disagreement < 1 ? <button type="button" className={styles.secondary} disabled={busy} onClick={() => setDisagreeing(true)}>我不同意这个结论</button> : null}
         {!showDisagreement && cueCase.attemptBudget.disagreement < 1 ? <button type="button" className={styles.tertiary} disabled={busy} onClick={() => setDisagreeing(true)}>这不是我当时的想法</button> : null}
       </div>
