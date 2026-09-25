@@ -1,15 +1,19 @@
 # CS-Agent 持续优化任务板
 
-更新时间：2026-09-25。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
+更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
-## 当前独立任务：决策前最近弹药缓存（2026-09-26）
+## 已交付：决策前最近弹药缓存（2026-09-26）
 
-- 9092a71已阶段push且owner释放，前任务01a0d9ad-f238-7392-aa56-746b60afd5d6的真实消费A4仍未完成、goal active。新任务01a0d9c5-a6c6-78d3-9b79-acc3620a154e接续该验收，串行独占parser缓存/adapter来源时间/Host选择及tests/docs，主控只读，默认配置。
+- 实现f9d9cbd已push，01a0d9c5-a6c6-78d3-9b79-acc3620a154e本轮goal完成并release。源任务01a0d9ad-f238-7392-aa56-746b60afd5d6在9092a71的0/4真实消费缺口由本轮3/4证据闭合，历史失败结果保留；主控负责回传旧goal。串行独占实现，默认配置只读ammo_lifecycle_review完成生命周期与时间边界复核，无must-fix。
 - 依据：源已证2960/7239条，4个正式cue均与prior隔8ticks且中间开火被正确拒绝。先核实source2 tick lifecycle，再用每玩家仅最新tick-end小缓存，在下一tick-start帧带独立时间；不提高Replay帧率/不存逐tick全帧、不取decision同tick end、不放松开火门，不保证四点覆盖。
 - A1真实observer生命周期fixture证明来源严格早于容器/决策；A2跨回合/死亡重生/实体换武器/无效或缺失采样立即失效，未知不回退；A3实际消费按sample时间与独立refs，rich/compact兼容、旧1.9字段不误解释，判决/路线不变；A4先小smoke和成功生产build，再本轮最多1读/parse（总历程第4次）120秒外部上限，小摘要含覆盖/精确变化时刻/同次消融/性能与缓存上限；若0消费不重试；A5相关tests/TS/Web/Viewer/parser构建、架构学习证据和阶段commit/push/release，未达真实消费不标原goal完成。
 - 风险/阶段：10分钟生命周期/缓存与内存设计，20分钟最小链，15分钟验证；固定单owner缓存应O(player数)且每tick不做每玩家全实体重复扫描，先明确上界与帧输出不膨胀。必要5分钟独立时间边界review，结束清自有进程。0模型/UI服务/用户DB/密钥/部署main；不扩大到备弹/新战术判断或完整事件系统。原UI A5独立等待。
 
-## 当前独立任务：原始弹药字段解码与生产消费（2026-09-26）
+- 最终验收：真实Observer/CNetMsgTick生命周期与缓存夹具、parser9/vendor33、相关180tests、TS/Web/WASM/Viewer构建与ViewerTS通过；clean13patches和0012→0013标准升级通过。v2保留独立sample/refs与最新缺失marker，未知不回退；controller每tick一次扫描，缓存O(players)。
+- 唯一真实读取/解析各1次（历程累计4）：frame仍7239、来源2970、cache最大实测10条、41条空clip采样；正式教学消费3/4。c2/c3/c4分别消费此前记录M4A4=11/FAMAS=12/AK47=14，c1因WEAPON_FIRE@decision19426正确拒绝；44候选/全路线/4诊断判断建议同Replay消融一致。解析7118ms/总7363ms为单次观测，不作性能提升外推。
+- 证据：[验收记录](validation/PRIOR_TICK_AMMO.md)、[匿名JSON](validation/PRIOR_TICK_AMMO_EVIDENCE.json)。缓存临时worktree与本轮parse/build/test进程已清理，旧研究证据保留。未读用户DB/密钥、未调用模型、未开UI服务、未安装部署或合并main。备弹与事件完整性仍未知，不把此前采样称为决策瞬间精确量，不声称专业质量提升；原UI A5保持，不为追求4/4放宽边界或自动新增稀有字段。
+
+## 已交付阶段：原始弹药字段解码与生产消费（2026-09-26）
 
 - 1f2b92c调查已push且owner释放。01a0d9ad-f238-7392-aa56-746b60afd5d6串行负责受控source2-demo0.5.4源码副本、单字段patch、可复现Cargo接线与验证通过后最小弹药消费链；默认配置，主控只读。上一轮2次真实读/parse且0消费，本轮明确最多新增1次（跨两轮总3次）。
 - 当前授权变化：允许约620K项目内受控vendor，保留许可证/版本/局部patch说明，禁止共享registry修改和新依赖安装；不是升级整个parser。只让CS2 m_iClip1在原wire解码为Unsigned32，消费者再checked_sub(1)，不得有损inverse。先确认真实Field构造/decoder fixture而非重复伪函数规格。
