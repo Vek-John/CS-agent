@@ -2,6 +2,13 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 当前任务：已验证资源数值追问（2026-09-26）
+
+- 7913aac已push/clean且owner release，有限3类追问81tests/TS/build通过。01a0da41-5267-7a31-b26b-d7a55e040a59串行独占现有问答纯投影/必要Host来源接线/少量问法/tests/docs，主控只读，默认配置。
+- 依据：已验证health/armor/utility/近期ammo已在当前诊断数值列表完整呈现，但“当时多少血/弹匣几发”等仍被首版问答拒绝。本轮只扩这些明确数值核对，不新增parser字段或专业判断。
+- A1生产诊断/来源投影+问答入口复现已有可验证数值仍不能问；A2少量明确问法返回当前已展示measurement且与当前Host合法resource来源值/refs一致，未知不补0，ammo标注此前最近采样而非精确瞬间；A3假设/错误前提/其他cue/旧未可信history不拿数值作建议，已有3类与重播/修订隔离保持，无新诊断/模型/Memory；A4相关tests/TS/build；A5架构/学习/简证/任务板commit/push/release。
+- 先5分钟最小来源契约（不得只信标签或任意measurement），10分钟实现、10分钟验证；只声明有限问法，避免每次输入字符遍历大timeline，按cue/来源缓存或提交时有界读取。不加开放NLP/建议/新存储，0Demo/模型/UI服务/用户DB密钥/部署main，emil/apple沿用，owner清自有资源。
+
 ## 已交付：当前教学点有据追问（2026-09-26）
 
 - 2203ef7已push/clean且owner释放（20相关tests/TS/build）；01a0da30-b678-7c22-8623-707b3f03635a串行负责当前cue问答接口/纯回答投影/Host与小UI/必要保存/tests/docs，主控只读，默认配置。
