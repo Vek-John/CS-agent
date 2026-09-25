@@ -2,6 +2,13 @@
 
 更新时间：2026-09-25。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 当前独立任务：原始弹药字段解码与生产消费（2026-09-26）
+
+- 1f2b92c调查已push且owner释放。01a0d9ad-f238-7392-aa56-746b60afd5d6串行负责受控source2-demo0.5.4源码副本、单字段patch、可复现Cargo接线与验证通过后最小弹药消费链；默认配置，主控只读。上一轮2次真实读/parse且0消费，本轮明确最多新增1次（跨两轮总3次）。
+- 当前授权变化：允许约620K项目内受控vendor，保留许可证/版本/局部patch说明，禁止共享registry修改和新依赖安装；不是升级整个parser。只让CS2 m_iClip1在原wire解码为Unsigned32，消费者再checked_sub(1)，不得有损inverse。先确认真实Field构造/decoder fixture而非重复伪函数规格。
+- A1 raw0/1/31/41/101/高位及其他int32不变真实Rust测试；A2原cs2d setup/build/check/reuse可复现采用副本，原parser行为不回归，无隐藏全局Cargo配置；A3原源修复成功后按必要范围复用私有下游快照，独立tick-end严格prior/端点武器身份/变化失效/最近记录措辞，未知不造0、reserve未知，不改判决建议；A4最终WASM一次parse证明来源和实际Host/compact消费并同Replay消融判断/路线不变，相关tests/TS/Web/Viewer/parser构建；A5架构/学习/证据/任务板commit/push/release。
+- 风险/阶段：10分钟源码副本和真实decoder smoke、15分钟可复现构建、20分钟下游/验证；单owner、先build成功再跑、120秒外部Demo deadline、bulk留WASM、0模型/UI/服务/用户DB/密钥/部署main。两次同基础设施失败先简化，不为过门扩大allowlist。必要5分钟独立边界审查；owner清理所有临时进程和probe，保留研究快照，原UI A5不动。
+
 ## 已交付调查：决策前本人弹药证据（2026-09-26）
 
 - 82d234f已push且owner释放；01a0d989-e5a7-77c3-99fb-75a486bcd8a3负责有限来源调查及有证据才实施的弹药事实链，主控只读协调。默认配置，串行当前树。停止相邻Host回调扫描。
