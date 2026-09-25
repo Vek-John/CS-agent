@@ -29,7 +29,7 @@
 | 已push | Jev受限评估与准备性能修复 | 原任务 01a0c914-96d1-72c0-b00d-f1b02ed6f4a4（空闲，不再派发写工作） | da640a6；1039 tests、TS、Web/Viewer/desktop构建和sidecar通过 |
 | 已push | 观察语义与联合证据协议 | 同上 | 6ba9e31；1073 tests/TS/Web/Viewer通过；27次live未证明Jev判断质量提高 |
 | 已push | 真实整场复盘体验与可靠性改进 | 01a0d72c-d1b6-7d31-9b5a-8705470ff0be（已结束，释放写入与进程） | d69a290；修复启动阻塞、已看cue回访跳过结果门；真实9回合/4cue到完成、刷新恢复、相关测试/TS/build通过；主控核对关键diff与验证记录 |
-| 阶段已push，A5待补验 | 暂停/播放保留带看意图 | 01a0d759-8472-7072-ae94-84ec101ece3b，阶段结束释放写入；原goal未完成 | Host普通暂停/继续、结果门与显式seek修复；105相关测试/TS/build通过；电脑控制连接/点击失败，真实Demo交互未验收。详见GUIDED_PAUSE_RESUME.md；恢复工具后先补原A5，不重复模型实验 |
+| 阶段已push，A5锁屏阻塞 | 暂停/播放保留带看意图 | 01a0d759-8472-7072-ae94-84ec101ece3b，已释放写入；原goal为blocked，未完成 | bf42aef；105相关测试/TS/build通过；CUA明确报告Mac锁屏且自动解锁失败。等待用户手动解锁并恢复任务，不自动重复派发A5；原验收仍需完成 |
 
 当前实现工作树：/Users/vekel/.codex/worktrees/7f2b/CS-agent，分支 codex/jev-decision-assessment。主工作区 /Users/vekel/编程/CS-agent 仍在main，含用户未跟踪提示词；不得覆盖。工作树位置变化时用 git worktree list 核实并更新本表。
 
@@ -44,6 +44,7 @@
 
 - 阶段结果：原始Host入口回归1红/24绿；修复后8文件105相关测试、TS、production build通过。只读审查发现的无Session pause→seek回归已统一真实入口修复。未修改Session契约/持久化或模型调用，教练停靠时原始play禁用。
 - A5仍环境阻塞：Edge原生timeout；内置浏览器快照可读，但AX/DOM/坐标点击目标不可用，文件选择未触发，未执行四条真实Demo交互。已问用户桌面可操作状态，未重复追问。经主控明确许可只提交阶段成果，原goal不标完成、不降低验收。
+- 后续已确诊为Mac锁屏：CUA明确返回“The Mac is locked and automatic unlock could not unlock it.”，连续三轮相同阻塞后执行者将原goal设为blocked。主控已通知用户一次。heartbeat在用户确认手动解锁/恢复任务前不得再次唤醒该任务重试电脑控制，也不另起浏览器harness。可以推进不依赖该环境且有真实收益的独立事项；没有此类事项就安静等待，不重复通知。
 - 清理与接续：主控唯一server已停，3000/5174无监听；本轮IAB页已关，浏览器tab清单为空；Edge调用没有返回可用窗口句柄，无法确认其后台窗口状态，未强制终止用户浏览器。阶段提交后释放写入；恢复交互后按[最小接续路径](validation/GUIDED_PAUSE_RESUME.md)补验，进入前核实最新工作树所有权。
 
 ## 本轮任务卡：真实带看控制可靠性（2026-09-25）
