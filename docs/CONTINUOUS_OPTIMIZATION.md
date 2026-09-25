@@ -2,6 +2,13 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 当前任务：诊断数值证据不静默截断（2026-09-26）
+
+- 8a7ecee已push/clean且owner释放（239相关tests/TS/build）。01a0da2a-b0da-7800-8dd1-d34b01af663b串行独占Panel数值列表/必要小样式与本轮docs，默认配置，主控只读。
+- 源码证据：DiagnosticResult最多16 measurements；resourceMeasurements依次health/armor/money/equipment/utility/ammo，Panel固定slice(0,4)，合法道具/弹药记录在列表不可见，虽仍在长解释中。本轮仅呈现已有数值，不补数据/改变判决。
+- A1实际完整6项diagnosis→Panel SSR确认后2项被截断；A2现有有界数值完整可访问，保持标签/单位/最近采样限定，窄宽度可读，零值保留未知不造值；A3旧历史/trust gate、回看和异议交互不回归，无额外请求；A4复用相关测试/一次渲染证据、TS/build，不为小展示新增大批测试；A5学习/简证/任务板commit/push/release。
+- 3分钟现状、8分钟小改、10分钟验证；emil/apple必用，无新动画/表单/分页框架/测量排序体系，不改模型/route/领域schema。无Demo/UI服务/用户数据/密钥/安装部署main；无实际浏览器则明确SSR层次，owner清自有进程。
+
 ## 已交付：诊断结果回看当前处理（2026-09-26）
 
 - 6a33ca6已push/clean，181tests/TS/build且owner release；01a0da19-8171-7750-8265-b47a9d50a442串行独占TeachingDiagnosisPanel/Host重播窄接线及相关tests/docs，主控只读，默认配置。
