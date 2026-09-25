@@ -36,6 +36,13 @@
 - 验证：实际producer饱和12条→Panel→问答红例转绿；actual快捷callback、长于400字条件、完整unless、5类同ID内容变更、默认/manual重播及跨visit隔离，相关5文件154tests、TypeScript、Web production build通过。主控关键diff只读无must-fix；[证据](validation/CURRENT_CUE_ADVICE_QUESTIONS.md)。
 - 限制：基础/fallback无合格规则不能补齐，旧历史限制不回填；非通用战术问答、不支持假设改判/其他cue。仅本页4条，无持久化/模型/Memory/重诊断/新播放动作，不重扫大Replay；SSR/callback/Session不是真实UI/DB验收，也不证明教练质量提升。
 
+## 2026-09-26：来源分类缺陷必须先证明数据能到达该分支
+
+- 初始问题：local Memory adapter 的宽松内部cast将material.evidence所有ID标PRO_EVIDENCE，真实compiler又会产RULE，因此看似会污染专业来源。
+- 实际证据：Host投影不携带evidence；TeachingDiagnosisInputSchema.material严格拒绝该字段，唯一生产caller的route envelope及runtime.dispatch在Graph去重/旧result复用前都校验。真实Host→诊断→adapter未发PRO_EVIDENCE，五种注入source在三层入口均被拒绝；[核实记录](validation/MEMORY_EVIDENCE_SOURCE_REACHABILITY.md)。
+- 决定：主控将本轮改为可达性核实，停止产品/identity/producer version改造，不制造绕schema的产品红例。当前潜在内部错误保留为未来真实PRO入口的明确约束；现有架构/权限/幂等边界未改。
+- 验证与限制：临时1项内存smoke通过并清理；docs-only未重跑TS/build，无用户DB/Memory或历史清洗，不声称真实数据已污染或从未污染。下一步应核实可接入的职业案例材料和检索适用性，不继续给不可达分支增加兼容复杂度。
+
 ## 1. 维护规则
 
 以下变化合并时，同时更新本文：

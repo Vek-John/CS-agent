@@ -2,6 +2,13 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已核实：Memory evidence 误标路径当前不可达（2026-09-26）
+
+- 基线402c584已push/clean；01a0dab3-4810-76a2-a23d-d7e278972014串行核查，主控只读。原任务怀疑RULE经material.evidence误标PRO_EVIDENCE；适配器内部代码确有该问题，但严格输入不包含evidence，不能用cast拼接fixture宣称产品红例。
+- 主控修正目标为“核实是否可达并作出是否修复决策”：唯一生产caller是agent route；Host剔除evidence，route envelope、runtime.dispatch/dispatchOne在Graph去重/恢复前严格parse，播放恢复事件不产诊断Memory。未发现当前实际可达链，原A1产品修复标不适用，停止产品/identity/版本改造，非假通过。
+- 一次临时Host→合法诊断→adapter内存smoke及5种source×3层schema/runtime拒绝断言通过，临时测试已移除；[证据](validation/MEMORY_EVIDENCE_SOURCE_REACHABILITY.md)。仅docs，不跑全tests/TS/build、没有“实现后”子代理，主控接受结论；无服务/用户DB/Memory/keys/Demo/模型/安装部署main。全部自有进程退出，docs commit/push后RELEASE。
+- 潜在cast错误待未来真实证据入口接入时连同来源/legacy幂等验证解决，不声称历史数据库已清洗。下一项可核实实际职业材料/检索及适用性契约，避免再次派发已阻断路径。
+
 ## 已交付：当前追问复述已有建议与适用条件（2026-09-26）
 
 - 基线 7bdbe68 已push/clean，前 owner RELEASE；01a0daaa-2bac-7222-8c53-f813ce51a8f9 独占当前问答/Panel/Host一行能力props/tests/docs，主控只读关键diff，无子代理。emil/apple沿用原样式，无浏览器/服务。风险集中完整条件、同ID来源变化和跨visit回调，先实际producer红例再接有界投影。
