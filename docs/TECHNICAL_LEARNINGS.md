@@ -1719,3 +1719,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：新增单一 ACTION_FACT_REPLAY 用途，以当前候选/冻结窗口/本人动作/讲解引用和实际结果完成边界授权。用途不升级 INSUFFICIENT_EVIDENCE，不由结果倒推动作；其他四种新展示用途暂不开放。保持旧 focus 与单工具/暂停/取消身份门。
 - 验证：原主链 1 红→绿；复核发现结果末端门遗漏，2 红→绿。默认内存 Graph 自然返回真实 effect，再由 Host 绑定命令并去重；共 257 个不同相关测试、TypeScript 和 Web production build 通过。独立复核闭合。
 - 限制：无真实 Demo/模型/UI 新结果，不能宣布原 A5 或专业质量提升。[详细记录](validation/CURRENT_FOCUS_ACTION_REPLAY.md)；契约以 ARCHITECTURE.md 为准。
+
+
+## 2026-09-25：控制恢复只证明当前可操作，验收仍需连续证据
+
+- 问题：新focus事实慢放接线b5da690给原A5带来新条件，21:48桌面smoke与文件选择均成功，但Demo解析完成后点击玩家时重新锁屏。
+- 决定：不把前序smoke当作后续UI仍可用的保证；CUA明确锁屏后立即停止，不重复驱动/解析，不将点击尝试、旧空工具或集成自然effect当真实验收。
+- 验证：基线6cb402d一次真实解析到“解析完成/10人选择”，服务小摘要仅两次IDLE，无工具或START_CUE；controller退出、端口释放，临时遥测全部移除。无产品改动，不重跑既有257用例/构建。详见[原A5记录](validation/TEACHING_PLAYBACK_CONTROLS.md)。
+- 限制：原A5仍未完成，新接线真实工具效果未知；专属InPrivate因锁屏未关闭，解锁后先检查现有Replay可复用性，再继续原验收，不能为了补证无预算重解析。代码写入在文档push后释放。
