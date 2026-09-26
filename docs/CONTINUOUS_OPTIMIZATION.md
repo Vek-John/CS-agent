@@ -2,6 +2,12 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：基础时间卡标明采样近似（2026-09-26）
+
+- ID clock-chip-qualification，基线49594e1已push；root独占View一行文案及docs，无委派。实际基础卡写“回合剩余N秒”，没有体现既有Parser时钟契约的最近采样/约秒；改为“最近采样：回合剩余约N秒”。
+- A1核对实际View输出与既有时钟契约；A2保留计算、未知/植包和诊断门，仅明确采样限制；A3相关View/时钟测试、TS/build及push。沿已应用emil/apple样式，无新控件/动画/布局；不为一行文案新增镜像测试，5分钟上限，零Demo/模型/DB/GUI，root清理进程。
+- 结果：55相关tests、TypeScript和production build通过，root直接复查一行生产diff，进程退出。下一项转回默认准备链的等待成本：先核实当前请求顺序与既有超时/缓存，再选未解决且可小规模复现的一处必要等待；不再逐字段扩追问，不重做已完成的artifact保存优化或相同Jev实验。
+
 ## 已交付：已显示道具种类的明确追问（2026-09-26）
 
 - ID utility-kind-question，基线e62a59c clean；partial_revision_restore继承默认模型/推理，独占question/resource-source/view必要共享投影、新helper与测试；root拥有docs/ARCH/集成与push。先核实真实分支：Host诊断与baseline三段互斥，种类chip目前只在baseline，不能借未显示的另一分支回答。

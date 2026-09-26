@@ -113,7 +113,7 @@ export function buildThreeStageCoachingView(input: {
 
   const situation = observableSituation(input.semantics ?? {});
   if (situation.allies !== null && situation.enemies !== null) chips.push({ kind: "situation", text: `我方 ${situation.allies} 人 · 对方 ${situation.enemies} 人存活` });
-  if (situation.remainingSeconds !== null) chips.push({ kind: "clock", text: `回合剩余 ${Math.max(0, Math.ceil(situation.remainingSeconds))} 秒` });
+  if (situation.remainingSeconds !== null) chips.push({ kind: "clock", text: `最近采样：回合剩余约 ${Math.max(0, Math.ceil(situation.remainingSeconds))} 秒` });
   const objectives = { NOT_CARRIED: "C4 未携带", CARRIED: "C4 已携带", DROPPED: "C4 已掉落", PLANTED: "C4 已安放", DEFUSED: "C4 已拆除", EXPLODED: "C4 已爆炸", UNKNOWN: "C4 状态待确认" };
   if (situation.objective) chips.push({ kind: "objective", text: objectives[situation.objective] });
   const assessment = input.semantics?.assessment;
