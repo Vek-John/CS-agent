@@ -5,6 +5,16 @@
 
 
 
+
+## 已交付：当前情况正文与引用一致（2026-09-27）
+
+- ID narration-visible-references，基线81980c9 clean，真实7f2b，root独占小实现/测试/docs/checks/push，无新委派，原owner均RELEASE。A1在现有7事实/第6超长/真实时钟链加入精确引用断言；A2只让currentSituation.refs随实际选入正文的事实，其他字段语义不变；A3有界正文、零请求、旧保存恢复、相关tests/两端TS/build后push。
+- 15分钟小任务，所有输入合成、单测试进程，无真实Demo/模型/GUI/服务/用户库/安装；不扩大引用审计，不改选句结果、专业判断或工具门。保留无事实但有claims的既有“事实有限”回退，非法引用仍走原拒绝门；root负责全部进程退出。
+
+
+- 交付：原3处精确引用断言红→绿，当前情况仅列实际选入事实，不携带未讲claims；新增1个claim-only回退case，正文/其他讲解字段/历史恢复不变，本地投影1.2。相关6文件87tests与2文件15项默认工具闭环均通过，两端TS/build通过；root集中读实际9行diff、测试输出并清理全部进程。
+- 下一有限目标 baseline-clock-question：已核实current-cue-questions基础分支resources保持空，只有diagnostics分支matchDisplayedCueResources提取clock；现有基础正文已可显示合法时钟。先用一条实际Adapter→presentable narration→基础追问case核实是否仍拒答“当时回合还剩多久”，有缺口才复用source身份/原clock/可见引用门，不扩大词义识别或越过呈现授权。
+
 ## 已交付：公开回合时钟讲解覆盖（2026-09-27）
 
 - ID narration-clock-coverage，基线874677a clean，7f2b实际树；partial_revision_restore默认配置独占小probe先核实，root独占docs/契约/最终check与push，前任务全部RELEASE。A1实际Adapter→Package→Narrator完整人数+受击+合法clock验证位置与正文；A2有遗漏才作有界呈现修复；A3真实引用/未知时钟/已有内容/旧保存与零请求快路径、相关tests/两端TS/build后push。

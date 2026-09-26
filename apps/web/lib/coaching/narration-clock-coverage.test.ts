@@ -44,8 +44,8 @@ it("keeps the first three facts and makes the legitimate fifth clock fact visibl
   expect(result.bundle.currentSituation.text.startsWith(firstThree)).toBe(true);
   expect(result.bundle.currentSituation.text).toContain("约110秒");
   expect(result.bundle.currentSituation.text.length).toBeLessThanOrEqual(1600);
-  expect(result.bundle.currentSituation.refs).toContain(facts[4].id);
-  expect(result.manifest).toMatchObject({ provider: "DETERMINISTIC", promptVersion: "review-planner/deterministic-narration/1.1.0", reason: "CLOSED_SEMANTIC_PROJECTION" });
+  expect(result.bundle.currentSituation.refs).toEqual(facts.map(fact => fact.id));
+  expect(result.manifest).toMatchObject({ provider: "DETERMINISTIC", promptVersion: "review-planner/deterministic-narration/1.2.0", reason: "CLOSED_SEMANTIC_PROJECTION" });
   expect(f.cue.assessment?.kind).toBe("INSUFFICIENT_EVIDENCE");
   expect(result.bundle.currentSituation.text).not.toMatch(/可以等|应该等|C4.*秒|接敌/);
   expect(fetcher).not.toHaveBeenCalled();
@@ -67,6 +67,7 @@ it("presents no more than six decision facts without inspecting IDs or text cate
   const result = deterministicNarrationBundle(f.coaching, f.outcome);
   expect(result.currentSituation.text).toBe(f.coaching.decisionContext.facts.slice(0, 6).map(fact => fact.text).join(" "));
   expect(result.currentSituation.text).not.toContain("事实6");
+  expect(result.currentSituation.refs).toEqual(f.coaching.decisionContext.facts.slice(0, 6).map(fact => fact.id));
 });
 
 it("keeps fitting fourth/fifth facts when the sixth exceeds the limit, without cutting a sentence", () => {
@@ -76,6 +77,7 @@ it("keeps fitting fourth/fifth facts when the sixth exceeds the limit, without c
   const result = deterministicNarrationBundle(f.coaching, f.outcome);
   expect(result.currentSituation.text).toBe(f.coaching.decisionContext.facts.slice(0, 5).map(fact => fact.text).join(" "));
   expect(result.currentSituation.text).toHaveLength(1504);
+  expect(result.currentSituation.refs).toEqual(f.coaching.decisionContext.facts.slice(0, 5).map(fact => fact.id));
 });
 
 it("does not append an extra fact outside the existing decision reference namespace", () => {
@@ -102,4 +104,14 @@ it("restores a saved three-fact narration unchanged instead of regenerating the 
   expect(restored.narrationByCue[f.cue.id].currentSituation).toEqual(saved.currentSituation);
   expect(restored.narrationByCue[f.cue.id].currentSituation.text).not.toContain("约110秒");
   expect(JSON.stringify(record)).toBe(json);
+});
+
+
+it("preserves claim-only limited-context fallback without inventing a fact statement", () => {
+  const f = fixture();
+  f.coaching.decisionContext.facts = [];
+  const refs = f.coaching.decisionContext.claims.map(claim => claim.id).filter(id => f.coaching.allowedRefs.decision.includes(id));
+  expect(refs.length).toBeGreaterThan(0);
+  const result = deterministicNarrationBundle(f.coaching, f.outcome);
+  expect(result.currentSituation).toMatchObject({ text: "当前可用决策事实有限", refs });
 });

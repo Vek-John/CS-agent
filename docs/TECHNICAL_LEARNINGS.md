@@ -2564,3 +2564,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决策：保持原前三条，按原序逐条增补第4–6条合法decision事实，每次拼接<=1600字符，超限即停，不切句、不按ID或文本猜类型。无需新schema或向模型传递snapshot；原前三条超长仍走原本地fallback。新本地投影版本1.1，旧保存讲解原样复用。
 - 验证：实际Adapter→CoachingPackage→requestNarrationBundle无网络生成，合法时钟可见；未知、暂停、植包均仅说明无法确认，不能推算C4或授予等待/接敌判断。小fixture为合成时间，未重读Demo或调用模型/GUI。最终测试与构建见持续任务板，日志.local-data/narration-clock-coverage。
 - 限制：仍只呈现有界前缀，外部超长事实可能令后续时钟无法加入，不能把1600当保证所有情境完整说明。下项核实达到数量/长度上限时，当前情况的引用是否仍包含未呈现事实，并以最小案例决定是否收窄；不扩大为全量引用审计。
+
+
+## 2026-09-27：当前情况引用跟随实际呈现事实
+
+- 问题：正文有6条/1600字符增补上限，而currentSituation.refs仍列全部decision facts/claims。现有数量截断、长度截断和普通时钟链增加精确引用断言后3红；基础追问以该refs作为shownFactIds，会将未讲出的内容也当作已呈现依据。
+- 决策：复用同一选句过程收集presentedFacts，仅对currentSituation收窄引用，不更改正文或其它字段依据。无facts的claim-only有限上下文回退保留，非法ref仍过滤/拒绝。新本地投影1.2，旧JSON讲解恢复保持原样。
+- 验证：3红→绿，加1条claim-only回退；6文件87tests及2文件15项工具/Host默认闭环通过，两端TypeScript/production build通过。没有真实Demo、模型、GUI或用户库操作，原选句/时钟/专业判断/工具门未修改。日志.local-data/narration-visible-references。
+- 下一行动：源码已核实基础讲解追问分支只匹配utilityKinds，resources保持空；clock答案目前只从诊断measurements分支取得。下一小验证应确认已在基础正文显示的合法时钟，是否仍被“当时回合还剩多久”拒答；有缺口才复用现有source身份与可见引用门接线，不增加任意语义匹配。

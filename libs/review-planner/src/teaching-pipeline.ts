@@ -789,13 +789,18 @@ export function deterministicNarrationBundle(
   const outcomeRefs = unique([...outcome.outcomeFacts.map((fact) => fact.id), ...outcome.deathKillHpRefs, ...outcome.measurementRefs]);
   // Preserve the original three facts. Current Adapter context has at most six
   // bounded facts; add complete statements only while they fit the wire budget.
-  let first = packageInput.decisionContext.facts.slice(0, 3).map((fact) => fact.text).join(" ") || "当前可用决策事实有限";
+  const presentedFacts = packageInput.decisionContext.facts.slice(0, 3);
+  let first = presentedFacts.map((fact) => fact.text).join(" ") || "当前可用决策事实有限";
   for (const fact of packageInput.decisionContext.facts.slice(3, 6)) {
     if (!decisionNamespace.has(fact.id)) continue;
     const expanded = `${first} ${fact.text}`;
     if (expanded.length > 1600) break;
     first = expanded;
+    presentedFacts.push(fact);
   }
+  const situationRefs = presentedFacts.length
+    ? unique(presentedFacts.map((fact) => fact.id)).filter((ref) => decisionNamespace.has(ref))
+    : decisionRefs; // Preserve the existing claim-only limited-context fallback.
   const action = packageInput.playerAction[0]?.text ?? "当前记录不足以确认具体行动意图。";
   const advice = packageInput.advice[0]?.text ?? UNCERTAIN_ADVICE_TEXT;
   const coreIssueRefs = !packageInput.decisionAssessment ? unique([...decisionRefs, ...actionRefs])
@@ -807,7 +812,7 @@ export function deterministicNarrationBundle(
     cueId: packageInput.cueId,
     candidateId: packageInput.candidateId,
     primaryFocusCode: packageInput.primaryFocusCode,
-    currentSituation: { text: first, refs: decisionRefs, limitations: packageInput.limitations.length > 0 ? [playerFacingLimitation()] : [] },
+    currentSituation: { text: first, refs: situationRefs, limitations: packageInput.limitations.length > 0 ? [playerFacingLimitation()] : [] },
     playerAction: { text: action, refs: actionRefs, limitations: packageInput.limitations.length > 0 ? [playerFacingLimitation()] : [] },
     coreIssue: { text: packageInput.assessment?.explanation ?? playerFacingFocusProblem(packageInput.primaryFocusCode), refs: coreIssueRefs, limitations: packageInput.limitations.length > 0 ? [playerFacingLimitation()] : [] },
     betterPlay: { text: advice, refs: unique([...adviceRefs, ...evidenceRefs, ...decisionRefs]), limitations: packageInput.limitations.length > 0 ? [playerFacingLimitation()] : [] },
