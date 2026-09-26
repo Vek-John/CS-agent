@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：自动恢复选人不是新建复盘意图
+
+- 问题：Runtime匹配产生SELECT_PLAYER后，Host原managed选人分支会在恢复分析入口前创建空Review；dedup未打开既有历史的路径确实可达。
+- 决策：生产selection副作用入口拒绝恢复pending/既有历史/非managed；普通新选择照常创建。恢复导入不再弹与意图冲突的去重新建选项；回调按稳定Replay/player/open epoch/Controller及其ownership门认领，不按正常分析会改变的generation。
+- 验证：真实Runtime选择在原seam创建1条→恢复门后0条，14新增/79相关tests、TS/build通过；root审实际接线，见[记录](validation/LOCAL_RECOVERY_SELECTION.md)。不声称真实GUI或SQLite测试，也不迁移本地摘要历史。
+- 后继：首次导入的importCapability仍是无期限小控制请求，下一步先核实服务端与有效期，再决定期限；不扩大到真实Demo流/解析。
+
 ## 2026-09-27：资料库失败与本地恢复是两个独立结果
 
 - 问题：近期保存期限测试只stub了本地persistStart，尚未证明资料库保存失败后的IndexedDB重开组合。

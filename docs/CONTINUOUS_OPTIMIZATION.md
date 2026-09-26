@@ -2,6 +2,15 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：本地恢复的玩家选择与新历史创建（2026-09-27）
+
+- ID local-recovery-selection，基线81402c2 clean；partial_revision_restore默认配置独占新selection history副作用seam及测试，root拥有Host接线/docs/集成push。先查真实managed导入/恢复自动SELECT_PLAYER路径，不把源码分支存在直接当可达故障。
+- A1 Runtime恢复选择→实际HistoryController/Host将使用的seam，小例核实空Review；A2恢复期间不新建，普通managed新选择仍创建、其他来源/已有历史恢复不变；A3切玩家/Demo/历史后迟到create不污染当前ID/错误，原冻结恢复与生成行为保持；A4相关tests/TS/build、root读日志/diff后push。缺口不成立不改生产。
+- 风险：不新增自动历史匹配/恢复到SQLite的迁移，不绕过明确退出恢复意图。单cue合成来源、transport stub，零真实Demo/用户库/网络/GUI/服务；5分钟smoke/15分钟上限，测试60秒、两次基础设施失败简化，owner清理进程，A5独立。
+- A1源码链已核实可达：managed导入的dedup未打开既有历史时不清恢复mode，REPLAY_READY→Runtime匹配SELECT_PLAYER后，原PLAYER_SELECTED直接创建。最小seam决定是否创建，异步回调用Replay对象/player/openEpoch/Controller及创建后的ownershipGeneration绑定；不使用会在正常分析开始时变化的preparation generation，否则正常新建也会被误拒。root独占Host接线。
+- 交付：Runtime BOOT→REPLAY_READY→自动SELECT_PLAYER的原seam创建1条，恢复门后0条；普通managed创建1条，pending不匹配、既有历史、非managed不新建。同玩家重选/ABA与切Demo/player/history的迟到成功失败均不污染当前。恢复导入跳过去重新建弹窗，避免与恢复意图冲突。14新增/79相关tests、TS/build通过；root读diff/日志，owner与进程释放。[记录](validation/LOCAL_RECOVERY_SELECTION.md)。未GUI/SQLite实测，不自动迁移本地恢复为资料库历史。
+- 下一有限目标：当前首次导入DEMO_IMPORT_REQUESTED先等api.importCapability，该小token请求仍plain fetch/body，原请求归属门已存在。先核实服务端工作与有效期，若确属小控制请求，补有界失败以免导入长驻等待；不对后续Demo流或解析套同一时间限制。
+
 ## 已验证：起点保存失败后的本地重开（2026-09-27）
 
 - ID failed-start-local-recovery，基线a4ead91 clean；partial_revision_restore默认配置独占新recovery集成测试，root拥有必要生产修复/docs/最终检查。先读既有runtime覆盖，目标只验证最近起点失败→继续→新Runtime BOOT组合，不重复成功SQLite历史链。

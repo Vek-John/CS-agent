@@ -177,6 +177,7 @@ import { HistoryPageRequests } from "../../lib/review-history/history-page-reque
 import { refreshHistoryPage } from "../../lib/review-history/refresh-history-page";
 import { HistoryRestoreController, HistoryRestoreError } from "../../lib/review-history/history-restore-controller";
 import { HistoryPersistenceController, type RuntimeHeadRetry } from "../../lib/review-history/history-persistence-controller";
+import { selectPlayerHistory } from "../../lib/review-history/player-selection-history";
 import { persistPreparedReviewStart, persistNarrationAfterStart } from "../../lib/review-history/prepared-start-persistence";
 import {
   ignoreHistoryAnalysisEvent,
@@ -933,11 +934,12 @@ export function Cs2dPlaybackHost({
     payload: Extract<PlaybackBridgeEvent, { type: "DEMO_IMPORT_SUCCEEDED" }>,
     operationEpoch: number,
   ) => {
+    const recoveringImport = recoveryModeRef.current;
     const isCurrent = () => historyOpenEpochRef.current === operationEpoch &&
       managedRequestMatchesExpected(expectedManagedSourceRef.current, payload.requestId);
     setHistoryImportProgress(undefined);
     await refreshReviewHistory();
-    if (!isCurrent()) return;
+    if (recoveringImport || !isCurrent()) return;
     if (!payload.deduplicated) return;
     try {
       const impact = await reviewHistoryApi.demoImpact(payload.demoId);
@@ -1728,11 +1730,19 @@ export function Cs2dPlaybackHost({
           return;
         }
         const currentReplay = replayRef.current;
-        if (currentReplay?.sourceKind === "MANAGED_LIBRARY" && currentReplay.demoId) {
-          const title = `${currentReplay.map} · ${payload.displayName}`;
-          void historyPersistenceControllerRef.current!.createForPlayer({ demoId: currentReplay.demoId, selectedPlayerId: payload.playerId, selectedPlayerName: payload.displayName, title, mapName: currentReplay.map })
-            .then((reviewId) => { setHistoryActiveReviewId(reviewId); void refreshReviewHistory(); })
-            .catch(() => setHistoryError("已加载 Demo，但无法创建复盘记录。"));
+        const selectionHistory = historyPersistenceControllerRef.current;
+        if (currentReplay && selectionHistory) {
+          const selectionEpoch = historyOpenEpochRef.current;
+          const isCurrentSelection = () => replayRef.current === currentReplay
+            && selectedPlayerIdRef.current === payload.playerId && historyOpenEpochRef.current === selectionEpoch
+            && historyPersistenceControllerRef.current === selectionHistory;
+          void selectPlayerHistory({ history: selectionHistory, replay: currentReplay, player: payload,
+            recoveryPending: recoveryModeRef.current,
+            useExistingReview: Boolean(historyActiveReviewId && historyRestoreModeRef.current !== "SELECT_PLAYER"),
+            isCurrent: isCurrentSelection,
+            onCreated: reviewId => { setHistoryActiveReviewId(reviewId); void refreshReviewHistory(isCurrentSelection); },
+            onError: () => setHistoryError("已加载 Demo，但无法创建复盘记录。"),
+          });
         }
         historyDurabilityReadyRef.current = undefined;
         invalidateGeneration();
