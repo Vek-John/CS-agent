@@ -8,6 +8,12 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：温恢复保留文件信任门、复用Parser结果
+
+- 问题：当前managed导入解析完后，历史RESTORE仍完整读取并第二次调用useDemoParser.parse，后者清Replay并重新Worker解析，没有自动缓存命中。
+- 决策：0021只允许同页、当前ready generation/done、同demoId/bytes/hash且仍同Replay引用的RESTORE复用。新READ授权、响应/长度及新body SHA256照常执行；不复用无hash的hydrate数据，不跳内容校验。清选人后nextTick再发新请求身份的REPLAY_READY，保留原舞台ACK恢复门。
+- 验证：实际Viewer函数+小Parser spy原2次→1次，12新增/41相关tests、两端TS/build通过；独立窄审无必修。[记录](validation/MANAGED_REPLAY_REUSE.md)。仍有完整文件IO及SHA内存成本，尚无真实大Demo耗时/舞台交互实测；fixture不是可解析Demo。
+
 ## 2026-09-27：选人会使尚未显示的去重建议失效
 
 - 问题：导入成功后的列表与去重查询异步完成，而PLAYER_SELECTED不改变Demo requestId/history epoch。旧流程可在用户开始新复盘后弹窗、报旧错或打开另一条复盘。

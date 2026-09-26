@@ -1,0 +1,51 @@
+diff --git a/apps/app/src/viewer/DemoAnalyzerView.vue b/apps/app/src/viewer/DemoAnalyzerView.vue
+--- a/apps/app/src/viewer/DemoAnalyzerView.vue
++++ b/apps/app/src/viewer/DemoAnalyzerView.vue
+@@ -759,6 +759,13 @@
+   mode: ManagedLoadMode
+ }) {
+   if (!managedLibraryMode.value) return
++  // Only reuse this page's current, hash-verified parser result for playback restore.
++  const reusableReplay = command.mode === 'RESTORE' &&
++    managedReadyGeneration === managedLoadGeneration && parser.status.value === 'done' &&
++    managedSource.value?.demoId === command.demoId && managedSource.value.byteSize === command.byteSize &&
++    managedSource.value.contentHash === command.contentHash.toLowerCase() &&
++    parser.demoContentHash.value?.toLowerCase() === command.contentHash.toLowerCase()
++    ? parser.replay.value : null
+   const load = beginManagedLoad()
+   routeLoading.value = true
+   pendingManagedImport.value = null
+@@ -785,11 +792,28 @@
+       byteSize: command.byteSize,
+       mode: command.mode,
+     }
+-    await parseManagedFile(
+-      new File([body], command.originalFilename, { type: 'application/octet-stream' }),
+-      source,
+-      load.generation,
+-    )
++    if (reusableReplay && parser.replay.value === reusableReplay) {
++      // READ authorization and full content validation still apply on a warm restore.
++      const started = performance.now()
++      const digest = await crypto.subtle.digest('SHA-256', await body.arrayBuffer())
++      assertManagedLoadCurrent(load.generation)
++      const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
++      if (hash !== source.contentHash || parser.replay.value !== reusableReplay ||
++        parser.status.value !== 'done' || parser.demoContentHash.value?.toLowerCase() !== hash) {
++        throw new Error('CONTENT_HASH_MISMATCH')
++      }
++      parser.hashLatencyMs.value = performance.now() - started
++      parser.fileName.value = source.originalFilename
++      // Flush the cleared player selection so the previous stage really unmounts.
++      await nextTick()
++      assertManagedLoadCurrent(load.generation)
++    } else {
++      await parseManagedFile(
++        new File([body], command.originalFilename, { type: 'application/octet-stream' }),
++        source,
++        load.generation,
++      )
++    }
+     emitPlaybackEvent(managedReplayReady(source, load.generation))
+   } catch (error) {
+     if (!isManagedLoadCurrent(load.generation) || (error instanceof Error && error.message === 'STALE_MANAGED_LOAD')) return

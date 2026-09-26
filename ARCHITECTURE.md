@@ -486,6 +486,7 @@ flowchart LR
 5.1.0 已实现 Tauri 宿主、pinned Node/Next sidecar、SQLite Memory/checkpoint Adapter、Keychain Provider、窄 capability、受限日志、资源准备、真实 sidecar smoke seam，以及带 quiescent backup/atomic swap/rollback 的 updater。最终本机 `.app`/DMG 已重建并通过 prepared＋bundled 双启动、SQLite consent/export/persistence/delete、完整 Demo GUI 旅程、资源/架构/完整性审计；CI signature verifier 为 Cargo feature-gated 工具且未进入 App。这些是本机候选产物证据，不是 public distribution 许可：third-party rights、正式 updater 公钥、Developer ID/notarization 和由其产生的公开资产仍必须通过独立 distribution Gate。
 
 桌面本地 Demo 由 Viewer 以一次性 IMPORT capability 流式进入 Application Support 资料库，不经过 Next 上传 API；sidecar 内容寻址发布后保持 `IMPORTING`，Viewer 再对同一 `File` 执行现有 Worker/WASM parser，并用一次性 VALIDATE capability 收敛为 `READY` 或 `CORRUPT`。历史恢复只为 `READY` Demo 签发 demo-bound READ capability；RESTORE 的玩家绑定等待 `ViewerStage` 命令 bridge 发出 mount acknowledgement 后才通知 Host seek，且不运行胜率 Worker。cs2d 单次解析后同时驱动全知 renderer 与 Adapter；raw Replay 不跨 iframe，教练壳只接收白名单分析包。localhost/Web 不安装该桌面 Adapter 时继续使用只在当前页面存活的 File 管线。
+同一Viewer页内，RESTORE可复用当前加载代际已成功就绪且demoId/byteSize/contentHash均匹配的Parser Replay。必须仍完成新的READ capability请求、响应与长度检查，并对新读body重新SHA-256校验；异步完成时重核代际、Replay引用、done与hash，失败不能发布缓存成功。复用仅节省Parser/Replay重建，不省授权或文件读取；其他模式或缺少可信hash沿冷解析。切换时清选人并等待Vue卸载旧舞台，再绑定新requestId/mode发REPLAY_READY，仍经原玩家/舞台ACK恢复门，不持久化额外Replay缓存。
 
 当前 Adapter 仍可用确定性规则生成兼容的候选 ReviewPlan，作为 Director 尚未完全接入时的回退；目标流程必须通过 SceneIndex、Teaching Director 和 PlanCompiler 生成正式 ReviewPlan。两条路径共享同一 Replay、canonical tick、Observation 和校验器。
 

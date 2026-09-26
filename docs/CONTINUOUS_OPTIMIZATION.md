@@ -2,6 +2,14 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：当前已解析Demo的RESTORE复用（2026-09-27）
+
+- ID managed-replay-reuse，基线f45c59e clean；root独占0021/registry/实际Viewer函数集成测试/docs。目标为导入已解析→打开同Demo保存复盘时免重复Parser；A1检查实际cache并计数，A2只复用当前ready代际且demoId/bytes/hash相同的Replay，A3保持fresh READ、完整内容校验、冷路径及旧代际拒绝，A4相关tests/两端TS/build和独立窄审后push。
+- partial_revision_restore默认配置两次有限只读（5分钟方案、3分钟终审），检查授权/内容/舞台边界，root全写入；未新checkout因唯一写入者明确。关键结论：READ仅查token/status/文件长度，必须重新SHA256新body；清selection后必须nextTick卸载旧stage再REPLAY_READY，不能只等selectHostPlayer内部ACK。不经hydrate丢hash、不跨页缓存、不跳权限/读取，不用于REANALYZE/SELECT_PLAYER。
+- 资源/风险：小9字节非Demo fixture、Parser spy+实际Viewer函数、真实WebCrypto，bulk留测试进程，零用户Demo/SQLite/模型/GUI；15分钟有限阶段，root管理测试/build与日志，无新安装。首次函数提取和微任务假设失败后改为正确函数边界及显式bodyStarted信号；这些不算业务红。原源码只在忽略目录副本反向还原0021，最终warm回归明确原parse=2失败、新parse=1通过。
+- 交付：12新增/41相关tests、Web/Viewer TS及production build通过；授权拒绝、长度/内容变化、无可信hash/not-ready/不同Demo和模式、body/hash/卸载等待中的旧代际均覆盖。独立终审无must-fix、执行者RELEASE；全部构建进程退出。[记录](validation/MANAGED_REPLAY_REUSE.md)。测试依赖本地patched upstream，无checkout时显式skip；没有真实WASM时延、Vue卸载/舞台ACK实测，不关闭原A5。
+- 下一有限目标：用已有授权Demo做一次有界成本对照，量出保留READ+SHA成本和省去Parser的真实成本；先复用已有Node/WASM工具小smoke，bulk只在单进程/Worker，返回时间/内存摘要，不启动桌面，不再次做整场教学或完整性审计。不能用小fixture计数声称大文件性能已验证。
+
 ## 已交付：迟到去重提示不打断选人（2026-09-27）
 
 - ID import-review-offer，基线03d61ad clean；root独占Host/新offer模块与测试/docs，无委派。用户导入重复Demo后可先选人开始新复盘；尚未呈现的旧去重提示必须在选人后失效，未选人时仍能确认打开已有复盘或取消。A1提取实际异步offer流程小验证，A2绑定选人序号，A3旧Demo/历史、查询失败、恢复及非重复入口保持，A4相关tests/TS/build及push。
