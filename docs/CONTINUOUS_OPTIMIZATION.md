@@ -2,6 +2,13 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+
+## 已交付学习：动作事实覆盖（2026-09-27）
+
+- ID action-fact-coverage，基线961ad1b clean，root独占本轮小验证/docs/checks/push，无委派或其他活动写入者。A1来源与现有判断门；A2小fixture验证覆盖缺口是否真正进入带看；A3只保留有收益变更，相关tests/两端TS/build后push。15分钟有界调查，无真实Demo/模型/UI/用户数据；临时脚本单进程退出，遇两次别名解析失败简化源码相对导入。
+- 结果：DEATH/HP_CHANGE同一窗口本人shot有/无，action1/0、均1cue且判断不变；普通KILL有/无shot均NO_TEACHING_VALUE、0 Director候选/0cue。局部补KILL开火后仍0cue，未证明实际收益，已撤回全部产品/测试试验，不修改架构契约或版本。[覆盖与行动结论](validation/ACTION_FACT_COVERAGE.md)。62相关tests、两端TypeScript/production build均通过；所有检查与临时探针进程退出，只有学习记录变更。
+- 下一有限目标 decision-prior-self-fire：实际源码Timeline有本人WEAPON_FIRE，DecisionSnapshot近期自身事件仅selfHurtEvents。先核实决策前本人开火是否通过其它入口进入当前情况讲解，再判断是否需要有界纯发生事实消费；不当成敌情/接敌/命中/决策证据，不放宽资格或移动窗口。原A5仍独立待条件，不阻塞此源码/小fixture工作。
+
 ## 已交付：真实路线默认工具选择（2026-09-27）
 
 - ID real-route-default-policy，基线58e0535 clean，7f2b实际checkout；partial_revision_restore默认配置独占有界probe脚本及.local-data小摘要，root独占docs和最终复查/checks/push。既有guided-lifecycle摘要只证明no-visual路径（显式禁止Policy），real-cue-resources仅局部投影，不能回答自然默认工具选择；不复用它们伪称当前完整Replay消费。

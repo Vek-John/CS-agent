@@ -2539,3 +2539,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：离线probe采用既有packed14-bit index/低10-bit serial原则，按当前唯一controller handle与可用SteamID关联pawn；无效、重复、缺失保持unknown。controllerEntityId1..64对应bit0..63仅作为[上轮一手来源](validation/SPOTTED_SOURCE_EVIDENCE.md)提供的候选公式，不混同零基clientSlot。
 - 验证：3个Rust回归覆盖1/32/33/64、0/65、缺段/zero、新serial/解绑、错class、重复owner/SteamID、非法高位/sentinel/高index。真实60.6MB Demo最终7248采样tick/72283 pawn样本，6573置位全有当前双方映射、self0，unknown controller7445，连续采样重绑0；数据不证明真实重生路径，后者仅合成回归。最终native0.843秒；37相关tests、TS/build通过。[证据](validation/SPOTTED_IDENTITY_MAPPING.md)。
 - 限制/后继：身份字段有效不是认证，低10serial不证明完整原生代际，未输出任何ID/坐标/rawmask。候选公式吻合不足以确认网络标记语义，继续不接教练视线；不再无新信息反复解析该样本。下一项转到当前bomb事件仍用旧缓存handle解析的具体路径，先用已有实体生命周期夹具核实归属，独立于锁屏UI。
+
+
+## 2026-09-27：动作覆盖扩展须先证明进入教学路径
+
+- 问题：真实默认路线一段无action、一段有action，不能由此推断缺失动作或专业判断改善。源码仅为DEATH/HP_CHANGE补窗口开火，需核实是否值得扩展KILL。
+- 决策：小fixture中独立shot加入KILL展示材料后仍NO_TEACHING_VALUE/0cue；增加字段无法改善当前带看。撤回试验，保持原版本/资格/引用门，记录来源覆盖和上下文门，而不为工具调用数扩展范围。
+- 验证：实际Adapter与Director小消融、既有5文件62tests通过；探针无真实Demo/模型/网络/GUI。见[记录](validation/ACTION_FACT_COVERAGE.md)。产品与测试文件已恢复本轮开始的干净内容。
+- 限制与行动：合成覆盖不代表真实射击分布；独立过程依据充分的其他KILL情境未否定。下一项先核实决策前本人WEAPON_FIRE的现有教学消费，严格区分已发生自身动作与敌情/判断依据。
