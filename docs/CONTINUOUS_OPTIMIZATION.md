@@ -2,6 +2,13 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：未通过验证不等于已证明文件损坏（2026-09-27）
+
+- ID import-validation-feedback，基线2185e82 clean；root独占两处Host/Sidebar文案、0024事件文案、registry、既有隔离library测试/docs，无委派。A1先核实真实ADR/状态机/重导恢复；事实为CORRUPT也承载中断/失去VALIDATE后的不可读状态，而非字节损坏证据。A2改“文件损坏”为“验证未通过”、失败提示明确重选，不改数据库状态或READY门；A3原记录同文件重导恢复与READ验证；A4相关tests/两端TS/build、集中diff后push。
+- 证据：既有两阶段用例已覆盖同id重导→READY，本轮补强CORRUPT时READ拒绝及成功后读取原完整字节。该隔离SQLite用例通过（其余32未运行，不计入）；另4文件59测试通过，共60相关测试。两端TypeScript/build通过，补丁增量升级及build复用成功。日志`.local-data/import-validation-feedback`。无真实WASM/用户库/GUI/模型/新安装；小header fixture不声称真实Demo解析成功，仅模拟VALIDATE布尔反馈，临时库/流和进程均清理。
+- 风险/范围：不新增可读中间状态、不借verify晋升、不自动重试或修复用户数据。emil/apple沿现有反馈组件，无布局/交互变化；10分钟有限阶段，root独占进程，小文案集中审查，无新增镜像UI测试。长期架构补充CORRUPT的既有含义，旧ADR不改。
+- 下一有限目标：实际Viewer finalizeManagedDemo的小POST仍无期限，fetch/json任一挂起会让解析成功后停在完成确认前；先核实服务端单次VALIDATE消费/写入与原错误清理，给该小控制操作建立有界结果，不能给大文件流套同一期限或在结果未知时自动重用token。
+
 ## 已交付：文件读取失败可重试（2026-09-27）
 
 - ID parser-read-failure，基线1cdd3ce clean；root独占0023/registry/既有Parser测试/docs，无委派，旧执行者已RELEASE。实际file.arrayBuffer在catch外，拒绝时parse抛出且status留reading，Viewer仅error状态才展示错误。目标：拒读→error及明确重选提示→函数正常结算→下次可正常解析；A1实际composable小File拒读，A2读取局部catch，A3不启动任何Worker/不留下假Replay，保持下一次正常解析及温恢复，A4相关tests/两端TS/build后push。

@@ -8,6 +8,12 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：区分不可读状态与损坏事实
+
+- 核实：ADR-0010明确中断验证也收敛CORRUPT，物理verify不能晋升。故读失败后的不可读状态符合现有安全边界，不应仅为文案新增状态或允许读取；真正不准确的是UI一律断言文件损坏。
+- 决策：Sidebar显示“验证未通过”，Host与Viewer事件使用尚未通过验证/重新选择提示。原CORRUPT→同内容重导IMPORTING→新VALIDATE→READY保持，旧token不能复用。
+- 验证：隔离SQLite两阶段用例补强不可读拒绝和重导后的原字节READ，1项通过；另59相关tests及两端TS/build通过。日志`.local-data/import-validation-feedback`。不是真实撤权文件/WASM或GUI测试，不改用户数据；后继检查finalize控制请求无期限问题。
+
 ## 2026-09-27：读取异常必须结束reading状态
 
 - 问题：file.arrayBuffer拒绝发生在useDemoParser既有catch外，parse直接拒绝且Viewer留reading，现有error面板不出现。独立于解压/Parser是否成功。

@@ -223,10 +223,20 @@ describe("DesktopReviewLibrary import and viewer seam", () => {
       valid: true,
     })).rejects.toMatchObject({ code: "INVALID_CAPABILITY" });
 
+    const rejectedRead = h.library.issueViewerCapability({ demoId: imported.demo.demoId });
+    await expect(h.library.resolveViewerDemo({
+      authorization: rejectedRead.authorization, demoId: imported.demo.demoId,
+    })).rejects.toMatchObject({ code: "DEMO_NOT_READY" });
+
     const retried = await importValue(h.library, value, "two-phase-retry", "renamed.dem");
     expect(retried.demo.demoId).toBe(imported.demo.demoId);
     expect(retried.demo.status).toBe("READY");
     expect(retried.deduplicated).toBe(true);
+    const restoredRead = h.library.issueViewerCapability({ demoId: retried.demo.demoId });
+    const restored = await h.library.resolveViewerDemo({
+      authorization: restoredRead.authorization, demoId: retried.demo.demoId,
+    });
+    expect(await bodyBytes(restored.body)).toEqual(value);
     await h.owner.close();
   });
 

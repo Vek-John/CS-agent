@@ -1,0 +1,12 @@
+diff --git a/apps/app/src/viewer/DemoAnalyzerView.vue b/apps/app/src/viewer/DemoAnalyzerView.vue
+--- a/apps/app/src/viewer/DemoAnalyzerView.vue
++++ b/apps/app/src/viewer/DemoAnalyzerView.vue
+@@ -741,7 +741,7 @@
+       requestId: command.requestId,
+       code,
+       message: code === 'MANAGED_DEMO_PARSE_FAILED'
+-        ? 'Demo 解析失败，已标记为损坏文件。'
++        ? 'Demo 尚未通过验证，请重新选择文件后重试。'
+         : code === 'DEMO_VALIDATION_REJECTED'
+           ? 'Demo 已写入，但未能完成解析验证。'
+           : 'Demo 导入失败：本地资料库拒绝了该文件。',

@@ -74,7 +74,7 @@ function groupForDate(value: string, now = new Date()): Group {
 
 function statusLabel(review: ReviewHistoryItem): string {
   if (review.demoStatus === "MISSING") return "文件缺失";
-  if (review.demoStatus === "CORRUPT") return "文件损坏";
+  if (review.demoStatus === "CORRUPT") return "验证未通过";
   if (review.demoStatus === "IMPORTING") return "正在导入";
   if (review.status === "PREPARING") return "准备中";
   if (review.status === "IN_PROGRESS") return "复盘中";

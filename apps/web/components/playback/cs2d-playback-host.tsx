@@ -1662,7 +1662,7 @@ export function Cs2dPlaybackHost({
           EMPTY_DEMO: "Demo 文件为空，无法导入。",
           INVALID_DEMO_FORMAT: "Demo 头或文件格式无效，未建立可用复盘。",
           DEMO_SIZE_MISMATCH: "Demo 传输大小与选定文件不一致，已中止导入。",
-          MANAGED_DEMO_PARSE_FAILED: "Demo 解析失败，资料库记录已标记为损坏。",
+          MANAGED_DEMO_PARSE_FAILED: "Demo 尚未通过验证，请重新选择文件后重试。",
           CONTENT_HASH_MISMATCH: "Demo 内容哈希与资料库记录不一致，已停止恢复。",
           DEMO_VALIDATION_REJECTED: "Demo 已写入，但未能完成解析验证。",
           DEMO_IMPORT_AUTHORIZATION_REJECTED: "Demo 导入权限已失效，请重新选择文件。",

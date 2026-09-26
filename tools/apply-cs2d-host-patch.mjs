@@ -32,6 +32,7 @@ export const CS2D_PATCH_FILES = Object.freeze([
   resolve(root, 'tools/cs2d-host/patches/0021-managed-replay-reuse.patch'),
   resolve(root, 'tools/cs2d-host/patches/0022-release-parser-worker.patch'),
   resolve(root, 'tools/cs2d-host/patches/0023-demo-read-failure.patch'),
+  resolve(root, 'tools/cs2d-host/patches/0024-validation-failure-feedback.patch'),
 ])
 
 export const CS2D_REUSE_DECISIONS = Object.freeze({
@@ -454,7 +455,7 @@ function inspectPatchedCheckout(upstream) {
   // generated model assets make older reverse checks intentionally inexact).
   // Only the explicitly supported tail upgrades can advance that checkout,
   // and only when each applies cleanly on top of all other validated markers.
-  // Fixed positions correspond to 0006 through 0023; appending a patch must not retarget an older upgrade.
+  // Fixed positions correspond to 0006 through 0024; appending a patch must not retarget an older upgrade.
   const managedLibraryPatch = CS2D_PATCH_FILES[5]
   const pendingManagedLibraryPatch = !reverseStates[5] && Boolean(managedLibraryPatch) &&
     run('git', ['apply', '--check', managedLibraryPatch], {
@@ -525,6 +526,10 @@ function inspectPatchedCheckout(upstream) {
   const pendingReadFailurePatch = !reverseStates[22] &&
     run('git', ['apply', '--check', readFailurePatch], { cwd: upstream, capture: true, allowFailure: true }).status === 0
   if (paths.length > 0 && !reverseStates[22] && !pendingReadFailurePatch) throw new Error('Demo read failure patch is neither exactly applied nor cleanly applicable')
+  const validationFeedbackPatch = CS2D_PATCH_FILES[23]
+  const pendingValidationFeedbackPatch = !reverseStates[23] &&
+    run('git', ['apply', '--check', validationFeedbackPatch], { cwd: upstream, capture: true, allowFailure: true }).status === 0
+  if (paths.length > 0 && !reverseStates[23] && !pendingValidationFeedbackPatch) throw new Error('Validation feedback patch is neither exactly applied nor cleanly applicable')
   // Later identity markers intentionally supersede earlier generatedBy lines.
   if (paths.length > 0 && !reverseStates[18] && !pendingPrimaryInventoryPatch) throw new Error('Primary inventory patch is neither exactly applied nor cleanly applicable')
   if (paths.length > 0 && !reverseStates[17] && !pendingGrenadeInventoryPatch && !reverseStates[18]) throw new Error('Grenade inventory patch is neither exactly applied nor cleanly applicable')
@@ -544,7 +549,7 @@ function inspectPatchedCheckout(upstream) {
     patchesExactlyApplied,
     markerErrors: errors,
   })
-  return { decision, head, paths, diffCheck: check, patchesExactlyApplied, markerErrors: errors, pendingManagedLibraryPatch, pendingShotActorPatch, pendingTeachingPlaybackPatch, pendingRoundClockPatch, pendingHurtEventsPatch, pendingShotIdentityPatch, pendingAmmoPatch, pendingAmmoCachePatch, pendingBombIdentityPatch, pendingDeathIdentityPatch, pendingFrameIdentityPatch, pendingActiveWeaponIdentityPatch, pendingGrenadeInventoryPatch, pendingPrimaryInventoryPatch, pendingDemoPickerPatch, pendingReplayReusePatch, pendingParserReleasePatch, pendingReadFailurePatch }
+  return { decision, head, paths, diffCheck: check, patchesExactlyApplied, markerErrors: errors, pendingManagedLibraryPatch, pendingShotActorPatch, pendingTeachingPlaybackPatch, pendingRoundClockPatch, pendingHurtEventsPatch, pendingShotIdentityPatch, pendingAmmoPatch, pendingAmmoCachePatch, pendingBombIdentityPatch, pendingDeathIdentityPatch, pendingFrameIdentityPatch, pendingActiveWeaponIdentityPatch, pendingGrenadeInventoryPatch, pendingPrimaryInventoryPatch, pendingDemoPickerPatch, pendingReplayReusePatch, pendingParserReleasePatch, pendingReadFailurePatch, pendingValidationFeedbackPatch }
 }
 
 function applyPatches(upstream) {
@@ -613,6 +618,7 @@ async function main(argv = process.argv.slice(2)) {
       ...(inspection.pendingReplayReusePatch ? [CS2D_PATCH_FILES[20]] : []),
       ...(inspection.pendingParserReleasePatch ? [CS2D_PATCH_FILES[21]] : []),
       ...(inspection.pendingReadFailurePatch ? [CS2D_PATCH_FILES[22]] : []),
+      ...(inspection.pendingValidationFeedbackPatch ? [CS2D_PATCH_FILES[23]] : []),
     ]
     for (const patch of pendingPatches) {
       if (!patch) throw new Error('pending patch missing from controlled stack')
