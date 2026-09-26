@@ -218,7 +218,7 @@ function boundaryForState(
   }
   if (kind === "WRAP_UP") {
     const last = plan.segments.at(-1);
-    if (state.phase !== "WRAP_UP" || state.current_segment_index !== plan.segments.length || state.current_cue_id ||
+    if ((state.phase !== "WRAP_UP" && state.phase !== "COMPLETED") || state.current_segment_index !== plan.segments.length || state.current_cue_id ||
       (last && state.current_tick !== last.end_tick)) {
       throw new Error("WRAP_UP must capture the plan-derived end boundary.");
     }

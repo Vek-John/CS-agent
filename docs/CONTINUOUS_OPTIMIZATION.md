@@ -2,6 +2,16 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：整场完成恢复点的延迟收敛（2026-09-26）
+
+- 结果：真实Graph完成cursor原为末段index，已推进到末端WRAP_UP；COMPLETED可合法捕获边界。终结mirror允许同owner自由回看，Host等mirror专属ACK再清理；summary/transport不毁终结retry，ACK后takeover清理已接通。
+- 验收：9新项及176其他相关tests、TS/build通过；实际Adapter/Session/Graph及fake-indexedDB、历史写fake，既有小SQLite回归通过。partial_revision_restore默认只读RELEASE，三类必修由root落实；进程退出、无用户数据或部署。[记录](validation/TERMINAL_CHECKPOINT.md)。
+- 下一有限目标转回教学：从当前cue生成路径核实默认不确定性讲解的具体证据缺项和可行动内容，选一类可验证提升。先小输入/源码消费，需要知识再查一手资料；不降低判断门或重试同Jev拒判集合，A5独立。
+
+- ID terminal-checkpoint，基线af88557 clean；root独占Session recovery边界/Host/mirror/测试/docs。已查三处：mirror拒takeover、stable builder不收COMPLETED、完成effect先删除recovery身份，需真实终结序列验证。
+- A1当前Adapter+Session/Graph完成产物，小fixture重现完成前后seek/点击完成导致head未提交；A2仅精确COMPLETE_SESSION完成回执允许终结自由查看同步，COMPLETED仍从plan精确末端捕获WRAP_UP；A3本地删除身份等待已确认终结mirror，错误/跨owner/非终结继续拒绝，retry仍绑定checkpoint；A4相关tests/TS/build/独立窄审和push。
+- 风险：不能假造结束、提前销毁旧可恢复点或放宽活动cue takeover；head写入与ACK分开验证，失败保留原record。默认只读子审3分钟，root写文件；先小真实模块，外部存储fake，不读Demo/用户库/模型/GUI，60秒测试/20分钟交付，进程清理。原A5独立。
+
 ## 已交付：总结保存失败的同内容重试（2026-09-26）
 
 - ID summary-save-retry，基线0e1b0ed clean；root独占完成seam/Host/Panel/测试/docs。已核实仅historyError，无总结重试；RuntimeHeadRetry只重交恢复点，不能复用为重新生成总结。

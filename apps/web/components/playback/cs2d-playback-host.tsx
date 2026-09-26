@@ -2,7 +2,7 @@
 
 import { attachHistoryViewerSource } from "../../lib/review-history/attach-history-viewer-source";
 
-import { mirrorAgentCheckpoint } from "../../lib/recovery/agent-checkpoint-mirror";
+import { hasConfirmedTerminalRecovery, mirrorAgentCheckpoint, type TerminalRecoveryAck } from "../../lib/recovery/agent-checkpoint-mirror";
 
 import { focusRecoveryDemoPicker, isRecoveryDemoImportActive } from "../../lib/recovery/recovery-demo-picker";
 
@@ -369,6 +369,7 @@ export function Cs2dPlaybackHost({
   const storedHistoryRecoveryLandingRef = useRef<RecoveryLanding | undefined>(undefined);
   const recoveryLandingTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const stableRecoveryKeyRef = useRef<string | undefined>(undefined);
+  const [terminalRecoveryAck, setTerminalRecoveryAck] = useState<TerminalRecoveryAck>();
   const completedRecoveryRef = useRef<string | undefined>(undefined);
   const latestAgentCheckpointRef = useRef<RecoveryAgentCheckpointMeta | undefined>(undefined);
   const [recoveryResult, setRecoveryResult] = useState<SessionRecoveryResult>();
@@ -481,7 +482,7 @@ export function Cs2dPlaybackHost({
     if (!current || !identity || !analysis || !activePlan || !activeRoute || !activeSession || activeSession.manual_cue_visit) return undefined;
     const boundaryKind = activeSession.phase === "PAUSED_FOR_COACHING" && activeSession.outcome_completion?.status === "COMPLETE"
       ? "CUE_PAUSED" as const
-      : activeSession.phase === "WRAP_UP"
+      : (activeSession.phase === "WRAP_UP" || activeSession.phase === "COMPLETED")
         ? "WRAP_UP" as const
         : undefined;
     if (!boundaryKind) return undefined;
@@ -531,11 +532,16 @@ export function Cs2dPlaybackHost({
     await mirrorAgentCheckpoint({ event, result,
       read: () => ({ generation: generationRef.current, historyEpoch: historyOpenEpochRef.current,
         transportEpoch: transportRef.current.epoch, checkpointId: latestAgentCheckpointRef.current?.checkpointId,
-        sessionId: liveSessionRef.current?.id, identity: stage3IdentityRef.current, recoveryIdentity: recoveryIdentityRef.current,
+        sessionId: liveSessionRef.current?.id, sessionPhase: liveSessionRef.current?.phase, identity: stage3IdentityRef.current, recoveryIdentity: recoveryIdentityRef.current,
         runtime: recoveryRuntimeRef.current, record: recoveryRecordRef.current, history: historyPersistenceControllerRef.current,
         takenOver: userTookOverRef.current, recovering: recoveryModeRef.current }),
       checkpoint: checkpoint => { setCheckpointRetry(undefined); latestAgentCheckpointRef.current = checkpoint; },
-      stable: currentStableRecoveryRecord, accept: acceptRecoveryResult,
+      stable: currentStableRecoveryRecord, accept: result => {
+        acceptRecoveryResult(result);
+        if (result.record?.boundary.kind === "WRAP_UP" && result.record.agentCheckpointId) {
+          setTerminalRecoveryAck({ recoveryId: result.record.recoveryId, checkpointId: result.record.agentCheckpointId });
+        }
+      },
       failure: retry => {
         setCheckpointRetry(retry);
         if (!retry) setHistoryError("恢复点保存未确认；仍保留上次已确认的进度，基础回放可继续。");
@@ -639,6 +645,7 @@ export function Cs2dPlaybackHost({
     stage3BlockedCueRef.current.clear();
     stage3InputRef.current = undefined;
     stage3WrapUpGenerationRef.current = undefined;
+    setTerminalRecoveryAck(undefined);
     setStage3WrapUpStatus("IDLE");
     setStage3WrapUpResult(undefined);
     setStage3WrapUpRequest(undefined);
@@ -2808,15 +2815,18 @@ export function Cs2dPlaybackHost({
     const current = recoveryRecordRef.current;
     // Rehydrated UI is not a newly verified stable boundary. Only the explicit
     // reconnect path may update recovery until the handshake has completed.
-    if (!runtime || !current || !session || userTookOverRef.current || recoveryModeRef.current) return;
-    const beginBoundaryOperation = () => {
+    if (!runtime || !current || !session || recoveryModeRef.current) return;
+    const confirmedCompletion = session.phase === "COMPLETED" && hasConfirmedTerminalRecovery(current, terminalRecoveryAck);
+    if (userTookOverRef.current && !confirmedCompletion) return;
+    const beginBoundaryOperation = (completing = false) => {
       recoveryBoundaryOperationRef.current += 1;
       return captureRecoveryBoundaryOwner(() => ({
         generation: generationRef.current, historyEpoch: historyOpenEpochRef.current,
         operationEpoch: recoveryBoundaryOperationRef.current, runtime: recoveryRuntimeRef.current,
-        sessionId: liveSessionRef.current?.id, record: recoveryRecordRef.current,
+        sessionId: liveSessionRef.current?.id, sessionPhase: liveSessionRef.current?.phase, record: recoveryRecordRef.current,
+        completedHeadConfirmed: !!recoveryRecordRef.current && hasConfirmedTerminalRecovery(recoveryRecordRef.current, terminalRecoveryAck),
         takenOver: userTookOverRef.current, recovering: recoveryModeRef.current,
-      }));
+      }), completing);
     };
     const onFailure = (result?: SessionRecoveryResult) => {
       // A failed or degraded delete is not proof that durable recovery was removed.
@@ -2824,9 +2834,11 @@ export function Cs2dPlaybackHost({
       setRecoveryResult(recoveryBoundaryFailureResult(recoveryRecordRef.current ?? current, result));
     };
     if (session.phase === "COMPLETED") {
+      // Keep the identity alive until the terminal mirror (including library head) acknowledges.
+      if (stage3Mode && !historyPlaybackOnlyRef.current && !hasConfirmedTerminalRecovery(current, terminalRecoveryAck)) return;
       if (completedRecoveryRef.current === current.recoveryId) return;
       completedRecoveryRef.current = current.recoveryId;
-      void dispatchHostRecoveryBoundary({ runtime, record: current, isCurrent: beginBoundaryOperation(), onFailure, event: {
+      void dispatchHostRecoveryBoundary({ runtime, record: current, isCurrent: beginBoundaryOperation(true), onFailure, event: {
         type: "SESSION_COMPLETED",
         eventId: recoveryEventId("recovery-session-completed"),
         recoveryId: current.recoveryId,
@@ -2859,7 +2871,7 @@ export function Cs2dPlaybackHost({
       agentCheckpointId: stable.agentCheckpointId,
       updatedAt: stable.updatedAt,
     }, accept: acceptRecoveryResult });
-  }, [acceptRecoveryResult, currentStableRecoveryRecord, narrationByCue, routeState, session, userTookOver]);
+  }, [acceptRecoveryResult, currentStableRecoveryRecord, narrationByCue, routeState, session, stage3Mode, terminalRecoveryAck, userTookOver]);
 
   useEffect(() => {
     if (historyPlaybackOnlyRef.current || !stage2Mode || !activePlan || !routeState || !session || !cue || !stage2Cue) return;

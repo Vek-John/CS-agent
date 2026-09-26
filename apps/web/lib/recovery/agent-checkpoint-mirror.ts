@@ -7,7 +7,7 @@ import { buildStage3Identity, type Stage3IdentityInput } from "../coaching/coach
 export interface AgentMirrorOwner {
   generation: number; historyEpoch: number;
   transportEpoch?: number; checkpointId?: string | null;
-  sessionId?: string;
+  sessionId?: string; sessionPhase?: string;
   identity?: Stage3IdentityInput;
   recoveryIdentity?: { recoveryId: string; sessionId: string; runId: string };
   runtime?: SessionRecoveryRuntime; record?: SessionRecoveryRecord;
@@ -22,6 +22,17 @@ export interface AgentMirrorInput {
   accept: (result: SessionRecoveryResult) => void;
   failure: (retry?: RuntimeHeadRetry) => void;
   eventId: () => string;
+}
+
+export interface TerminalRecoveryAck { recoveryId: string; checkpointId: string; }
+export function hasConfirmedTerminalRecovery(record: SessionRecoveryRecord, ack: TerminalRecoveryAck | undefined): boolean {
+  return record.boundary.kind === "WRAP_UP" && !!record.agentCheckpointId
+    && ack?.recoveryId === record.recoveryId && ack.checkpointId === record.agentCheckpointId;
+}
+function terminalPlaybackOnly(input: AgentMirrorInput, live: AgentMirrorOwner): boolean {
+  return input.event.type === "COMPLETE_SESSION" && input.result.status === "COMPLETED"
+    && input.result.state.sessionStatus === "COMPLETED" && input.result.state.currentSessionPhase === "WRAP_UP"
+    && (live.sessionPhase === "WRAP_UP" || live.sessionPhase === "COMPLETED");
 }
 
 function recordMatches(record: SessionRecoveryRecord | undefined, identity: CoachAgentResult["identity"], recoveryId: string): boolean {
@@ -40,7 +51,7 @@ function captureOwner(input: AgentMirrorInput): { owner: AgentMirrorOwner; curre
   const sameIdentity = (candidate: CoachAgentResult["identity"]) => Object.entries(identity).every(([key,value]) => candidate[key as keyof typeof candidate] === value);
   const current = () => {
     const live = input.read();
-    if (!recoveryId || !live.identity || !sameIdentity(input.result.identity) || live.takenOver || live.recovering
+    if (!recoveryId || !live.identity || !sameIdentity(input.result.identity) || (live.takenOver && !terminalPlaybackOnly(input, live)) || live.recovering
       || live.generation !== owner.generation || live.historyEpoch !== owner.historyEpoch
       || live.runtime !== owner.runtime || live.sessionId !== identity.sessionId
       || live.recoveryIdentity?.recoveryId !== recoveryId || live.recoveryIdentity.sessionId !== identity.sessionId || live.recoveryIdentity.runId !== identity.runId
@@ -97,7 +108,7 @@ export async function mirrorAgentCheckpoint(input: AgentMirrorInput): Promise<vo
           let inFlight: Promise<boolean> | undefined;
           const isCurrent = () => {
             const live = input.read();
-            if (!current() || !retained.isCurrent() || live.transportEpoch !== owner.transportEpoch
+            if (!current() || !retained.isCurrent() || (live.transportEpoch !== owner.transportEpoch && !terminalPlaybackOnly(input, live))
               || live.checkpointId !== checkpoint.checkpointId
               || input.stable(checkpoint)?.boundary.boundaryId !== durable.boundary.boundaryId) invalidated = true;
             return !invalidated;

@@ -279,6 +279,12 @@ Host先通过既有本人/当前回合/生命/新鲜度与snapshot门，再独�
 
 ### 2.14 默认顺序路线与用户点播 cue
 
+Graph首次COMPLETE_SESSION将routeCursor推进到最后已观察段之后并进入WRAP_UP；已完成会话由Runtime去重，不重复推进。Session在COMPLETED时也可捕获同一WRAP_UP末端，但必须保持准确末索引、末tick、无当前cue和合法进度。
+
+live Stage3终结恢复只为匹配COMPLETE_SESSION且Graph已COMPLETED/WRAP_UP、当前Session为WRAP_UP/COMPLETED的回执放行自由播放接管。Host仅依据mirror成功accept（含历史artifact→head ACK及其重试）记录的recoveryId/checkpointId确认，才清理本地终结恢复记录；通用本地stable更新不构成该确认。ACK后的清理也可在接管期间执行，但逐次核对终结阶段、ACK和owner。historyPlaybackOnly和非stage3保持原清理流程，其他活动边界不放宽。
+
+终结head重试不因纯播放transport变化或SESSION_SUMMARY写入失效；新head、其他artifact、owner、checkpoint或boundary变化仍使旧重试失效。普通cue head重试保留全部原intent/transport限制。旧已完成checkpoint不隐式迁移或重写。
+
 默认带看与用户点播是两种不同的会话意图。`DefaultRouteCursor` 只表示冻结 `ReviewPlan` 按 segment 顺序推进的进度；用户自由 seek、切换回合或发起 `ManualCueVisit` 都不能修改它。`ManualCueVisit` 是一个带稳定 visit ID 的临时讲解过程，只能引用 frozen cue ID；Host 从当前播放头和 frozen plan 选择最近 cue，`CoachingSession` 再从 plan 推导合法 pre-roll、outcome window、decision point 与 Gate，调用方不能提供任意播放 tick。
 
 `PresentedCue` 与默认路线消费进度分开记录。只有 cue 已完整播放 outcome、完成 `OutcomeCompletionGate`、展示既有 `NarrationBundle` 且 Coach Agent 正常收敛，才形成一次 `PresentedCue`；取消中的 visit、PENDING narration、自由 seek 和仅到达时间段都不算。Manual visit 成功后，SessionTheme 与 Agent 完成摘要只聚合一次；默认路线以后经过这个 cue 时仍保留完整时间线，但通过确定性“已呈现 cue 经过”事件推进 `DefaultRouteCursor`，不得再次调用 Narrator、Coach Policy 或教学工具。重看 PresentedCue 复用已有 Narration 和结果，但每次 ManualCueVisit 必须重新完成本次 OutcomeCompletionGate，不能用全局 revealed/presented 标记跳过结果播放或跨入下一 cue；本次结束仍回到该 cue 的 decision point。

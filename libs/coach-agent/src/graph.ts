@@ -910,6 +910,9 @@ function completeSessionState(
   return appendTrace(
     {
       ...state,
+      // A completed route points past its last observed segment, like Session's WRAP_UP boundary.
+      routeCursor: Math.min(512, state.routeCursor + 1),
+      currentSessionPhase: "WRAP_UP",
       sessionStatus: "COMPLETED",
       runStatus: "COMPLETED",
       selectedTeachingMove: null,

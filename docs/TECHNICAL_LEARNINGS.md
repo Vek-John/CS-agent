@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：完成标志不等于终结恢复点已经确认
+
+- 问题：真实模块序列发现COMPLETED不能捕获WRAP_UP、takeover拒绝mirror，Graph完成cursor仍为末段索引；Host可能先删恢复身份。
+- 决策：统一Graph终结位置与Session边界，只为终结回执放行自由播放；Host等mirror专属ACK再清理。终结retry不被summary写或纯transport变化废弃，其他owner/恢复内容/新head约束保持；ACK后清理同样校验终结阶段。
+- 验证：9新项及176其他相关tests、TS/build通过，独立窄审三类必修均落实。[证据](validation/TERMINAL_CHECKPOINT.md)。真实Adapter/Session/Graph、fake-indexedDB及生产mirror/cleanup，ACK前不清理、ACK后BOOT无旧记录。
+- 限制/后继：外部历史写为fake，不是Viewer/大Demo实测，旧checkpoint不自动迁移；删除失败仍保留身份。下一项回到默认教学证据缺项与可行动表达。
+
 ## 2026-09-26：总结重试应保留内容和owner而不是重新生成
 
 - 问题：SESSION_SUMMARY写失败只有通用错误，既有RuntimeHeadRetry不能补写它；请求也没有小artifact的等待期限。

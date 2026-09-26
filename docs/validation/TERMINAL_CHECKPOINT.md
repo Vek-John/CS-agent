@@ -1,0 +1,13 @@
+# 终结恢复点延迟收敛（2026-09-26）
+
+实际Adapter、Session和Graph完成产物暴露三处问题：COMPLETED Session不能捕获WRAP_UP；takeover会拒绝mirror；Graph虽然标为完成，游标仍停在末段索引，无法匹配Session末端。Host还可能在迟到回执前删除恢复身份。
+
+本轮统一新Graph终结cursor/phase与Session末端，允许合法COMPLETED捕获原WRAP_UP，仍校验准确末tick、末索引、无当前cue和合法进度。只有精确COMPLETE_SESSION完成回执与终结Session能在自由播放期间mirror。Host清理身份等待mirror专属ACK，不能凭普通runtime本地更新判断历史head成功。
+
+独立审查指出的额外竞态已处理：终结head retry不因纯transport变化或后续SESSION_SUMMARY写入失效；其他artifact、新head、owner、checkpoint/boundary变化仍使它失效。ACK后的终结清理也可在takeover期间完成，普通边界保持原接管限制。historyPlaybackOnly和非stage3保留既有清理流程。
+
+9项新测试覆盖合法COMPLETED末端、自由播放终结head、summary/seek后的失败重试、ACK前禁止清理、非终结/错事件/错owner拒绝、替换恢复产物失效，以及ACK后清理并再次BOOT无旧记录。9文件185项相关测试、TypeScript和production Web build通过；真实Demo opt-in本轮未运行。partial_revision_restore默认配置只读窄审，主控落实三类必修并读真实diff/输出。
+
+验证使用真实Adapter/Session/Graph与fake-indexedDB、生产mirror/清理函数；历史HTTP写入为受控fake。另运行既有小SQLite重开回归，不重读大Demo，不冒称真实浏览器/Viewer验收。旧已完成checkpoint未隐式迁移或重写；恢复存储删除失败仍保留身份并报告降级。所有测试进程退出，无用户数据/模型/安装部署。
+
+下一项回到默认教学内容，核实不确定性讲解的具体证据缺项与可行动表达；不继续无收益恢复审计，不重复Jev拒判集合。

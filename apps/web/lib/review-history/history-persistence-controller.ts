@@ -33,6 +33,7 @@ export class HistoryPersistenceController {
   #expectedRecoveryArtifactId: string | null = null;
   #headTail: Promise<unknown> = Promise.resolve();
   #headIntent = 0;
+  #terminalHeadIntent = 0;
   constructor(private readonly deps: HistoryPersistenceDeps) {}
   /** Read-only ownership epoch; identity can initialize without changing this epoch. */
   get ownershipGeneration() { return this.#generation; }
@@ -89,7 +90,8 @@ export class HistoryPersistenceController {
     schemaVersion: string,
     artifactRevision = 1,
   ): Promise<void> {
-    this.#headIntent += 1; // New saved content invalidates any retained head retry.
+    this.#headIntent += 1; // New content invalidates ordinary retained head retries.
+    if (type !== "SESSION_SUMMARY") this.#terminalHeadIntent += 1;
     const generation = this.#generation; const reviewPromise = this.#reviewPromise; const revisionPromise = this.#revisionPromise;
     const reviewId = this.#reviewId ?? await reviewPromise; const revisionId = this.#revisionId ?? await revisionPromise;
     if (generation !== this.#generation || reviewPromise !== this.#reviewPromise || revisionPromise !== this.#revisionPromise) throw new Error("STALE_HISTORY_GENERATION");
@@ -107,13 +109,14 @@ export class HistoryPersistenceController {
   }
   stableHead(input: Record<string, unknown>, onRetry?: (retry: RuntimeHeadRetry) => void): Promise<void> {
     const intent = ++this.#headIntent;
+    const terminalIntent = ++this.#terminalHeadIntent;
     const generation = this.#generation;
     const snapshot = structuredClone(input);
-    const pending = this.#headTail.then(() => this.commitStableHead(snapshot, generation, intent, onRetry));
+    const pending = this.#headTail.then(() => this.commitStableHead(snapshot, generation, intent, terminalIntent, onRetry));
     this.#headTail = pending.catch(() => undefined);
     return pending;
   }
-  private async commitStableHead(input: Record<string, unknown>, requestedGeneration: number, intent: number, onRetry?: (retry: RuntimeHeadRetry) => void): Promise<void> {
+  private async commitStableHead(input: Record<string, unknown>, requestedGeneration: number, intent: number, terminalIntent: number, onRetry?: (retry: RuntimeHeadRetry) => void): Promise<void> {
     if (requestedGeneration !== this.#generation) throw new Error("STALE_HISTORY_GENERATION");
     const generation = this.#generation; const reviewPromise = this.#reviewPromise; const revisionPromise = this.#revisionPromise;
     const reviewId = this.#reviewId ?? await reviewPromise; const revisionId = this.#revisionId ?? await revisionPromise;
@@ -125,7 +128,9 @@ export class HistoryPersistenceController {
     // never override the managed-library UUID at this durability boundary.
     const request = { ...input, demoId, reviewRevisionId: revisionId, expectedRecoveryArtifactId: this.#expectedRecoveryArtifactId };
     const ownerCurrent = () => generation === this.#generation && reviewId === this.#reviewId && revisionId === this.#revisionId;
-    const current = () => ownerCurrent() && intent === this.#headIntent;
+    // The summary is saved after terminal mirroring and cannot change its recovery boundary.
+    const current = () => ownerCurrent() && (input.recoveryBoundary === "WRAP_UP"
+      ? terminalIntent === this.#terminalHeadIntent : intent === this.#headIntent);
     const send = async () => {
       const committed = await this.deps.commitRuntimeHead(reviewId, structuredClone(request));
       if (!ownerCurrent()) throw new Error("STALE_HISTORY_GENERATION");

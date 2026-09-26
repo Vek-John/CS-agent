@@ -8,19 +8,21 @@ export interface RecoveryBoundaryOwner {
   operationEpoch: number;
   runtime: SessionRecoveryRuntime | undefined;
   sessionId: string | undefined;
+  sessionPhase?: string;
+  completedHeadConfirmed?: boolean;
   record: Pick<SessionRecoveryRecord, "recoveryId" | "sessionId" | "runId"> | undefined;
   takenOver: boolean;
   recovering: boolean;
 }
 
 /** Capture primitive identity, not a record object which legitimately changes at stable points. */
-export function captureRecoveryBoundaryOwner(read: () => RecoveryBoundaryOwner): () => boolean {
+export function captureRecoveryBoundaryOwner(read: () => RecoveryBoundaryOwner, completing = false): () => boolean {
   const owner = { ...read() };
   const { recoveryId, sessionId, runId } = owner.record ?? {};
   return () => {
     const live = read();
     return !!owner.runtime && !!recoveryId && owner.sessionId === sessionId
-      && !live.takenOver && !live.recovering
+      && (!live.takenOver || (completing && live.sessionPhase === "COMPLETED" && live.completedHeadConfirmed === true)) && !live.recovering
       && live.generation === owner.generation && live.historyEpoch === owner.historyEpoch
       && live.operationEpoch === owner.operationEpoch && live.runtime === owner.runtime
       && live.sessionId === sessionId && live.record?.sessionId === sessionId
