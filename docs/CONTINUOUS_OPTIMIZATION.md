@@ -2,6 +2,13 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：完整讲解保存的等待期限（2026-09-27）
+
+- ID narration-save-deadline，基线0bcefe8 clean；root独占API小集合/既有保存seam集成测试/docs，无新委派，原执行者已释放。NarrationBundle存储为小JSON，默认上限256KiB，超过仅Analysis/Candidate能外置；保存route仍需物化已有分析校验，因此复用既有保守20秒而非缩短。
+- A1真实Adapter小产物→API/Controller/起点保存seam，分别挂起首Narration fetch/body；A2只将NARRATION_BUNDLE纳入TEACHING期限；A3超时沿未确认保存继续、本次head=0，晚响应无追加/重生成/自动重试，bulk阈值不动；A4相关tests/TS/build、主控集中diff及push。10分钟有限任务、测试60秒，零Demo/用户DB/模型/GUI，root清理计时器/进程。
+- 结果：原两个挂起用例20秒后均未结算，新增期限后2红→绿；54相关tests、TypeScript和production build通过。超时只有起点前4次artifact尝试（Analysis/Candidate/Plan/首Narration），无后续Recovery/head/重试，激活回调一次，迟到headers不读正文。[记录](validation/NARRATION_SAVE_DEADLINE.md)。主控集中审diff，进程退出，未真实网络/SQLite/浏览器。
+- 下一有限目标转向失败后的恢复体验：先核实已有起点未确认保存测试是否实际覆盖BrowserSessionRecoveryRuntime重开路径；若缺失，用隔离IndexedDB验证当前会话继续后还能恢复什么，检查真实可观察限制，不重复成功历史链或扩大成完整性审计。
+
 ## 已交付：起点讲解保存按当时快照收敛（2026-09-27）
 
 - ID startup-narration-snapshot，基线1c9d060 clean；partial_revision_restore默认配置独占新prepared-start-persistence实际保存seam与测试，root拥有Host接线/docs/集成push。先实际Orchestrator4cue+deferred beginRevision，验证首两cue捕获后后两cue进入live map是否导致6次保存及额外启动等待。

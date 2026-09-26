@@ -42,8 +42,8 @@ export const CHECKPOINT_REQUEST_TIMEOUT_MS = 20_000;
 export const TEACHING_SAVE_TIMEOUT_MS = 20_000;
 // Paginated summaries and small review/revision metadata mutations, never full artifacts.
 export const HISTORY_REQUEST_TIMEOUT_MS = 20_000;
-// Small teaching projections, completed summaries and user input. Large analysis/route payloads retain their own lifetime.
-const TEACHING_ARTIFACT_TYPES = new Set(["USER_INTERACTION", "CUE_CASE", "DIAGNOSTIC_RESULT", "TRANSFER_RULE", "LEARNING_THREAD", "SESSION_SUMMARY"]);
+// Small teaching bundles/projections, summaries and user input. Large analysis/route payloads retain their own lifetime.
+const TEACHING_ARTIFACT_TYPES = new Set(["NARRATION_BUNDLE", "USER_INTERACTION", "CUE_CASE", "DIAGNOSTIC_RESULT", "TRANSFER_RULE", "LEARNING_THREAD", "SESSION_SUMMARY"]);
 async function boundedHistoryJson(fetcher: typeof fetch, endpoint: string, init: RequestInit, kind: "CHECKPOINT" | "TEACHING" | "HISTORY" = "CHECKPOINT"): Promise<unknown> {
   const response = await requestJsonWithDeadline(fetcher, endpoint, init, {
     timeoutMs: kind === "HISTORY" ? HISTORY_REQUEST_TIMEOUT_MS : kind === "TEACHING" ? TEACHING_SAVE_TIMEOUT_MS : CHECKPOINT_REQUEST_TIMEOUT_MS,

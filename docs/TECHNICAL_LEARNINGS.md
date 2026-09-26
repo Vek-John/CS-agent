@@ -8,6 +8,12 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：完整讲解也属于有界小产物
+
+- 问题/决策：首批Narration保存原为plain fetch/body，挂起阻挡起点；DAL默认256KiB小JSON上限且不能外置，适合复用既有TEACHING20秒期限。只扩一个artifact类型，不扩大文件或缩短已有预算。
+- 验证：实际Adapter内容→API/Controller/起点保存的fetch/body两红→绿，54相关tests、TS/build通过；超时后未确认保存与激活回调各一次，后续head与自动重试均零。见[记录](validation/NARRATION_SAVE_DEADLINE.md)。
+- 限制/后继：transport与激活callback为stub，未真实服务器/SQLite/完整Host，不保证服务端撤销。接下来先核实失败继续后的本地Recovery重开覆盖，而非重复成功历史链或逐endpoint加期限。
+
 ## 2026-09-27：起点保存不能再读取后来扩大的讲解集合
 
 - 问题：起点record已捕获首批readiness，Host却在等待Revision/Analysis保存后才读取live Narration map，后续cue被首批和后台各保存一次，并延后激活。

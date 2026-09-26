@@ -8,6 +8,7 @@ import { buildInitialCoachingRouteState, createReviewPreparationOrchestrator, se
 import { buildSessionRecoveryRecord, createRecoverySessionIdentity, validateStoredReviewArtifacts } from "../recovery/cs2d-session-recovery";
 import { HistoryPersistenceController } from "./history-persistence-controller";
 import { persistNarrationAfterStart, persistPreparedReviewStart } from "./prepared-start-persistence";
+import { createReviewHistoryApi, TEACHING_SAVE_TIMEOUT_MS } from "./api";
 
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(yes => { resolve = yes; }); return { promise, resolve }; }
 function analysisFixture() {
@@ -85,6 +86,50 @@ function prepared() {
   history.adopt("review", undefined, "demo");
   return { analysis, plan, routeState, record, narrationByCue, history, append, head, readRawAnalysis: vi.fn(() => analysis), isCurrent: () => true };
 }
+
+it.each(["fetch", "body"])("settles the prepared start when its first narration %s hangs", async stage => {
+  vi.useFakeTimers();
+  const f = prepared(), gate = deferred<unknown>();
+  const lateJson = vi.fn(async () => ({ saved: true }));
+  const calls: string[] = [];
+  let blocked = false;
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith("/revisions")) return Response.json({ revisionId: "revision" });
+    if (url.endsWith("/runtime-head")) { calls.push("HEAD"); return Response.json({ recoveryArtifactId: "head" }); }
+    const body = JSON.parse(String(init?.body));
+    calls.push(body.artifactType);
+    if (body.artifactType === "NARRATION_BUNDLE" && !blocked) {
+      blocked = true;
+      return stage === "fetch" ? await gate.promise as Response : Object.assign(new Response(), { json: () => gate.promise });
+    }
+    return Response.json({ saved: true });
+  });
+  const api = createReviewHistoryApi(fetcher as typeof fetch);
+  const history = new HistoryPersistenceController({ createReview: api.create, startRevision: api.startRevision,
+    appendArtifact: api.appendArtifact, commitRuntimeHead: api.commitRuntimeHead, markFailed: api.markFailed });
+  history.adopt("review", undefined, "demo");
+  let failure: unknown, settled = false;
+  const save = persistPreparedReviewStart({ ...f, history }).catch(error => { failure = error; throw error; });
+  const activate = vi.fn(async () => true), saved = vi.fn(), unconfirmed = vi.fn();
+  const start = settlePreparedCoachingStart({ durability: save, isCurrent: () => true, saved, unconfirmed, activate })
+    .then(result => { settled = true; return result; });
+  const release = () => gate.resolve(stage === "fetch" ? Object.assign(new Response(), { json: lateJson }) : { saved: true });
+  try {
+    await vi.advanceTimersByTimeAsync(TEACHING_SAVE_TIMEOUT_MS - 1);
+    expect(blocked).toBe(true); expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(settled).toBe(true);
+    expect(failure).toMatchObject({ code: "TEACHING_SAVE_TIMEOUT" });
+    expect(await start).toBe(true); expect(activate).toHaveBeenCalledOnce();
+    expect(unconfirmed).toHaveBeenCalledOnce(); expect(saved).not.toHaveBeenCalled();
+    const before = [...calls]; release(); await vi.advanceTimersByTimeAsync(0);
+    expect(calls).toEqual(before);
+    expect(calls).toEqual(["ANALYSIS_BUNDLE", "CANDIDATE_SET", "REVIEW_PLAN", "NARRATION_BUNDLE"]);
+    expect(lateJson).not.toHaveBeenCalled(); expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    release(); await start; vi.clearAllTimers(); vi.useRealTimers();
+  }
+});
 
 it("persists every narration already ready at capture, including more than the first two", async () => {
   const f = prepared();
