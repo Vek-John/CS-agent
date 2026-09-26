@@ -2160,3 +2160,10 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 一手学习：[demoinfocs v5.2.0](https://github.com/markus-wa/demoinfocs-golang/blob/v5.2.0/pkg/demoinfocs/common/player.go#L184)明确该标记不是LOS/FOV，多spotter可能有异常；[CounterStrikeSharp生成schema](https://github.com/roflmuffin/CounterStrikeSharp/blob/main/managed/CounterStrikeSharp.API/Generated/Schema/Classes/EntitySpottedState_t.g.cs)只证明bool和uint32[2]字段布局。不能由此断定雷达实际显示、队内可靠共享或玩家感知。
 - 验证：固定vendor0.5.4/正确locked离线构建，60,601,900字节既有Demo，tick stride8，1024tick smoke后同parser完成；7,248采样tick、72,283 pawn样本。m_bSpotted与低mask各5,258非零，高mask全零；三条嵌套路径全部missing，扁平路径无missing/typeerror。仅统计，不输出ID/坐标/rawmask。首次通用cargo误绕过vendor及更动本地lock已纠正，第二次才作为生产依赖证据。[完整证据](validation/SPOTTED_SOURCE_EVIDENCE.md)。
 - 决定/后继：不接DIRECT_VISION或信息反证，不把缺失默认false；下一项只做raw-mask位边界和当前controller/pawn身份映射，尚无接触或真实视线语义。37相关tests、TS/build通过；无安装/模型/用户DB，临时example已清理，主控持有的probe仅为离线研究工具。
+
+
+## 2026-09-26：Spotted候选身份映射可检验，但覆盖率不是视线证据
+
+- 决定：离线probe采用既有packed14-bit index/低10-bit serial原则，按当前唯一controller handle与可用SteamID关联pawn；无效、重复、缺失保持unknown。controllerEntityId1..64对应bit0..63仅作为[上轮一手来源](validation/SPOTTED_SOURCE_EVIDENCE.md)提供的候选公式，不混同零基clientSlot。
+- 验证：3个Rust回归覆盖1/32/33/64、0/65、缺段/zero、新serial/解绑、错class、重复owner/SteamID、非法高位/sentinel/高index。真实60.6MB Demo最终7248采样tick/72283 pawn样本，6573置位全有当前双方映射、self0，unknown controller7445，连续采样重绑0；数据不证明真实重生路径，后者仅合成回归。最终native0.843秒；37相关tests、TS/build通过。[证据](validation/SPOTTED_IDENTITY_MAPPING.md)。
+- 限制/后继：身份字段有效不是认证，低10serial不证明完整原生代际，未输出任何ID/坐标/rawmask。候选公式吻合不足以确认网络标记语义，继续不接教练视线；不再无新信息反复解析该样本。下一项转到当前bomb事件仍用旧缓存handle解析的具体路径，先用已有实体生命周期夹具核实归属，独立于锁屏UI。

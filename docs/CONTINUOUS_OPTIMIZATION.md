@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：Spotted候选位映射与当前身份（2026-09-26）
+
+- ID spotted-identity，基线87f9694 clean；主控只读probe/tests/docs，revision_semantics_review默认配置3分钟只读风险复核、已RELEASE。slot公式是外部解析器实现假设，不是独立Valve语义证明。
+- 流程：Option低/高word→controllerEntityId1..64对应bit0..63→当前唯一有效controller/pawn packed匹配→仅统计。A1bit1/32/33/64、missing段与zero、无效ID；A2同index新serial/解绑/错class/重复绑定/无效身份unknown；A3小回归后单60.6MB Demo1024tick smoke再同parser继续，输出无ID/坐标/rawmask；A4相关tests/TS/build与证据push。
+- 风险/边界：低10serial不是完整native身份；映射不等于真实LOS/感知，sample间重绑仅telemetry不补当前缺失。vendor+locked/offline命令，不安装/改锁；unit/build/run各120秒、唯一controller finally清临时example。常量规模snapshot，原始字节单进程，不接Replay/Observation/模型/用户DB，原UI A5独立。
+
+- 结果：3个Rust单测覆盖边界位、单段unknown/zero、ID范围、当前serial/解绑/错class/重复pawn或身份、非法packed与高index；native锁定vendor构建成功。既有60.6MB Demo最终0.843秒：6,573置位样本全部可按候选公式映射当前双方身份，0自指/未解析对；72,283有效当前绑定，7,445未知controller样本，连续采样重绑0（不能声称真实重生已测）。37相关tests、TS/build通过。[证据](validation/SPOTTED_IDENTITY_MAPPING.md)。
+- 范围/后继：候选位公式来自外部解析器，覆盖率不是独立语义标注，更不证明LOS/雷达/感知；当前仍不接生产Observation。最终高index守卫补强后复验，因此共两次单pass，锁不变、临时example清理。此spotted路径先保留研究结果；下一独立目标已核实collector bomb_planted/defused仍走旧steam_from_pawn_handle缓存/索引解析，复用既有native/packed生命周期夹具小验证事件归属，不再为缺乏spotted语义重复读Demo。全部进程退出，无模型/用户DB/UI，原A5独立保留。
+
 ## 已交付：真实可见性字段与上游语义（2026-09-26）
 
 - ID spotted-source-evidence，基线b652845 clean；主控真实接线/只读probe/docs，revision_semantics_review默认配置一手来源研究10分钟，无并写。沿用research技能和用户要求记录行动结论。
