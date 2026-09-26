@@ -215,6 +215,7 @@ describe("cs2d analysis adapter", () => {
     ["cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2", "/hurt-events.v1/shot-identity.v2"],
     ["cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2", "/hurt-events.v1/shot-identity.v2/ammo-clip.v2"],
     ["cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1", "/hurt-events.v1/shot-identity.v2/ammo-clip.v2/bomb-identity.v1"],
+    ["cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1", "/hurt-events.v1/shot-identity.v2/ammo-clip.v2/bomb-identity.v1/death-identity.v1"],
     ["unknown+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v3", ""]
   ] as const)("preserves independent parser provenance for %s", (generatedBy, suffix) => {
     const bundle = buildCs2dAnalysisBundle({ replay: { ...replayFixture(), generatedBy }, selectedSteamId: "p-t1", demoId: "parser-provenance" });
@@ -239,6 +240,29 @@ describe("cs2d analysis adapter", () => {
       else expect(actions.length).toBeGreaterThan(0);
       expect(bundle.match_timeline.rounds).toHaveLength(1);
       expect(deserializeCs2dAnalysisBundle(serializeCs2dAnalysisBundle(bundle)).match_timeline.match_events).toEqual(bundle.match_timeline.match_events);
+    }
+  });
+
+  it("keeps unknown killers out of own kills while retaining the known victim death", () => {
+    const source = replayFixture();
+    const kill = source.rounds[0].events.find(event => event.type === "kill");
+    if (!kill || kill.type !== "kill") throw new Error("Missing kill fixture");
+    for (const attackerSteamId of [null, "p-t1", "p-ct2"]) {
+      const replay: Cs2dReplay = { ...source, rounds: [{ ...source.rounds[0], grenadePaths: [],
+        frames: source.rounds[0].frames.map(frame => ({ ...frame, players: frame.players.map(p => ({ ...p, health: 100, alive: true })) })),
+        events: [{ ...kill, attackerSteamId, assisterSteamId: null }]
+      }] };
+      const actor = buildCs2dAnalysisBundle({ replay, selectedSteamId: "p-t1", demoId: "death-identity-fixture", winProbabilityTimeline: negativeSelectedSideTimeline(kill.tick) });
+      const victim = buildCs2dAnalysisBundle({ replay, selectedSteamId: "p-ct1", demoId: "death-identity-fixture" });
+      const ownKills = actor.match_timeline.match_events?.filter(event => event.source_parser_event === "cs2d:kill") ?? [];
+      expect(ownKills).toHaveLength(attackerSteamId === "p-t1" ? 1 : 0);
+      const deaths = victim.match_timeline.match_events?.filter(event => event.event_type === "PLAYER_DEATH") ?? [];
+      expect(deaths).toHaveLength(1);
+      expect(deaths[0].target_player_id).toBe("p-ct1");
+      expect(deaths[0].actor_player_id).toBe(attackerSteamId ?? undefined);
+      const ownKillFacts = actor.candidate_set.materials.flatMap(material => material.outcomeFacts).filter(fact => fact.text === "你随后完成击杀。");
+      expect(ownKillFacts).toHaveLength(attackerSteamId === "p-t1" ? 1 : 0);
+      expect(deserializeCs2dAnalysisBundle(serializeCs2dAnalysisBundle(victim)).match_timeline.match_events).toEqual(victim.match_timeline.match_events);
     }
   });
 

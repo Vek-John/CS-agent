@@ -2,6 +2,17 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：player_death即时身份（2026-09-26）
+
+- ID death-identity，基线e7fba6b已push且启动干净；总goal已创建。主控整合/文档，子代理`/root/revision_semantics_review`默认配置独占只读链路预检，8分钟期限；无生产并写。
+- 目标/流程：collector→RawEvent Kill→assemble/schema→Viewer/Adapter，先核实非空victim协议，再选择只改death分支的兼容当前pawn方案。A1列出nonnull victim和几何依赖；A2合法未知attacker/assister保持null，失效victim不造人或位置；A3小生命周期红例后再实现；A4相关tests/TS/production和parser构建、真实消费、文档push。
+- 风险/边界：死亡事件时pawn可能已消失，直接机械替换可能丢合法事件；不得放松serial或用旧cache补未知。预检禁止Demo/build/安装/UI/模型/写文件；先3分钟接口、8分钟行动结论，主控随后接线和资源清理。明确排除ADR/userid/network handle，原UI A5独立等待。当前预检已派发，下一heartbeat先读代理结果，不重复派发。
+- 预检完成：非空victim依赖RawEvent/schema/replay-core、Viewer计分/死亡点及Adapter死亡证据。根任务确定只在当前验证pawn+唯一owner时发Kill，未知victim保留既有skip，三方不使用alive资格；坐标字段缺省本轮不扩展。partial_revision_restore独占0015/patch工具/upstream collector/lib；revision_semantics_review独占death源注入fixture/harness；主控Adapter/真实消费/docs，默认配置。修前生产WASM真实60.6MB样本单parse7.180秒、73个Kill，紧凑基线留忽略目录用于修后覆盖率比较。
+
+
+- 结果：源注入9红/1绿→10绿；98相关tests、12patch tests、native9+vendor33、TS/Web与WASM/Viewer build/TS通过。真实样本73个Kill完整字段与基线相同，10人Adapter消费正式范围64死亡、9个边界外事件仍保留；旧1次/新2次解析，最终7.112秒，0网络。首验证脚本混淆Parser与教练范围已修正，失败输出改固定代码避免dump真实身份。[证据](validation/DEATH_IDENTITY.md)。
+- 所有权/后继：两默认代理已RELEASE，根diff复核/独立只读审查完成，进程与临时checkout已清理。未知victim仍skip，单样本不能外推零损失；无真实UI/DB/专业质量结论。下一可独立核实线索为world_coord缺cell/offset默认值可能形成貌似有效坐标，先统计真实字段缺失并查Viewer/分析未知几何消费，再决定是否需协议改动；不为默认值代码本身就声称真实bug发生。原锁屏A5独立保留。
+
 ## 已交付：Bomb事件即时归属（2026-09-26）
 
 - ID bomb-identity，基线0f94799 clean；主控Adapter/证据/集成，partial_revision_restore独占0014补丁、patch工具与upstream collector/lib，revision_semantics_review独占源注入Bomb fixture/harness，均默认模型/推理，复用已释放checkout。

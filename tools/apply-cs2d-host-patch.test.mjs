@@ -142,3 +142,17 @@ it("registers bomb owner and plant geometry from one verified event pawn without
   expect(patch).toContain("self.defuse_ends.push((tick, true))");
   expect(patch).toContain("self.events.push(RawEvent::Bomb");
 });
+
+it("registers death parties against current verified pawns while requiring a known victim", () => {
+  expect(CS2D_PATCH_FILES[14]).toMatch(/0015-death-identity\.patch$/);
+  const patch = readFileSync(CS2D_PATCH_FILES[14], "utf8");
+  const additions = patch.split("\n").filter(line => line.startsWith("+") && !line.startsWith("+++")).join("\n");
+  for (const party of ["userid_pawn", "attacker_pawn", "assister_pawn"]) {
+    expect(additions).toContain(`verified_event_pawn(ctx, ev_i32(ge, "${party}"))`);
+  }
+  expect(additions).toContain("Some((pawn, Some(owner))) => (pawn, owner)");
+  expect(additions).toContain("_ => return Ok(())");
+  expect(additions).toContain("bomb-identity.v1.death-identity.v1");
+  expect(additions).not.toMatch(/steam_from_pawn_handle|get_by_handle|m_hThrower|= 0\.0|m_iHealth/);
+  expect(patch).toContain("self.events.push(RawEvent::Kill");
+});

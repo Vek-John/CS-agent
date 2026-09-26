@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：击杀身份不能复用tick开始缓存
+
+- 问题：death三方身份仍用index/cache，victim位置独立按index取值；同tick重绑或实体复用会错归属。RawEvent/schema/Viewer依赖非空victim，不能直接改为null。
+- 决策：0015只改death分支，victim当前pawn+唯一owner与几何共源，attacker/assister分别验证、未知null；未知victim沿现有skip，已死pawn不按alive拒绝。追加parser来源并保持历史恢复，不迁移其他handle。
+- 验证：真实源9红→10绿；98相关tests+12patch，native9+vendor33，TS/Web及WASM/Viewer build/TS通过。真实60.6MB样本修前后73个Kill逐字段相等；正式范围64个进入10人时间线，其余9个仍留Parser。脚本误把73当教练数量导致一次失败，按实际正式边界修正后通过，共3次单pass；终审防止比较失败dump原始身份，改固定错误码。[证据](validation/DEATH_IDENTITY.md)。
+- 限制：单样本不证明所有Demo无丢失；未知victim仍skip。坐标缺字段默认语义未改，实体正确不等于字段完整；没有UI/数据库或专业质量结论。下一项先调查缺坐标的真实发生与消费边界，不泛化重写几何协议。
+
 ## 2026-09-26：Bomb归属与几何共用当前事件实体
 
 - 问题：三种Bomb事件的旧index/cache路径在实体复用或同tick重绑时错归属；plant几何可能取到替代实体。Adapter来源识别还因后加ammo尾标记丢失hurt/shot来源。

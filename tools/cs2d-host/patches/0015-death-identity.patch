@@ -1,0 +1,51 @@
+--- a/packages/parser/src/collector.rs
++++ b/packages/parser/src/collector.rs
+@@ -613,25 +613,19 @@
+                 }
+             }
+             "player_death" => {
+-                let victim = ev_i32(ge, "userid_pawn")
+-                    .and_then(|h| steam_from_pawn_handle(self, ctx, h));
+-                let victim = match victim {
+-                    Some(v) => v,
+-                    None => return Ok(()),
++                // A kill requires a known victim. Bind that identity and its
++                // geometry to the same verified current pawn, including dead pawns.
++                let (p, victim) = match verified_event_pawn(ctx, ev_i32(ge, "userid_pawn")) {
++                    Some((pawn, Some(owner))) => (pawn, owner),
++                    _ => return Ok(()),
+                 };
+-                let attacker = ev_i32(ge, "attacker_pawn")
+-                    .and_then(|h| steam_from_pawn_handle(self, ctx, h));
+-                let assister = ev_i32(ge, "assister_pawn")
+-                    .and_then(|h| steam_from_pawn_handle(self, ctx, h));
+-                // Victim position: resolve the pawn and read its current position.
+-                let (mut x, mut y, mut z) = (0.0, 0.0, 0.0);
+-                if let Some(h) = ev_i32(ge, "userid_pawn") {
+-                    if let Ok(p) = ctx.entities().get_by_handle(h as u32 as usize) {
+-                        x = round1(world_coord(p, "CBodyComponent.m_cellX", "CBodyComponent.m_vecX"));
+-                        y = round1(world_coord(p, "CBodyComponent.m_cellY", "CBodyComponent.m_vecY"));
+-                        z = round1(world_coord(p, "CBodyComponent.m_cellZ", "CBodyComponent.m_vecZ"));
+-                    }
+-                }
++                let attacker = verified_event_pawn(ctx, ev_i32(ge, "attacker_pawn"))
++                    .and_then(|(_, owner)| owner);
++                let assister = verified_event_pawn(ctx, ev_i32(ge, "assister_pawn"))
++                    .and_then(|(_, owner)| owner);
++                let x = round1(world_coord(p, "CBodyComponent.m_cellX", "CBodyComponent.m_vecX"));
++                let y = round1(world_coord(p, "CBodyComponent.m_cellY", "CBodyComponent.m_vecY"));
++                let z = round1(world_coord(p, "CBodyComponent.m_cellZ", "CBodyComponent.m_vecZ"));
+                 self.events.push(RawEvent::Kill {
+                     tick,
+                     attacker,
+--- a/packages/parser/src/lib.rs
++++ b/packages/parser/src/lib.rs
+@@ -22,7 +22,7 @@
+ use collector::Collector;
+ 
+ const DEMO_TICK_RATE: f64 = 64.0;
+-const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1";
++const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1";
+ 
+ /// Parses the bytes of a `.dem` in a single pass and returns `(Replay JSON, voice
+ /// blob)`. The `Replay` matches `replay-schema 2D`; the blob follows the `CLV2`

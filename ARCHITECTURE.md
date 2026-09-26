@@ -133,6 +133,13 @@ Adapter 1.8.0 只为已有 DEATH / HP_CHANGE 候选补充处理窗口本人开�
 Parser追加`bomb-identity.v1`，Adapter manifest保留已知hurt/shot/ammo/bomb完整来源链。未知actor不能生成本人安包/拆包动作；爆炸仍不是本人动作的证据。旧保存产物继续直接恢复，新解析中actor变化可能改变候选选择，不能重写旧引用或声称专业决策判断因此改善。
 
 
+### 2.4.5 击杀的即时身份与受害者几何
+
+`player_death`的victim必须是当前验证过的pawn且拥有唯一有效controller身份，身份和x/y/z读取同一个实体；pawn已死亡不构成拒绝条件。attacker和assister分别按同一native事件身份规则解析，未知各自保持null，不回退tick_start缓存。未知victim沿现有非空victim协议跳过该Kill，不造空ID、null受害者或替代实体位置；这可能减少坏身份事件，不能宣称任意Demo全量无损。
+
+Parser追加`death-identity.v1`，Adapter记录完整已知来源链；旧产物仍直接恢复，不重算其事件索引。此修正只限定death事件身份与几何实体共源；不改变既有world_coord字段缺省规则、不扩展ADR或其他handle路径，不从击杀结果推断决策时可知敌情。
+
+
 ### 2.5 事实、推断、建议分层
 
 - `Fact`：Demo 可直接验证；
