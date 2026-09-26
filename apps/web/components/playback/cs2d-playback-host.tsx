@@ -179,7 +179,7 @@ import { LiquidPhaseStatus } from "./liquid-phase-status";
 import { ReviewHistorySidebar, type ReviewHistoryItem } from "../history/review-history-sidebar";
 import { createReviewHistoryApi, ReviewHistoryApiError } from "../../lib/review-history/api";
 import { HistoryRestoreController, HistoryRestoreError } from "../../lib/review-history/history-restore-controller";
-import { HistoryPersistenceController } from "../../lib/review-history/history-persistence-controller";
+import { HistoryPersistenceController, type RuntimeHeadRetry } from "../../lib/review-history/history-persistence-controller";
 import {
   ignoreHistoryAnalysisEvent,
   runHistoryAnalysisGeneration,
@@ -459,6 +459,8 @@ export function Cs2dPlaybackHost({
   const [historyActiveReviewId, setHistoryActiveReviewId] = useState<string>();
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string>();
+  const [checkpointRetry, setCheckpointRetry] = useState<RuntimeHeadRetry>();
+  const [checkpointRetryBusy, setCheckpointRetryBusy] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
   const [historyNextCursor, setHistoryNextCursor] = useState<string>();
   const [historyImportProgress, setHistoryImportProgress] = useState<{ requestId: string; completedBytes: number; totalBytes: number }>();
@@ -546,15 +548,34 @@ export function Cs2dPlaybackHost({
   const mirrorAgentResult = useCallback(async (event: import("@cs-coach/coach-agent/client").CoachAgentEvent, result: CoachAgentResult) => {
     await mirrorAgentCheckpoint({ event, result,
       read: () => ({ generation: generationRef.current, historyEpoch: historyOpenEpochRef.current,
+        transportEpoch: transportRef.current.epoch, checkpointId: latestAgentCheckpointRef.current?.checkpointId,
         sessionId: liveSessionRef.current?.id, identity: stage3IdentityRef.current, recoveryIdentity: recoveryIdentityRef.current,
         runtime: recoveryRuntimeRef.current, record: recoveryRecordRef.current, history: historyPersistenceControllerRef.current,
         takenOver: userTookOverRef.current, recovering: recoveryModeRef.current }),
-      checkpoint: checkpoint => { latestAgentCheckpointRef.current = checkpoint; },
+      checkpoint: checkpoint => { setCheckpointRetry(undefined); latestAgentCheckpointRef.current = checkpoint; },
       stable: currentStableRecoveryRecord, accept: acceptRecoveryResult,
-      failure: () => setHistoryError("恢复点保存未确认；仍保留上次已确认的进度，基础回放可继续。"),
+      failure: retry => {
+        setCheckpointRetry(retry);
+        if (!retry) setHistoryError("恢复点保存未确认；仍保留上次已确认的进度，基础回放可继续。");
+      },
       eventId: () => recoveryEventId("recovery-checkpoint"),
     });
   }, [acceptRecoveryResult, currentStableRecoveryRecord]);
+
+  const retryCheckpointSave = useCallback(async () => {
+    const retry = checkpointRetry;
+    if (!retry?.isCurrent() || checkpointRetryBusy) return;
+    setCheckpointRetryBusy(true);
+    try {
+      await retry.retry();
+      setCheckpointRetry(current => current === retry ? undefined : current);
+    } catch {
+      if (!retry.isCurrent()) {
+        setCheckpointRetry(current => current === retry ? undefined : current);
+      }
+      // Preserve a still-owned transient failure for another explicit user click.
+    } finally { setCheckpointRetryBusy(false); }
+  }, [checkpointRetry, checkpointRetryBusy]);
 
   const persistToolTransition = useCallback(async (transition: Stage3ToolLedgerTransition) => {
     if (!shouldPersistToolTransitionToRecovery(transition.source)) {
@@ -3201,6 +3222,7 @@ export function Cs2dPlaybackHost({
             activeReviewId={historyActiveReviewId}
             loading={historyLoading}
             error={historyError}
+            checkpointRetry={checkpointRetry?.isCurrent() ? { busy: checkpointRetryBusy, onRetry: () => void retryCheckpointSave() } : undefined}
             importProgress={historyImportProgress}
             hasMore={Boolean(historyNextCursor)}
             onImportDemo={() => send({ type: "requestDemoPicker" } as PlaybackCommand)}

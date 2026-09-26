@@ -62,6 +62,47 @@ function headFixture() {
   return { deps, controller };
 }
 
+it("retains the exact failed head and predecessor, coalesces retries and confirms once", async () => {
+  const { deps, controller } = headFixture();
+  const gate = deferred<{ recoveryArtifactId: string }>();
+  deps.commitRuntimeHead.mockRejectedValueOnce(new TypeError("network failed")).mockReturnValueOnce(gate.promise);
+  let retry!: import("./history-persistence-controller").RuntimeHeadRetry;
+  await expect(controller.stableHead({ checkpointId: "c1", completedAt: "fixed-time" }, value => { retry = value; })).rejects.toThrow("network failed");
+  const first = retry.retry(); const duplicate = retry.retry();
+  expect(first).toBe(duplicate);
+  await Promise.resolve();
+  expect(deps.commitRuntimeHead).toHaveBeenCalledTimes(2);
+  expect(deps.commitRuntimeHead.mock.calls[1]).toEqual(deps.commitRuntimeHead.mock.calls[0]);
+  gate.resolve({ recoveryArtifactId: "head-1" });
+  expect(await first).toBe(true);
+  expect(await retry.retry()).toBe(false);
+  deps.commitRuntimeHead.mockResolvedValue({ recoveryArtifactId: "head-2" });
+  await controller.stableHead({ checkpointId: "c2" });
+  expect(deps.commitRuntimeHead.mock.calls[2][1].expectedRecoveryArtifactId).toBe("head-1");
+});
+
+it.each(["artifact", "head", "adopt"])("invalidates a retained retry after a new %s", async change => {
+  const { deps, controller } = headFixture();
+  deps.commitRuntimeHead.mockRejectedValueOnce(new TypeError("network failed")).mockResolvedValue({ recoveryArtifactId: "head-new" });
+  let retry!: import("./history-persistence-controller").RuntimeHeadRetry;
+  await controller.stableHead({ checkpointId: "old" }, value => { retry = value; }).catch(() => undefined);
+  if (change === "artifact") await controller.artifact("USER_INTERACTION", "new", {}, "fixture");
+  if (change === "head") await controller.stableHead({ checkpointId: "new" });
+  if (change === "adopt") controller.adopt("review-b", "revision-b", "demo-b");
+  const count = deps.commitRuntimeHead.mock.calls.length;
+  expect(retry.isCurrent()).toBe(false); expect(await retry.retry()).toBe(false);
+  expect(deps.commitRuntimeHead).toHaveBeenCalledTimes(count);
+});
+
+it("does not offer retries for a known conflict or incomplete artifact set", async () => {
+  const { deps, controller } = headFixture(); const offer = vi.fn();
+  for (const code of ["RUNTIME_HEAD_CONFLICT", "REVISION_ARTIFACTS_INCOMPLETE", "INVALID_REQUEST"]) {
+    deps.commitRuntimeHead.mockRejectedValueOnce({ code });
+    await expect(controller.stableHead({}, offer)).rejects.toMatchObject({ code });
+  }
+  expect(offer).not.toHaveBeenCalled();
+});
+
 it("serializes head commits using the preceding confirmed ID and captures queued payloads", async () => {
   const { deps, controller } = headFixture();
   const firstAck = deferred<{ recoveryArtifactId: string }>();

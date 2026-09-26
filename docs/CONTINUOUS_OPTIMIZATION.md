@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：当前会话恢复点显式重试（2026-09-26）
+
+- 基线a9c80a8 clean；主控有限goal独占Controller/Mirror/Host/tests/docs；revision_semantics_review默认配置独占历史栏UI及窄测试，复用emil/Apple与原样式；无并发同文件写入。
+- 流程：教学及Recovery artifact已成功→head请求未确认→历史栏显示显式重试→复用原payload/expected→CAS成功才接受原保存记录；不重新诊断/重写artifact/读取latest Graph。A1真实API失败→原请求重发/ACK；A2双击合并、失败继续可试、409/非法状态不提供重试，新artifact/head/owner/离开边界使旧操作失效；A3UI忙态和反馈、旧基础回放不阻断；A4相关tests/TS/build与独立窄审；A5架构学习证据commit/push。
+- 范围：仅本页默认Agent镜像的最后head步骤，排除artifact未确认/ROUTE_START失败/跨重启队列/自动retry。不放宽CAS/旧恢复保护、结果门或诊断预算。5分钟接口、15分钟实现、15分钟验证；风险是重跑mirror改变completedAt、用新expected、迟到成功覆盖新owner以及双击重复回调。复用原快照与20秒请求限时；无服务/用户DB/Demo/模型/部署安装，UI以组件证据如实说明。每个owner清自有进程，原UI A5不重试。
+
+- 结果：历史栏入口/忙态已接通；原body/expected重发、零新artifact/Recovery dispatch，成功才accept。7文件121tests通过；补重试在途owner/新artifact失效及再次瞬时失败后Mirror31tests/TS/production build通过。两个owner RELEASE，独审无must-fix，主控实际diff及UI小表复核。[证据](validation/EXPLICIT_HEAD_RETRY.md)。无完整浏览器/Host验收，原A5独立保留。
+- 后继真实线索：Host起点durabilityCommit catch总会markFailed并activateSession；如果head已提交仅ACK丢失，可能把有效历史误标失败。下一轮先用小型生产链复现这一区别，不直接扩大重试到所有artifact/初始路径。测试/build已退出，commit/push后本轮释放。
+
 ## 已交付：恢复点提交并发保护（2026-09-26）
 
 - 基线1da3de5 clean；主控有限goal拥有apps协议/Controller/Host及docs，partial_revision_restore默认配置独占libs/review-library契约/DAL/tests。共享树按文件独占，无其他运行写owner。

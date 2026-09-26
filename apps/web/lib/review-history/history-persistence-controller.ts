@@ -1,5 +1,11 @@
 export type PersistedArtifactType = "ANALYSIS_BUNDLE" | "CANDIDATE_SET" | "REVIEW_PLAN" | "NARRATION_BUNDLE" | "CUE_CASE" | "DIAGNOSTIC_RESULT" | "TRANSFER_RULE" | "LEARNING_THREAD" | "SESSION_RECOVERY" | "SESSION_SUMMARY" | "TOOL_RESULT" | "USER_INTERACTION";
 
+export interface RuntimeHeadRetry {
+  isCurrent(): boolean;
+  /** False means the retained request was invalidated or already completed. */
+  retry(): Promise<boolean>;
+}
+
 export interface HistoryPersistenceDeps {
   createReview(input: { demoId: string; selectedPlayerId: string; selectedPlayerName: string; title: string; mapName?: string }): Promise<{ reviewId: string }>;
   startRevision(reviewId: string, input: {
@@ -25,7 +31,8 @@ export class HistoryPersistenceController {
   #revisionPromise?: Promise<string | undefined>;
   #reviewPromise?: Promise<string>;
   #expectedRecoveryArtifactId: string | null = null;
-  #headTail: Promise<void> = Promise.resolve();
+  #headTail: Promise<unknown> = Promise.resolve();
+  #headIntent = 0;
   constructor(private readonly deps: HistoryPersistenceDeps) {}
   /** Read-only ownership epoch; identity can initialize without changing this epoch. */
   get ownershipGeneration() { return this.#generation; }
@@ -82,6 +89,7 @@ export class HistoryPersistenceController {
     schemaVersion: string,
     artifactRevision = 1,
   ): Promise<void> {
+    this.#headIntent += 1; // New saved content invalidates any retained head retry.
     const generation = this.#generation; const reviewPromise = this.#reviewPromise; const revisionPromise = this.#revisionPromise;
     const reviewId = this.#reviewId ?? await reviewPromise; const revisionId = this.#revisionId ?? await revisionPromise;
     if (generation !== this.#generation || reviewPromise !== this.#reviewPromise || revisionPromise !== this.#revisionPromise) throw new Error("STALE_HISTORY_GENERATION");
@@ -97,14 +105,15 @@ export class HistoryPersistenceController {
     });
     if (generation !== this.#generation || reviewId !== this.#reviewId || revisionId !== this.#revisionId) throw new Error("STALE_HISTORY_GENERATION");
   }
-  stableHead(input: Record<string, unknown>): Promise<void> {
+  stableHead(input: Record<string, unknown>, onRetry?: (retry: RuntimeHeadRetry) => void): Promise<void> {
+    const intent = ++this.#headIntent;
     const generation = this.#generation;
     const snapshot = structuredClone(input);
-    const pending = this.#headTail.then(() => this.commitStableHead(snapshot, generation));
+    const pending = this.#headTail.then(() => this.commitStableHead(snapshot, generation, intent, onRetry));
     this.#headTail = pending.catch(() => undefined);
     return pending;
   }
-  private async commitStableHead(input: Record<string, unknown>, requestedGeneration: number): Promise<void> {
+  private async commitStableHead(input: Record<string, unknown>, requestedGeneration: number, intent: number, onRetry?: (retry: RuntimeHeadRetry) => void): Promise<void> {
     if (requestedGeneration !== this.#generation) throw new Error("STALE_HISTORY_GENERATION");
     const generation = this.#generation; const reviewPromise = this.#reviewPromise; const revisionPromise = this.#revisionPromise;
     const reviewId = this.#reviewId ?? await reviewPromise; const revisionId = this.#revisionId ?? await revisionPromise;
@@ -114,12 +123,39 @@ export class HistoryPersistenceController {
     // The DemoAsset identity is bound when the Review is created/adopted.
     // AnalysisBundle.demo_id is a separate parser artifact identifier and may
     // never override the managed-library UUID at this durability boundary.
-    const committed = await this.deps.commitRuntimeHead(reviewId, { ...input, demoId, reviewRevisionId: revisionId,
-      expectedRecoveryArtifactId: this.#expectedRecoveryArtifactId });
-    if (generation !== this.#generation || reviewId !== this.#reviewId || revisionId !== this.#revisionId) throw new Error("STALE_HISTORY_GENERATION");
-    if (!committed) throw new Error("INVALID_RUNTIME_HEAD_ACK");
-    this.#expectedRecoveryArtifactId = recoveryArtifactIdFromHead(committed);
+    const request = { ...input, demoId, reviewRevisionId: revisionId, expectedRecoveryArtifactId: this.#expectedRecoveryArtifactId };
+    const ownerCurrent = () => generation === this.#generation && reviewId === this.#reviewId && revisionId === this.#revisionId;
+    const current = () => ownerCurrent() && intent === this.#headIntent;
+    const send = async () => {
+      const committed = await this.deps.commitRuntimeHead(reviewId, structuredClone(request));
+      if (!ownerCurrent()) throw new Error("STALE_HISTORY_GENERATION");
+      if (!committed) throw new Error("INVALID_RUNTIME_HEAD_ACK");
+      this.#expectedRecoveryArtifactId = recoveryArtifactIdFromHead(committed);
+    };
+    try { await send(); }
+    catch (error) {
+      if (onRetry && current() && isRetryableRuntimeHeadFailure(error)) {
+        let finished = false;
+        let blocked = false;
+        let inFlight: Promise<boolean> | undefined;
+        const isCurrent = current;
+        onRetry({ isCurrent, retry: () => {
+          if (inFlight) return inFlight;
+          if (!isCurrent() || finished || blocked) return Promise.resolve(false);
+          const pending = this.#headTail.then(async () => {
+            if (!isCurrent() || finished || blocked) return false;
+            try { await send(); finished = true; return isCurrent(); }
+            catch (retryError) { if (!isRetryableRuntimeHeadFailure(retryError)) blocked = true; throw retryError; }
+          });
+          this.#headTail = pending.catch(() => undefined);
+          inFlight = pending.finally(() => { inFlight = undefined; });
+          return inFlight;
+        } });
+      }
+      throw error;
+    }
   }
+
   async markFailed(): Promise<void> {
     const generation = this.#generation;
     const reviewPromise = this.#reviewPromise;
@@ -149,4 +185,9 @@ function storedHeadExpectation(head: unknown, reviewId: string, demoId: string):
       && [stored.reviewRevisionId, stored.sessionId, stored.runId].every(value => typeof value === "string" && value.trim())) return null;
   }
   return recoveryArtifactIdFromHead(head);
+}
+
+export function isRetryableRuntimeHeadFailure(error: unknown): boolean {
+  const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+  return code === undefined || code === "CHECKPOINT_SAVE_TIMEOUT" || code === "INVALID_RUNTIME_HEAD_ACK" || code === "REQUEST_FAILED";
 }

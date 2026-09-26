@@ -41,6 +41,7 @@ export interface ReviewHistorySidebarProps {
   readonly activeReviewId?: string;
   readonly loading?: boolean;
   readonly error?: string;
+  readonly checkpointRetry?: { readonly busy: boolean; readonly onRetry: () => void };
   readonly importProgress?: { readonly completedBytes: number; readonly totalBytes: number };
   readonly hasMore?: boolean;
   readonly onImportDemo: () => void;
@@ -148,6 +149,12 @@ export function ReviewHistorySidebar(props: ReviewHistorySidebarProps) {
       {!collapsed ? <div className={styles.list} aria-live="polite">
         {props.loading ? <p className={styles.muted}>正在读取本地复盘…</p> : null}
         {props.error ? <p className={styles.error} role="status">{props.error}</p> : null}
+        {props.checkpointRetry ? <div role="status">
+          <p className={styles.muted}>恢复点保存未确认，当前讲解仍保留。</p>
+          <button type="button" className={styles.loadMore} onClick={props.checkpointRetry.onRetry} disabled={props.checkpointRetry.busy}>
+            {props.checkpointRetry.busy ? "正在重试…" : "重试保存"}
+          </button>
+        </div> : null}
         {!props.loading && !props.error && groups.length === 0 ? <div className={styles.empty}>
           <Library aria-hidden="true" />
           <strong>还没有复盘记录</strong>

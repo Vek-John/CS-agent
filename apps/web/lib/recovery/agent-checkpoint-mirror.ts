@@ -1,11 +1,12 @@
 import { checkpointThreadIdForSession, type CoachAgentEvent, type CoachAgentResult, type SessionRecoveryRecord, type SessionRecoveryRuntime, type SessionRecoveryResult } from "@cs-coach/coach-agent/client";
 import type { ReviewPlan } from "@cs-coach/contracts";
-import type { HistoryPersistenceController } from "../review-history/history-persistence-controller";
+import { isRetryableRuntimeHeadFailure, type HistoryPersistenceController, type RuntimeHeadRetry } from "../review-history/history-persistence-controller";
 import type { RecoveryAgentCheckpointMeta } from "./cs2d-session-recovery";
 import { buildStage3Identity, type Stage3IdentityInput } from "../coaching/coach-agent-stage3-host-adapter";
 
 export interface AgentMirrorOwner {
   generation: number; historyEpoch: number;
+  transportEpoch?: number; checkpointId?: string | null;
   sessionId?: string;
   identity?: Stage3IdentityInput;
   recoveryIdentity?: { recoveryId: string; sessionId: string; runId: string };
@@ -19,7 +20,7 @@ export interface AgentMirrorInput {
   checkpoint: (checkpoint: RecoveryAgentCheckpointMeta) => void;
   stable: (checkpoint: RecoveryAgentCheckpointMeta) => SessionRecoveryRecord | undefined;
   accept: (result: SessionRecoveryResult) => void;
-  failure: () => void;
+  failure: (retry?: RuntimeHeadRetry) => void;
   eventId: () => string;
 }
 
@@ -64,6 +65,7 @@ export async function mirrorAgentCheckpoint(input: AgentMirrorInput): Promise<vo
   if (!runtime || !record) return;
   const stable = input.stable(checkpoint);
   if (!stable || stable.agentCheckpointId !== checkpoint.checkpointId || !recordMatches(stable, event.identity, record.recoveryId)) return;
+  let pendingRetry: RuntimeHeadRetry | undefined;
   try {
     const persisted = await runtime.dispatch({ type: "STABLE_BOUNDARY_REACHED", eventId: input.eventId(), recoveryId: record.recoveryId,
       boundary: stable.boundary, cueProgress: stable.cueProgress, routeReadiness: stable.routeReadiness, narrationArtifacts: stable.narrationArtifacts,
@@ -90,10 +92,36 @@ export async function mirrorAgentCheckpoint(input: AgentMirrorInput): Promise<vo
           defaultRouteCursor: durable.boundary.segmentIndex, completedCueCount: durable.cueProgress.completedCueIds.length,
           totalCueCount: (durable.frozenReviewPlan as ReviewPlan).cues.length, stableProgress: durable.cueProgress,
           ...(durable.boundary.kind === "WRAP_UP" ? { reviewStatus: "COMPLETED", completedAt: new Date(durable.updatedAt).toISOString() } : { reviewStatus: "IN_PROGRESS" }),
+        }, retained => {
+          let invalidated = false;
+          let inFlight: Promise<boolean> | undefined;
+          const isCurrent = () => {
+            const live = input.read();
+            if (!current() || !retained.isCurrent() || live.transportEpoch !== owner.transportEpoch
+              || live.checkpointId !== checkpoint.checkpointId
+              || input.stable(checkpoint)?.boundary.boundaryId !== durable.boundary.boundaryId) invalidated = true;
+            return !invalidated;
+          };
+          pendingRetry = { isCurrent, retry: () => {
+            if (inFlight) return inFlight;
+            if (!isCurrent()) return Promise.resolve(false);
+            inFlight = retained.retry().then(saved => {
+              if (!saved || !isCurrent()) return false;
+              input.accept(persisted);
+              return true;
+            }).catch(error => {
+              if (isCurrent() && !isRetryableRuntimeHeadFailure(error)) {
+                invalidated = true;
+                input.failure();
+              }
+              throw error;
+            }).finally(() => { inFlight = undefined; });
+            return inFlight;
+          } };
         });
         if (!current()) return;
       }
     }
     input.accept(persisted);
-  } catch { if (current()) input.failure(); }
+  } catch { if (current()) input.failure(pendingRetry?.isCurrent() ? pendingRetry : undefined); }
 }

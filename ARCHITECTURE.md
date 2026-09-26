@@ -743,6 +743,11 @@ Host只有从当前请求得到身份全字段匹配、Graph/sessionStatus均COM
 当前镜像保存失败时不发布新的已确认record/head，Host保留上次已确认记录并说明保存未确认，合法live Agent结果仍可继续。IndexedDB open/transaction沿原1.5秒保护；已写入的IDB缓存或已发HTTP可能在服务器生效，不做回滚/未提交保证。默认桌面激活会话在起点durabilityCommit（含beginRevision）结束后进行；本轮不扩创建review/revision、其他持久化Promise或整条队列的端到端期限，不新增自动重试。API成功后的正常artifact→head顺序、服务器原单调进度及幂等校验不变。
 
 
+默认Agent镜像在教学与SESSION_RECOVERY artifact确认后，若仅最后head提交出现网络、客户端超时或无效ACK等未确认结果，可向历史栏提供本页“重试保存”入口。Controller保留原请求完整快照（包括expectedRecoveryArtifactId与completedAt）；重试只重新提交head，不再次dispatch Recovery/Graph、不追加artifact或重诊断。已知CAS冲突/缺少产物/非法请求不提供重试，重试遇此类结果也撤销入口；暂时性失败允许下一次明确点击，绝不自动循环。
+
+重试复用head串行队列和每请求20秒期限，双击共享同一Promise；只有成功ACK且归属仍有效才接受原persisted record。新artifact调用或head保存意图使旧retry失效；reset/adopt/create、Host generation/open epoch/runtime/Recovery身份、播放transport epoch、最新checkpoint或当前稳定boundary变化也失效。迟到ACK可成为该Controller已确认的CAS前驱，但不能据此发布过期的教学落点。失败卡片保留当前讲解，忙态禁用按钮；不清空已显示诊断，不放宽恢复/Outcome/异议预算。该句柄仅本页，排除未确认artifact、ROUTE_START起点保存及跨重启恢复；不保存通用任务队列。
+
+
 ### 6.14 VideoWeakAnnotation（离线启动管线）
 
 已授权的看 Demo 教学视频只用于学习“真人教练如何主持复盘”的行为结构，不作为精确比赛事实来源。离线工具按视频原始时间轴检测播放、暂停、回放、快进、讲解起止、ASR 文本、问题类型、讲解结构、习惯复查和 HUD OCR，输出 `VideoTeachingEvent`。每个检测结果保留模型/规则版本、来源片段、置信度和人工校订状态。
@@ -1411,7 +1416,7 @@ RuntimeHead 提交采用事务内 compare-and-swap：HTTP 必须携带 `expected
 
 HistoryPersistenceController 按 owner generation 串行提交 head，捕获排队输入，在有效成功 ACK 后推进 expected ID；reset/adopt/create 使旧排队请求及迟到 ACK 失效。新 Review 从 null 开始；历史 RESTORE/REANALYZE/SELECT_PLAYER 从读取的 head 初始化。旧存储 head 缺全部 artifact 绑定但 Review/Demo 身份匹配时仅可用 null 开始显式重新分析；它仍不能精确恢复，也不能作为新保存 ACK。已存旧数据不因新提交协议失效，旧无 expected 字段的 HTTP 写客户端需加载匹配版本。
 
-超时/冲突后保持原 expected ID，不自动读取新 head、rebase 或重试；原请求可能仍在服务端完成。CAS 保护迟到网络请求及并发竞争，不替代上游业务事件归属/顺序门，也不识别主动以最新 token 再提交的语义旧状态。安全重试入口尚未实现；此时重新打开历史以读取已确认状态。
+超时/冲突后保持原 expected ID，不自动读取新 head、rebase 或重试；原请求可能仍在服务端完成。CAS 保护迟到网络请求及并发竞争，不替代上游业务事件归属/顺序门，也不识别主动以最新 token 再提交的语义旧状态。默认Agent镜像的有限显式重试入口按下述规则执行；不满足资格时可重新打开历史读取已确认状态。
 SQLite 小型 backup 只保存数据库真相和相对路径，不隐式复制全部 `.dem`；完整资料库导出是独立后续能力。
 
 ### 10.2 本地 Demo 与 Artifact 文件

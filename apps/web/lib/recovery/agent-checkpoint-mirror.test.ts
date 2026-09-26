@@ -86,12 +86,96 @@ async function fixture(fetcher = vi.fn(async (_url: string, _init?: RequestInit)
   const event = { version: "coach-agent-event.v2", type: "COMPLETE_SESSION", eventId: "complete-A", identity: agentIdentity } as CoachAgentEvent;
   const live: AgentMirrorOwner = { generation: 1, historyEpoch: 1, sessionId: a.sessionId, identity,
     recoveryIdentity: { recoveryId: a.recoveryId, sessionId: a.sessionId, runId: a.runId }, runtime, record: a, history, takenOver: false, recovering: false };
-  const checkpoint = vi.fn(); const accept = vi.fn((r: SessionRecoveryResult) => { if(r.record) live.record=r.record; }); const failure = vi.fn();
+  const checkpoint = vi.fn((meta: { checkpointId: string | null }) => { live.checkpointId = meta.checkpointId; }); const accept = vi.fn((r: SessionRecoveryResult) => { if(r.record) live.record=r.record; }); const failure = vi.fn();
   const input = { event, result, read: () => live, checkpoint, accept, failure, eventId: () => "mirror-A",
     stable: () => ({ ...a, updatedAt: 1001, agentCheckpointId: result.checkpoint.checkpointId }) };
   const switchToB = () => { live.generation++; live.historyEpoch++; live.sessionId=b.sessionId; live.record=b; live.recoveryIdentity={recoveryId:b.recoveryId,sessionId:b.sessionId,runId:b.runId}; history.adopt("review-B","revision-B","demo-B"); };
   return { input, live, a,b,history,runtime,identity,result,event,fetcher,checkpoint,accept,failure,switchToB,deps };
 }
+
+it("retries only the original head after timeout, without rerunning recovery or rewriting artifacts", async () => {
+  vi.useFakeTimers();
+  const late = deferred<Response>(); let heads = 0;
+  const fetcher = vi.fn(async (url: string, _init?: RequestInit) => url.endsWith("/runtime-head") && ++heads === 1
+    ? late.promise : Response.json({ recoveryArtifactId: "confirmed-artifact" }));
+  const f = await fixture(fetcher); const dispatch = vi.spyOn(f.runtime, "dispatch");
+  const pending = mirrorAgentCheckpoint(f.input);
+  await vi.advanceTimersByTimeAsync(deadline); await pending;
+  const retry = f.failure.mock.calls[0][0] as import("../review-history/history-persistence-controller").RuntimeHeadRetry;
+  expect(retry?.isCurrent()).toBe(true); expect(f.accept).not.toHaveBeenCalled();
+  const one = retry.retry(); const two = retry.retry();
+  expect(one).toBe(two); expect(await one).toBe(true);
+  expect(f.accept).toHaveBeenCalledOnce(); expect(dispatch).toHaveBeenCalledOnce();
+  expect(fetcher.mock.calls.map(([url]) => url.split("/").at(-1))).toEqual(["artifacts", "runtime-head", "runtime-head"]);
+  expect(fetcher.mock.calls[2][1]?.body).toBe(fetcher.mock.calls[1][1]?.body);
+  late.resolve(Response.json({ recoveryArtifactId: "confirmed-artifact" })); await vi.advanceTimersByTimeAsync(0);
+  expect(f.accept).toHaveBeenCalledOnce(); expect(await retry.retry()).toBe(false);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it.each(["owner", "transport", "checkpoint", "artifact"])("does not resend a head after %s invalidates the retained mirror", async change => {
+  const fetcher = vi.fn(async (url: string, _init?: RequestInit) => {
+    if (url.endsWith("/runtime-head")) throw new TypeError("network failed");
+    return Response.json({ saved: true });
+  });
+  const f = await fixture(fetcher); await mirrorAgentCheckpoint(f.input);
+  const retry = f.failure.mock.calls[0][0] as import("../review-history/history-persistence-controller").RuntimeHeadRetry;
+  expect(retry?.isCurrent()).toBe(true);
+  if (change === "owner") f.switchToB();
+  if (change === "transport") f.live.transportEpoch = 2;
+  if (change === "checkpoint") f.live.checkpointId = "newer";
+  if (change === "artifact") await f.history.artifact("CUE_CASE", "new", {}, "fixture");
+  const requests = fetcher.mock.calls.length;
+  expect(retry.isCurrent()).toBe(false); expect(await retry.retry()).toBe(false);
+  expect(fetcher).toHaveBeenCalledTimes(requests); expect(f.accept).not.toHaveBeenCalled();
+});
+
+it("retires a retry on CAS conflict and leaves the confirmed record untouched", async () => {
+  let heads = 0;
+  const fetcher = vi.fn(async (url: string, _init?: RequestInit) => {
+    if (!url.endsWith("/runtime-head")) return Response.json({ saved: true });
+    if (++heads === 1) throw new TypeError("network failed");
+    return Response.json({ code: "RUNTIME_HEAD_CONFLICT" }, { status: 409 });
+  });
+  const f = await fixture(fetcher); await mirrorAgentCheckpoint(f.input);
+  const retry = f.failure.mock.calls[0][0] as import("../review-history/history-persistence-controller").RuntimeHeadRetry;
+  await expect(retry.retry()).rejects.toMatchObject({ code: "RUNTIME_HEAD_CONFLICT" });
+  expect(retry.isCurrent()).toBe(false); expect(f.failure).toHaveBeenLastCalledWith();
+  expect(f.accept).not.toHaveBeenCalled(); expect(f.live.record).toBe(f.a);
+  expect(await retry.retry()).toBe(false); expect(heads).toBe(2);
+});
+
+it.each(["owner", "artifact"])("ignores retry acknowledgement after %s changes while the request is in flight", async change => {
+  const ack = deferred<Response>(); let heads = 0;
+  const fetcher = vi.fn(async (url: string, _init?: RequestInit) => {
+    if (!url.endsWith("/runtime-head")) return Response.json({ saved: true });
+    if (++heads === 1) throw new TypeError("network failed");
+    return ack.promise;
+  });
+  const f = await fixture(fetcher); await mirrorAgentCheckpoint(f.input);
+  const retry = f.failure.mock.calls[0][0] as import("../review-history/history-persistence-controller").RuntimeHeadRetry;
+  const pending = retry.retry().catch(() => false);
+  await Promise.resolve(); expect(heads).toBe(2);
+  if (change === "owner") f.switchToB();
+  else await f.history.artifact("USER_INTERACTION", "new-reflection", {}, "fixture");
+  const expectedRecord = f.live.record;
+  ack.resolve(Response.json({ recoveryArtifactId: "confirmed-artifact" }));
+  expect(await pending).toBe(false); expect(f.accept).not.toHaveBeenCalled();
+  expect(f.live.record).toBe(expectedRecord); expect(f.failure).toHaveBeenCalledOnce();
+});
+
+it("allows another explicit attempt after a transient retry failure", async () => {
+  let heads = 0;
+  const fetcher = vi.fn(async (url: string, _init?: RequestInit) => {
+    if (url.endsWith("/runtime-head") && ++heads < 3) throw new TypeError("network failed");
+    return Response.json({ recoveryArtifactId: "confirmed-artifact" });
+  });
+  const f = await fixture(fetcher); await mirrorAgentCheckpoint(f.input);
+  const retry = f.failure.mock.calls[0][0] as import("../review-history/history-persistence-controller").RuntimeHeadRetry;
+  await expect(retry.retry()).rejects.toThrow("network failed");
+  expect(heads).toBe(2); expect(retry.isCurrent()).toBe(true);
+  expect(await retry.retry()).toBe(true); expect(heads).toBe(3); expect(f.accept).toHaveBeenCalledOnce();
+});
 
 it("discards a stable save response after review A switched to B, before any new UI or library write", async()=>{
   const f=await fixture(); const gate=deferred<SessionRecoveryResult>();

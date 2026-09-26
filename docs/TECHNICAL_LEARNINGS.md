@@ -2006,3 +2006,12 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 验证：partial_revision_restore默认配置独占DAL与隔离tmp SQLite，3红→绿；同cue/跨Revision、并发两后继仅一成功、同目标不同tick/progress/status/completedAt拒绝；主控实际diff复核并补API/Controller/Host接线。8文件114tests通过，独审指出legacy head无法重新分析后补1红→绿、真实SQLite legacy→newRevision，并复验相关3文件49tests；TS/build见[证据](validation/RUNTIME_HEAD_CAS.md)。
 - 独审：revision_semantics_review默认配置只读发现旧无artifact绑定head不应按新ACK校验。存储读取增加有限身份匹配兼容，ACK仍严格；复核关闭must-fix，双方RELEASE。没有完整性/哈希审计或UI服务。
 - 限制：没有新增重试入口；冲突/未确认仍沿原保存失败提示，需要重开历史读取确认点。CAS不识别主动以新token提交的业务旧状态，不代替业务owner门。验证含实际临时SQLite，不含真实用户库/桌面/整Host挂载，无Demo/模型/安装部署；后继优先核实如何在不重复诊断、不丢当前展示的前提下让用户重试同一个已保存提交。
+
+
+## 2026-09-26：显式保存重试必须重复同一提交，而不是重跑镜像
+
+- 问题：head失败时教学与Recovery artifact可已保存，但原界面无继续提交入口；直接重跑mirror会重新dispatch稳定边界并可能改变完成时间/目标，不符合上一轮严格CAS幂等。
+- 决定：Controller在未确认head失败时保留原request/expected，Mirror附当前owner、transport、checkpoint、boundary资格；历史栏明确点击只重发head，成功后accept原persisted。新artifact/head意图或owner变化使旧句柄失效，双击合并。CAS冲突和已知无效状态无重试，未知网络/超时可再次手动尝试。限定本页默认Agent镜像，不扩初始起点或artifact保存失败。
+- 验证：相关7文件121tests通过；追加重试已发后owner/新教学变化再收到ACK，以及二次瞬时失败的定向回归后Mirror31tests、TypeScript、production build通过。请求序列artifact→head→head且两个head body相同，Recovery dispatch只一次，晚ACK accept=0、冲突不发布；真实CAS测试保留。[证据](validation/EXPLICIT_HEAD_RETRY.md)。
+- 分工：revision_semantics_review默认配置独占Sidebar/SSR测试，遵循emil/Apple复用原样式；partial_revision_restore只读终审无must-fix并建议在途ACK测试，主控补齐。均RELEASE、无进程残留。
+- 限制：组件SSR/callback和生产API/Controller/Mirror验证不是完整Host/真实浏览器；原桌面A5仍独立待验。超时不能证明服务端未提交，旧控制面仍按精确head恢复。不操作用户数据/模型/服务/安装部署。下一项实际线索：起点durabilityCommit失败后会markFailed并激活本地会话；需核实head已落盘但ACK丢失时是否错误标记有效历史，先小复现再决定修复。
