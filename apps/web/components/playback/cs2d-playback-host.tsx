@@ -178,6 +178,7 @@ import { refreshHistoryPage } from "../../lib/review-history/refresh-history-pag
 import { HistoryRestoreController, HistoryRestoreError } from "../../lib/review-history/history-restore-controller";
 import { HistoryPersistenceController, type RuntimeHeadRetry } from "../../lib/review-history/history-persistence-controller";
 import { selectPlayerHistory } from "../../lib/review-history/player-selection-history";
+import { offerImportedReview } from "../../lib/review-history/import-review-offer";
 import { persistPreparedReviewStart, persistNarrationAfterStart } from "../../lib/review-history/prepared-start-persistence";
 import {
   ignoreHistoryAnalysisEvent,
@@ -348,6 +349,7 @@ export function Cs2dPlaybackHost({
   const replayRef = useRef<ReplayReadyEvent | undefined>(undefined);
   const [selected, setSelected] = useState<PlayerSelectedEvent>();
   const selectedPlayerIdRef = useRef<string | undefined>(undefined);
+  const playerSelectionEpochRef = useRef(0);
   const historyRestorePlayerRef = useRef<string | undefined>(undefined);
   const historyRestoreTickRef = useRef<number | undefined>(undefined);
   const historyRestoreModeRef = useRef<"RESTORE" | "REANALYZE" | "SELECT_PLAYER">("RESTORE");
@@ -934,29 +936,23 @@ export function Cs2dPlaybackHost({
     payload: Extract<PlaybackBridgeEvent, { type: "DEMO_IMPORT_SUCCEEDED" }>,
     operationEpoch: number,
   ) => {
-    const recoveringImport = recoveryModeRef.current;
-    const isCurrent = () => historyOpenEpochRef.current === operationEpoch &&
-      managedRequestMatchesExpected(expectedManagedSourceRef.current, payload.requestId);
     setHistoryImportProgress(undefined);
-    await refreshReviewHistory(isCurrent);
-    if (recoveringImport || !isCurrent()) return;
-    if (!payload.deduplicated) return;
-    try {
-      const impact = await reviewHistoryApi.demoImpact(payload.demoId);
-      if (!isCurrent()) return;
-      const latest = impact.reviews[0];
-      if (!latest) return;
-      const openExisting = window.confirm(
+    await offerImportedReview({
+      recovering: recoveryModeRef.current,
+      deduplicated: payload.deduplicated,
+      isCurrent: () => historyOpenEpochRef.current === operationEpoch &&
+        managedRequestMatchesExpected(expectedManagedSourceRef.current, payload.requestId),
+      readSelectionEpoch: () => playerSelectionEpochRef.current,
+      refresh: refreshReviewHistory,
+      loadExisting: () => reviewHistoryApi.demoImpact(payload.demoId),
+      confirmExisting: impact => window.confirm(
         `这份 Demo 已在资料库中，共有 ${impact.reviewCount} 条复盘。\n\n` +
-        `确定：打开最近复盘“${latest.title}”\n` +
+        `确定：打开最近复盘“${impact.reviews[0]!.title}”\n` +
         "取消：继续为这次导入创建新复盘",
-      );
-      if (!isCurrent()) return;
-      if (openExisting) await openHistoryReview(latest.id);
-    } catch {
-      if (!isCurrent()) return;
-      setHistoryError("Demo 已安全去重，但无法读取已有复盘；仍可选择玩家创建新复盘。");
-    }
+      ),
+      openReview: openHistoryReview,
+      onError: () => setHistoryError("Demo 已安全去重，但无法读取已有复盘；仍可选择玩家创建新复盘。"),
+    });
   }, [openHistoryReview, refreshReviewHistory, reviewHistoryApi]);
 
   const deleteDemoWithImpact = useCallback(async (review: ReviewHistoryItem) => {
@@ -1717,6 +1713,7 @@ export function Cs2dPlaybackHost({
         return;
       }
       if (payload.type === "PLAYER_SELECTED") {
+        playerSelectionEpochRef.current += 1;
         selectedPlayerIdRef.current = payload.playerId;
         if (historyActiveReviewId && historyRestoreModeRef.current !== "SELECT_PLAYER") {
           setSelected(payload);

@@ -2,6 +2,13 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：迟到去重提示不打断选人（2026-09-27）
+
+- ID import-review-offer，基线03d61ad clean；root独占Host/新offer模块与测试/docs，无委派。用户导入重复Demo后可先选人开始新复盘；尚未呈现的旧去重提示必须在选人后失效，未选人时仍能确认打开已有复盘或取消。A1提取实际异步offer流程小验证，A2绑定选人序号，A3旧Demo/历史、查询失败、恢复及非重复入口保持，A4相关tests/TS/build及push。
+- 风险：不能用analysis generation（正常REPLAY_READY也重置分析）或单一playerId（同人重选会重复）识别新意图。独立单调选人序号只在实际PLAYER_SELECTED回执增加；offer在首次await前捕获，与既有requestId/history epoch共同检查，传给刷新并在查询/确认后及catch中检查。小deferred数据，无真实Demo/DB/模型/GUI；root单控制器负责测试/build，15分钟有限任务、每次测试60秒，两次基础设施失败即简化，无新增安装。
+- A1原流程4红/6绿；修复后10新增/64相关tests通过，覆盖刷新期间选人时不再查impact、impact期间选人时不弹/不报旧错、确认后失效不打开、正常确认/取消、恢复/非重复/空历史与换导入。TypeScript与Web production build通过；主控读取真实diff与日志，全部进程退出。仅模块实测与Host接线审查，未系统弹窗/完整桌面实测。[记录](validation/IMPORT_REVIEW_OFFER.md)。
+- 下一有限目标：核实“重复Demo刚导入并已解析→确认打开已有复盘”的当前数据流是否再次读取/解析同一Demo。先检查Viewer现有缓存与恢复路径、用小调用计数验证；存在实际重复才优化，不默认绕过身份/版本/玩家恢复门，也不重跑整场大Demo审计。
+
 ## 已交付：重新导入的错误反馈（2026-09-27）
 
 - ID import-retry-feedback，基线82be693 clean；root独占Host两处接线/docs，无委派，其他执行者已释放。流程：新有效DEMO_IMPORT_REQUESTED→清旧错误并显示新progress→仅当前请求发布失败；取消选择不产生该事件，保留原提示。A1查真实Sidebar同时渲染error/progress及成功刷新清error；A2只清新操作旧反馈；A3导入后刷新绑定已有epoch/requestId，迟到结果不清新错误；A4相关tests/TS/build、窄diff复查后push。
