@@ -2,6 +2,17 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：活动武器即时身份（2026-09-26）
+
+- ID active-weapon-identity，基线546ac82 clean；partial_revision_restore默认配置独占0017/patch工具/upstream weapons/assemble/lib，revision_semantics_review默认配置独占源注入武器/knife fixture，主控Adapter/真实消费/docs。
+- 目标/流程：m_hActiveWeapon network packed→当前匹配实体→武器名称/资源消费；失效保持unknown空串，不能读替代实体或作为“无人持枪”的刀局证据。A1原函数生命周期红例；A2合法标签/USP行为保持，不native转换、不按alive拒绝；A3两knife推断拒unknown、不影响respawn；A4相关tests/TS/Web和parser/Viewer build、已有已验证当前帧基线对照单次真实消费、文档push。
+- 边界/风险：不改primary/grenade_inventory/label映射表、不新schema，不把unknown当刀/空手或拒整player。5分钟接口/12分钟实现/20分钟交付；根单Demo进程120秒，仅统计，复用上一轮已验证546ac82 projection避免重复baseline parse；bulk本地gzip，不网络/安装/模型/UI/用户DB，原A5独立保留。
+
+- 接线补充：真实Viewer domain/rounds.ts也把空武器或空players判刀局，影响0编号和统计排除，已纳入0017窄修；root拥有新knife-rounds-source.test.mjs，实际旧源4红/1绿、当前patch函数5绿。沿emil/apple已读设计技能保持准确状态反馈；pure domain逻辑，不改布局/动画或需要锁屏UI验收。无frames pregame独立规则保持。
+
+- 结果：实际武器/Parser knife源6红/4绿→10绿，Viewer源4红/1绿→5绿；82相关tests+14patch tests、native9+vendor33、TS/Web及WASM/Viewer build/TS通过。本轮单次60.6MB parse7.555秒，真实7239帧/72193玩家行和9回合边界JSON字段与已验基线一致，10人消费通过，0网络。[证据](validation/ACTIVE_WEAPON_IDENTITY.md)。
+- 后继/限制：unknown刀局保守不识别，不声称外部武器真值/完整名单/UI质量。已核实grenade_inventory仍index-only解析m_hMyWeapons且缺字段返回空数组，下一项先小例明确道具误归属与unknown/empty资源语义，再决定窄改；不泛化全背包。全部进程/临时目录清理，两个默认代理分工结束，原A5独立待验。
+
 ## 已交付：玩家采样packed身份（2026-09-26）
 
 - ID frame-pawn-identity，基线af8e53a clean；主控Adapter/真实消费/docs，partial_revision_restore默认配置先接口预检后props/collector/assemble/lib和0016工具，revision_semantics_review默认配置独占源注入fixture/harness；已核实现有owner均RELEASE。

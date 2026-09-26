@@ -76,6 +76,7 @@ export const CS2D_SOURCE = {
 function parserVersion(replay: Cs2dReplay): string {
   const base = `${CS2D_SOURCE.repository}@${CS2D_SOURCE.commit}`;
   const revisions = [
+    ["hurt-events.v1", "shot-identity.v2", "ammo-clip.v2", "bomb-identity.v1", "death-identity.v1", "frame-identity.v1", "active-weapon-identity.v1"],
     ["hurt-events.v1", "shot-identity.v2", "ammo-clip.v2", "bomb-identity.v1", "death-identity.v1", "frame-identity.v1"],
     ["hurt-events.v1", "shot-identity.v2", "ammo-clip.v2", "bomb-identity.v1", "death-identity.v1"],
     ["hurt-events.v1", "shot-identity.v2", "ammo-clip.v2", "bomb-identity.v1"],

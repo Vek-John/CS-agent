@@ -25,6 +25,7 @@ export const CS2D_PATCH_FILES = Object.freeze([
   resolve(root, 'tools/cs2d-host/patches/0014-bomb-identity.patch'),
   resolve(root, 'tools/cs2d-host/patches/0015-death-identity.patch'),
   resolve(root, 'tools/cs2d-host/patches/0016-frame-pawn-identity.patch'),
+  resolve(root, 'tools/cs2d-host/patches/0017-active-weapon-identity.patch'),
 ])
 
 export const CS2D_REUSE_DECISIONS = Object.freeze({
@@ -50,6 +51,7 @@ const CONTROLLED_EXACT_PATHS = new Set([
   'apps/app/src/viewer/player/ViewerStage.vue',
   'apps/app/src/viewer/player/useMapCamera.ts',
   'apps/app/src/viewer/player/useReplay.ts',
+  'apps/app/src/viewer/domain/rounds.ts',
   'apps/app/src/viewer/vite.config.ts',
   'apps/app/vite.config.ts',
   'packages/parser/Cargo.toml',
@@ -81,6 +83,9 @@ const CONTROLLED_ORT_ASSETS = new Set([
 ])
 
 const REQUIRED_MARKERS = [
+  { name: 'active weapon identity version', activeWeaponIdentity: true, path: 'packages/parser/src/lib.rs', pattern: /frame-identity\.v1\.active-weapon-identity\.v1/ },
+  { name: 'viewer knife round known weapons', activeWeaponIdentity: true, path: 'apps/app/src/viewer/domain/rounds.ts', pattern: /f\.players\.length > 0 && f\.players\.every\(\(p\) => p\.weapon === 'Faca'\)/ },
+  { name: 'active weapon current serial', activeWeaponIdentity: true, path: 'packages/parser/src/weapons.rs', pattern: /weapon\.serial\(\) & 0x3ff/ },
   { name: 'frame identity version', frameIdentity: true, path: 'packages/parser/src/lib.rs', pattern: /death-identity\.v1\.frame-identity\.v1/ },
   { name: 'verified sampled player pawn', frameIdentity: true, path: 'packages/parser/src/collector.rs', pattern: /let pawn = match verified_controller_pawn\(ctx, ctrl\)/ },
   { name: 'complete identity respawn guard', frameIdentity: true, path: 'packages/parser/src/assemble.rs', pattern: /&& f\.identity_complete/ },
@@ -362,7 +367,7 @@ function diffCheck(upstream) {
   }
 }
 
-function markerErrors(upstream, includeManagedLibrary = true, includeShotActor = true, includeTeachingPlayback = true, includeRoundClock = true, includeHurtEvents = true, includeShotIdentity = true, includeBombIdentity = true, includeDeathIdentity = true, includeFrameIdentity = true) {
+function markerErrors(upstream, includeManagedLibrary = true, includeShotActor = true, includeTeachingPlayback = true, includeRoundClock = true, includeHurtEvents = true, includeShotIdentity = true, includeBombIdentity = true, includeDeathIdentity = true, includeFrameIdentity = true, includeActiveWeaponIdentity = true) {
   const errors = []
   for (const marker of REQUIRED_MARKERS) {
     if (!includeManagedLibrary && marker.managedLibrary) continue
@@ -374,6 +379,7 @@ function markerErrors(upstream, includeManagedLibrary = true, includeShotActor =
     if (!includeBombIdentity && marker.bombIdentity) continue
     if (!includeDeathIdentity && marker.deathIdentity) continue
     if (!includeFrameIdentity && marker.frameIdentity) continue
+    if (!includeActiveWeaponIdentity && marker.activeWeaponIdentity) continue
     const file = resolve(upstream, marker.path)
     if (!existsSync(file)) {
       errors.push(`${marker.name}: missing ${marker.path}`)
@@ -435,7 +441,7 @@ function inspectPatchedCheckout(upstream) {
   // generated model assets make older reverse checks intentionally inexact).
   // Only the explicitly supported tail upgrades can advance that checkout,
   // and only when each applies cleanly on top of all other validated markers.
-  // Fixed positions correspond to 0006 through 0016; appending a patch must not retarget an older upgrade.
+  // Fixed positions correspond to 0006 through 0017; appending a patch must not retarget an older upgrade.
   const managedLibraryPatch = CS2D_PATCH_FILES[5]
   const pendingManagedLibraryPatch = !reverseStates[5] && Boolean(managedLibraryPatch) &&
     run('git', ['apply', '--check', managedLibraryPatch], {
@@ -481,14 +487,18 @@ function inspectPatchedCheckout(upstream) {
   const frameIdentityPatch = CS2D_PATCH_FILES[15]
   const pendingFrameIdentityPatch = !reverseStates[15] && (pendingDeathIdentityPatch ||
     run('git', ['apply', '--check', frameIdentityPatch], { cwd: upstream, capture: true, allowFailure: true }).status === 0)
+  const activeWeaponIdentityPatch = CS2D_PATCH_FILES[16]
+  const pendingActiveWeaponIdentityPatch = !reverseStates[16] && (pendingFrameIdentityPatch ||
+    run('git', ['apply', '--check', activeWeaponIdentityPatch], { cwd: upstream, capture: true, allowFailure: true }).status === 0)
   // Later identity markers intentionally supersede earlier generatedBy lines.
-  if (paths.length > 0 && !reverseStates[15] && !pendingFrameIdentityPatch) throw new Error('Frame pawn identity patch is neither exactly applied nor cleanly applicable')
-  if (paths.length > 0 && !reverseStates[14] && !pendingDeathIdentityPatch && !reverseStates[15]) throw new Error('Death identity patch is neither exactly applied nor cleanly applicable')
-  if (paths.length > 0 && !reverseStates[13] && !pendingBombIdentityPatch && !reverseStates[14] && !reverseStates[15]) throw new Error('Bomb identity patch is neither exactly applied nor cleanly applicable')
-  if (paths.length > 0 && !reverseStates[12] && !pendingAmmoCachePatch && !reverseStates[13] && !reverseStates[14] && !reverseStates[15]) throw new Error('Prior-tick ammo cache patch is neither exactly applied nor cleanly applicable')
-  if (paths.length > 0 && !reverseStates[11] && !pendingAmmoPatch && !reverseStates[12] && !reverseStates[13] && !reverseStates[14] && !reverseStates[15]) throw new Error('Active weapon ammo patch is neither exactly applied nor cleanly applicable')
+  if (paths.length > 0 && !reverseStates[16] && !pendingActiveWeaponIdentityPatch) throw new Error('Active weapon identity patch is neither exactly applied nor cleanly applicable')
+  if (paths.length > 0 && !reverseStates[15] && !pendingFrameIdentityPatch && !reverseStates[16]) throw new Error('Frame pawn identity patch is neither exactly applied nor cleanly applicable')
+  if (paths.length > 0 && !reverseStates[14] && !pendingDeathIdentityPatch && !reverseStates[15] && !reverseStates[16]) throw new Error('Death identity patch is neither exactly applied nor cleanly applicable')
+  if (paths.length > 0 && !reverseStates[13] && !pendingBombIdentityPatch && !reverseStates[14] && !reverseStates[15] && !reverseStates[16]) throw new Error('Bomb identity patch is neither exactly applied nor cleanly applicable')
+  if (paths.length > 0 && !reverseStates[12] && !pendingAmmoCachePatch && !reverseStates[13] && !reverseStates[14] && !reverseStates[15] && !reverseStates[16]) throw new Error('Prior-tick ammo cache patch is neither exactly applied nor cleanly applicable')
+  if (paths.length > 0 && !reverseStates[11] && !pendingAmmoPatch && !reverseStates[12] && !reverseStates[13] && !reverseStates[14] && !reverseStates[15] && !reverseStates[16]) throw new Error('Active weapon ammo patch is neither exactly applied nor cleanly applicable')
   const errors = paths.length > 0 || patchesExactlyApplied
-    ? markerErrors(upstream, !pendingManagedLibraryPatch, !pendingShotActorPatch, !pendingTeachingPlaybackPatch, !pendingRoundClockPatch, !pendingHurtEventsPatch, !pendingShotIdentityPatch, !pendingBombIdentityPatch, !pendingDeathIdentityPatch, !pendingFrameIdentityPatch)
+    ? markerErrors(upstream, !pendingManagedLibraryPatch, !pendingShotActorPatch, !pendingTeachingPlaybackPatch, !pendingRoundClockPatch, !pendingHurtEventsPatch, !pendingShotIdentityPatch, !pendingBombIdentityPatch, !pendingDeathIdentityPatch, !pendingFrameIdentityPatch, !pendingActiveWeaponIdentityPatch)
     : []
   const decision = classifyPatchedCheckout({
     head,
@@ -497,7 +507,7 @@ function inspectPatchedCheckout(upstream) {
     patchesExactlyApplied,
     markerErrors: errors,
   })
-  return { decision, head, paths, diffCheck: check, patchesExactlyApplied, markerErrors: errors, pendingManagedLibraryPatch, pendingShotActorPatch, pendingTeachingPlaybackPatch, pendingRoundClockPatch, pendingHurtEventsPatch, pendingShotIdentityPatch, pendingAmmoPatch, pendingAmmoCachePatch, pendingBombIdentityPatch, pendingDeathIdentityPatch, pendingFrameIdentityPatch }
+  return { decision, head, paths, diffCheck: check, patchesExactlyApplied, markerErrors: errors, pendingManagedLibraryPatch, pendingShotActorPatch, pendingTeachingPlaybackPatch, pendingRoundClockPatch, pendingHurtEventsPatch, pendingShotIdentityPatch, pendingAmmoPatch, pendingAmmoCachePatch, pendingBombIdentityPatch, pendingDeathIdentityPatch, pendingFrameIdentityPatch, pendingActiveWeaponIdentityPatch }
 }
 
 function applyPatches(upstream) {
@@ -559,6 +569,7 @@ async function main(argv = process.argv.slice(2)) {
       ...(inspection.pendingBombIdentityPatch ? [CS2D_PATCH_FILES[13]] : []),
       ...(inspection.pendingDeathIdentityPatch ? [CS2D_PATCH_FILES[14]] : []),
       ...(inspection.pendingFrameIdentityPatch ? [CS2D_PATCH_FILES[15]] : []),
+      ...(inspection.pendingActiveWeaponIdentityPatch ? [CS2D_PATCH_FILES[16]] : []),
     ]
     for (const patch of pendingPatches) {
       if (!patch) throw new Error('pending patch missing from controlled stack')

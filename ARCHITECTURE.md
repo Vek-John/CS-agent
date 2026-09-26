@@ -149,6 +149,13 @@ Parser追加`death-identity.v1`，Adapter记录完整已知来源链；旧产物
 Parser来源追加frame-identity.v1。合法完整帧保持字段与既有回合推断；无效绑定可能使个别玩家缺样本或保守放弃推断，不能声称任何Demo都零缺行。旧保存产物直接恢复，不重写其时间线。该修正不迁移tick_start cache、ADR或其他network handle。
 
 
+### 2.4.7 活动武器名称的当前实体来源
+
+`m_hActiveWeapon`为network packed句柄。活动名称解析要求Unsigned32、非零且小于0xffffff、当前实体index与可见低10serial匹配，再沿既有武器标签和USP/P2000定义编号消歧；不按native转换，不以玩家存活作为名称解析资格。无法验证时保持空串unknown，不借替代实体、库存主枪或上一次名称补值。该窄修复不改变primary/grenade_inventory路径。
+
+空串既不能证明持刀，也不能证明空手。assemble整回合刀局判定要求已确认标签为Faca；暖场刀局拆分窗口遇未知名称保守不拆分。Viewer共享isKnifeRound也要求每帧非空且所有已采样武器明确为Faca，不能因空名称或空玩家数组误标0回合、从统计中排除；无任何frames的既有pre-game判断保持独立。该限制不改变respawn全活满血门，不删除含未知武器的玩家身份/生命/资源行。Adapter沿现有规则把空名称投影为unknown，保持其他已验证资源，Parser来源追加active-weapon-identity.v1，旧保存产物不重算。
+
+
 ### 2.5 事实、推断、建议分层
 
 - `Fact`：Demo 可直接验证；

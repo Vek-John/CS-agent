@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：未知活动武器不能变成刀局证据
+
+- 问题：active名称仍index-only解析，弹药却已校验serial；拒绝坏label后原Parser/Viewer又把空串当无枪/刀局，会错误改编号或排除统计。
+- 决策：0017严格network活动句柄类型/范围/index/serial，合法label/USP定义编号行为保持；unknown保留空串、资源其他项保留。同步两assemble推断和Viewer共享刀局函数，unknown不能证明Faca；respawn及无frames的独立pre-game规则保持。
+- 验证：Rust实际源6红→10绿，Viewer实际源4红→5绿，82相关tests+14patch tests，native9+vendor33、TS/Web和WASM/Viewer build/TS通过。复用已验当前基线、本轮单读60.6MB，7239帧/72193玩家行/9回合边界JSON字段一致，10人消费通过，0网络。[证据](validation/ACTIVE_WEAPON_IDENTITY.md)。
+- 限制：保守规则可少识别未知真正刀局；不声称完整名单/外部武器真值或UI专业质量。primary/投掷物库存未改；下一项核实grenade_inventory旧handle和缺字段→空数组是否错导资源判断。代理/进程清理，原A5独立。
+
 ## 2026-09-26：玩家采样拒绝替代pawn并保护回合推断
 
 - 问题：采样network packed handle走index-only查找，实体复用可错人；直接删坏行又会让剩余玩家“全活/全持刀”，误改freeze或刀局。

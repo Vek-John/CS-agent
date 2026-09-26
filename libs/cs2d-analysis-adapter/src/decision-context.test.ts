@@ -71,6 +71,15 @@ describe("trusted compact decision snapshots", () => {
     } else expect(value.selectedPlayer.value?.health).toBe(2);
   });
 
+  it("keeps an unknown active weapon separate from valid player health and roster", () => {
+    const source = round();
+    const value = snapshot({ ...source, frames: source.frames.map(frame => ({ ...frame, players: frame.players.map(p => p.steamId === "p0" ? { ...p, weapon: "" } : p) })) });
+    expect(value.selectedPlayer.value).toMatchObject({ weapon: null, health: 2, alive: true, armor: 20 });
+    expect(value.missingFields).toContain("weapon");
+    expect(value.aliveCounts.value).toEqual({ allies: 1, enemies: 5, includesSelectedPlayer: true });
+    expect(value.players).toHaveLength(10);
+  });
+
   it("does not guess timers from match settings or eventual round duration", () => {
     const value = snapshot({ ...round(), events: [{ type: "bomb_planted", tick: 100, t: 1.5625, playerSteamId: "p5" }] });
     expect(value.clock.value).toEqual({ phase: "UNKNOWN", elapsedSeconds: null, remainingSeconds: null });

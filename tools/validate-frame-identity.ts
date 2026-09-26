@@ -5,7 +5,8 @@ import { gzipSync, gunzipSync } from "node:zlib";
 import { buildCs2dAnalysisBundle, serializeCs2dAnalysisBundle, deserializeCs2dAnalysisBundle, type Cs2dReplay } from "../libs/cs2d-analysis-adapter/src/index";
 // Run each mode under 120 seconds. Large Replay stays in this process; local compressed
 // baseline preserves exact source samples without printing identities or positions.
-const [mode, path, snapshot] = process.argv.slice(2);
+const [mode, path, snapshot, expectedRevision = "frame-identity.v1"] = process.argv.slice(2);
+assert(["frame-identity.v1", "active-weapon-identity.v1"].includes(expectedRevision));
 assert(["--baseline", "--verify"].includes(mode) && path && snapshot);
 let networkCalls = 0;
 globalThis.fetch = async () => { networkCalls++; throw new Error("NETWORK_FORBIDDEN"); };
@@ -28,7 +29,7 @@ if (mode === "--baseline") {
   const compressed=gzipSync(JSON.stringify(projection)); writeFileSync(snapshot,compressed,{mode:0o600});
   console.log(JSON.stringify({mode,demoBytes,demoReads:1,parsePasses:1,parseMs,frames,players,baselineBytes:compressed.length,networkCalls}));
 } else {
-  assert(replay.generatedBy?.endsWith(".frame-identity.v1"));
+  assert(replay.generatedBy?.endsWith(`.${expectedRevision}`));
   const before=JSON.parse(gunzipSync(readFileSync(snapshot)).toString()) as typeof projection;
   const same=isDeepStrictEqual(projection,before);
   if(!same){
@@ -39,7 +40,7 @@ if (mode === "--baseline") {
   let bundles=0;
   for(const player of replay.players){
     const bundle=buildCs2dAnalysisBundle({replay,selectedSteamId:player.steamId,demoId:"frame-identity-validation"});
-    assert(bundle.review_plan.generation_manifest.parser_version.endsWith("/frame-identity.v1"));
+    assert(bundle.review_plan.generation_manifest.parser_version.endsWith(`/${expectedRevision}`));
     assert(isDeepStrictEqual(deserializeCs2dAnalysisBundle(serializeCs2dAnalysisBundle(bundle)).match_timeline,jsonValue(bundle.match_timeline)),"TIMELINE_ROUNDTRIP_MISMATCH");
     bundles++;
   }

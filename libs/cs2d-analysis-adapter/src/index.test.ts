@@ -217,6 +217,7 @@ describe("cs2d analysis adapter", () => {
     ["cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1", "/hurt-events.v1/shot-identity.v2/ammo-clip.v2/bomb-identity.v1"],
     ["cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1", "/hurt-events.v1/shot-identity.v2/ammo-clip.v2/bomb-identity.v1/death-identity.v1"],
     ["cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1", "/hurt-events.v1/shot-identity.v2/ammo-clip.v2/bomb-identity.v1/death-identity.v1/frame-identity.v1"],
+    ["cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1.active-weapon-identity.v1", "/hurt-events.v1/shot-identity.v2/ammo-clip.v2/bomb-identity.v1/death-identity.v1/frame-identity.v1/active-weapon-identity.v1"],
     ["unknown+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v3", ""]
   ] as const)("preserves independent parser provenance for %s", (generatedBy, suffix) => {
     const bundle = buildCs2dAnalysisBundle({ replay: { ...replayFixture(), generatedBy }, selectedSteamId: "p-t1", demoId: "parser-provenance" });

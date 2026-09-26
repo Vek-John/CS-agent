@@ -170,3 +170,18 @@ it("registers network controller identity and partial-frame inference guards", (
   expect(additions).toContain("death-identity.v1.frame-identity.v1");
   expect(additions).not.toMatch(/event_pawn_to_packed|m_lifeState|steam_from_pawn_handle/);
 });
+
+it("registers strict packed active weapon identity without widening inventory resolution", () => {
+  expect(CS2D_PATCH_FILES[16]).toMatch(/0017-active-weapon-identity\.patch$/);
+  expect(isControlledDirtyPath("apps/app/src/viewer/domain/rounds.ts")).toBe(true);
+  const patch = readFileSync(CS2D_PATCH_FILES[16], "utf8");
+  const additions = patch.split("\n").filter(line => line.startsWith("+") && !line.startsWith("+++")).join("\n");
+  expect(additions).toContain("Ok(FieldValue::Unsigned32(h)) if *h > 0 && *h < 0xffffff");
+  expect(additions).toContain("weapon.index() != (handle & 0x3fff)");
+  expect(additions).toContain("(weapon.serial() & 0x3ff) != (handle >> 14)");
+  expect(additions).toContain("disambiguate_usp(weapon, weapon_label(weapon.class().name()))");
+  expect(additions).toContain('if p.weapon != "Faca"');
+  expect(additions).toContain("if f.players.iter().any(|p| p.weapon.is_empty()) { return None; }");
+  expect(additions).toContain("frame-identity.v1.active-weapon-identity.v1");
+  expect(additions).not.toMatch(/event_pawn_to_packed|primary_weapon|grenade_inventory|m_lifeState/);
+});

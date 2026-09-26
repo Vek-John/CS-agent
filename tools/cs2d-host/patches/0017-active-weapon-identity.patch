@@ -1,0 +1,167 @@
+--- a/packages/parser/src/weapons.rs
++++ b/packages/parser/src/weapons.rs
+@@ -163,14 +163,19 @@
+ 
+ /// Resolves a pawn active weapon into the short label.
+ pub(crate) fn active_weapon_label(ctx: &Context, pawn: &Entity) -> String {
+-    let handle = prop_u32(pawn, "m_pWeaponServices.m_hActiveWeapon");
+-    if handle == 0 || handle == u32::MAX {
++    // This property is already network-packed, not a native game-event handle.
++    let handle = match pawn.get_property_by_name("m_pWeaponServices.m_hActiveWeapon") {
++        Ok(FieldValue::Unsigned32(h)) if *h > 0 && *h < 0xffffff => *h,
++        _ => return String::new(),
++    };
++    let weapon = match ctx.entities().get_by_index((handle & 0x3fff) as usize) {
++        Ok(w) => w,
++        Err(_) => return String::new(),
++    };
++    if weapon.index() != (handle & 0x3fff) || (weapon.serial() & 0x3ff) != (handle >> 14) {
+         return String::new();
+     }
+-    match ctx.entities().get_by_handle(handle as usize) {
+-        Ok(w) => disambiguate_usp(&w, weapon_label(w.class().name())),
+-        Err(_) => String::new(),
+-    }
++    disambiguate_usp(weapon, weapon_label(weapon.class().name()))
+ }
+ 
+ /// The player's main gun from the inventory: a primary (rifle/SMG/sniper/shotgun/MG)
+--- a/packages/parser/src/assemble.rs
++++ b/packages/parser/src/assemble.rs
+@@ -99,8 +99,8 @@
+     // post-round runs from there to the official end).
+     let mut decided: Vec<u32> = c.synth_ends.iter().map(|e| e.0).collect();
+     decided.sort_unstable();
+-    // Knife round (FACEIT/scrim opener): every sampled player holds only a knife
+-    // (or nothing) for the whole live round. There is no buy, so we collapse the
++    // Knife round (FACEIT/scrim opener): every sampled player has a known knife
++    // for the whole live round. There is no buy, so we collapse the
+     // freeze window — otherwise the long warmup gap before it shows as a huge
+     // freeze. (The viewer also detects this to label the round "0".)
+     let is_knife_round = |start_tick: u32, end_tick: u32| -> bool {
+@@ -113,7 +113,8 @@
+             if !f.identity_complete { return false; }
+             for p in &f.players {
+                 saw_player = true;
+-                if p.weapon != "Faca" && !p.weapon.is_empty() {
++                // Empty is unknown, not evidence that the player held no gun.
++                if p.weapon != "Faca" {
+                     return false;
+                 }
+             }
+@@ -163,6 +164,8 @@
+             }
+             // Do not split a knife round from a partial roster snapshot.
+             if !f.identity_complete { return None; }
++            // An unresolved active weapon cannot establish a knife-only stretch.
++            if f.players.iter().any(|p| p.weapon.is_empty()) { return None; }
+             let armed = f
+                 .players
+                 .iter()
+--- a/packages/parser/src/lib.rs
++++ b/packages/parser/src/lib.rs
+@@ -22,7 +22,7 @@
+ use collector::Collector;
+ 
+ const DEMO_TICK_RATE: f64 = 64.0;
+-const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1";
++const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1.active-weapon-identity.v1";
+ 
+ /// Parses the bytes of a `.dem` in a single pass and returns `(Replay JSON, voice
+ /// blob)`. The `Replay` matches `replay-schema 2D`; the blob follows the `CLV2`
+--- a/apps/app/src/viewer/domain/rounds.ts
++++ b/apps/app/src/viewer/domain/rounds.ts
+@@ -1,90 +1,91 @@
+ // Pure round-structure helpers over a parsed `Replay`: per-player sides, knife /
+ // pre-game round detection, display numbering, and the flash-assist definition.
+ // Shared by the player (killfeed, replay clock, timeline) and the analysis tabs,
+ // so they live in `domain/` rather than under any single feature.
+ import type { KillEvent, Round, Side } from '@/viewer/domain/schema'
+ 
+ /**
+  * Each player's side in a round, read from the live frames (after `startTick`).
+  *
+  * Live frames matter at the pistol round: when the match opens with a knife
+  * round, the side pick happens *during* the pistol round's freeze time, so its
+  * first frames still carry the knife-round sides before the swap. Reading the
+  * first frame would invert CT/T there. Live frames always carry the real round
+  * sides. First occurrence wins, so a player who dies early still gets a side.
+  *
+  * A second pass over every frame fills any player who never appears live (e.g.
+  * disconnected during freeze), so they still get a side instead of rendering
+  * gray; live frames already won for everyone present, so this never re-inverts.
+  */
+ export function roundSides(round: Round): Map<string, Side> {
+   const m = new Map<string, Side>()
+   for (const f of round.frames) {
+     if (f.tick < round.startTick) continue
+     for (const p of f.players) {
+       if (!m.has(p.steamId)) m.set(p.steamId, p.side)
+     }
+   }
+   for (const f of round.frames) {
+     for (const p of f.players) {
+       if (!m.has(p.steamId)) m.set(p.steamId, p.side)
+     }
+   }
+   return m
+ }
+ 
+ /**
+  * Knife round: some servers (FACEIT, scrims) open with a knife-only round to
+  * pick sides. It does not count on the scoreboard, so we detect it by the
+- * absence of any weapon other than the knife across all samples.
++ * known knife labels across populated samples. Empty labels or player lists
++ * cannot establish that the round was knife-only.
+  */
+ export function isKnifeRound(round: Round): boolean {
+   return (
+     round.frames.length > 0 &&
+     round.frames.every((f) =>
+-      f.players.every((p) => p.weapon === 'Faca' || p.weapon === ''),
++      f.players.length > 0 && f.players.every((p) => p.weapon === 'Faca'),
+     )
+   )
+ }
+ 
+ /**
+  * A pre-game round that precedes the real match and does not count on the
+  * scoreboard: the knife round (knife-only frames) or a frameless "result" round
+  * some platforms emit alongside it. FACEIT opens with a single knife round;
+  * Gamers Club emits two (a 0-frame result round + the knife frames), so the
+  * opener cannot be assumed to be a single round.
+  */
+ export function isPreGameRound(round: Round): boolean {
+   return round.frames.length === 0 || isKnifeRound(round)
+ }
+ 
+ /**
+  * Count of leading pre-game rounds (knife / frameless openers). Only leading
+  * rounds count, so a pathological frameless round mid-match never shifts the
+  * numbering. Returns 0 when every round looks pre-game (nothing real to anchor).
+  */
+ export function preGameRoundCount(rounds: Round[]): number {
+   let n = 0
+   while (n < rounds.length && isPreGameRound(rounds[n])) n++
+   return n >= rounds.length ? 0 : n
+ }
+ 
+ /**
+  * Display label per round: leading pre-game rounds are "0" (hidden where the UI
+  * hides the knife round); the real match rounds are numbered from 1. Replaces
+  * the old "knife at index 0 only" assumption, which mis-numbered Gamers Club
+  * demos (two opener rounds). With no pre-game round, the parser's `number` is
+  * kept (matchmaking demos, where it is the source of truth).
+  */
+ export function roundDisplayLabels(rounds: Round[]): string[] {
+   const preGame = preGameRoundCount(rounds)
+   return rounds.map((r, i) =>
+     i < preGame ? '0' : preGame === 0 ? String(r.number) : String(i - preGame + 1),
+   )
+ }
+ 
+ /**
+  * The flash that set up a kill: the most recent blind still active on the victim
+  * at the moment of death, thrown by someone on the killer's team against an
+  * enemy. Returns the flasher (which may be the killer themselves, a self-flash)
+  * and the blind start, or null when no flash set up the kill.
