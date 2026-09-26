@@ -20,28 +20,42 @@ if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invali
 
 if (!args.includes('--serve-only')) {
   await mkdir(generated, { recursive: true })
-  await writeFile(resolve(generated, 'index.html'), `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic Viewer action smoke</title><style>body{margin:16px;background:#10141d;color:#eee;font:16px system-ui}button{font:inherit;padding:10px 16px}button:disabled{opacity:.5}iframe{width:100%;height:640px;border:1px solid #657084;margin-top:14px}pre{white-space:pre-wrap}p{max-width:80ch}</style><h1>Synthetic Viewer action smoke</h1><p>合成场景，不是真实 Demo tick。实际 ViewerStage / useReplay / iframe bridge；不运行 Parser 或模型。</p><button id="run" disabled>运行动作回放</button><p id="status" role="status">等待真实 ViewerStage 挂载</p><pre id="summary"></pre><iframe id="viewer" title="Synthetic CS2 Viewer"></iframe><script type="module" src="/parent.ts"></script></html>`)
+  await writeFile(resolve(generated, 'index.html'), `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic Viewer action smoke</title><style>body{margin:16px;background:#10141d;color:#eee;font:16px system-ui}button{font:inherit;padding:10px 16px}button:disabled{opacity:.5}iframe{width:100%;height:640px;border:1px solid #657084;margin-top:14px}pre{white-space:pre-wrap}p{max-width:80ch}</style><h1>Synthetic Viewer action smoke</h1><p>合成场景，不是真实 Demo tick。实际 ViewerStage / useReplay / iframe bridge；不运行 Parser 或模型。</p><button id="run" disabled>运行动作回放</button> <button id="interrupt" disabled>验证暂停与恢复</button><p id="status" role="status">等待真实 ViewerStage 挂载</p><pre id="summary"></pre><iframe id="viewer" title="Synthetic CS2 Viewer"></iframe><script type="module" src="/parent.ts"></script></html>`)
   await writeFile(resolve(generated, 'child.html'), '<!doctype html><html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic ViewerStage</title><div id="app"></div><script type="module" src="/child.ts"></script></html>')
   await writeFile(resolve(generated, 'parent.ts'), `import { isPlaybackCommandEnvelope, isPlaybackEventEnvelope, PLAYBACK_BRIDGE_CHANNEL } from ${JSON.stringify(resolve(root, 'libs/contracts/src/playback-bridge.ts'))};
 const frame = document.querySelector<HTMLIFrameElement>('#viewer')!;
 const button = document.querySelector<HTMLButtonElement>('#run')!;
+const interruptButton = document.querySelector<HTMLButtonElement>('#interrupt')!;
 const summary = document.querySelector('#summary')!;
 const status = document.querySelector('#status')!;
-const state = { ready:false, posted:0, ackCount:0, ackStatus:'', ackCode:'', completed:false, lastTick:0, minPlayingTick:null as number|null, maxPlayingTick:null as number|null, playing:false, speed:0, returnedToDecisionAndPaused:false, errors:[] as string[] };
+const state = { ready:false, posted:0, ackCount:0, ackStatus:'', ackCode:'', completed:false, lastTick:0, minPlayingTick:null as number|null, maxPlayingTick:null as number|null, playing:false, speed:0, returnedToDecisionAndPaused:false, mode:'continuous', pauseCommands:0, resumeCommands:0, pauseTick:null as number|null, checkedPauseTick:null as number|null, heldMs:0, firstResumedTick:null as number|null, movedAfterResume:false, interruptionPassed:false, errors:[] as string[] };
 const command = { channel:PLAYBACK_BRIDGE_CHANNEL, direction:'command', payload:{type:'teachingTool',schemaVersion:'cs2d-teaching-tool-command.v2',tool:'REPLAY_CUE_SLOW',callId:'synthetic-action-1',runId:'synthetic-run',generation:1,cueId:'synthetic-cue',args:{tool:'REPLAY_CUE_SLOW',startCanonicalTick:64,decisionCanonicalTick:128,outcomeEndCanonicalTick:256,speed:0.5}}};
 if(!isPlaybackCommandEnvelope(command)) throw Error('SMOKE_COMMAND_INVALID');
-const render=()=>{state.returnedToDecisionAndPaused=state.ackCount===1&&state.completed&&state.ackStatus==='SUCCEEDED'&&state.ackCode==='CUE_PLAYED'&&!state.playing&&Math.abs(state.lastTick-128)<=1; summary.textContent=JSON.stringify(state,null,2); status.textContent=state.returnedToDecisionAndPaused?'已完成一次动作回放，返回决策点并暂停':state.posted?'正在等待真实播放完成 ACK':state.ready?'Viewer 已就绪':'等待真实 ViewerStage 挂载';};
+let holdTimer: ReturnType<typeof setTimeout>|undefined;
+let pausedAt=0;
+let probeSent=false;
+const control=(action:'pause'|'resume')=>{const payload={type:'teachingPlayback',callId:command.payload.callId,runId:command.payload.runId,cueId:command.payload.cueId,generation:command.payload.generation,action};const envelope={channel:PLAYBACK_BRIDGE_CHANNEL,direction:'command',payload};if(!isPlaybackCommandEnvelope(envelope))throw Error('SMOKE_CONTROL_INVALID');if(action==='pause')state.pauseCommands++;else state.resumeCommands++;frame.contentWindow!.postMessage(envelope,location.origin);};
+const render=()=>{state.returnedToDecisionAndPaused=state.ackCount===1&&state.completed&&state.ackStatus==='SUCCEEDED'&&state.ackCode==='CUE_PLAYED'&&!state.playing&&Math.abs(state.lastTick-128)<=1; state.interruptionPassed=state.mode==='interrupt'&&state.returnedToDecisionAndPaused&&state.pauseTick!==null&&state.checkedPauseTick===state.pauseTick&&state.heldMs>=1000&&state.firstResumedTick===state.pauseTick&&state.movedAfterResume&&state.resumeCommands===1; summary.textContent=JSON.stringify(state,null,2); status.textContent=state.returnedToDecisionAndPaused?'已完成一次动作回放，返回决策点并暂停':state.posted?'正在等待真实播放完成 ACK':state.ready?'Viewer 已就绪':'等待真实 ViewerStage 挂载';};
 window.addEventListener('message',event=>{
  if(event.source!==frame.contentWindow||event.origin!==location.origin)return;
- if(event.data?.channel==='synthetic-viewer-smoke'&&event.data.type==='host-ready'){state.ready=true;button.disabled=state.posted>0;render();return;}
+ if(event.data?.channel==='synthetic-viewer-smoke'&&event.data.type==='host-ready'){state.ready=true;button.disabled=state.posted>0;interruptButton.disabled=state.posted>0;render();return;}
  if(event.data?.channel==='synthetic-viewer-smoke'&&event.data.type==='error'){state.errors.push(String(event.data.code).slice(0,120));state.errors=state.errors.slice(-3);render();return;}
  if(!isPlaybackEventEnvelope(event.data))return;
  const message=event.data.payload;
  if(message.type==='PLAYBACK_STATE'){state.lastTick=message.canonicalTick;state.playing=message.playing;state.speed=message.speed;if(state.posted&&message.playing){state.minPlayingTick=Math.min(state.minPlayingTick??message.canonicalTick,message.canonicalTick);state.maxPlayingTick=Math.max(state.maxPlayingTick??message.canonicalTick,message.canonicalTick);}}
+ if(message.type==='PLAYBACK_STATE'&&state.mode==='interrupt'&&state.posted&&!state.ackCount){
+  if(message.playing&&message.canonicalTick>=96&&state.pauseCommands===0)control('pause');
+  else if(!message.playing&&state.pauseCommands>0&&state.pauseTick===null){state.pauseTick=message.canonicalTick;pausedAt=performance.now();holdTimer=setTimeout(()=>{probeSent=true;control('pause');},1200);}
+  else if(!message.playing&&probeSent&&state.checkedPauseTick===null){state.checkedPauseTick=message.canonicalTick;state.heldMs=Math.round(performance.now()-pausedAt);if(state.checkedPauseTick===state.pauseTick)control('resume');else state.errors.push('CLOCK_ADVANCED_WHILE_PAUSED');}
+  if(message.playing&&state.resumeCommands===1){if(state.firstResumedTick===null)state.firstResumedTick=message.canonicalTick;if(message.canonicalTick>(state.pauseTick??Infinity))state.movedAfterResume=true;}
+ }
  if(message.type==='TEACHING_TOOL_ACK'&&message.callId===command.payload.callId&&message.runId===command.payload.runId&&message.cueId===command.payload.cueId&&message.generation===command.payload.generation&&message.tool===command.payload.tool){state.ackCount++;state.ackStatus=message.status;state.ackCode=message.observationCode;state.completed=message.completed;}
  render();
 });
-button.addEventListener('click',()=>{if(!state.ready||state.posted||!frame.contentWindow)return;state.posted++;button.disabled=true;frame.contentWindow.postMessage(command,location.origin);render();});
+const start=(mode:'continuous'|'interrupt')=>{if(!state.ready||state.posted||!frame.contentWindow)return;state.mode=mode;state.posted++;button.disabled=true;interruptButton.disabled=true;frame.contentWindow.postMessage(command,location.origin);render();};
+button.addEventListener('click',()=>start('continuous'));
+interruptButton.addEventListener('click',()=>start('interrupt'));
+window.addEventListener('pagehide',()=>clearTimeout(holdTimer),{once:true});
 frame.src='/child.html?parentOrigin='+encodeURIComponent(location.origin);
 render();
 `)

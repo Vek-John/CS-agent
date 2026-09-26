@@ -8,6 +8,12 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：暂停验证不能只比较父页缓存时钟
+
+- 方法：真实Viewer自然播放后以同一工具身份pause，等待真实墙钟1.2秒，再发送幂等pause使Viewer重新发出当前状态，确认时钟停住；随后resume必须从该点继续。这避免因paused期间不再发PLAYBACK_STATE而把父页缓存不变误当真实暂停。
+- 观察：两次实际paused位置均合成96，间隔1204ms；恢复首个playing位置96且随后增长。一次工具、一次resume、一次成功CUE_PLAYED，最终返回128暂停；错误0，画布稳定。只增加验收driver，不改产品时钟/ACK。
+- 限制：合成小场景，未测真实Demo/模型/数据库或native A5；没有跨设备延迟承诺。[记录](validation/VIEWER_ACTION_INTERRUPTION.md)。
+
 ## 2026-09-27：真实播放ACK与可见渲染要分开验收
 
 - 决策：使用小合成Replay、真实ViewerStage/useReplay/ViewerMap/bridge和父iframe；root唯一控制browser/server，运行前先做RAF/能力smoke。构建静态产物与白名单资源，不运行全repo dev server或加载大Demo。

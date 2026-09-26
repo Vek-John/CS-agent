@@ -2,6 +2,17 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：真实动作工具暂停与恢复（2026-09-27）
+
+- ID viewer-action-interruption，基线ca82c56 clean；root独占既有viewer-action-smoke脚本/docs及全部服务/浏览器/checks/push，无新委派，前owner已RELEASE。沿已读emil/apple使用原生验收按钮，不改产品界面或Viewer代码。
+- A1仅新增可选暂停/恢复场景：真实playing到合成96后发送当前call身份pause；实际paused消息记录时钟，等真实墙钟约1.2秒后再发同身份pause以重新读取Viewer当前状态，不靠缓存值断言；相同位置才resume。A2实际resume状态从暂停位置出发继续，最终原call恰好一次ACK并回decision暂停。A3timer/tab/server退出，相关tests/两端TS/build后push。默认连续播放验收仍可用。
+- 风险/边界：driver计时器只调度控制消息，不能替换Viewer RAF/时钟或注入ACK；只一个小合成Replay，不加载真实Demo/模型/DB，不改旧A5。单root controller、每浏览器场景60秒、同基础设施两失败简化；复用上一轮显式Tailwind source和mount前CSS门，异常画布立即关页。无数据迁移/安装/发布。
+
+
+- 交付：真实IAB时钟pauseTick96，1204ms后用第二条同身份pause重新取当前值仍96；resume首个playing值96并继续。一次工具、一次resume、一次SUCCEEDED/CUE_PLAYED，最终返回合成128暂停，errors=[]、canvas2496×1280稳定。可选driver场景已加入原harness，产品代码未改。[记录](validation/VIEWER_ACTION_INTERRUPTION.md)。
+- 集中复查driver只发真实命令/读真实事件、不替换时钟与ACK；小构建、23相关tests、两端TS/production build通过。root清理hold timer/tab/4321server，全部进程退出；无真实Demo/模型/用户库，未重复完整阶段矩阵。
+- 下一有限目标（viewer-action-completion-feedback）：这两次实际画面在已经返回decision并收到成功ACK后仍显示“正在回到决策点”。依据已观察到的完成状态，只修该提示为完成语义，避免用户把已就绪当作仍在等待；保留真实终点/暂停/ACK门，复用小harness作一次文案状态验收，不再扩大播放控制测试矩阵。
+
 ## 已交付：真实Viewer动作播放小验收（2026-09-27）
 
 - ID basic-route-viewer-action，基线bd83113 clean，7f2b实际checkout；partial_revision_restore默认配置独占独立harness脚本/小fixture素材，root独占docs、浏览器与服务生命周期/最终验证/push。前执行者已RELEASE；不改Viewer产品代码或旧patch，发现问题按证据再分配。

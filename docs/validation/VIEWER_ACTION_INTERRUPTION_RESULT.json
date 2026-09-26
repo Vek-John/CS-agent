@@ -1,0 +1,26 @@
+{
+  "source": "root CUA IAB observed DOM",
+  "synthetic": true,
+  "posted": 1,
+  "pauseCommands": 2,
+  "pauseProbeExplanation": "Second same-identity pause requests fresh actual Viewer state after hold",
+  "resumeCommands": 1,
+  "pauseTick": 96,
+  "checkedPauseTick": 96,
+  "heldMs": 1204,
+  "firstResumedTick": 96,
+  "movedAfterResume": true,
+  "ackCount": 1,
+  "ackStatus": "SUCCEEDED",
+  "ackCode": "CUE_PLAYED",
+  "completed": true,
+  "lastTick": 128,
+  "playing": false,
+  "speed": 1,
+  "interruptionPassed": true,
+  "errors": [],
+  "canvasPixels": {
+    "width": 2496,
+    "height": 1280
+  }
+}
