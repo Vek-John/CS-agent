@@ -476,7 +476,7 @@ describe("teaching diagnosis trust and evidence boundaries", () => {
     expect(output.cueCase.transferRule?.unless).toMatch(/无法验证/);
   });
 
-  it("partially supports an explicit teammate coverage gap and keeps evidence on the USER claim", () => {
+  it("keeps partial coverage evidence on the condition without verifying the USER expectation", () => {
     const output = diagnoseCue(input({
       cueId: "cue-trade-gap",
       reflection: reflection({ cueId: "cue-trade-gap", selectedGoal: "TRADE", rawText: "我以为队友会跟我一起补枪" }),
@@ -489,8 +489,9 @@ describe("teaching diagnosis trust and evidence boundaries", () => {
     expect(output.cueCase.diagnosticResult).toMatchObject({ status: "PARTIALLY_SUPPORTED" });
     expect(output.cueCase.hinge?.verification).toBe("PARTIALLY_SUPPORTED");
     expect(output.cueCase.diagnosticResult?.explanation).toContain("还需确认你和队友能否在相近时间看到同一个对手");
-    expect(teammateClaim).toMatchObject({ source: "USER", verification: "PARTIALLY_SUPPORTED" });
-    expect(teammateClaim?.supportingRefs).toEqual(expect.arrayContaining([...evidenceRefs]));
+    expect(teammateClaim).toMatchObject({ source: "USER", verification: "UNVERIFIABLE" });
+    expect(teammateClaim?.supportingRefs).toEqual([]);
+    expect(evidenceRefs).toContain("decision-trade-gap");
     expect(output.learningThread.userModel.expectedTeammateAction).toContain("队友会跟我一起补枪");
   });
 
@@ -752,5 +753,37 @@ describe("information evidence needs a claim-bound contradiction", () => {
     expect(output.cueCase.transferRule?.do).not.toContain("你描述的声音");
     expect(output.cueCase.reflection?.rawText).toBe(rawText);
     expect(output.cueCase.diagnosticResult?.explanation).toContain("对应关系");
+  });
+});
+
+
+describe("condition measurements do not verify arbitrary user wording", () => {
+  it.each([
+    ["我没甲", { health: 100, armor: 100, hasHelmet: true }, "SUPPORTED"],
+    ["资源充足，我有100甲", { health: 100, armor: 100, hasHelmet: true }, "SUPPORTED"],
+    ["我没有头盔", { health: 100, armor: 100, hasHelmet: true }, "SUPPORTED"],
+    ["我没甲", { health: 2, armor: 0, hasHelmet: false }, "PARTIALLY_SUPPORTED"],
+    ["资源很充足", { health: 2, armor: 0, hasHelmet: false }, "PARTIALLY_SUPPORTED"],
+  ] as const)("keeps measured resources separate from %s", (rawText, resources, status) => {
+    const output = diagnoseCue(input({ reflection: reflection({ rawText }), decisionResources: { ...resources, evidenceRefs: ["resource-sample"] } }));
+    const result = output.cueCase.diagnosticResult!;
+    const claim = output.cueCase.claims.find(item => item.type === "RESOURCE_BELIEF")!;
+    expect(result.status).toBe(status);
+    expect(result.measurements.find(item => item.id.endsWith("armor"))?.value).toBe(resources.armor);
+    expect(claim).toMatchObject({ source: "USER", verification: "UNVERIFIABLE", supportingRefs: [], contradictingRefs: [] });
+    expect(claim.content).toContain(rawText);
+    expect(output.cueCase.hinge?.verification).toBe(status);
+    expect(output.cueCase.verdict?.type).toBe("INCONCLUSIVE");
+  });
+
+  it("does not turn zero living teammates into a blanket refutation of earlier expectations", () => {
+    const output = diagnoseCue(input({ reflection: reflection({ selectedGoal: "TRADE", rawText: "我以为队友会跟我" }),
+      decisionRoster: { aliveTeammates: 0, evidenceRefs: ["roster-zero"] } }));
+    expect(output.cueCase.diagnosticResult?.status).toBe("CONTRADICTED");
+    expect(output.cueCase.diagnosticResult?.measurements[0]?.value).toBe(0);
+    expect(output.cueCase.claims.find(item => item.type === "TEAMMATE_BELIEF")).toMatchObject({
+      verification: "UNVERIFIABLE", supportingRefs: [], contradictingRefs: [], source: "USER",
+    });
+    expect(output.cueCase.verdict?.type).toBe("INCONCLUSIVE");
   });
 });

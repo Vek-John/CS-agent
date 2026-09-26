@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：条件测量与用户原话验证分离（2026-09-26）
+
+- ID condition-claim-separation，基线f39355b clean，主控独占diagnosis.ts/tests/docs；现有owner RELEASE。目标是保留真实资源/人数测量与条件状态，但不把整体SUPPORTED/PARTIAL/CONTRADICTED复制给任意USER信念及refs。
+- 流程：资源/人数→diagnostic result与hinge→USER原话单独保持未核实。A1“没甲”配100甲、同测量不同原话和零队友反例；A2保留数值/条件/引用/原文与最终保守判决，显式目标仍为用户自述；A3一次修订/Memory/恢复不受影响；A4相关tests/TS/build及只读窄审，文档commit/push。
+- 风险/边界：未建立逐条主张对应证据前，不能从同主题条件测试推论原话真假。不是删测量或重算旧数据，不编新schema/NLP/模型。5分钟红例、10分钟实现、15分钟验证；无用户DB/服务/模型，主控清进程，原UI A5独立待验。
+
+- 结果：5个有效红例复现（另1初版fixture未命中资源词，已改为真实可分类陈述）；同一资源测量不能证明任意原话，零队友条件也不直接否定先前预期。删除通用claim状态/refs复制，相关非GOAL未核实，诊断数值/条件/ref完整保留。旧覆盖缺口测试仍验condition PARTIAL，已不要求错误支持USER；7文件218tests、TS/build通过，revision_semantics_review默认只读终审无must-fix、RELEASE。[证据](validation/CONDITION_CLAIM_SEPARATION.md)。
+- 边界/后继：不重算旧claim；GOAL仅支持自述，当前不自动验证自由文本命题。已读Memory policy两Demo可EMERGING及boundedClaims保留claim字段；下一项小例核实两个INCONCLUSIVE点进入Agent Brief时是否完整保留不确定说明，不能仅因生命周期活跃就改promotion策略，不重做存储审计。无模型/用户DB/服务，测试/build退出，push后释放；UI A5独立待验。
+
 ## 已交付：信息反证必须对应用户主张（2026-09-26）
 
 - ID information-contradiction-boundary，基线313a8d1 clean；主控拥有diagnosis.ts/tests、相关两fixture断言/docs；revision_semantics_review默认配置8分钟只读输入契约，无并写。

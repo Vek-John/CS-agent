@@ -735,7 +735,6 @@ function explicitIrreversibleAction(input: TeachingDiagnosisInput): boolean {
 }
 
 function updateClaimVerification(claims: readonly UserClaim[], result: DiagnosticResult): UserClaim[] {
-  const evidenceRefs = unique(result.evidenceRefs).slice(0, 32);
   const relevantTypes = new Set<UserClaimType>(
     result.capabilityId === "VERIFY_TRADE_ASSUMPTION" || result.capabilityId === "VERIFY_SYNC_ASSUMPTION"
       ? ["TEAMMATE_BELIEF", "TACTICAL_CONTEXT"]
@@ -750,14 +749,12 @@ function updateClaimVerification(claims: readonly UserClaim[], result: Diagnosti
   return claims.map((item) => {
     if (item.type === "GOAL") return { ...item, source: "USER", verification: "SUPPORTED" };
     if (!relevantTypes.has(item.type)) return { ...item, source: "USER" };
-    const supporting = result.status === "SUPPORTED" || result.status === "PARTIALLY_SUPPORTED";
-    const contradicting = result.status === "CONTRADICTED";
+    // A condition-level measurement does not prove the user's free-text
+    // proposition. Keep its result/refs on the diagnostic, not on the claim.
     return {
       ...item,
       source: "USER",
-      verification: result.status,
-      supportingRefs: supporting ? unique([...item.supportingRefs, ...evidenceRefs]).slice(0, 32) : item.supportingRefs,
-      contradictingRefs: contradicting ? unique([...item.contradictingRefs, ...evidenceRefs]).slice(0, 32) : item.contradictingRefs,
+      verification: "UNVERIFIABLE",
       limitations: unique([...item.limitations, "这是你补充的经历，回放尚未证实。"]),
     };
   });

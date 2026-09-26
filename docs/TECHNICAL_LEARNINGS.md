@@ -2112,3 +2112,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：当前契约没有命题/主体/时空绑定，不再增加regex补丁，删除该定罪分支；保留引用，返回UNVERIFIABLE/INCONCLUSIVE和具体待核的信息来源/对象/时点。视觉/一般信息不再被写成“你描述的声音”。保留枚举及历史读取，不宣称用户已被证明正确。
 - 验证：6红转绿，USER原文保持、contradictingRefs为空；原Memory与总结fixture改为信息→同步仍有规则变化，不再依赖错误BELIEF_INCORRECT前提。9文件179tests、TypeScript/production build通过，独立只读实际diff复核无must-fix并RELEASE。[证据](validation/INFORMATION_CONTRADICTION_BOUNDARY.md)。
 - 限制：新信息诊断不能输出已证实/已反驳，直至有可靠对应证据；没有改历史或运行模型/真实Demo/用户DB。后继同类真实线索是updateClaimVerification把资源预算状态直接套给任意RESOURCE_BELIEF，需要用不同用户原话与同资源测量核实，而不是反复跑旧拒判集合。
+
+
+## 2026-09-26：条件结果不能代替逐条USER命题核验
+
+- 证据：updateClaimVerification按capability关联类型后，通用复制result.status和全部refs；“我没甲”在100甲样本下被SUPPORTED，低资源测量给“资源很充足”PARTIAL，零队友直接给先前期待CONTRADICTED。5项有效红例；另1初版fixture“我的护甲是100”未命中当前RESOURCE词，改为包含资源的自然陈述，未扩分类器。
+- 决定：只取消条件状态/引用向自由文本命题的自动传播；相关非GOAL为UNVERIFIABLE，未涉及保持UNTESTED，GOAL保持自述含义。数值、diagnostic/hinge状态和refs保留，独立的零队友配合条件仍CONTRADICTED；不把未知改成支持用户。
+- 验证：新生成claims为空引用，初次/修订均重建所以无旧verified refs混入；旧覆盖缺口回归改为condition PARTIAL与原refs保持、USER未知。7文件218tests、TypeScript和production build通过，独立只读实际diff复核无must-fix并RELEASE。[证据](validation/CONDITION_CLAIM_SEPARATION.md)。
+- 限制/后继：没有逐条语义核验，旧产物不重算，无用户DB或模型。下一项仅检查不确定的学习记录经两Demo聚合、Brief压缩后是否仍明确未知，不预设EMERGING状态本身就是错误。
