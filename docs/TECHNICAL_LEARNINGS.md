@@ -8,6 +8,12 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：授权等待与Demo传输生命周期分开
+
+- 问题/决策：导入前的小IMPORT授权API原来无请求期限，Host因此可能始终等token。它只签发内存授权、默认60秒TTL，改用既有HISTORY20秒fetch+body期限，不碰文件流/解析或自动重试。
+- 验证：fetch/body两红→绿，6新增/42相关tests、TS/build通过；A超时不取消后来B，迟到token不交付，HTTP错误和metadata保持。[记录](validation/IMPORT_CAPABILITY_DEADLINE.md)。未GUI或真实网络。
+- 后继：真实Viewer源码显示主onInput缺少.cs2dv入口已有的清空value行为，下一步最小核实同Demo重选能否重新触发授权，不增加无关协议或重构。
+
 ## 2026-09-27：自动恢复选人不是新建复盘意图
 
 - 问题：Runtime匹配产生SELECT_PLAYER后，Host原managed选人分支会在恢复分析入口前创建空Review；dedup未打开既有历史的路径确实可达。

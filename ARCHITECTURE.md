@@ -265,6 +265,8 @@ Host先通过既有本人/当前回合/生命/新鲜度与snapshot门，再独�
 
 页面刷新或关闭不会持久化 Replay。桌面首次导入时，用户选择的 `File` 先由 cs2d Viewer 使用 sidecar 签发的短期、一次性 IMPORT capability，经 Viewer 自己的 loopback authority 流式写入应用托管资料库；sidecar 同步计算 SHA-256、校验 Demo 文件头并完成内容寻址落盘，之后 Viewer 才把同一 `File` 交给现有 Worker/WASM 解析。Host、Agent、LLM、Memory、Checkpoint 和日志始终不能读取原始 bytes 或绝对路径。localhost/Web Adapter 不具备该桌面资料库时继续维持既有浏览器本地选择语义。
 
+导入前importCapability仅发送requestId/文件名/大小等小元数据，对fetch与JSON正文共用HISTORY20秒客户端等待期限。当前授权失败沿Host原错误处理结束导入进度，迟到响应不再产生persistSelectedDemo命令；不同requestId的请求各有独立期限，原当前请求归属门保持。该期限不覆盖随后Demo流、WASM解析或验证，不改变默认60秒IMPORT token有效期、一次性用途/对象绑定，也不自动重新申请；服务器可能已签发但未使用的token按原TTL失效，客户端超时不是撤销证明。
+
 桌面重新进入时，持久化的 Review control plane 先从 SQLite 立即恢复；Viewer 随后通过只绑定一个已登记 `demoId` 的短期 READ capability 从托管文件后台重建 Replay。`ReplayAvailability=ABSENT/LOADING` 时不得调用 Director、Narrator、Coach Policy 或推进 Graph。历史恢复的玩家绑定使用 playback-only 命令，不启动胜率 Worker、Director、Narrator、Reflection parser、Adaptive Narrator、Embedding 或 Coach Policy；Artifact 缺失/损坏只能显式提示“重新分析”，不得以历史点击静默补算。没有托管 Review 的旧版 `SessionRecoveryRecord` 可以继续进入兼容的 DORMANT/重新选择流程。
 
 恢复采用双状态 `RecoveryHandshake`：浏览器 Host Recovery Store 拥有冻结 `ReviewPlan`、合法 Session 进度、讲解产物和工具 ledger 摘要；Agent checkpoint 则由运行形态 Adapter 拥有——桌面为 SQLite `BaseCheckpointSaver`，Web/Cloudflare 可为每 session 一个 Durable Object。两侧以会话唯一 `sessionId/runId`、Demo hash、selected player、route id/hash、parser/planner/graph/state/session/recovery 版本、`RecoveryBoundary` 与最近 checkpoint id 精确校验。任一项不匹配都拒绝恢复，用户可以重选文件或创建具有新身份的新复盘。

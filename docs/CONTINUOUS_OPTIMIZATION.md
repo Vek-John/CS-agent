@@ -2,6 +2,13 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：导入前授权请求等待上限（2026-09-27）
+
+- ID import-capability-deadline，基线44f1354 clean，root独占API/小测试/docs，无委派。已核实POST仅≤16KiB元数据、issueImportCapability同步签发内存令牌、默认60秒TTL，无Demo读取或模型；原API plain fetch/body可挂住Host发persistSelectedDemo之前。
+- A1分别挂起fetch/body观察授权不结算；A2复用HISTORY20秒共同期限，仅控制请求；A3迟到token不再交付、新request独立存活、HTTP/请求语义保持、零自动重试；A4相关tests/TS/build和push。原Host requestId当前性门保留，不为后续Demo流/解析加20秒限制。10分钟有限任务，假timer finally清理，零用户Demo/库/网络/GUI。
+- 交付：两个授权挂起红→绿，新请求独立期限与HTTP成功/失败兼容覆盖；6新增/42相关tests、TypeScript和production build通过。root一处API接线并集中复查，进程与计时器清理。[证据](validation/IMPORT_CAPABILITY_DEADLINE.md)。没有真实GUI/网络/文件流测试。
+- 下一有限目标已有具体源码证据：当前Viewer的主Demo onInput只转交files、不清input.value；仅非Host的.cs2dv入口onImportInput会清值。因此初始授权失败后，重新选择同一Demo是否不再触发change需最小验证并复用既有清值行为；不扩大上传/解析流程。
+
 ## 已交付：本地恢复的玩家选择与新历史创建（2026-09-27）
 
 - ID local-recovery-selection，基线81402c2 clean；partial_revision_restore默认配置独占新selection history副作用seam及测试，root拥有Host接线/docs/集成push。先查真实managed导入/恢复自动SELECT_PLAYER路径，不把源码分支存在直接当可达故障。

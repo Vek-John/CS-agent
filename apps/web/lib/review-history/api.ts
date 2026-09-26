@@ -109,7 +109,7 @@ export function createReviewHistoryApi(fetcher: typeof fetch = fetch) {
       return response.payload as ManagedDemoSource;
     },
     async importCapability(input: { requestId: string; originalFilename: string; byteSize: number }): Promise<{ requestId: string; capabilityToken: string }> {
-      return responseJson(await fetcher("/api/review-history/import-capability", { method: "POST", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify(input) }));
+      return await boundedHistoryJson(fetcher, "/api/review-history/import-capability", { method: "POST", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify(input) }, "HISTORY") as { requestId: string; capabilityToken: string };
     },
     async rename(reviewId: string, title: string): Promise<void> {
       await responseJson(await fetcher(`/api/review-history/${encodeURIComponent(reviewId)}`, { method: "PATCH", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify({ title }) }));
