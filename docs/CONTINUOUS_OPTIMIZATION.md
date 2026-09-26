@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：拥挤Brief优先保留完整纠正（2026-09-26）
+
+- ID correction-budget-priority，基线d0794ff clean；主控独占brief.ts/memory.test.ts及必要接线tests/docs，现有owner RELEASE。
+- 目标/流程：含用户纠正的Brief超800→从尾部整条移除低优先级记录/线程及必要偏好→仍超限才舍第二条纠正→完整保留可容纳的首条或安全EMPTY。A1拥挤长thread不再带走能单独容纳的纠正；A2两条短纠正优先于大record/advice；A3原文/limits不截断、source对象不变、身份/授权/无纠正原路径保持；A4相关tests/TS/build及窄审、文档push。
+- 风险：舍记录必须连advice一起舍，不能只删限定；纠正单独加必要限定仍超额时继续EMPTY，不承诺无条件召回。5分钟红例、10分钟实现、15分钟验证；不改query/存储/预算/模型，无用户DB/服务，主控清进程，原锁屏A5独立待验。
+
+- 结果：2红转绿，超长thread不再带走可容纳的首条完整纠正，大record不再挤掉两条短纠正；记录连同advice整体去除，无输入变异。新增首条纠正+顶层限定仍超额的EMPTY覆盖，不截任何纠正文案。5文件72tests、TS/production build通过；revision_semantics_review默认只读终审无must-fix、RELEASE。[证据](validation/CORRECTION_BUDGET_PRIORITY.md)。
+- 限制/后继：按当前有序召回数组舍尾，不是智能相关性排名；默认教练仍仅用纠正提示复核。Memory文本传递本轮阶段收敛。下一项转向可知信息证据：libs/observation支持DIRECT_VISION/SPOTTED，但本轮rg仅发现合成/契约用例，尚未证明当前parser提供真实输入；先查实际生产接线与上游一手源码，明确可采集语义，不能凭spotted字段名授予真实视线或队内语音。无模型/用户DB/服务，测试/build退出，push后释放；UI A5独立待验。
+
 ## 已交付：长用户纠正完整传递（2026-09-26）
 
 - ID complete-user-correction，基线4bffdb5 clean；主控拥有brief.ts、history-idempotency.integration.test.ts、memory.test.ts/docs，所有旧owner RELEASE。

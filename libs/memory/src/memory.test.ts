@@ -1422,9 +1422,38 @@ it("keeps each recalled correction whole when the context budget drops another c
   const crowded = MemoryBriefSchema.parse({ ...source, activeThreads: [{ ...makeThread(), scope: "CROSS_DEMO",
     transferRule: { ...makeThread().transferRule, when: long, do: long, unless: long } }] });
   const fallback = buildAgentMemoryBrief(crowded);
-  expect(fallback.source).toBe("EMPTY");
-  expect(fallback.corrections).toEqual([]);
+  expect(fallback.source).toBe("STRUCTURED");
+  expect(fallback.corrections).toEqual([{ content: contents[0], source: "USER", revision: 2 }]);
   expect(fallback.activeThreads).toEqual([]);
-  expect(JSON.stringify(fallback)).not.toContain("最新纠正");
+  expect(JSON.stringify(fallback)).not.toContain("条件");
   expect(approximateMemoryBriefTokens(fallback)).toBeLessThanOrEqual(800);
+  const withRequiredContext = MemoryBriefSchema.parse({ ...source,
+    limitations: Array.from({ length: 8 }, (_, i) => `${i}${"限定".repeat(89)}`),
+  });
+  const unavailable = buildAgentMemoryBrief(withRequiredContext);
+  expect(unavailable.source).toBe("EMPTY");
+  expect(unavailable.corrections).toEqual([]);
+  expect(approximateMemoryBriefTokens(unavailable)).toBeLessThanOrEqual(800);
+});
+
+
+it("retains both complete small corrections before crowded lower-priority memory", async () => {
+  const service = makeService(new InMemoryMemoryRepository());
+  await service.ingestEvent(userId, makeEvent(makeProposal("1"), "1"));
+  const saved = await service.ingestEvent(userId, makeEvent(makeProposal("2"), "2"));
+  const long = "条件".repeat(390);
+  const source = MemoryBriefSchema.parse(buildUserMemoryBrief({ records: [{ ...saved.record!,
+    transferRule: { ...saved.record!.transferRule!, when: long, do: long, unless: long },
+    advice: [{ id: "must-drop", when: long, do: long, unless: long, confidence: 0.3, refs: [] }],
+    corrections: [0, 1].map(index => ({ correctionId: `budget-correction-${index}`, memoryId: saved.record!.memoryId,
+      content: `用户纠正${index}：并不是这样。`, source: "USER" as const, revision: 3 - index,
+      createdAt: `2026-09-26T00:00:0${2 - index}.000Z`, refs: [] })),
+  }] }));
+  const before = JSON.stringify(source);
+  const projected = buildAgentMemoryBrief(source);
+  expect(projected.corrections).toEqual(source.corrections.map(c => ({ content: c.content, source: "USER", revision: c.revision })));
+  expect(projected.memories).toEqual([]);
+  expect(JSON.stringify(projected)).not.toContain("条件");
+  expect(JSON.stringify(source)).toBe(before);
+  expect(approximateMemoryBriefTokens(projected)).toBeLessThanOrEqual(800);
 });

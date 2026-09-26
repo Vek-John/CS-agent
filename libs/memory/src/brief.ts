@@ -231,22 +231,32 @@ export function buildAgentMemoryBrief(input: UserMemoryBrief): Record<string, un
     ...(input.semanticStatus ? { semanticStatus: input.semanticStatus } : {}),
   };
 
-  // Remove the least important sections first if an unusually verbose record
-  // still exceeds the target. Every result remains a valid top-level brief.
-  if (approximateTokens(candidate) > MAX_AGENT_MEMORY_BRIEF_TOKENS) {
-    candidate.corrections = (candidate.corrections as unknown[]).slice(0, 1);
-  }
-  if (approximateTokens(candidate) > MAX_AGENT_MEMORY_BRIEF_TOKENS) {
-    candidate.memories = (candidate.memories as unknown[]).slice(0, 1);
-  }
-  if (approximateTokens(candidate) > MAX_AGENT_MEMORY_BRIEF_TOKENS) {
-    candidate.activeThreads = (candidate.activeThreads as unknown[]).slice(0, 1);
-  }
-  if (approximateTokens(candidate) > MAX_AGENT_MEMORY_BRIEF_TOKENS) {
-    candidate.limitations = (candidate.limitations as string[]).slice(0, 2);
-  }
-  if (approximateTokens(candidate) > MAX_AGENT_MEMORY_BRIEF_TOKENS) {
-    candidate.preferences = Object.fromEntries(Object.entries(candidate.preferences as Record<string, unknown>).slice(0, 4));
+  if ((candidate.corrections as unknown[]).length > 0) {
+    // A user correction takes precedence over recalled teaching. Remove whole
+    // entries (including their advice and qualifications), never text tails.
+    for (const section of ["memories", "activeThreads"] as const) {
+      const entries = candidate[section] as unknown[];
+      while (entries.length > 0 && approximateTokens(candidate) > MAX_AGENT_MEMORY_BRIEF_TOKENS) entries.pop();
+    }
+    if (approximateTokens(candidate) > MAX_AGENT_MEMORY_BRIEF_TOKENS) candidate.preferences = {};
+    const corrections = candidate.corrections as unknown[];
+    while (corrections.length > 1 && approximateTokens(candidate) > MAX_AGENT_MEMORY_BRIEF_TOKENS) corrections.pop();
+    // Keep all projected source limitations. If even the first complete
+    // correction with those limitations cannot fit, fall back below.
+  } else {
+    // Preserve the existing no-correction budget path.
+    if (approximateTokens(candidate) > MAX_AGENT_MEMORY_BRIEF_TOKENS) {
+      candidate.memories = (candidate.memories as unknown[]).slice(0, 1);
+    }
+    if (approximateTokens(candidate) > MAX_AGENT_MEMORY_BRIEF_TOKENS) {
+      candidate.activeThreads = (candidate.activeThreads as unknown[]).slice(0, 1);
+    }
+    if (approximateTokens(candidate) > MAX_AGENT_MEMORY_BRIEF_TOKENS) {
+      candidate.limitations = (candidate.limitations as string[]).slice(0, 2);
+    }
+    if (approximateTokens(candidate) > MAX_AGENT_MEMORY_BRIEF_TOKENS) {
+      candidate.preferences = Object.fromEntries(Object.entries(candidate.preferences as Record<string, unknown>).slice(0, 4));
+    }
   }
   if (approximateTokens(candidate) > MAX_AGENT_MEMORY_BRIEF_TOKENS) {
     return {

@@ -2144,3 +2144,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：corrections.content直接传递Memory域接受的完整内容，保留USER/revision与身份剥离，不改500/1200字来源门或800预算。预算按条舍弃，绝不发半条纠正。
 - 验证：原目标纠正/重试/机会计数/consent链保持；两条近1200字合法纠正超额只留第一条完整文本，长规则拥挤仍按原EMPTY全清。4文件69tests、TypeScript/production build通过，主控集中复核单行生产变化。[证据](validation/COMPLETE_USER_CORRECTION.md)。
 - 限制/后继：传递完整不等于教练语义理解；未重写旧Graph/用户Memory。拥挤例证明一条超长低优先级thread会连能单独放下的纠正一起清掉，下一项可改按整条低优先级内容释放预算，优先保留完整纠正，不抬预算或截句。
+
+
+## 2026-09-26：先舍低优先级整条内容，保住完整用户纠正
+
+- 证据：原预算先舍第二条纠正，再各保留一个record/thread；其中一个过长就整份EMPTY，使能单独容纳的首条纠正或两条短纠正也消失。2红例复现。
+- 决定：只在有纠正时按尾部整条移除memories、activeThreads，再清偏好，最后才舍次要纠正；保留顶层限定，首条+限定仍不合预算则EMPTY。无纠正旧策略、800预算、删除/身份/授权门不变；不删除句子或产生残缺advice。
+- 验证：完整长纠正、双短纠正、记录连advice清理、输入不变、首条+8条限定超额EMPTY；5文件72tests、TypeScript/production build通过，独立只读终审无must-fix。[证据](validation/CORRECTION_BUDGET_PRIORITY.md)。
+- 限制/后继：按既有顺序舍尾，非智能相关性排序；仍非纠正语义推理。结束此轮Memory文本修复，转查真实可知信息来源：Observation虽接受DIRECT_VISION/SPOTTED，当前生产parser是否提供尚未证实；下一轮以实际接线和一手源码先明确能力边界，不用合成观察冒充真实视线。
