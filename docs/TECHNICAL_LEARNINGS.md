@@ -8,6 +8,14 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：默认模型读取必须接上有效进展
+
+- 证据：首进展成本调查发现默认WebGPU路径直接等待response.arrayBuffer，下载过程从不调用onProgress；首条有效进度要等fetch、hash、session、warmup及首批推理。WASM已有stream字节进度，不能据此推断默认WebGPU也具备。
+- 历史测量边界：原主目录保留batch16冷样本fetch55.145ms/session601.335ms/warmup162.350ms/total16698.580ms。它是旧环境的7,239样本，不是本轮或跨设备SLA；warm记录沿用cached fetch/session数字，不可将重复字段当每次新增等待。未重新跑大Demo或ONNX。
+- 决策：仅为默认WebGPU补实际字节进度及局部读取取消；不改模型、采样、Provider和WASM，不增加虚假阶段百分比，不降低完整SHA验证门。空chunk不计有效进展，未知总长度不制造100%。
+- 验证：18新增/55相关tests、两端TS/build通过，实际runtime入口未EOF首chunk原红→绿；root复查完整SHA门和Worker上报接线。取消先reject再cancel且不等待底层cancel，reader锁/listener释放；无reader只能完成时上报，不虚构早期进度。[记录](validation/WIN_RATE_DOWNLOAD_PROGRESS.md)。
+- 限制：ORT/hash mock，真实stream和feature/timeline builder；未真实GPU/下载/内存测量。chunks与连续buffer拼合时短暂双份字节，未声称内存下降。session创建和首批编译仍可能无进度，既有120秒空闲策略与主动基础路线出口保留；不声称推理变快。
+
 ## 2026-09-27：用户跳过可选推理必须绑定当前请求
 
 - 问题：空闲期限只能处理停滞；真实进度持续推进但耗时较长时，用户仍无法主动进入基础带看。直接暴露全局cancel会误伤后继推理，且已有生命周期取消语义会退出选择流程而非生成基础路线。

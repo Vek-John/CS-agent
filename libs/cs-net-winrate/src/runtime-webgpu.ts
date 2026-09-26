@@ -525,6 +525,67 @@ function profileDurationMs(): number {
   return profileEvents.reduce((total, event) => total + Math.max(0, event.endTime - event.startTime) / 1_000_000, 0);
 }
 
+async function readWebGpuModelBytes(response: Response, options: WebGpuRuntimeOptions): Promise<Uint8Array> {
+  throwIfAborted(options.signal);
+  const header = response.headers.get("content-length");
+  const length = header && /^\d+$/.test(header) ? Number(header) : 0;
+  const encoding = response.headers.get("content-encoding");
+  const total = (!encoding || encoding.toLowerCase() === "identity") && Number.isSafeInteger(length) && length > 0 ? length : 0;
+  const reader = response.body?.getReader?.();
+  let complete = false;
+  let cancelled = false;
+  const cancelReader = () => {
+    if (!reader || cancelled) return;
+    cancelled = true;
+    try { void reader.cancel().catch(() => {}); } catch { /* Preserve the original failure. */ }
+  };
+  let rejectAbort!: (error: Error) => void;
+  const aborted = new Promise<never>((_, reject) => { rejectAbort = reject; });
+  const onAbort = () => {
+    const error = new Error("cs-net WebGPU inference aborted");
+    error.name = "AbortError";
+    // Reject before cancel: cancelling can resolve a pending read as EOF.
+    rejectAbort(error);
+    cancelReader();
+  };
+  options.signal?.addEventListener("abort", onAbort, { once: true });
+  const report = (completed: number) => {
+    if (completed > 0) options.onProgress?.({
+      phase: "downloading", completed, total: total >= completed ? total : 0,
+      detail: "正在下载胜率模型",
+    });
+  };
+  try {
+    if (!reader) {
+      const buffer = new Uint8Array(await Promise.race([response.arrayBuffer(), aborted]));
+      throwIfAborted(options.signal);
+      report(buffer.byteLength);
+      complete = true;
+      return buffer;
+    }
+    const chunks: Uint8Array[] = [];
+    let completed = 0;
+    while (true) {
+      const { done, value } = await Promise.race([reader.read(), aborted]);
+      throwIfAborted(options.signal);
+      if (done) break;
+      if (!value.byteLength) continue;
+      chunks.push(value);
+      completed += value.byteLength;
+      report(completed);
+    }
+    const buffer = new Uint8Array(completed);
+    let offset = 0;
+    for (const chunk of chunks) { buffer.set(chunk, offset); offset += chunk.byteLength; }
+    complete = true;
+    return buffer;
+  } finally {
+    options.signal?.removeEventListener("abort", onAbort);
+    if (!complete) cancelReader();
+    try { reader?.releaseLock(); } catch { /* Cleanup must not replace the read/abort failure. */ }
+  }
+}
+
 async function loadWebGpuModel(url: string, batchSize: number, options: WebGpuRuntimeOptions): Promise<LoadedWebGpuSession> {
   throwIfAborted(options.signal);
   const inspected = await inspectWebGpu();
@@ -541,11 +602,12 @@ async function loadWebGpuModel(url: string, batchSize: number, options: WebGpuRu
     const fetchStarted = now();
     const response = await fetch(url, { signal: options.signal });
     if (!response.ok) throw new Error(`WEBGPU_MODEL_FETCH_FAILED:${response.status}`);
-    const modelBytes = Number(response.headers.get("content-length") ?? 0);
-    const buffer = new Uint8Array(await response.arrayBuffer());
+    const buffer = await readWebGpuModelBytes(response, options);
     const fetchMs = now() - fetchStarted;
     throwIfAborted(options.signal);
-    if (await sha256Hex(buffer) !== CS_NET_WEBGPU_FP16_MODEL_SHA256) {
+    const digest = await sha256Hex(buffer);
+    throwIfAborted(options.signal);
+    if (digest !== CS_NET_WEBGPU_FP16_MODEL_SHA256) {
       throw new Error("WEBGPU_MODEL_SHA256_MISMATCH");
     }
 
@@ -566,7 +628,7 @@ async function loadWebGpuModel(url: string, batchSize: number, options: WebGpuRu
       capability: inspected.capability,
       fetchMs,
       sessionCreateMs,
-      modelBytes: modelBytes || buffer.byteLength,
+      modelBytes: buffer.byteLength,
       profilingEnabled: profilingSetup.enabled,
       profilingReason: profilingSetup.reason,
       ortWarnings: captured.warnings,

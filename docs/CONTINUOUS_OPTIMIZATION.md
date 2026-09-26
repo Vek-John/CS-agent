@@ -2,6 +2,18 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：默认WebGPU下载上报真实字节进度（2026-09-27）
+
+- ID win-rate-download-progress，由win-rate-first-progress-cost的源码与旧证据调查收敛。基线a2a20b7 clean，7f2b实际工作树；前执行者完成/RELEASE后复用partial_revision_restore默认配置，独占runtime-webgpu.ts私有读取逻辑及相关小测试；root独占docs/ARCH、独立复查/两端TS/build/push。不改WASM runtime、模型/Provider/采样、Host/Viewer或用户数据。
+- 新证据：默认WebGPU loadWebGpuModel直接arrayBuffer，没有downloading消息，首次有效进展在完整fetch/hash/session/warmup与首批推理之后；WASM已有字节进度。当前本地FP16模型19,452,396B与asyncify24,254,953B存在，不需安装或下载。原主目录旧batch16原始记录可读，cold fetch55ms/session601ms/warmup162ms/total16699ms；warm字段复用cached session，不能误相加，也不当本次测量或120秒校准。
+- A1实际chunk到达即严格递增completed，不等EOF；无效/缺失content-length以unknown total=0，非空实际字节才算进展。A2小流/无reader兼容、挂起read/arrayBuffer取消及时结算、锁/listener清理。A3实际runWebGpu接线保留完整SHA门，读失败/取消不进ORT，digest后取消仍不create；结果算法不改。A4相关tests/Viewer idle联动、两端TS/build及独立diff复查后push。
+- 风险/资源：reader取消可能将read变done，须先拒绝abort再cancel；cancel不能成为新无限等待，finally释放锁/listener且清理异常不覆盖主错误。分块缓存仅一次拼合，19.45MB模型拼合时有临时额外内存，禁止每chunk重复拼大数组。15分钟有限任务、5分钟接口检查、test60秒，同基础设施两失败简化。小stream/mock ORT+hash，不跑真实ONNX/Demo/浏览器/SQLite，不新建服务；测试由执行者清理，root负责build。
+
+
+- 验证完成：实际runWebGpuFp16Inference入口未EOF的首chunk进度原红→绿，18新增/4文件55相关tests通过，两端TypeScript/production build通过，root独立读diff和Worker真实onProgress接线。覆盖未知/非法/压缩total、空chunk、无reader兼容、read错误、挂起read/arrayBuffer取消、底层cancel挂起、hash失败及digest期间取消；真实feature/timeline builder消费保持。modelBytes记录真实buffer长度，不信响应头。执行者RELEASE，资源/构建进程清理。[记录](validation/WIN_RATE_DOWNLOAD_PROGRESS.md)。
+- 限制：ORT和hash为mock，未真实GPU/网络下载/内存测量；下载完成后session/warmup仍可能无进度。既有Viewer120秒续期source测试同时通过，但没有把完整Worker浏览器链路当本轮实测。
+- 下一有限目标（basic-route-default-tool）：核实无胜率基础路线进入默认Coach Policy后能否选择合法的非胜率工具，并在真实Host ACK或超时后只继续一次。已有UNAVAILABLE能力门单测，既有整场consumeGuidedRoute强制POLICY_NOT_EXPECTED/NO_VISUAL_TOOL_EXPECTED；先查是否已有默认策略完整接线证据，缺口才用一个小cue补Adapter→默认Policy→Host工具→继续的有限链路，不重复无工具整场或拒判集。
+
 ## 已交付：等待胜率时主动转基础路线（2026-09-27）
 
 - ID win-rate-user-fallback，基线009ce8a clean；真实7f2b checkout复用，partial_revision_restore默认配置独占Host/setup flow、bridge contract、Viewer/0030/registry与对应tests；root独占docs/ARCH、独立复查和最终TS/build/commit push。上轮执行者已完成并RELEASE，无重复派发；其他工作树不动。
