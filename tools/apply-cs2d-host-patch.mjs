@@ -22,6 +22,7 @@ export const CS2D_PATCH_FILES = Object.freeze([
   resolve(root, 'tools/cs2d-host/patches/0011-current-shot-identity.patch'),
   resolve(root, 'tools/cs2d-host/patches/0012-active-weapon-ammo.patch'),
   resolve(root, 'tools/cs2d-host/patches/0013-prior-tick-ammo-cache.patch'),
+  resolve(root, 'tools/cs2d-host/patches/0014-bomb-identity.patch'),
 ])
 
 export const CS2D_REUSE_DECISIONS = Object.freeze({
@@ -78,6 +79,8 @@ const CONTROLLED_ORT_ASSETS = new Set([
 ])
 
 const REQUIRED_MARKERS = [
+  { name: 'bomb identity version', bombIdentity: true, path: 'packages/parser/src/lib.rs', pattern: /ammo-clip\.v2\.bomb-identity\.v1/ },
+  { name: 'current bomb identity', bombIdentity: true, path: 'packages/parser/src/collector.rs', pattern: /let resolved = verified_event_pawn\(ctx, ev_i32\(ge, "userid_pawn"\)\);[\s\S]*?let player = resolved\.as_ref\(\)\.and_then/ },
   { name: 'current shot identity', shotIdentity: true, path: 'packages/parser/src/collector.rs', pattern: /if let Some\(\(p, shooter\)\) = verified_event_pawn\(ctx, ev_i32\(ge, "userid_pawn"\)\)/ },
   { name: 'shot identity version', shotIdentity: true, path: 'packages/parser/src/lib.rs', pattern: /hurt-events\.v1\.shot-identity\.v2/ },
   { name: 'separate player hurt source', hurtEvents: true, path: 'packages/parser/src/collector.rs', pattern: /hurt_victim_steam\(ctx, ev_i32\(ge, "userid_pawn"\)\)/ },
@@ -352,7 +355,7 @@ function diffCheck(upstream) {
   }
 }
 
-function markerErrors(upstream, includeManagedLibrary = true, includeShotActor = true, includeTeachingPlayback = true, includeRoundClock = true, includeHurtEvents = true, includeShotIdentity = true) {
+function markerErrors(upstream, includeManagedLibrary = true, includeShotActor = true, includeTeachingPlayback = true, includeRoundClock = true, includeHurtEvents = true, includeShotIdentity = true, includeBombIdentity = true) {
   const errors = []
   for (const marker of REQUIRED_MARKERS) {
     if (!includeManagedLibrary && marker.managedLibrary) continue
@@ -361,6 +364,7 @@ function markerErrors(upstream, includeManagedLibrary = true, includeShotActor =
     if (!includeRoundClock && marker.roundClock) continue
     if (!includeHurtEvents && marker.hurtEvents) continue
     if (!includeShotIdentity && marker.shotIdentity) continue
+    if (!includeBombIdentity && marker.bombIdentity) continue
     const file = resolve(upstream, marker.path)
     if (!existsSync(file)) {
       errors.push(`${marker.name}: missing ${marker.path}`)
@@ -422,46 +426,52 @@ function inspectPatchedCheckout(upstream) {
   // generated model assets make older reverse checks intentionally inexact).
   // Only the explicitly supported tail upgrades can advance that checkout,
   // and only when each applies cleanly on top of all other validated markers.
-  const managedLibraryPatch = CS2D_PATCH_FILES.at(-8)
-  const pendingManagedLibraryPatch = !reverseStates.at(-8) && Boolean(managedLibraryPatch) &&
+  // Fixed positions correspond to 0006 through 0014; appending a patch must not retarget an older upgrade.
+  const managedLibraryPatch = CS2D_PATCH_FILES[5]
+  const pendingManagedLibraryPatch = !reverseStates[5] && Boolean(managedLibraryPatch) &&
     run('git', ['apply', '--check', managedLibraryPatch], {
       cwd: upstream,
       capture: true,
       allowFailure: true,
     }).status === 0
-  const shotActorPatch = CS2D_PATCH_FILES.at(-7)
-  const pendingShotActorPatch = !reverseStates.at(-7) && Boolean(shotActorPatch) &&
+  const shotActorPatch = CS2D_PATCH_FILES[6]
+  const pendingShotActorPatch = !reverseStates[6] && Boolean(shotActorPatch) &&
     run('git', ['apply', '--check', shotActorPatch], {
       cwd: upstream,
       capture: true,
       allowFailure: true,
     }).status === 0
-  const teachingPlaybackPatch = CS2D_PATCH_FILES.at(-6)
-  const pendingTeachingPlaybackPatch = !reverseStates.at(-6) && Boolean(teachingPlaybackPatch) &&
+  const teachingPlaybackPatch = CS2D_PATCH_FILES[7]
+  const pendingTeachingPlaybackPatch = !reverseStates[7] && Boolean(teachingPlaybackPatch) &&
     run('git', ['apply', '--check', teachingPlaybackPatch], {
       cwd: upstream,
       capture: true,
       allowFailure: true,
     }).status === 0
-  const roundClockPatch = CS2D_PATCH_FILES.at(-5)
-  const pendingRoundClockPatch = !reverseStates.at(-5) && Boolean(roundClockPatch) &&
+  const roundClockPatch = CS2D_PATCH_FILES[8]
+  const pendingRoundClockPatch = !reverseStates[8] && Boolean(roundClockPatch) &&
     run('git', ['apply', '--check', roundClockPatch], { cwd: upstream, capture: true, allowFailure: true }).status === 0
-  const hurtEventsPatch = CS2D_PATCH_FILES.at(-4)
-  const pendingHurtEventsPatch = !reverseStates.at(-4) && Boolean(hurtEventsPatch) &&
+  const hurtEventsPatch = CS2D_PATCH_FILES[9]
+  const pendingHurtEventsPatch = !reverseStates[9] && Boolean(hurtEventsPatch) &&
     run('git', ['apply', '--check', hurtEventsPatch], { cwd: upstream, capture: true, allowFailure: true }).status === 0
-  const shotIdentityPatch = CS2D_PATCH_FILES.at(-3)
-  const pendingShotIdentityPatch = !reverseStates.at(-3) && Boolean(shotIdentityPatch) &&
+  const shotIdentityPatch = CS2D_PATCH_FILES[10]
+  const pendingShotIdentityPatch = !reverseStates[10] && Boolean(shotIdentityPatch) &&
     run('git', ['apply', '--check', shotIdentityPatch], { cwd: upstream, capture: true, allowFailure: true }).status === 0
-  const ammoPatch = CS2D_PATCH_FILES.at(-2)
-  const pendingAmmoPatch = !reverseStates.at(-2) && Boolean(ammoPatch) &&
+  const ammoPatch = CS2D_PATCH_FILES[11]
+  const pendingAmmoPatch = !reverseStates[11] && Boolean(ammoPatch) &&
     run('git', ['apply', '--check', ammoPatch], { cwd: upstream, capture: true, allowFailure: true }).status === 0
-  const cachePatch = CS2D_PATCH_FILES.at(-1)
-  const pendingAmmoCachePatch = !reverseStates.at(-1) &&
+  const cachePatch = CS2D_PATCH_FILES[12]
+  const pendingAmmoCachePatch = !reverseStates[12] &&
     run('git', ['apply', '--check', cachePatch], { cwd: upstream, capture: true, allowFailure: true }).status === 0
-  if (paths.length > 0 && !reverseStates.at(-1) && !pendingAmmoCachePatch) throw new Error('Prior-tick ammo cache patch is neither exactly applied nor cleanly applicable')
-  if (paths.length > 0 && !reverseStates.at(-2) && !pendingAmmoPatch && !reverseStates.at(-1)) throw new Error('Active weapon ammo patch is neither exactly applied nor cleanly applicable')
+  const bombIdentityPatch = CS2D_PATCH_FILES[13]
+  const pendingBombIdentityPatch = !reverseStates[13] && (pendingAmmoCachePatch ||
+    run('git', ['apply', '--check', bombIdentityPatch], { cwd: upstream, capture: true, allowFailure: true }).status === 0)
+  // The new generatedBy marker intentionally supersedes the 0013 version line.
+  if (paths.length > 0 && !reverseStates[13] && !pendingBombIdentityPatch) throw new Error('Bomb identity patch is neither exactly applied nor cleanly applicable')
+  if (paths.length > 0 && !reverseStates[12] && !pendingAmmoCachePatch && !reverseStates[13]) throw new Error('Prior-tick ammo cache patch is neither exactly applied nor cleanly applicable')
+  if (paths.length > 0 && !reverseStates[11] && !pendingAmmoPatch && !reverseStates[12] && !reverseStates[13]) throw new Error('Active weapon ammo patch is neither exactly applied nor cleanly applicable')
   const errors = paths.length > 0 || patchesExactlyApplied
-    ? markerErrors(upstream, !pendingManagedLibraryPatch, !pendingShotActorPatch, !pendingTeachingPlaybackPatch, !pendingRoundClockPatch, !pendingHurtEventsPatch, !pendingShotIdentityPatch)
+    ? markerErrors(upstream, !pendingManagedLibraryPatch, !pendingShotActorPatch, !pendingTeachingPlaybackPatch, !pendingRoundClockPatch, !pendingHurtEventsPatch, !pendingShotIdentityPatch, !pendingBombIdentityPatch)
     : []
   const decision = classifyPatchedCheckout({
     head,
@@ -470,7 +480,7 @@ function inspectPatchedCheckout(upstream) {
     patchesExactlyApplied,
     markerErrors: errors,
   })
-  return { decision, head, paths, diffCheck: check, patchesExactlyApplied, markerErrors: errors, pendingManagedLibraryPatch, pendingShotActorPatch, pendingTeachingPlaybackPatch, pendingRoundClockPatch, pendingHurtEventsPatch, pendingShotIdentityPatch, pendingAmmoPatch, pendingAmmoCachePatch }
+  return { decision, head, paths, diffCheck: check, patchesExactlyApplied, markerErrors: errors, pendingManagedLibraryPatch, pendingShotActorPatch, pendingTeachingPlaybackPatch, pendingRoundClockPatch, pendingHurtEventsPatch, pendingShotIdentityPatch, pendingAmmoPatch, pendingAmmoCachePatch, pendingBombIdentityPatch }
 }
 
 function applyPatches(upstream) {
@@ -521,14 +531,15 @@ async function main(argv = process.argv.slice(2)) {
     process.stdout.write(`[cs2d-host] reused exact patched checkout at ${CS2D_PIN.slice(0, 7)}\n`)
   } else if (inspection?.decision === CS2D_REUSE_DECISIONS.CONTROLLED_SUPERSET) {
     const pendingPatches = [
-      ...(inspection.pendingManagedLibraryPatch ? [CS2D_PATCH_FILES.at(-8)] : []),
-      ...(inspection.pendingShotActorPatch ? [CS2D_PATCH_FILES.at(-7)] : []),
-      ...(inspection.pendingTeachingPlaybackPatch ? [CS2D_PATCH_FILES.at(-6)] : []),
-      ...(inspection.pendingRoundClockPatch ? [CS2D_PATCH_FILES.at(-5)] : []),
-      ...(inspection.pendingHurtEventsPatch ? [CS2D_PATCH_FILES.at(-4)] : []),
-      ...(inspection.pendingShotIdentityPatch ? [CS2D_PATCH_FILES.at(-3)] : []),
-      ...(inspection.pendingAmmoPatch ? [CS2D_PATCH_FILES.at(-2)] : []),
-      ...(inspection.pendingAmmoCachePatch ? [CS2D_PATCH_FILES.at(-1)] : []),
+      ...(inspection.pendingManagedLibraryPatch ? [CS2D_PATCH_FILES[5]] : []),
+      ...(inspection.pendingShotActorPatch ? [CS2D_PATCH_FILES[6]] : []),
+      ...(inspection.pendingTeachingPlaybackPatch ? [CS2D_PATCH_FILES[7]] : []),
+      ...(inspection.pendingRoundClockPatch ? [CS2D_PATCH_FILES[8]] : []),
+      ...(inspection.pendingHurtEventsPatch ? [CS2D_PATCH_FILES[9]] : []),
+      ...(inspection.pendingShotIdentityPatch ? [CS2D_PATCH_FILES[10]] : []),
+      ...(inspection.pendingAmmoPatch ? [CS2D_PATCH_FILES[11]] : []),
+      ...(inspection.pendingAmmoCachePatch ? [CS2D_PATCH_FILES[12]] : []),
+      ...(inspection.pendingBombIdentityPatch ? [CS2D_PATCH_FILES[13]] : []),
     ]
     for (const patch of pendingPatches) {
       if (!patch) throw new Error('pending patch missing from controlled stack')

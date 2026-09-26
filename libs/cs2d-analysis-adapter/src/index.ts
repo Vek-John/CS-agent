@@ -72,12 +72,17 @@ export const CS2D_SOURCE = {
   input_boundary: "WASM_WORKER_STRUCTURED_REPLAY_ONLY"
 } as const;
 
-/** Known parser revisions retain independent hurt and current-shot provenance. */
+/** Preserve the complete known parser extension chain, including later revisions. */
 function parserVersion(replay: Cs2dReplay): string {
   const base = `${CS2D_SOURCE.repository}@${CS2D_SOURCE.commit}`;
-  if (replay.generatedBy?.endsWith("+cs-coach.hurt-events.v1.shot-identity.v2")) return `${base}/hurt-events.v1/shot-identity.v2`;
-  if (replay.generatedBy?.endsWith("+cs-coach.hurt-events.v1")) return `${base}/hurt-events.v1`;
-  return base;
+  const revisions = [
+    ["hurt-events.v1", "shot-identity.v2", "ammo-clip.v2", "bomb-identity.v1"],
+    ["hurt-events.v1", "shot-identity.v2", "ammo-clip.v2"],
+    ["hurt-events.v1", "shot-identity.v2"],
+    ["hurt-events.v1"]
+  ];
+  const known = revisions.find(parts => replay.generatedBy?.endsWith(`+cs-coach.${parts.join(".")}`));
+  return known ? `${base}/${known.join("/")}` : base;
 }
 
 export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.10.0" as const;

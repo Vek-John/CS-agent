@@ -126,6 +126,13 @@ Adapter 1.8.0 只为已有 DEATH / HP_CHANGE 候选补充处理窗口本人开�
 `CanonicalAnalysisFact` 与 `PlayerActionFact` 的可选 `presentationOnly: true` 表示这种补充发生事实。它可进入 CoachingPackage、Narrator、cue action_facts 及 Stage3 既有动作回看资格，但不获得 Director 两处有动作排序加分，不充当 verified behavior hypothesis 的过程证据、不进入结构化决策评估动作，也不触发不可回撤动作文本推断。诊断严格传输 schema 保留该标记。旧动作缺省字段继续沿用旧语义，旧包不回填或重写；Adapter 解码保留 1.7.0 及既有兼容版本，新增来源由 Adapter/signals 1.8.0 和 CandidateGenerator 2.4.0 标识。专业判断、建议适用性和引用/未来边界保持原门禁。
 
 
+### 2.4.4 安包与拆包事件的即时归属
+
+`bomb_planted`、`bomb_defused`、`bomb_exploded`共用上述native事件pawn验证；在事件发生时只解析一次，actor与安包几何来自同一当前pawn。pawn无效、class/serial不匹配时，公共事件kind/canonical tick及拆包完成标记仍保留，actor与安包几何为null；有效pawn但owner未知时仅保留有效几何，不猜玩家。拆包与爆炸不附坐标。此修正不迁移其他事件或network handle。
+
+Parser追加`bomb-identity.v1`，Adapter manifest保留已知hurt/shot/ammo/bomb完整来源链。未知actor不能生成本人安包/拆包动作；爆炸仍不是本人动作的证据。旧保存产物继续直接恢复，新解析中actor变化可能改变候选选择，不能重写旧引用或声称专业决策判断因此改善。
+
+
 ### 2.5 事实、推断、建议分层
 
 - `Fact`：Demo 可直接验证；

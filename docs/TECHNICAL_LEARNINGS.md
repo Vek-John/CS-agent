@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：Bomb归属与几何共用当前事件实体
+
+- 问题：三种Bomb事件的旧index/cache路径在实体复用或同tick重绑时错归属；plant几何可能取到替代实体。Adapter来源识别还因后加ammo尾标记丢失hurt/shot来源。
+- 决策：0014对Bomb只解析一次verified pawn，身份/几何共源；无效pawn保留公共kind/tick和defuse完成、可空身份/几何；有效未知owner不猜人。显式识别完整已知parser链，未知链保持原降级。其他事件/network handle不泛化修改。
+- 验证：源注入生命周期8红→10绿；89相关tests+11补丁tests，native9+vendor33，TS/Web build、WASM/Viewer build和Viewer TS通过。一次60.6MB真实Demo解析7.407秒，7plant/1defuse/2explosion，10人Adapter与JSON往返合计8个人动作，0网络调用。两个默认配置代理分工补丁/生命周期，主控集成；只读终审无must-fix。[证据](validation/BOMB_IDENTITY.md)。
+- 限制：真实样本不是独立身份真值，异常是合成生命周期；未实测UI/SQLite或专业判断收益。native低10serial边界不变，旧产物不重写。下一项先核实仍旧缓存的player_death与非空victim协议，再做兼容小验证。
+
 ## 2026-09-26：总结出处应跟随保存结果，而非临时请求
 
 - 问题：Panel 从 transient request.theme.cueRefs 推回合，历史恢复只有 result 时丢失出处；live 还可能把整个主题回合误当代表段落来源，缺 segment 被标为准备阶段。

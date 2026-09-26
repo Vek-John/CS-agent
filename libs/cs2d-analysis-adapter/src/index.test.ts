@@ -212,12 +212,34 @@ describe("cs2d analysis adapter", () => {
   it.each([
     [undefined, ""],
     ["cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1", "/hurt-events.v1"],
-    ["cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2", "/hurt-events.v1/shot-identity.v2"]
+    ["cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2", "/hurt-events.v1/shot-identity.v2"],
+    ["cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2", "/hurt-events.v1/shot-identity.v2/ammo-clip.v2"],
+    ["cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1", "/hurt-events.v1/shot-identity.v2/ammo-clip.v2/bomb-identity.v1"],
+    ["unknown+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v3", ""]
   ] as const)("preserves independent parser provenance for %s", (generatedBy, suffix) => {
     const bundle = buildCs2dAnalysisBundle({ replay: { ...replayFixture(), generatedBy }, selectedSteamId: "p-t1", demoId: "parser-provenance" });
     const version = bundle.review_plan.generation_manifest.parser_version;
     expect(version).toBe(`zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec${suffix}`);
     expect(deserializeCs2dAnalysisBundle(serializeCs2dAnalysisBundle(bundle)).review_plan.generation_manifest.parser_version).toBe(version);
+  });
+
+  it.each(["bomb_planted", "bomb_defused", "bomb_exploded"] as const)("keeps unknown %s actors out of personal action evidence", (type) => {
+    const source = replayFixture();
+    const replayWithActor = (playerSteamId: string | null): Cs2dReplay => ({ ...source, rounds: [{
+      ...source.rounds[0], grenadePaths: [],
+      frames: source.rounds[0].frames.map(frame => ({ ...frame, players: frame.players.map(p => ({ ...p, health: 100, alive: true })) })),
+      events: [{ type, tick: 480, t: 7.5, playerSteamId }]
+    }] });
+    for (const actor of [null, "p-ct1", "p-t1"]) {
+      const bundle = buildCs2dAnalysisBundle({ replay: replayWithActor(actor), selectedSteamId: "p-t1", demoId: "bomb-identity-fixture" });
+      const personal = bundle.match_timeline.match_events?.filter(event => ["BOMB_PLANT", "BOMB_DEFUSE"].includes(event.event_type)) ?? [];
+      expect(personal).toHaveLength(actor === "p-t1" && type !== "bomb_exploded" ? 1 : 0);
+      const actions = bundle.candidate_set.materials.flatMap(material => material.playerActionFacts);
+      if (actor !== "p-t1" || type === "bomb_exploded") expect(actions).toHaveLength(0);
+      else expect(actions.length).toBeGreaterThan(0);
+      expect(bundle.match_timeline.rounds).toHaveLength(1);
+      expect(deserializeCs2dAnalysisBundle(serializeCs2dAnalysisBundle(bundle)).match_timeline.match_events).toEqual(bundle.match_timeline.match_events);
+    }
   });
 
   it("records the pinned structured-input boundary and supports every player selection", () => {

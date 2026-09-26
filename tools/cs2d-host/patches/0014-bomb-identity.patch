@@ -1,0 +1,39 @@
+--- a/packages/parser/src/collector.rs
++++ b/packages/parser/src/collector.rs
+@@ -657,16 +657,17 @@
+                 if matches!(kind, BombKind::Defused) {
+                     self.defuse_ends.push((tick, true));
+                 }
+-                let player = ev_i32(ge, "userid_pawn")
+-                    .and_then(|h| steam_from_pawn_handle(self, ctx, h));
++                // Resolve the event pawn once so owner and plant geometry share
++                // the same current, serial-verified entity. Unknown actors do not
++                // remove the public bomb event or its defuse completion marker.
++                let resolved = verified_event_pawn(ctx, ev_i32(ge, "userid_pawn"));
++                let player = resolved.as_ref().and_then(|(_, owner)| owner.clone());
+                 let (mut x, mut y, mut z) = (None, None, None);
+                 if matches!(kind, BombKind::Planted) {
+-                    if let Some(h) = ev_i32(ge, "userid_pawn") {
+-                        if let Ok(p) = ctx.entities().get_by_handle(h as u32 as usize) {
+-                            x = Some(round1(world_coord(p, "CBodyComponent.m_cellX", "CBodyComponent.m_vecX")));
+-                            y = Some(round1(world_coord(p, "CBodyComponent.m_cellY", "CBodyComponent.m_vecY")));
+-                            z = Some(round1(world_coord(p, "CBodyComponent.m_cellZ", "CBodyComponent.m_vecZ")));
+-                        }
++                    if let Some((p, _)) = resolved {
++                        x = Some(round1(world_coord(p, "CBodyComponent.m_cellX", "CBodyComponent.m_vecX")));
++                        y = Some(round1(world_coord(p, "CBodyComponent.m_cellY", "CBodyComponent.m_vecY")));
++                        z = Some(round1(world_coord(p, "CBodyComponent.m_cellZ", "CBodyComponent.m_vecZ")));
+                     }
+                 }
+                 self.events.push(RawEvent::Bomb { tick, kind, player, x, y, z });
+--- a/packages/parser/src/lib.rs
++++ b/packages/parser/src/lib.rs
+@@ -22,7 +22,7 @@
+ use collector::Collector;
+ 
+ const DEMO_TICK_RATE: f64 = 64.0;
+-const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2";
++const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1";
+ 
+ /// Parses the bytes of a `.dem` in a single pass and returns `(Replay JSON, voice
+ /// blob)`. The `Replay` matches `replay-schema 2D`; the blob follows the `CLV2`

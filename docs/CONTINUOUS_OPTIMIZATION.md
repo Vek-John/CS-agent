@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：Bomb事件即时归属（2026-09-26）
+
+- ID bomb-identity，基线0f94799 clean；主控Adapter/证据/集成，partial_revision_restore独占0014补丁、patch工具与upstream collector/lib，revision_semantics_review独占源注入Bomb fixture/harness，均默认模型/推理，复用已释放checkout。
+- 流程：native事件handle→当前验证pawn和唯一controller→公共Bomb事件及plant几何→Adapter本人动作。A1旧serial/错class/缺handle保持公共kind/tick且actor/geometry unknown；A2同tick重绑用当前owner、缺owner保留有效plant位置；A3已知本人plant/defuse仍可用、未知不变本人动作、爆炸不是本人动作；A4来源版本、相关tests/TS/Web和parser/Viewer build、一次真实Demo消费、文档push。
+- 风险/边界：只改三种Bomb事件，不泛化network m_hThrower；低10serial不能证明未传输高位。0014须可受控追加、既有补丁不能随尾索引漂移。5分钟接口/12分钟实现/20分钟交付；根任务统一vendor+locked工具链和120秒单次60.6MB Demo，bulk留进程、只输出摘要，负责清理。无安装/模型/用户DB/UI，原A5独立保留。
+
+- 结果：实际旧分支8红/2绿→当前10绿；Adapter来源两红修复，已知hurt/shot/ammo/bomb链完整、unknown actor不造本人动作。89相关tests/11patch tests，native9+vendor33、TS/Web build、WASM/Viewer build/TS均通过。真实60.6MB单read/parse 7.407秒、10个公共Bomb事件、10人bundle消费8个plant/defuse个人事件，0网络；[证据](validation/BOMB_IDENTITY.md)。
+- 交付/后继：两代理默认配置已RELEASE，主控真实diff及只读终审无must-fix；临时资源/进程已清，旧历史不重写，未验证UI/SQLite或外部身份真值。下一独立目标已核实player_death仍旧缓存解析三方身份和index-only坐标，victim缺失直接丢事件；先核实非空victim schema/Viewer消费与生命周期红例，再选兼容修复，不机械替换全局helper。原UI A5独立等待。
+
 ## 已交付：Spotted候选位映射与当前身份（2026-09-26）
 
 - ID spotted-identity，基线87f9694 clean；主控只读probe/tests/docs，revision_semantics_review默认配置3分钟只读风险复核、已RELEASE。slot公式是外部解析器实现假设，不是独立Valve语义证明。

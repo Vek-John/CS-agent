@@ -18,11 +18,11 @@ const cleanBase = {
 
 describe("cs2d patched checkout seam", () => {
   it("keeps managed Demo support in the controlled patch stack", () => {
-    expect(CS2D_PATCH_FILES.at(-8)).toMatch(/0006-managed-demo-load-races\.patch$/);
-    expect(CS2D_PATCH_FILES.at(-7)).toMatch(/0007-cs2d-shot-actor\.patch$/);
-    expect(CS2D_PATCH_FILES.at(-6)).toMatch(/0008-teaching-playback\.patch$/);
-    expect(CS2D_PATCH_FILES.at(-5)).toMatch(/0009-public-round-clock\.patch$/);
-    expect(CS2D_PATCH_FILES.at(-4)).toMatch(/0010-self-hurt-events\.patch$/);
+    expect(CS2D_PATCH_FILES[5]).toMatch(/0006-managed-demo-load-races\.patch$/);
+    expect(CS2D_PATCH_FILES[6]).toMatch(/0007-cs2d-shot-actor\.patch$/);
+    expect(CS2D_PATCH_FILES[7]).toMatch(/0008-teaching-playback\.patch$/);
+    expect(CS2D_PATCH_FILES[8]).toMatch(/0009-public-round-clock\.patch$/);
+    expect(CS2D_PATCH_FILES[9]).toMatch(/0010-self-hurt-events\.patch$/);
     const patch = CS2D_PATCH_FILES.map((file) => readFileSync(file, "utf8")).join("\n");
     expect(patch).toMatch(/DEMO_IMPORT_REQUESTED/);
     expect(patch).toMatch(/await uploadManagedDemo[\s\S]*await parser\.parse\(pending\.file\)/);
@@ -45,8 +45,8 @@ describe("cs2d patched checkout seam", () => {
     expect(patch).toMatch(/requestId: replay\.managedSource\.requestId/);
   });
   it("adds current shot identity without replacing the previous hurt patch", () => {
-    expect(CS2D_PATCH_FILES.at(-3)).toMatch(/0011-current-shot-identity\.patch$/);
-    const patch = readFileSync(CS2D_PATCH_FILES.at(-3), "utf8");
+    expect(CS2D_PATCH_FILES[10]).toMatch(/0011-current-shot-identity\.patch$/);
+    const patch = readFileSync(CS2D_PATCH_FILES[10], "utf8");
     expect(patch).toContain('verified_event_pawn(ctx, ev_i32(ge, "userid_pawn"))');
     expect(patch).toContain('cs-coach.hurt-events.v1.shot-identity.v2');
   });
@@ -116,16 +116,29 @@ describe("cs2d patched checkout seam", () => {
 });
 
 it("registers raw-wire clip consumption without a signed inverse", () => {
-  const patch = readFileSync(CS2D_PATCH_FILES.at(-2), "utf8");
+  const patch = readFileSync(CS2D_PATCH_FILES[11], "utf8");
   expect(patch).toContain("sample_weapon_ammo");
   expect(patch).toContain("checked_sub(1)");
   expect(patch).not.toContain("decoded >> 31");
 });
 
 it("registers bounded prior-tick sampling after the raw-wire decoder patch", () => {
-  expect(CS2D_PATCH_FILES.at(-1)).toMatch(/0013-prior-tick-ammo-cache\.patch$/);
-  const patch = readFileSync(CS2D_PATCH_FILES.at(-1), "utf8");
+  expect(CS2D_PATCH_FILES[12]).toMatch(/0013-prior-tick-ammo-cache\.patch$/);
+  const patch = readFileSync(CS2D_PATCH_FILES[12], "utf8");
   expect(patch).toContain("ammo_cache.begin_tick");
   expect(patch).toContain("ammo_cache.capture_end");
   expect(patch).toContain("ammo_sampling_version: 2");
+});
+
+it("registers bomb owner and plant geometry from one verified event pawn without removing public events", () => {
+  expect(CS2D_PATCH_FILES[13]).toMatch(/0014-bomb-identity\.patch$/);
+  const patch = readFileSync(CS2D_PATCH_FILES[13], "utf8");
+  const additions = patch.split("\n").filter(line => line.startsWith("+") && !line.startsWith("+++")).join("\n");
+  expect(additions.match(/verified_event_pawn\(ctx, ev_i32\(ge, "userid_pawn"\)\)/g)).toHaveLength(1);
+  expect(additions).toContain("resolved.as_ref().and_then(|(_, owner)| owner.clone())");
+  expect(additions).toContain("if let Some((p, _)) = resolved");
+  expect(additions).toContain("ammo-clip.v2.bomb-identity.v1");
+  expect(additions).not.toMatch(/steam_from_pawn_handle|get_by_handle|m_hThrower|return;/);
+  expect(patch).toContain("self.defuse_ends.push((tick, true))");
+  expect(patch).toContain("self.events.push(RawEvent::Bomb");
 });
