@@ -2152,3 +2152,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：只在有纠正时按尾部整条移除memories、activeThreads，再清偏好，最后才舍次要纠正；保留顶层限定，首条+限定仍不合预算则EMPTY。无纠正旧策略、800预算、删除/身份/授权门不变；不删除句子或产生残缺advice。
 - 验证：完整长纠正、双短纠正、记录连advice清理、输入不变、首条+8条限定超额EMPTY；5文件72tests、TypeScript/production build通过，独立只读终审无must-fix。[证据](validation/CORRECTION_BUDGET_PRIORITY.md)。
 - 限制/后继：按既有顺序舍尾，非智能相关性排序；仍非纠正语义推理。结束此轮Memory文本修复，转查真实可知信息来源：Observation虽接受DIRECT_VISION/SPOTTED，当前生产parser是否提供尚未证实；下一轮以实际接线和一手源码先明确能力边界，不用合成观察冒充真实视线。
+
+
+## 2026-09-26：spotted网络标记可读取，但不能当作玩家视线
+
+- 生产事实：当前cs2d collector/props/Replay schema无spotted读取；adapter仅将本人位置生成SELF DIRECT_VISION，Observation的其他source支持不是已采集的敌情。
+- 一手学习：[demoinfocs v5.2.0](https://github.com/markus-wa/demoinfocs-golang/blob/v5.2.0/pkg/demoinfocs/common/player.go#L184)明确该标记不是LOS/FOV，多spotter可能有异常；[CounterStrikeSharp生成schema](https://github.com/roflmuffin/CounterStrikeSharp/blob/main/managed/CounterStrikeSharp.API/Generated/Schema/Classes/EntitySpottedState_t.g.cs)只证明bool和uint32[2]字段布局。不能由此断定雷达实际显示、队内可靠共享或玩家感知。
+- 验证：固定vendor0.5.4/正确locked离线构建，60,601,900字节既有Demo，tick stride8，1024tick smoke后同parser完成；7,248采样tick、72,283 pawn样本。m_bSpotted与低mask各5,258非零，高mask全零；三条嵌套路径全部missing，扁平路径无missing/typeerror。仅统计，不输出ID/坐标/rawmask。首次通用cargo误绕过vendor及更动本地lock已纠正，第二次才作为生产依赖证据。[完整证据](validation/SPOTTED_SOURCE_EVIDENCE.md)。
+- 决定/后继：不接DIRECT_VISION或信息反证，不把缺失默认false；下一项只做raw-mask位边界和当前controller/pawn身份映射，尚无接触或真实视线语义。37相关tests、TS/build通过；无安装/模型/用户DB，临时example已清理，主控持有的probe仅为离线研究工具。

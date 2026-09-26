@@ -692,6 +692,8 @@ Narrator 可以在后台提前读取两份包并返回 `PREPARED` 的密封 bund
 
 所有 DirectorDecisionSet、NarrationBundle、QuestionAnswer 和 Summary 先通过字段全集、引用 ID、package namespace、时间边界和禁止未来泄漏校验。普通回合不触发 Director/Narrator；模型失败时回退到确定性决策或结构化五字段模板，不阻塞基础回放。
 
+当前默认cs2d适配器的Observation位置事实仅由所选玩家自身采样构造SELF DIRECT_VISION；不能把这个source_type视为已采集敌方可见性。固定parser的通用属性读取可以读取m_bSpotted及两段m_bSpottedByMask，但生产Replay/Adapter尚未接此字段。网络spotted标记不等价LOS/FOV、玩家注意/理解或可靠队内共享，也不能用false/零mask证明无人。缺失或类型错误必须保持unknown，禁止通过既有默认零/false helper伪造未标记。任何后续接线应先验证slot/controller/pawn对应与生命周期，并单独保留网络标记语义；不得直接转换成现有精确敌人位置Observation或信息主张反证。当前只读字段探针不改变教学事实。
+
 ### 6.12 PersonalMemory（长期）
 
 长期记忆由独立 `Memory Domain` 管理，保存用户跨 Demo 的稳定学习信息：角色偏好、学习目标、反复习惯、代表证据、上次建议、后续是否改善和用户纠正。`libs/contracts` 中的 `LearningThread`、`UserClaim`、`CoachVerdict` 和 `TransferRule` 是既有语义的唯一来源；Memory 只增加带 principal、provenance、授权、生命周期、revision 和幂等信息的 envelope，不复制 `CueCase`、`Fact` 或 `ObservableState`。

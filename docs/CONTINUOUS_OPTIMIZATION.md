@@ -2,6 +2,17 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：真实可见性字段与上游语义（2026-09-26）
+
+- ID spotted-source-evidence，基线b652845 clean；主控真实接线/只读probe/docs，revision_semantics_review默认配置一手来源研究10分钟，无并写。沿用research技能和用户要求记录行动结论。
+- 已核实adapter只把本人位置映射SELF DIRECT_VISION；当前cs2d collector/props/schema未读取spotted，不能从合成Observation测试推出敌方视线。目标核实网络字段可读性和语义边界，先不接教练。
+- 流程：固定cs2d/source2-demo依赖→通用属性probe→既有60.6MB Demo单进程单次读取→1024tick smoke，字段可读才同parser继续→只输出统计。A1一手源码区分spotted与LOS；A2missing/type错误与false/zero分离；A3无身份/坐标/rawmask或大数组输出，不做observer映射；A4相关tests/TS/build及学习证据push。
+- 风险：属性路径与数组编码未知，禁止用prop_bool缺省false冒充未标记；offline编译120秒、单pass120秒，临时example由唯一Python owner finally移除，只保留小probe/摘要。未证语义绝不接DIRECT_VISION或宣称玩家已知，不安装/改锁文件/模型/UI/用户DB，原A5独立待验。
+
+- 结果：一手demoinfocs v5.2.0明确spotted不是LOS/FOV；CounterStrikeSharp仅证明bool+uint32[2]字段布局。当前adapter只生成本人位置，生产parser无spotted接线。正确vendor source2-demo0.5.4、locked/offline native探针在60.6MB样本读到扁平路径：72,283 pawn样本中bool与低mask各5,258非零，高mask全零；嵌套路径全部missing。1024tick smoke后同parser继续，1.111秒，仅统计输出。[证据/来源](validation/SPOTTED_SOURCE_EVIDENCE.md)。
+- 编译纠偏：初次通用cargo漏本地vendor配置，离线更新了构建checkout的lock并读了一次样本；该次不作当前生产依据。已恢复本任务引入的libredox更新与source2 registry绑定，随后vendor+locked/offline重跑成功且lock不变。总两次读取，无下载/安装/用户文件修改；临时example finally移除，probe源码保留可复现。37相关tests、TS/build通过，研究owner RELEASE。
+- 后继：确认字段可读仍不能接教练视线。下一项有限raw-mask解码/身份映射验证（边界bit0/31/32/63，controller与当前pawn、重生/缺失未知），保持诊断隔离；若映射或语义不足就只保留raw标记研究结果，不补造可知敌情。无用户DB/模型/UI，全部进程退出，原A5独立待验。
+
 ## 已交付：拥挤Brief优先保留完整纠正（2026-09-26）
 
 - ID correction-budget-priority，基线d0794ff clean；主控独占brief.ts/memory.test.ts及必要接线tests/docs，现有owner RELEASE。
