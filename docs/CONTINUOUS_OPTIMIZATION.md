@@ -2,6 +2,14 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：修订诊断经Recovery重连后的追问（2026-09-26）
+
+- 基线22b4f5a clean；主控有限goal，独占recovery集成测试/必要窄修复/docs。核实原子任务仍401失败无写入，不重启或重复派发；其余本轮owner均RELEASE。
+- 流程：生产Host同步diagnosis→真实Runtime诊断/修订→捕获Recovery+实际checkpoint→新Runtime重连→原落点restore helper→当前追问。A1新旧USER原文/修订预算与结果门保留；A2问答显示新建议；A3恢复只请求RECONNECT、无新诊断/Policy/长期Memory proposal或工具；A4相关tests/TS/build，若已正确不改产品；A5证据/docs提交push。
+- 范围：复用内存checkpointer与既有紧凑Replay fixture；不是用户Demo解析/真实持久DB/浏览器。风险为把两条分离恢复源当一份、伪造Graph状态替代真实event、错把合法checkpoint写当Memory副作用。5分钟小链、10分钟验证，失败最多两次先简化。主控清理自有测试/build，无服务、下载、模型、密钥或schema扩展。
+- 结果：正常产品路径已正确，新增1条Controller同步→Host event builder→Runtime两次提交→实际checkpoint/Recovery→新Runtime重连→Session落点→追问回归，未改产品代码。3文件91tests、TS、Web build通过；两段原文/完整修订/门/进度保持，重连无诊断/Policy/工具/长期Memory事件，重复重连checkpoint不变。[证据](validation/REVISED_DIAGNOSIS_RECOVERY.md)。仅测试包helper解决依赖所有权，fixture构造问题不称产品red；MemorySaver不是持久DB，未跑UI。
+- 后继：partial_revision_restore默认配置8分钟只读，已RELEASE无写入/进程。真实顺序为新教学artifact先存、后head；若head失败，历史先显示最新教学artifact，握手又以旧精确checkpoint覆盖。同点静默回退/预算重新开放尚未fixture验证，下一项只先验证该不一致；不能把回到旧确认点本身当bug，也不能简单改为用latest Graph。当前所有测试/build退出，commit/push后主控释放本轮写入。
+
 ## 已交付：异议修订后的当前追问（2026-09-26）
 
 - 基线538275f已push/clean；主控有限goal，独占current-cue-questions.ts/对应tests及docs。原API子任务认证失败未重启；本轮小改动主控执行，不并发写入。模板沿用，emil/Apple技能用于保持明确反馈与现有交互，不加新布局动画。

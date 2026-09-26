@@ -1973,3 +1973,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：只扩现有gate到完整DISAGREED；额外要求revision>=1和disagreement=1，原cue/hinge/result/verdict归属、busy、当前完整结果门均保留。没有新诊断、模型、命令或历史写入。
 - 验证：真实diagnose→revise→Session RECORD→当前context/Panel两红→绿；旧key拒绝、来源更新、当前建议包含修订内容，问答前后input不变。未完成门/busy/未修订版本或未消耗异议资格拒绝。4文件173tests、TS通过，生产build见[证据](validation/REVISED_CUE_QUESTIONS.md)。
 - 限制：仅已有有限问法/本页状态，不新增一般问答或修订历史回填。采用emil/Apple技能维持现有控制，不改布局/动效/reduced设置。SSR和模块回调不是浏览器/桌面实测；无Demo/模型/用户DB或服务，原UI A5独立保留。
+
+
+## 2026-09-26：修订追问恢复要同时覆盖Recovery与Agent checkpoint
+
+- 问题：单独验证CueCase JSON往返不能证明修订后可继续追问。Recovery记录保存路线/位置，完整诊断由匹配Agent checkpoint拥有；Host落点要把两者重新组合。
+- 决定/结果：补一条真实Controller/Host event builder→Runtime诊断与修订→Recovery捕获/JSON恢复→新Runtime重连→restoreCheckpointTeachingCase→当前追问的集成回归。正常路径本来正确，未做产品修复。
+- 验证：两段近500字USER原文、DISAGREED与门/游标/进度保留；恢复只发RECONNECT，诊断/修订spies、Policy、工具post为0，长期Memory适配器无事件；重复重连checkpoint不变。相关3文件91tests、TS通过，build及命令见[证据](validation/REVISED_DIAGNOSIS_RECOVERY.md)。
+- 限制：MemorySaver仅测试进程共享，不冒称真实SQLite/IndexedDB耐久或桌面刷新验收，未装载完整Host/iframe。fixture构造的三处问题不算产品red。没有真实Demo/模型/DB、依赖安装或服务；下一项仅小范围核实诊断产物已保存但head失败的恢复选择，不预设bug。

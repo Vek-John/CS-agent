@@ -1,3 +1,4 @@
+import { MemorySaver } from "@langchain/langgraph";
 import {
   AgentToolResultSchema,
   CoachAgentIdentitySchema,
@@ -129,4 +130,9 @@ export function resumeEvent(
       limitations: [],
     }),
   };
+}
+
+/** Shared in-memory checkpoint fixture, resolved within the package that owns LangGraph. */
+export function createMemoryTestCheckpointSaver(): MemorySaver {
+  return new MemorySaver();
 }

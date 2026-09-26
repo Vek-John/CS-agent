@@ -626,3 +626,90 @@ it.each(["DISABLED", "SUCCEEDED"] as const)("restores %s wrap-up artifacts witho
     expect(fetcher).not.toHaveBeenCalled();
   } finally { vi.unstubAllGlobals(); }
 });
+
+
+it("reconnects a revised diagnosis checkpoint into the recovered paused Session and reuses its grounded answers", async () => {
+  const { createMemoryTestCheckpointSaver } = await import("../../../../libs/coach-agent/src/test-fixtures");
+  const { createCoachAgentRuntime, FakePolicyAdapter } = await import("@cs-coach/coach-agent");
+  const { reduceCoachingSession } = await import("@cs-coach/session");
+  const { CoachAgentStage3Controller } = await import("../coaching/coach-agent-stage3-controller");
+  const { buildStage3Identity } = await import("../coaching/coach-agent-stage3-host-adapter");
+  const { buildTeachingDiagnosisSubmissionEvent } = await import("../coaching/teaching-diagnosis-host");
+  const { buildCheckpointedRecoveryRecord, restoreCheckpointTeachingCase } = await import("./cs2d-session-recovery");
+  const { buildCurrentCueQuestionContext, answerGroundedCueQuestion, CURRENT_CUE_ADVICE_QUESTION } = await import("../coaching/current-cue-questions");
+  const { buildLocalAgentMemoryEvents } = await import("../memory/agent-events");
+  const input = fixture(), plan = input.analysis.review_plan, cue = plan.cues[0];
+  let session = reduceCoachingSession(plan, input.session, { type: "START" });
+  for (let step = 0; step < plan.segments.length + 2 && session.phase !== "PAUSED_FOR_COACHING"; step++) {
+    session = session.phase === "SKIPPING" ? reduceCoachingSession(plan, session, { type: "ADVANCE_SEGMENT" })
+      : reduceCoachingSession(plan, session, { type: "TICK", tick: Math.max(plan.segments[session.current_segment_index].end_tick, cue.outcome_end_tick) });
+  }
+  expect(session.current_cue_id).toBe(cue.id);
+  const saver = createMemoryTestCheckpointSaver(), policy = new FakePolicyAdapter({ failure: new Error("no visual Policy during recovery") });
+  const runtime = createCoachAgentRuntime({ checkpointer: saver, policy });
+  const post = vi.fn();
+  const controller = new CoachAgentStage3Controller({ dispatch: event => runtime.dispatch(event), post, bridgeAvailable: () => true, isLive: () => true });
+  const hostInput = { plan, routeState: input.routeState, cue, narration: input.narrationByCue[cue.id],
+    outcomeGate: session.outcome_completion!, currentSessionPhase: "PAUSED_FOR_COACHING" as const,
+    analysis: input.analysis, demoContentHash: HASH, selectedPlayerId: "dog", sessionId: input.identity.sessionId,
+    runId: input.identity.runId, generation: 1, tickRate: input.analysis.match_timeline.tick_rate,
+    evidence: { candidate: input.analysis.candidate_set.candidates.find(c => c.candidateId === cue.candidate_id),
+      material: input.analysis.candidate_set.materials.find(m => m.candidateId === cue.candidate_id) },
+  } satisfies Parameters<InstanceType<typeof CoachAgentStage3Controller>["synchronizeDiagnosis"]>[0];
+  const context = { plan, cue, timeline: input.analysis.match_timeline, selectedPlayerId: "dog",
+    material: input.analysis.candidate_set.materials.find(m => m.candidateId === cue.candidate_id) };
+  try {
+    expect(await controller.synchronizeDiagnosis(hostInput)).toBeDefined();
+    const identity = buildStage3Identity(hostInput);
+    const firstText = "原思路".repeat(160) + "没有看到敌人。";
+    const secondText = "新补充".repeat(160) + "听到了脚步但不确定来源。";
+    const reflection = { cueId: cue.id, rawText: firstText, selectedGoal: "OTHER" as const, source: "USER" as const, response: "ANSWERED" as const, limitations: [] };
+    await runtime.dispatch(buildTeachingDiagnosisSubmissionEvent(context, reflection, { eventType: "SUBMIT_REFLECTION", eventId: "source-reflection", identity }));
+    const revised = await runtime.dispatch(buildTeachingDiagnosisSubmissionEvent(context, { ...reflection, rawText: secondText }, { eventType: "SUBMIT_DISAGREEMENT", eventId: "source-disagreement", identity }));
+    const savedCase = revised.state.cueCases[cue.id];
+    expect(savedCase.status).toBe("DISAGREED");
+    session = restoreCheckpointTeachingCase(plan, session, savedCase, revised.state.learningThreads[0]);
+    const draft = buildCheckpointedRecoveryRecord({ ...input, plan, session, boundaryKind: "CUE_PAUSED", demoContentHash: HASH,
+      selectedPlayerId: "dog", agentCheckpointId: revised.checkpoint.checkpointId }, {
+      checkpointId: revised.checkpoint.checkpointId, activeCueId: revised.state.activeCueId,
+      currentSessionPhase: revised.state.currentSessionPhase, routeCursor: revised.state.routeCursor, sessionStatus: revised.state.sessionStatus,
+    });
+    expect(draft).toBeDefined();
+    const record = SessionRecoveryRecordSchema.parse(JSON.parse(JSON.stringify(draft)));
+    const restored = restoreRecoveryArtifacts(record);
+    expect(restored.session.cue_cases?.[cue.id]).toBeUndefined(); // Diagnosis lives in the Agent checkpoint.
+    const producer = await import("../../../../libs/coach-agent/src/teaching-diagnosis");
+    const diagnosisCalls = vi.spyOn(producer, "diagnoseTeachingCue");
+    const revisionCalls = vi.spyOn(producer, "reviseTeachingDiagnosis");
+    const runtimeB = createCoachAgentRuntime({ checkpointer: saver, policy });
+    const dispatch = vi.fn((event: Parameters<typeof runtimeB.dispatch>[0]) => runtimeB.dispatch(event));
+    const resumed = new CoachAgentStage3Controller({ dispatch, post, bridgeAvailable: () => true, isLive: () => true });
+    try {
+      const reconnect = buildReconnectReplayEvent(record);
+      const agent = await resumed.reconnect(reconnect);
+      expect(agent.restored).toBe("MATCHED");
+      expect(agent.state.cueCases[cue.id]).toEqual(savedCase);
+      const landed = restoreCheckpointTeachingCase(restored.plan, restored.session, agent.state.cueCases[cue.id], agent.state.learningThreads[0]);
+      resumed.adoptRecoveredCue(cue.id, landed.current_segment_index);
+      expect(landed.outcome_completion).toEqual(session.outcome_completion);
+      expect(landed.default_route_cursor).toEqual(session.default_route_cursor);
+      expect(landed.consumed_cue_ids).toEqual(session.consumed_cue_ids);
+      expect(landed.cue_cases?.[cue.id]?.previousReflection?.rawText).toBe(firstText);
+      expect(landed.cue_cases?.[cue.id]?.reflection?.rawText).toBe(secondText);
+      const before = structuredClone(landed);
+      const questions = buildCurrentCueQuestionContext({ plan: restored.plan, session: landed, generation: 2,
+        cueCase: landed.cue_cases?.[cue.id], diagnosticsEnabled: true, busy: false, takenOver: false });
+      expect(questions).toBeDefined();
+      const answer = answerGroundedCueQuestion(questions!, CURRENT_CUE_ADVICE_QUESTION);
+      expect(answer.items.some(item => item.text.includes(savedCase.transferRule!.do))).toBe(true);
+      expect(landed).toEqual(before);
+      expect(buildLocalAgentMemoryEvents(reconnect, agent, "test-principal")).toEqual([]);
+      const duplicate = await resumed.reconnect(reconnect);
+      expect(duplicate.state.cueCases[cue.id]).toEqual(savedCase);
+      expect(duplicate.checkpoint.checkpointId).toBe(agent.checkpoint.checkpointId);
+      expect(dispatch.mock.calls.map(([event]) => event.type)).toEqual(["RECONNECT_REPLAY", "RECONNECT_REPLAY"]);
+      expect(diagnosisCalls).not.toHaveBeenCalled(); expect(revisionCalls).not.toHaveBeenCalled();
+      expect(policy.calls).toHaveLength(0); expect(post).not.toHaveBeenCalled();
+    } finally { resumed.dispose(); diagnosisCalls.mockRestore(); revisionCalls.mockRestore(); }
+  } finally { controller.dispose(); }
+});
