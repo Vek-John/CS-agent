@@ -2,6 +2,18 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：基础路线默认工具继续闭环（2026-09-27）
+
+- ID basic-route-default-tool，基线32f1b25 clean，真实7f2b工作树；partial_revision_restore默认配置独占新增集成测试（必要测试helper），root独占docs和最终复查/两端TS/build/push。上轮执行者已RELEASE。产品代码发现问题先按证据协调所有权，不预设需要改动。
+- 已有证据：current-focus-tools覆盖编译fixture→默认Graph→Host命令，旧stage3-integration覆盖手工cue+显式policy→ACK；consumeGuidedRoute整场入口禁止工具选择。实际Next agent API没有注入policy，桌面仅改SQLite checkpointer，Runtime缺省DeterministicPolicyAdapter。本轮只补真实无胜率Adapter的自然cue与实际Controller ACK/timeout衔接，不能重复旧矩阵。
+- A1小fireReplay合成事件→真实bundle/讲解/Session合法outcome gate→默认Runtime/HostAdapter自然选择非胜率工具；A2匹配ACK成功后只一次RESUME_TOOL/toolHistory/completedCueIds，重复迟到不再推进；A3可用bridge超时失败继续一次，晚成功不覆盖失败。不得人工伪造能力或弱化引用/教学门，只允许Controller计时器/bridge作为受控边界。
+- 5分钟自然cue检查、15分钟有限实现，test60秒；零模型/网络(fetch必抛)/真实Demo/SQLite/服务/GUI/安装。执行者负责dispose Controller/Runtime/timer，root检查实际diff和日志；若自然默认FINISH先报告，已有等价覆盖则停止，不为充数新增。合成时间不标Demo精确tick，完成测试不等同专业判断改善。
+
+
+- 交付：2条自然闭环（ACK成功/可用bridge超时）及4文件22相关tests通过；自然选择ACTION_FACT_REPLAY/REPLAY_CUE_SLOW，没有SHOW_WIN_RATE_IMPACT。Graph resume、toolHistory、completedCueIds均一次，重复/晚ACK与旧timeout不重入，Session仍等待现有推进。没有发现产品缺陷，仅新增集成测试；首次smoke是测试漏算自动freeze，首Web TS是测试类型收窄不足，按真实plan/显式phase guard修正，不改产品门。
+- 主控独立读实际测试、API默认Policy和Controller结算接线，2项受影响复验及两端TypeScript/production build通过。Controller dispose后timer0、fetch0，无外部服务/库；执行者RELEASE，进程清理。[记录](validation/BASIC_ROUTE_DEFAULT_TOOL.md)。
+- 下一有限目标（basic-route-viewer-action）：本轮ACK由harness提供，尚未验证自然动作工具在真实Viewer中播放到终点并回报。下一轮先核实既有Viewer测试页/小fixture入口与当前IAB的渲染能力；仅小合成Replay、单Controller、单次REPLAY_CUE_SLOW，验证实际完成ACK或明确能力阻塞，不加载大Demo/模型，不重启锁屏A5任务。若已有等价证据则复用，避免重建整场验收。
+
 ## 已交付：默认WebGPU下载上报真实字节进度（2026-09-27）
 
 - ID win-rate-download-progress，由win-rate-first-progress-cost的源码与旧证据调查收敛。基线a2a20b7 clean，7f2b实际工作树；前执行者完成/RELEASE后复用partial_revision_restore默认配置，独占runtime-webgpu.ts私有读取逻辑及相关小测试；root独占docs/ARCH、独立复查/两端TS/build/push。不改WASM runtime、模型/Provider/采样、Host/Viewer或用户数据。

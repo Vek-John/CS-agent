@@ -8,6 +8,14 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：基础路线要验自然输入到工具结果的衔接
+
+- 证据边界：已有current-focus-tools证明编译fixture→默认Graph→命令绑定，旧stage3-integration证明手工cue与显式policy的ACK流程；整场consumeGuidedRoute强制无工具。不能把三者直接称为实际Adapter无胜率路线的工具完成闭环。
+- 验证方案：仅用现有合成fireReplay死亡/本人射击事实，通过真实Adapter、讲解、Session outcome gate、默认Runtime、HostAdapter及Controller，分别消费匹配ACK和超时失败。实际Next API未注入policy，桌面仅更换SQLite saver，因此Runtime默认策略是目标本地路径；测试仍不访问SQLite。
+- 初步观察：自然cue可以选择ACTION_FACT_REPLAY/REPLAY_CUE_SLOW，不需要胜率，也不需要把不充分证据标成已确认战术错误。前置冻结段由Session START和Controller同步共同覆盖，测试必须按完整plan核对，不能只计算手动推进的片段。
+- 验证：2新增/22相关tests，两端TS/build通过；成功ACK或超时FAILED均一次RESUME_TOOL/toolHistory/cue完成，重复晚回调不再发命令，fetch0、timer0。测试初期漏算freeze与TS未收窄均仅修测试，产品逻辑无需改动。[记录](validation/BASIC_ROUTE_DEFAULT_TOOL.md)。
+- 限制：Viewer ACK和scheduler是受控边界，未实际渲染工具或跑真实Demo/SQLite。工具ACK后的“继续”指Graph只结算一次，不新增自动推进Session片段的语义；默认工具存在不代表确认战术错误或专业判断改善。
+
 ## 2026-09-27：默认模型读取必须接上有效进展
 
 - 证据：首进展成本调查发现默认WebGPU路径直接等待response.arrayBuffer，下载过程从不调用onProgress；首条有效进度要等fetch、hash、session、warmup及首批推理。WASM已有stream字节进度，不能据此推断默认WebGPU也具备。
