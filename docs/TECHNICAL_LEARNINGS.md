@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：道具种类必须匹配当前显示分支
+
+- 问题：baseline已展示“闪光弹、烟雾弹（数量未知）”，但明确种类追问无答案；不能把仍在内存的baseline投影当作diagnostic已显示内容。
+- 决策：种类追问仅baseline合法Narration+结果完成门；共用View种类规则，actual chip文本与opaque cache中的同cue/fresh来源必须一致。空库存仅同源确认且显示无道具时复述；不从种类数推颗数。显示/来源变化参与key，原问答副作用边界保持。
+- 验证：2正例原红→绿；22新增、180相关tests、TS/build通过，root读真实日志与diff。[记录](validation/CURRENT_CUE_UTILITY_QUESTIONS.md)。负例修复undefined matcher解引用，未改变原View语义。
+- 限制：合成Replay经实际Adapter/Session/View、JSON和SSR；非真实Demo/完整浏览器/SQLite。暂不在完整诊断分支回答隐藏种类，不提供道具用途或时机判断。下一步只对齐基础卡已知时钟的采样约秒文案，不重复解析或扩知识门。
+
 ## 2026-09-26：追问复述已显示的公开时间
 
 - 问题：时机诊断已显示可信回合时间，但明确追问只能核对个人资源；同一个数值不能从当前入口复述。

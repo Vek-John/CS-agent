@@ -2,7 +2,7 @@ import type { CoachingSessionState, CueCase, NarrationBundle, ReviewPlan, Transf
 import { CueCaseSchema } from "@cs-coach/coach-agent/client";
 import { getCurrentCue, getCurrentSegment } from "@cs-coach/session";
 import { observableSituation, playerFacingLimitation } from "./decision-presentation";
-import { matchDisplayedCueResources, type CurrentCueResourceSource, type CueResourceKind, type VerifiedResourceText } from "./current-cue-resource-source";
+import { matchDisplayedCueUtilityKinds, matchDisplayedCueResources, type CurrentCueResourceSource, type CueResourceKind, type VerifiedResourceText } from "./current-cue-resource-source";
 
 export const MAX_CUE_QUESTION_LENGTH = 300;
 export const CURRENT_CUE_QUESTIONS = ["这次判断依据是什么？", "当时有哪些已知事实？", "还有哪些未知条件？"] as const;
@@ -18,6 +18,7 @@ export interface CurrentCueQuestionInput {
   busy: boolean;
   takenOver: boolean;
   resourceSource?: CurrentCueResourceSource;
+  displayedUtilityText?: string;
 }
 interface CitedText { text: string; refs: readonly string[] }
 export interface CurrentCueQuestionContext {
@@ -27,6 +28,7 @@ export interface CurrentCueQuestionContext {
   limitations: readonly string[];
   limitationSource: string;
   resources: Partial<Record<CueResourceKind, VerifiedResourceText>>;
+  utilityKinds?: VerifiedResourceText;
   advice?: Pick<TransferRule, "when" | "do" | "unless" | "limitations" | "refs">;
 }
 export interface CurrentCueAnswer {
@@ -71,6 +73,7 @@ export function buildCurrentCueQuestionContext(input: CurrentCueQuestionInput): 
   let limitationSource: string;
   let resources: CurrentCueQuestionContext["resources"] = {};
   let transferRule: TransferRule | undefined;
+  let utilityKinds: VerifiedResourceText | undefined;
   if (input.diagnosticsEnabled && input.cueCase?.status !== "FALLBACK") {
     const parsed = CueCaseSchema.safeParse(input.cueCase);
     if (!parsed.success) return;
@@ -98,6 +101,7 @@ export function buildCurrentCueQuestionContext(input: CurrentCueQuestionInput): 
     limitations = [...observableSituation(cue).limitations, ...cue.assessment.limitations.map(playerFacingLimitation)].slice(0, 3);
     sourceRevision = n;
     limitationSource = "当前讲解已显示的限制";
+    utilityKinds = matchDisplayedCueUtilityKinds(input.resourceSource, plan, cue, input.displayedUtilityText);
   }
   const idCounts = new Map<string, number>();
   for (const fact of cue.facts) idCounts.set(fact.id, (idCounts.get(fact.id) ?? 0) + 1);
@@ -110,8 +114,8 @@ export function buildCurrentCueQuestionContext(input: CurrentCueQuestionInput): 
   const shownLimitations = [...new Set(limitations.filter(Boolean).map(playerFacingLimitation))].slice(0, 4)
     .map(text => boundedText(text) ? text : "当前记录中的限制较长，请结合上方完整诊断查看；这里不截断后改变其含义。");
   return {
-    key: JSON.stringify([input.generation, session.id, plan.id, cue.id, visit?.visit_id ?? null, sourceRevision, facts, basis, shownLimitations, input.resourceSource?.revision, resources]),
-    facts, basis, limitations: shownLimitations, limitationSource, resources,
+    key: JSON.stringify([input.generation, session.id, plan.id, cue.id, visit?.visit_id ?? null, sourceRevision, facts, basis, shownLimitations, input.resourceSource?.revision, resources, utilityKinds]),
+    facts, basis, limitations: shownLimitations, limitationSource, resources, utilityKinds,
     ...(transferRule ? { advice: {
       when: transferRule.when, do: transferRule.do, unless: transferRule.unless,
       // Match the diagnosis surface, retaining its entire schema-bounded list.
@@ -147,6 +151,13 @@ export function answerGroundedCueQuestion(context: CurrentCueQuestionContext, qu
       ],
       source: "当前诊断已展示的建议与适用条件（原文复述）",
     };
+  }
+  if (["当时有什么道具", "我当时有什么道具", "当时有哪些道具"].includes(q)) {
+    return context.utilityKinds ? {
+      text: context.utilityKinds.text === "无道具" ? "当前已显示的库存记录确认当时无道具；这里只复述记录，不新增战术建议。"
+        : "这里只复述当前已显示且来源一致的道具种类；种类数不等于持有颗数，具体数量仍未知，也不能据此判断应该使用哪种道具。",
+      items: [context.utilityKinds], source: "当前状态已显示的道具与同一决策采样交叉核对",
+    } : { text: "当前没有可核对的已显示道具种类，不能把未知当成无道具，也不能从隐藏内容补齐。", items: [], source: "当前道具种类的来源缺口" };
   }
   const resourceQuestions: readonly [CueResourceKind, readonly string[]][] = [
     ["health", ["我当时多少血", "当时多少血", "当时血量是多少"]],
@@ -190,7 +201,7 @@ export function answerGroundedCueQuestion(context: CurrentCueQuestionContext, qu
     text: context.limitations.length ? "当前讲解仍保留以下限制；追问不会消除这些未知条件。" : "当前内容没有逐项列出更多未知条件，这不代表所有条件都已确认。",
     items: context.limitations.map(text => ({ text, refs: [] })), source: context.limitationSource,
   };
-  return boundary("这句问法暂不支持可靠回答。可以问判断依据、已知事实或未知条件，也可以明确问“当时回合还剩多久？”“我当时多少血？”“当时有多少护甲？”“当时有几颗道具？”“弹匣当时还有几发？”。目前不能新增战术建议或回答其他教学点。");
+  return boundary("这句问法暂不支持可靠回答。可以问判断依据、已知事实或未知条件，也可以明确问“当时有什么道具？”“当时回合还剩多久？”“我当时多少血？”“当时有多少护甲？”“当时有几颗道具？”“弹匣当时还有几发？”。目前不能新增战术建议或回答其他教学点。");
 }
 
 export function currentCueQuestionState(state: CurrentCueQuestionState | undefined, context: CurrentCueQuestionContext): CurrentCueQuestionState {

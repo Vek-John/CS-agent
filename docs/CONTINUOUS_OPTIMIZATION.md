@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：已显示道具种类的明确追问（2026-09-26）
+
+- ID utility-kind-question，基线e62a59c clean；partial_revision_restore继承默认模型/推理，独占question/resource-source/view必要共享投影、新helper与测试；root拥有docs/ARCH/集成与push。先核实真实分支：Host诊断与baseline三段互斥，种类chip目前只在baseline，不能借未显示的另一分支回答。
+- A1真实Adapter verified库存→当前显示→明确问句；5分钟提交最小接线方案。A2复述同源已展示种类且数量未知，未知/未verified/旧/未来/缺本人拒绝；A3结果门、分支、旧token/恢复、数值/clock/建议兼容；A4相关tests/TS/build，root读实际diff及本地日志，文档后push。
+- 风险/边界：不把种类数量当颗数，不新增战术判断/模型/Graph/Memory/播放；复用opaque cache和已安装emil/apple规则，先来源而非新UI。15分钟有限交付，测试60秒，两次基础设施失败简化；无Demo/DB/服务/GUI/安装，执行者清理进程，原A5独立。
+- A1方案已确认：仅baseline三段（含FALLBACK）实际显示种类chip时开放，诊断分支不引用隐藏chips。原View/helper共用种类规则，cache来源对照actual displayedUtilityText；root独占Host新增这一标量行，执行者不写Host。最终匹配结果参与key以拒绝旧回答；已知空仅在同源已显示“无道具”且原count=0时中性复述。
+- 交付：22新增项、5文件180相关tests、TS/build通过，root已读实际日志与关键diff；未知/空、诊断隐藏chip、显示变化、manual结果门、旧token及无重复投影覆盖。负例发现两个undefined相等导致解引用，已用明确source存在门修复。执行者RELEASE、进程全部退出；[记录](validation/CURRENT_CUE_UTILITY_QUESTIONS.md)。仅合成Replay实际模块/SSR，未真实Demo/完整浏览器/用户库。
+- 后继：当前基础局面卡回合时间仍写“回合剩余N秒”，而诊断/追问明确最近采样约秒。先核实实际卡片文案并对齐采样限定，不动时钟计算/判决或重复真实Demo解析；随后转回有实际证据的教学/等待问题，不逐字段制造新入口。
+
 ## 已交付：当前回合时间的有来源追问（2026-09-26）
 
 - ID clock-question，基线42d6b37已push；partial_revision_restore默认模型/推理独占current-cue-resource-source.ts、current-cue-questions.ts及新clock问答测试，必要最小提取原Host clock helper须先同步。root拥有docs/ARCH/最终集成与push，不并发写源码。

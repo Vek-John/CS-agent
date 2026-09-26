@@ -1,3 +1,5 @@
+import { buildCoachingCueView, playerStateAtOrBefore } from "./cs2d-coaching-view";
+import { verifiedDisplayedUtilityEvidence } from "./utility-kind-evidence";
 import type { CoachCue, DecisionResources, DiagnosticMeasurement, ReviewPlan, TeachingDiagnosisInput } from "@cs-coach/contracts";
 import type { TeachingDiagnosisHostContext } from "./teaching-diagnosis-host";
 import { decisionFactsForCue } from "./teaching-diagnosis-host";
@@ -6,7 +8,7 @@ import { currentDiagnosisSnapshot, currentDiagnosisResources, currentDiagnosisWi
 
 /** Opaque, page-local provenance: a saved/labelled measurement cannot manufacture this source. */
 export interface CurrentCueResourceSource { readonly revision: number }
-const sources = new WeakMap<CurrentCueResourceSource, { plan: ReviewPlan; cue: CoachCue; resources?: DecisionResources; clock?: TeachingDiagnosisInput["decisionClock"] }>();
+const sources = new WeakMap<CurrentCueResourceSource, { plan: ReviewPlan; cue: CoachCue; resources?: DecisionResources; clock?: TeachingDiagnosisInput["decisionClock"]; utilityKinds?: VerifiedResourceText }>();
 
 /** One immutable source entry per Host. Typing/replay do not rescan the timeline. */
 export class CurrentCueResourceCache {
@@ -29,8 +31,13 @@ export class CurrentCueResourceCache {
     const window = belongs ? currentDiagnosisWindow(context) : undefined;
     const resources = belongs ? currentDiagnosisResources(context, window) : undefined;
     const clock = belongs ? projectDiagnosisClock(currentDiagnosisSnapshot(context, window), decisionFactsForCue(cue, material)) : undefined;
+    // Match the baseline View's precedence and fact surface, while requiring current freshness.
+    const semantics = { ...material, ...cue };
+    const displayedSnapshot = currentDiagnosisSnapshot({ ...context, material: undefined, cue: { ...cue, decisionSnapshot: semantics.decisionSnapshot } }, window);
+    const state = belongs && displayedSnapshot ? playerStateAtOrBefore(timeline?.player_state_tracks ?? [], selectedPlayerId, cue.decision_tick) : undefined;
+    const utilityKinds = state ? verifiedDisplayedUtilityEvidence(state, semantics, cue.decision_tick, buildCoachingCueView(cue, false).decisionFacts) : undefined;
     const source = Object.freeze({ revision: ++this.revision });
-    sources.set(source, { plan, cue, resources, clock });
+    sources.set(source, { plan, cue, resources, clock, utilityKinds });
     this.last = { context: { ...context }, source };
     return source;
   }
@@ -69,4 +76,11 @@ export function matchDisplayedCueResources(
     result[item.kind] = { text: `${item.label}：${item.value}${item.unit}。`, refs: [...item.refs] };
   }
   return result;
+}
+
+/** Baseline-only caller must also supply the exact utility text from its current displayed View. */
+export function matchDisplayedCueUtilityKinds(source: CurrentCueResourceSource | undefined, plan: ReviewPlan, cue: CoachCue, displayedText: string | undefined): VerifiedResourceText | undefined {
+  const origin = source && sources.get(source);
+  return origin && origin.plan === plan && origin.cue === cue && origin.utilityKinds && origin.utilityKinds.text === displayedText
+    ? { text: origin.utilityKinds.text, refs: [...origin.utilityKinds.refs] } : undefined;
 }

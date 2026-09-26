@@ -1,3 +1,4 @@
+import { matchesDecisionState, verifiedUtilityKindText } from "./utility-kind-evidence";
 import { projectDecisionUtilityCount } from "@cs-coach/coach-agent/decision-utilities";
 import type {
   ActiveItem,
@@ -57,36 +58,6 @@ function isGenericAction(value: string): boolean {
 
 function containsInternalTaxonomy(value: string): boolean {
   return /\b[A-Z]{2,}(?:_[A-Z0-9]+)+\b/.test(value) || /回到决策时的事实和动作/.test(value);
-}
-
-const GRENADE_NAMES = new Map([
-  ["HE", "高爆手雷"], ["Smoke", "烟雾弹"], ["Flash", "闪光弹"],
-  ["Molotov", "燃烧弹"], ["Decoy", "诱饵弹"]
-]);
-
-/** Modern snapshots already enforce freshness; do not revive a rejected older track row. */
-function matchesDecisionState(state: PlayerStateSample, semantics: TrustedDecisionSemantics | undefined, decisionTick: number | undefined, decisionFacts: readonly Fact[] = []): boolean {
-  const snapshot = semantics?.decisionSnapshot;
-  // Legacy callers without a compact snapshot retain their existing presentation.
-  if (!snapshot) return decisionTick === undefined || (Number.isSafeInteger(decisionTick) && Number.isSafeInteger(state.tick) && state.tick <= decisionTick);
-  const evidence = snapshot.selectedPlayer;
-  return evidence.boundary === "OBSERVABLE" && evidence.value !== null &&
-    snapshot.selectedPlayerId === state.player_id && snapshot.sampledAtTick === state.tick &&
-    Number.isSafeInteger(decisionTick) && snapshot.decisionTick === decisionTick && Number.isSafeInteger(state.tick) && state.tick <= decisionTick! &&
-    evidence.evidenceRefs.some(ref => decisionFacts.some(fact => fact.id === ref && fact.source === "DEMO" && fact.availability === "DECISION" && fact.observed_by_player && fact.available_at_tick === state.tick));
-}
-
-/** Kinds can be known while physical counts are not; bind them to this exact sample. */
-function verifiedUtilityKindText(state: PlayerStateSample, semantics: TrustedDecisionSemantics | undefined, decisionTick: number | undefined, decisionFacts: readonly Fact[] = []): string | undefined {
-  const snapshot = semantics?.decisionSnapshot;
-  const evidence = snapshot?.selectedPlayer;
-  const kinds = evidence?.value?.grenades;
-  if (!snapshot || evidence?.boundary !== "OBSERVABLE" || !Array.isArray(kinds) || kinds.length === 0 ||
-    kinds.length > GRENADE_NAMES.size || new Set(kinds).size !== kinds.length || !kinds.every(kind => GRENADE_NAMES.has(kind)) ||
-    !state.missing_fields.includes("inventory.count") || state.missing_fields.some(field =>
-      (field === "inventory" || field.startsWith("inventory.") || field.startsWith("inventory[")) && field !== "inventory.count") ||
-    !matchesDecisionState(state, semantics, decisionTick, decisionFacts)) return undefined;
-  return `${kinds.map(kind => GRENADE_NAMES.get(kind)).join("、")}（数量未知）`;
 }
 
 /** Finds the last real state at the decision boundary without interpolating facts. */
