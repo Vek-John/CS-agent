@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：自由目标描述的否定与歧义（2026-09-26）
+
+- ID reflection-goal-polarity，基线52ca299 clean；主控拥有teaching-diagnosis.ts/tests/docs；revision_semantics_review默认配置8分钟只读语义链，不并写。
+- 目标/流程：初次/一次异议的USER描述→有界目标分类→GOAL陈述，不把否定或多目标强认作一个肯定目标；TIME_BELIEF保留中性原文。A1真实diagnose红例，A2selectedGoal仍优先、撤回旧目标不复活/无新目标保留，A3不修改原文/来源/预算/旧保存结果；A4相关tests/TS/build及窄审；交付文档commit/push。
+- 边界/风险：仅有限词法分类，不完整解析自然语言；已有hinge仍扫描其他claim关键词，不能以目标修复冒称判决完整理解。优先保守UNKNOWN；否定不跨分句污染后面的肯定目标；时间中性陈述不改变回合时钟事实。5分钟红例，12分钟实现，15分钟验证；无模型/用户DB/服务，主控清测试进程，原锁屏A5独立待验。
+
+- 结果：13个真实红例转绿；显式目标优先，有限否定/分句/多目标判定保守处理，时间陈述不强加压力。独审补出“该保枪吗？”仍当肯定的must-fix，主控加入问号/有限疑问句式及初次/修订回归后关闭；最终6文件119tests、TypeScript/production build通过。reviewer只读RELEASE，主控实际diff复核。[证据](validation/REFLECTION_GOAL_POLARITY.md)。
+- 后继/限制：目标陈述更忠实，但selectHingeCondition还按其他claim里的“信息/补枪”选条件，不能宣称最终判断完全理解否定。下一项对同反例核实这一错接；优先仅去掉从否定目标衍生的条件，保留真正独立敌情/队友陈述与显式focus，不扩大NLP。旧保存不重算，无模型/真实Demo/用户DB/服务；测试/build退出，push后释放，UI A5独立待验。
+
 ## 已交付：教学模式标题准确呈现（2026-09-26）
 
 - ID pedagogy-labels；基线8ceb81f clean，现有owner均RELEASE，主控独占Panel/docs，小文案映射不另派代理。沿用已读emil-design-eng/apple-design的具体反馈与克制原则，不新增动效/透明度/布局。

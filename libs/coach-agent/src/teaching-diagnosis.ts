@@ -341,15 +341,31 @@ function claim(
 function inferGoalFromText(rawText: string | undefined): ReflectionGoal | undefined {
   const text = boundedText(rawText).toLowerCase();
   if (!text) return undefined;
-  if (/补枪|帮队友|跟枪|trade/.test(text)) return "TRADE";
-  if (/拿信息|探信息|找信息|摸信息|获取信息|get\s*info/.test(text)) return "GET_INFO";
-  if (/抢空间|拿空间|首杀|前压|take\s*space/.test(text)) return "TAKE_SPACE";
-  if (/拖时间|拖延|耗时间|delay/.test(text)) return "DELAY";
-  if (/转点|转到|rotate/.test(text)) return "ROTATE";
-  if (/保枪|保经济|save/.test(text)) return "SAVE";
-  if (/执行战术|执行计划|按战术|execute/.test(text)) return "EXECUTE_PLAN";
-  if (/纯执行|压枪|瞄准|手滑|操作失误|mechanical/.test(text)) return "MECHANICAL_ATTEMPT";
-  return undefined;
+  const patterns: readonly [ReflectionGoal, RegExp][] = [
+    ["TRADE", /补枪|帮队友|跟枪|\btrade\b/],
+    ["GET_INFO", /拿信息|探信息|找信息|摸信息|获取信息|\bget\s*info\b/],
+    ["TAKE_SPACE", /抢空间|拿空间|首杀|前压|\btake\s*space\b/],
+    ["DELAY", /拖时间|拖延|耗时间|\bdelay\b/],
+    ["ROTATE", /转点|转到|\brotate\b/],
+    ["SAVE", /保枪|保经济|\bsave\b/],
+    ["EXECUTE_PLAN", /执行战术|执行计划|按战术|\bexecute\b/],
+    ["MECHANICAL_ATTEMPT", /纯执行|压枪|瞄准|手滑|操作失误|\bmechanical\b/],
+  ];
+  if (!patterns.some(([, pattern]) => pattern.test(text))) return undefined;
+  // This is deliberately a conservative lexical classifier. Recognized but
+  // uncertain/rejected goals return UNKNOWN, not undefined: revisions must
+  // not silently restore the old goal when the user has just rejected it.
+  if (/[?？]|(?:吗|么|呢)[。！!]*$|\b(?:should|could|would|can)\s+i\b|如果|假如|要是|可能|也许|或(?:者)?|还是|是否|不但|不仅|不光|(?:队友|他|她)(?:想|要|说|准备|打算)|[“”「」]|\b(?:if|maybe|perhaps|or|teammate)\b/.test(text)) return "UNKNOWN";
+  const positive = new Set<ReflectionGoal>();
+  const negative = new Set<ReflectionGoal>();
+  for (const clause of text.split(/[，,。.!！?？;；\n]|而是|但是|但|所以|因此|不过/u)) {
+    const rejected = /不|没|未|并非|别|无意|放弃|\b(?:not|no|never|don['’]t|didn['’]t|wasn['’]t|can['’]t|won['’]t)\b/.test(clause);
+    for (const [goal, pattern] of patterns) {
+      if (pattern.test(clause)) (rejected ? negative : positive).add(goal);
+    }
+  }
+  const only = [...positive][0];
+  return positive.size === 1 && only && !negative.has(only) ? only : "UNKNOWN";
 }
 
 /** Turn a short reflection into bounded, separately typed user assertions. */
@@ -368,7 +384,7 @@ export function buildUserClaims(rawReflection: UserReflection | unknown, input?:
   if (reflection.questionType === "TACTICAL_CONTEXT" || (text && /语音|叫我|报点|战术|固定/.test(text))) {
     claims.push(claim(reflection, "TACTICAL_CONTEXT", `用户补充了可能影响决策的语音或战术背景：${boundedText(reflection.rawText)}。`, ["Demo 无法直接验证语音或固定战术内容。"], "context"));
   }
-  if (text && /时间|来不及|秒|倒计时|快没/.test(text)) claims.push(claim(reflection, "TIME_BELIEF", `用户认为当时存在时间压力：${boundedText(reflection.rawText)}。`, ["Demo 时间轴可以验证剩余时间，但不能验证用户主观感受。"], "time"));
+  if (text && /时间|来不及|秒|倒计时|快没/.test(text)) claims.push(claim(reflection, "TIME_BELIEF", `用户补充了当时的时间判断：${boundedText(reflection.rawText)}。`, ["Demo 时间轴可以验证剩余时间，但不能验证用户主观感受。"], "time"));
   if (text && /钱|经济|没甲|头盔|道具|资源/.test(text)) claims.push(claim(reflection, "RESOURCE_BELIEF", `用户补充了资源判断：${boundedText(reflection.rawText)}。`, [], "resource"));
   if (text && /敌人|看到|听到|脚步|信息|报点/.test(text)) claims.push(claim(reflection, "ENEMY_BELIEF", `用户补充了当时对敌人或信息的判断：${boundedText(reflection.rawText)}。`, /听到|脚步/.test(text) ? ["Demo 声音发射不等于所选玩家确实听到。"] : [], "enemy"));
   if (text && /失误|压枪|瞄准|手滑|没按|执行/.test(text)) claims.push(claim(reflection, "EXECUTION_REPORT", `用户把这次处理描述为执行层尝试：${boundedText(reflection.rawText)}。`, [], "execution"));

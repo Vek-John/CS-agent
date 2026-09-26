@@ -623,3 +623,58 @@ it("uses a known zero teammate count to reject trade feasibility without judging
   expect(unknown.cueCase.diagnosticResult?.status).toBe("UNVERIFIABLE");
   expect(unknown.cueCase.diagnosticResult?.explanation).toContain("队友是否存活");
 });
+
+
+describe("bounded free-text goal assertions", () => {
+  it.each([
+    ["我该保枪吗？", "当时目标不确定"],
+    ["拿信息？", "当时目标不确定"],
+    ["我该保枪吗", "当时目标不确定"],
+    ["should I save", "当时目标不确定"],
+    ["想拿信息", "拿信息"],
+    ["我想给队友补枪", "给队友补枪"],
+    ["队友想保枪", "当时目标不确定"],
+    ["想拿信息，还要再拿信息", "拿信息"],
+    ["不是拿信息，是保枪", "保枪"],
+    ["不是拿信息而是保枪", "保枪"],
+    ["不是补枪，而是拿信息", "拿信息"],
+    ["我不想拿信息", "当时目标不确定"],
+    ["想拿信息，也想保枪", "当时目标不确定"],
+    ["我想保枪，不想保枪", "当时目标不确定"],
+    ["没看到敌人，所以想拿信息", "拿信息"],
+    ["I do not want to get info, I want to save", "保枪"],
+    ["不但拿信息，还要补枪", "当时目标不确定"],
+    ["如果能保枪，我可能就不打了", "当时目标不确定"],
+  ])("does not assert a rejected or ambiguous goal from %s", (rawText, expected) => {
+    const output = diagnoseCue(input({ reflection: reflection({ selectedGoal: undefined, rawText }) }));
+    const goal = output.cueCase.claims.find(item => item.type === "GOAL")!;
+    expect(goal.content).toBe(`用户表示当时的目标是${expected}。`);
+    expect(goal.source).toBe("USER");
+    expect(output.cueCase.reflection?.rawText).toBe(rawText);
+  });
+
+  it("keeps the explicit selection authoritative", () => {
+    const output = diagnoseCue(input({ reflection: reflection({ selectedGoal: "TRADE", rawText: "不是拿信息，是保枪" }) }));
+    expect(output.cueCase.claims.find(item => item.type === "GOAL")?.content).toContain("给队友补枪");
+  });
+
+  it("does not resurrect an explicitly rejected old goal during the one revision", () => {
+    const originalInput = input({ reflection: reflection({ selectedGoal: "GET_INFO", rawText: "想拿信息" }) });
+    const original = diagnoseCue(originalInput);
+    for (const rawText of ["我不是想拿信息", "拿信息或者保枪", "该保枪吗？"]) {
+      const revised = reviseDiagnosis({ previous: original, input: originalInput, disagreement: reflection({ selectedGoal: undefined, rawText }) });
+      expect(revised.cueCase.reflection?.selectedGoal).toBe("UNKNOWN");
+      expect(revised.cueCase.claims.find(item => item.type === "GOAL")?.content).toContain("当时目标不确定");
+      expect(revised.cueCase.acceptedDisagreement?.rawText).toBe(rawText);
+      expect(revised.cueCase.previousReflection?.selectedGoal).toBe("GET_INFO");
+    }
+    const addedContext = reviseDiagnosis({ previous: original, input: originalInput, disagreement: reflection({ selectedGoal: undefined, rawText: "队友语音叫我行动" }) });
+    expect(addedContext.cueCase.reflection?.selectedGoal).toBe("GET_INFO");
+  });
+
+  it.each(["当时时间很充足", "没有时间压力", "时间来不及了"])("preserves a time statement without adding a subjective pressure claim: %s", rawText => {
+    const time = buildUserClaims(reflection({ rawText })).find(item => item.type === "TIME_BELIEF")!;
+    expect(time.content).toBe(`用户补充了当时的时间判断：${rawText}。`);
+    expect(time.source).toBe("USER");
+  });
+});
