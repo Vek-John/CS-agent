@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：历史分页与搜索归属（2026-09-26）
+
+- 基线fde53ae clean，主控有限goal独占Host/窄请求归属helper/tests/docs；原owner均RELEASE。已核实首屏有epoch，但loadMore不验证search/cursor/request，React loading状态发布前双击也可重复请求。
+- 流程：搜索改变即同步失效旧请求/cursor→当前search首屏刷新→只允许当前已接受cursor分页→只接受当前请求；A1延迟旧分页成功/失败不改新列表/cursor/loading/error；A2搜索改变到effect前及旧callback、同cursor双击拒绝；A3正常刷新/追加去重和失败后明确重试保持，API仍20秒且零自动retry；A4相关tests/TS/build与窄审；A5架构/学习/证据push。
+- 范围/风险：仅列表的search/cursor/待请求归属，不引入缓存/数据查询框架，不改Review数据/恢复/Graph。复用现有refreshHistoryPage异步发布，增加小型同步请求owner以验证React提交前间隙；5分钟接口/局部例、12分钟实现、10分钟验证。emil/Apple沿用现有loading/按钮、无新动效；无用户Demo/DB/模型/服务/安装部署，主控清进程，原UI A5不重试。
+
+- 结果：小型HistoryPageRequests共同管理首屏/分页，同步拒绝旧query/cursor与双击，复用原refresh发布/错误门。保留Sidebar原160ms防抖，指提交query后同步失效。新增5项生产owner/helper回归，相关5文件49tests、TS/production build通过；默认revision_semantics_review只读窄审无must-fix、RELEASE，主控实际diff与去重/防抖接线确认。[证据](validation/HISTORY_QUERY_PAGINATION.md)。
+- 后继切回教学质量：已读实际buildStage3WrapUpInput与deterministicSessionWrapUpBundle，前者只接plan/narration/candidateSet，没有CueCase修订输入。下一轮用真实diagnose→revise→总结小例核实用户补充是否在最终总结中被旧建议覆盖；先确定影响，再最小接线，不重跑旧Jev拒判或扩大模型门。测试/build退出，当前文件commit/push后释放，原UI A5独立待验。
+
 ## 已交付：历史后台请求等待上限（2026-09-26）
 
 - 基线f772ba9 clean；主控有限goal独占API/目标tests/docs；原owner已RELEASE。真实list route默认30/max50条摘要，不携带Artifact；markFailed是小PATCH状态DTO，仍直接fetch/json无界。

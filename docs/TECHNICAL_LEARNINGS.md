@@ -2039,3 +2039,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：API内已有有界JSON保存helper扩为CHECKPOINT/TEACHING/HISTORY三个明确用途，只有list/markFailed新增HISTORY_REQUEST_TIMEOUT与每请求20秒；保留原body/query、错误code与void ACK，detail/大产物不套用，零自动retry。
 - 验证：两类fetch挂起与实际settlement→API→refresh收尾共3红→绿；fetch/body各覆盖非合作abort、晚响应不发布、timer清理。正常摘要/搜索cursor/HTTP错误/PATCH空JSON与大detail隔离保持。最终6文件66tests、TS/production build通过；默认revision_semantics_review只读窄审无must-fix，RELEASE。[证据](validation/HISTORY_BOOKKEEPING_DEADLINE.md)。
 - 限制：fake transport/生产模块验证，不是实际浏览器网络/服务器时限。20秒为单请求；status和随后list各超时可合计40秒，但Session已独立启动；abort不证明服务端取消或未提交。无用户数据/DB/Demo/模型/服务/安装部署。下一项代码线索：首屏刷新有request epoch，但loadMore还会无条件append旧search/cursor结果，先复现搜索变化期间的分页竞态再最小修复。
+
+
+## 2026-09-26：分页必须继承当前已接受查询的游标
+
+- 问题：首屏有epoch而loadMore只看React loading、无query/cursor归属；新查询首屏接受后，旧分页仍可追加旧行、替换cursor并结束新请求loading，渲染前双击也能重复发同cursor。
+- 决定：以小型HistoryPageRequests只拥有search/cursor/pending/epoch，不拥有缓存或Review数据；首屏/分页共用其请求资格。保留Sidebar160ms防抖，提交query后同步清旧cursor/失效请求，首屏只接当前query，分页同步拒绝pending/旧query/旧cursor。复用已有refreshHistoryPage发布与错误门，Host原去重不变。
+- 验证：5项owner＋真实refresh helper回归覆盖旧成功/错误、新查询effect前、同query刷新、旧cursor和渲染前双击、当前失败可重试；相关5文件49tests、TypeScript/production build通过。主控实际diff及Sidebar防抖接线复核；默认revision_semantics_review只读窄审无must-fix、RELEASE。[证据](validation/HISTORY_QUERY_PAGINATION.md)。
+- 限制：模块/回调而非完整Host/浏览器验收；防抖期间仍属旧已提交查询，不新增立即取消网络或缓存。无用户数据/模型/服务/安装部署。下一项回到教学内容：buildStage3WrapUpInput仅取plan/narration/candidateSet，不收CueCase；需用真实修订诊断的小例核实整场总结是否仍复述已被修订的旧建议，不预设要改职业判断门或调用Jev。

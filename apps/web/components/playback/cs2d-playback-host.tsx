@@ -179,6 +179,7 @@ import { CoachSetupFlow, type CoachSetupStep } from "./coach-setup-flow";
 import { LiquidPhaseStatus } from "./liquid-phase-status";
 import { ReviewHistorySidebar, type ReviewHistoryItem } from "../history/review-history-sidebar";
 import { createReviewHistoryApi, ReviewHistoryApiError } from "../../lib/review-history/api";
+import { HistoryPageRequests } from "../../lib/review-history/history-page-requests";
 import { refreshHistoryPage } from "../../lib/review-history/refresh-history-page";
 import { HistoryRestoreController, HistoryRestoreError } from "../../lib/review-history/history-restore-controller";
 import { HistoryPersistenceController, type RuntimeHeadRetry } from "../../lib/review-history/history-persistence-controller";
@@ -468,7 +469,7 @@ export function Cs2dPlaybackHost({
   const [historyImportProgress, setHistoryImportProgress] = useState<{ requestId: string; completedBytes: number; totalBytes: number }>();
   const historyDurabilityReadyRef = useRef<Promise<void> | undefined>(undefined);
   const historyOpenEpochRef = useRef(0);
-  const historyRefreshEpochRef = useRef(0);
+  const historyPageRequestsRef = useRef(new HistoryPageRequests());
   const expectedManagedSourceRef = useRef<ExpectedManagedReplayIdentity | undefined>(undefined);
 
   useEffect(() => {
@@ -691,33 +692,42 @@ export function Cs2dPlaybackHost({
   const reviewHistoryApi = useMemo(() => createReviewHistoryApi(), []);
   const refreshReviewHistory = useCallback(async (isCurrent: () => boolean = () => true, clearError = true) => {
     if (!isCurrent()) return;
-    const request = ++historyRefreshEpochRef.current;
-    const ownsRequest = () => request === historyRefreshEpochRef.current;
+    const request = historyPageRequestsRef.current.refresh(historySearch);
+    if (!request) return;
     if (!desktopLibraryEnabled) {
       setHistoryItems([]);
       setHistoryError(undefined);
+      request.finish();
       return;
     }
     await refreshHistoryPage({
       load: () => reviewHistoryApi.list(historySearch || undefined),
-      accept: page => { setHistoryItems(page.items); setHistoryNextCursor(page.nextCursor); },
-      isCurrent, ownsRequest, clearError, setLoading: setHistoryLoading, setError: setHistoryError,
+      accept: page => { request.acceptCursor(page.nextCursor); setHistoryItems(page.items); setHistoryNextCursor(page.nextCursor); },
+      isCurrent, ownsRequest: request.owns, clearError,
+      setLoading: loading => { if (!loading) request.finish(); setHistoryLoading(loading); }, setError: setHistoryError,
     });
   }, [desktopLibraryEnabled, historySearch, reviewHistoryApi]);
   useEffect(() => { void refreshReviewHistory(); }, [refreshReviewHistory]);
-  const loadMoreReviewHistory = useCallback(async () => {
-    if (!historyNextCursor || historyLoading) return;
+  const changeHistorySearch = useCallback((search: string) => {
+    if (!historyPageRequestsRef.current.changeSearch(search)) return;
+    setHistoryNextCursor(undefined);
     setHistoryLoading(true);
-    try {
-      const page = await reviewHistoryApi.list(historySearch || undefined, historyNextCursor);
-      setHistoryItems((current) => [...current, ...page.items.filter((item) => !current.some((existing) => existing.id === item.id))]);
-      setHistoryNextCursor(page.nextCursor);
-    } catch {
-      setHistoryError("无法加载更多复盘。");
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, [historyLoading, historyNextCursor, historySearch, reviewHistoryApi]);
+    setHistorySearch(search);
+  }, []);
+  const loadMoreReviewHistory = useCallback(async () => {
+    const request = historyPageRequestsRef.current.more(historySearch, historyNextCursor);
+    if (!request) return;
+    await refreshHistoryPage({
+      load: () => reviewHistoryApi.list(historySearch || undefined, historyNextCursor),
+      accept: page => {
+        request.acceptCursor(page.nextCursor);
+        setHistoryItems(current => [...current, ...page.items.filter(item => !current.some(existing => existing.id === item.id))]);
+        setHistoryNextCursor(page.nextCursor);
+      },
+      isCurrent: () => true, ownsRequest: request.owns, clearError: false, failureMessage: "无法加载更多复盘。",
+      setLoading: loading => { if (!loading) request.finish(); setHistoryLoading(loading); }, setError: setHistoryError,
+    });
+  }, [historyNextCursor, historySearch, reviewHistoryApi]);
   const historyRestoreControllerRef = useRef<HistoryRestoreController | undefined>(undefined);
   const historyPersistenceControllerRef = useRef<HistoryPersistenceController | undefined>(undefined);
   if (!historyPersistenceControllerRef.current) historyPersistenceControllerRef.current = new HistoryPersistenceController({
@@ -3230,7 +3240,7 @@ export function Cs2dPlaybackHost({
             importProgress={historyImportProgress}
             hasMore={Boolean(historyNextCursor)}
             onImportDemo={() => send({ type: "requestDemoPicker" } as PlaybackCommand)}
-            onSearchChange={setHistorySearch}
+            onSearchChange={changeHistorySearch}
             onLoadMore={() => void loadMoreReviewHistory()}
             onOpenReview={(reviewId) => void openHistoryReview(reviewId)}
             onStartOver={(review) => void openHistoryReview(review.id, "RESTORE", true)}

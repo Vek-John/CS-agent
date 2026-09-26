@@ -9,6 +9,7 @@ export async function refreshHistoryPage(input: {
   setLoading: (loading: boolean) => void;
   setError: (update: (previous: string | undefined) => string | undefined) => void;
   clearError: boolean;
+  failureMessage?: string;
 }): Promise<void> {
   const live = () => input.ownsRequest() && input.isCurrent();
   if (!live()) return;
@@ -19,7 +20,8 @@ export async function refreshHistoryPage(input: {
     input.accept(page);
     if (input.clearError) input.setError(() => undefined);
   } catch {
-    if (live()) input.setError(previous => input.clearError ? "无法读取本地复盘历史。" : previous ?? "无法读取本地复盘历史。");
+    const message = input.failureMessage ?? "无法读取本地复盘历史。";
+    if (live()) input.setError(previous => input.clearError ? message : previous ?? message);
   } finally {
     // A superseded route may finish its own spinner, but never another request's.
     if (input.ownsRequest()) input.setLoading(false);
