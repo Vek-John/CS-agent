@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：把已确认道具种类呈现给玩家
+
+- 问题：完整种类已知但物理颗数未知时，状态栏完全不显示道具。复用已有chip显示中文种类/数量未知，明确空、完全未知和旧精确数量保持。
+- 边界：玩家/sample/decision与OBSERVABLE Snapshot绑定，inventory.count不能伴其他缺口；canonical引用解析到当前cue同时间DEMO/DECISION事实。初直接匹配raw ref与canonical ref失败，改正确解析而非削弱引用门。
+- 验证：真实Adapter→View、实际组件SSR，错身份/时间/引用/unknown反例与SQLite恢复两红→绿；42相关tests/TS/build通过。组件沿原DOM/icon/assets提取，CSS限宽换行保留完整限定，无新动画/透明依赖。[证据](validation/UTILITY_KIND_CHIP.md)。
+- 限制/后继：未实测锁屏环境真实UI/小屏布局，原A5独立。下一项仅小验证原health/armor状态栏是否在真实候选/恢复缺当前样本时回填旧资源，不凭无界查找函数单独宣称产品bug。全部进程/临时库清理，代理RELEASE。
+
 ## 2026-09-26：新库存语义经SQLite重开恢复保持
 
 - 问题/目标：上一轮只证明JSON往返，不能代替SQLite关闭重开与真正History Restore接线。六情形（明确空/Flash/Smoke/unknown/无效类型/旧无标记输入）用新Adapter产物进入真实库/API/恢复函数/教练View。

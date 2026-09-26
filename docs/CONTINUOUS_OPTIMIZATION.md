@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：教练状态栏显示已确认道具种类（2026-09-26）
+
+- ID utility-kind-chip，基线81fc947 clean；主控View/Host接线/样式和单元测试/docs，partial_revision_restore默认配置独占上一轮SQLite恢复集成测试，其他owner RELEASE。已读emil/apple与Next测试指南，沿现有chip反馈，不加动画/依赖。
+- 流程：当前cue决策采样+相同玩家/时间/sourceRef的受限Snapshot种类→中文标签+数量未知；完整空沿现有无道具，精确数量旧行为保持，完全unknown不造标签。A1实际Adapter产物当前显示Flash/Smoke；A2错player/tick/决策/source/unknown/非法列表均不显示；A3长列表在现有chip内换行，SSR验证真实渲染/来源，reduced motion/transparency不新增依赖；A4SQLite重开也显示种类、零新生成，相关tests/TS/build与证据push。
+- 风险/边界：新种类只用于展示，不授予专业判决、推断颗数或修改保存数据；Host显式传decisionTick避免跨cue拼接。5分钟小回归/10分钟实现/15分钟验收，测试60秒，子任务临时库finally清理；不重试锁屏浏览器路径、不模型/真实Demo/安装/用户DB，准确区分SSR与真实UI未测，原A5独立。
+
+- 结果：已确认Flash/Smoke等显示中文种类+数量未知；Host传当前decisionTick及实际canonical决策事实，错身份/时间/引用/unknown不显示。修正初raw/canonical ref层级误配而未降低引用门；真实生产status组件SSR及长标签通过，CSS限宽换行。SQLite恢复两红→六绿、42相关tests/TS/build通过。[证据](validation/UTILITY_KIND_CHIP.md)。
+- 清理/限制：两个默认代理RELEASE、临时SQLite/进程清理；无模型/用户库/安装，SSR不是浏览器布局实测，原A5独立。下一有限核实：playerStateAtOrBefore无最大年龄，而旧health/armor chip无Snapshot绑定；用实际Adapter/恢复小例判断是否真会缺当前样本却显示旧资源，有复现再窄修，不把合法前置采样当错误，不做全UI审计。
+
 ## 已交付：库存语义的SQLite恢复（2026-09-26）
 
 - ID inventory-history-restore，基线12778fe clean；partial_revision_restore默认配置独占新inventory-restore.integration.test.ts，主控读真实恢复链/必要生产修复及文档，其他owner RELEASE。不重复Parser验证或读取Demo。

@@ -1,3 +1,6 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { CoachingStatusList } from "../../components/playback/coaching-status-list";
 import { buildCs2dAnalysisBundle } from "@cs-coach/cs2d-analysis-adapter";
 import { fireReplay, self } from "../../../../libs/cs2d-analysis-adapter/src/window-self-fire-fixtures";
 import { describe, expect, it } from "vitest";
@@ -22,6 +25,16 @@ const preparedNarration = {
   betterPlay: { text: "更好的处理", refs: ["advice-r2-reset"] },
   outcomeImpact: { text: "结果影响", refs: ["fact-r2-outcome"] }
 } as const;
+
+function inventoryViewInput(kinds: string[] = ["Flash", "Smoke"]) {
+  const source = fireReplay("DEATH", []);
+  const replay = { ...source, rounds: source.rounds.map(round => ({ ...round, frames: round.frames.map(frame => ({ ...frame, players: frame.players.map(p => ({ ...p, grenadeInventoryVersion: 1 as const, grenades: kinds })) })) })) };
+  const bundle = buildCs2dAnalysisBundle({ replay, selectedSteamId: self, demoId: "inventory-chips" });
+  const currentCue = bundle.review_plan.cues[0];
+  const material = bundle.candidate_set.materials.find(m => m.candidateId === currentCue.candidate_id)!;
+  return { narration: preparedNarration, decisionState: playerStateAtOrBefore(bundle.match_timeline.player_state_tracks ?? [], self, currentCue.decision_tick)!,
+    decisionTick: currentCue.decision_tick, decisionFacts: buildCoachingCueView(currentCue, false).decisionFacts, semantics: { ...material, ...currentCue }, outcomeFacts: [] };
+}
 
 describe("cs2d paused coaching cue view", () => {
   it("keeps outcome facts locked before playback completes", () => {
@@ -124,6 +137,46 @@ describe("cs2d paused coaching cue view", () => {
     expect(state).toBeDefined();
     const view = buildThreeStageCoachingView({ narration: preparedNarration, decisionState: state, outcomeFacts: [] });
     expect(view.currentState.chips.filter(chip => chip.kind === "utility").map(chip => chip.text)).toEqual(kinds?.length === 0 ? ["无道具"] : []);
+  });
+
+  it("shows confirmed kinds in Chinese without inventing counts", () => {
+    const view = buildThreeStageCoachingView(inventoryViewInput());
+    expect(view.currentState.chips.filter(chip => chip.kind === "utility")).toEqual([{ kind: "utility", text: "闪光弹、烟雾弹（数量未知）" }]);
+    const all = buildThreeStageCoachingView(inventoryViewInput(["HE", "Smoke", "Flash", "Molotov", "Decoy"]));
+    expect(all.currentState.chips.find(chip => chip.kind === "utility")?.text).toBe("高爆手雷、烟雾弹、闪光弹、燃烧弹、诱饵弹（数量未知）");
+  });
+
+  it("renders the actual Host status list with readable kinds and uncertainty", () => {
+    const view = buildThreeStageCoachingView(inventoryViewInput(["HE", "Smoke", "Flash", "Molotov", "Decoy"]));
+    const html = renderToStaticMarkup(createElement(CoachingStatusList, { chips: view.currentState.chips }));
+    expect(html).toContain('class="cs2d-coaching-status-list"');
+    expect(html).toContain("高爆手雷、烟雾弹、闪光弹、燃烧弹、诱饵弹（数量未知）");
+    expect(html).not.toContain("无道具");
+    expect(html).not.toMatch(/\d+ 颗道具/);
+    expect(html).toContain('aria-hidden="true"');
+  });
+
+  it.each(["player", "sample", "decision", "future", "source", "unknown", "duplicate", "invalid-kind", "partial", "boundary"])("does not combine mismatched or unknown inventory evidence: %s", mismatch => {
+    const input = inventoryViewInput();
+    const snapshot = input.semantics.decisionSnapshot!;
+    if (mismatch === "player") snapshot.selectedPlayerId = "other";
+    if (mismatch === "sample") snapshot.sampledAtTick! += 1;
+    if (mismatch === "decision") input.decisionTick += 1;
+    if (mismatch === "future") { input.decisionState = { ...input.decisionState, tick: input.decisionTick + 1 }; snapshot.sampledAtTick = input.decisionState.tick; }
+    if (mismatch === "source") snapshot.selectedPlayer.evidenceRefs = ["unrelated"];
+    if (mismatch === "unknown") snapshot.selectedPlayer.value!.grenades = null;
+    if (mismatch === "duplicate") snapshot.selectedPlayer.value!.grenades = ["Flash", "Flash"];
+    if (mismatch === "invalid-kind") snapshot.selectedPlayer.value!.grenades = ["unverified"];
+    if (mismatch === "partial") input.decisionState = { ...input.decisionState, missing_fields: [...input.decisionState.missing_fields, "inventory"] };
+    if (mismatch === "boundary") snapshot.selectedPlayer.boundary = "APPLICABILITY_ONLY";
+    expect(buildThreeStageCoachingView(input).currentState.chips.filter(chip => chip.kind === "utility")).toEqual([]);
+  });
+
+  it("retains exact-count legacy presentation when kind metadata is unavailable", () => {
+    const input = inventoryViewInput();
+    const state = { ...input.decisionState, inventory: [{ item_id: "Flash", item_class: "UTILITY", count: 2 }], missing_fields: [] };
+    expect(buildThreeStageCoachingView({ ...input, decisionState: state, semantics: undefined }).currentState.chips.find(chip => chip.kind === "utility")?.text).toBe("2 颗道具");
+    expect(buildThreeStageCoachingView({ ...input, decisionTick: undefined }).currentState.chips.filter(chip => chip.kind === "utility")).toEqual([]);
   });
 
   it("shows only meaningful win-rate movement and picks the last decision state", () => {

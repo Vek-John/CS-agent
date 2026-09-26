@@ -162,6 +162,8 @@ Parser来源追加frame-identity.v1。合法完整帧保持字段与既有回合
 
 新PlayerState每行带`grenadeInventoryVersion: 1`；`grenades`是去重的已确认道具种类，省略代表未知、[]代表已确认没有。Adapter只有版本1的完整合法列表才能用于Flash存在/不存在和种类陈述；旧未标记raw Replay数组不追认完整。类型列表不证明物理颗数：非空时Timeline不制造count=1条目，标记inventory.count缺失；未知标记inventory缺失；仅明确空支持utilityCount=0。种类通过DecisionSnapshot进入受限教学上下文，生命/身份/其他资源不受库存未知影响。
 
+教练状态栏可呈现已确认的中文道具种类并标注“数量未知”。展示须绑定当前玩家、同一sample tick、当前cue decision tick及OBSERVABLE Snapshot；canonical证据引用必须在当前cue已公开的DEMO/DECISION事实中解析到同sample tick，不能直接将重映射后的fact ID与原Timeline raw引用字符串比较。未知列表、其他库存缺口、跨身份/时间/来源均不生成种类chip；明确空与旧已保存精确数量保持原展示语义。此展示不提升专业判断或推定物理颗数。
+
 Parser追加grenade-inventory.v1，Adapter/Signal 1.11.0、Timeline1.2.0标记新派生语义。既有已保存bundle仍按原产物读取（兼容1.10.0等旧版），不悄悄重算或删除历史结论；重新解析/分析才获得新事实语义。不依据类型数声称携带N颗，不由道具存在直接批准战术建议。
 
 

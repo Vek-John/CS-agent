@@ -20,22 +20,16 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   ArrowLeftRight,
   ArrowUpDown,
-  Bomb,
   BrainCircuit,
   ChevronRight,
-  CircleDollarSign,
   CornerUpLeft,
   Crosshair,
-  Heart,
   Lightbulb,
-  MapPin,
   MessageSquareText,
-  PackageOpen,
   Pause,
   Play,
   RotateCcw,
   RotateCw,
-  Shield,
   SkipBack,
   SkipForward,
   Sparkles,
@@ -121,10 +115,9 @@ import {
 } from "../../lib/coaching/cs2d-guided-session";
 import {
   buildThreeStageCoachingView,
-  playerStateAtOrBefore,
-  type CoachingStatusChip
+  playerStateAtOrBefore
 } from "../../lib/coaching/cs2d-coaching-view";
-import { resolveItemPresentation } from "../../lib/assets/game-asset-display";
+import { CoachingStatusList } from "./coaching-status-list";
 import { loadLocalGameAssetCatalog } from "../../lib/assets/local-game-asset-catalog";
 import { completeStage3SessionWrapUp } from "../../lib/coaching/session-wrap-up-completion";
 import { isSessionWrapUpIdentityCurrent, sessionWrapUpPresentation, SessionWrapUpPanel } from "../../lib/coaching/session-wrap-up-presentation";
@@ -246,25 +239,6 @@ const WIN_RATE_VERTICAL_ZOOM_MIN = 0.75;
 const WIN_RATE_VERTICAL_ZOOM_MAX = 2.5;
 const WIN_RATE_VERTICAL_ZOOM_STEP = 0.25;
 const WIN_RATE_BASE_CHART_HEIGHT_REM = 3.2;
-
-function CoachingStatusGlyph({ chip, catalog }: { chip: CoachingStatusChip; catalog?: GameAssetCatalog }) {
-  if (chip.kind === "weapon" && chip.item) {
-    const presentation = resolveItemPresentation(catalog, chip.item);
-    if (presentation.iconRef) return <img src={presentation.iconRef} alt="" aria-hidden="true" />;
-  }
-  if (chip.kind === "location") return <MapPin aria-hidden="true" />;
-  if (chip.kind === "health") return <Heart aria-hidden="true" />;
-  if (chip.kind === "armor") return <Shield aria-hidden="true" />;
-  if (chip.kind === "utility") return <PackageOpen aria-hidden="true" />;
-  if (chip.kind === "money") return <CircleDollarSign aria-hidden="true" />;
-  if (chip.kind === "objective") return <Bomb aria-hidden="true" />;
-  return <Crosshair aria-hidden="true" />;
-}
-
-function coachingStatusText(chip: CoachingStatusChip, catalog?: GameAssetCatalog): string {
-  if (chip.kind !== "weapon" || !chip.item) return chip.text;
-  return resolveItemPresentation(catalog, chip.item).label;
-}
 
 export interface Cs2dPlaybackHostProps {
   /** Optional test/provider override; production builds it from ANALYSIS_READY. */
@@ -2247,6 +2221,8 @@ export function Cs2dPlaybackHost({
         narration: presentableNarration,
         semantics: { ...candidateMaterial, ...cue },
         decisionState: decisionPlayerState,
+        decisionTick: cue?.decision_tick,
+        decisionFacts: coachingView.decisionFacts,
         callout: candidateMaterial?.callout,
         outcomeFacts: coachingView.outcomeFacts,
         outcomeImpact
@@ -3379,14 +3355,7 @@ export function Cs2dPlaybackHost({
                     <strong>当前状态</strong>
                   </div>
                   {threeStageCoaching.currentState.chips.length > 0 ? (
-                    <ul className="cs2d-coaching-status-list">
-                      {threeStageCoaching.currentState.chips.map((chip, index) => (
-                        <li key={`${chip.kind}-${index}`}>
-                          <CoachingStatusGlyph chip={chip} catalog={gameAssetCatalog} />
-                          <span>{coachingStatusText(chip, gameAssetCatalog)}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    <CoachingStatusList chips={threeStageCoaching.currentState.chips} catalog={gameAssetCatalog} />
                   ) : <p>{threeStageCoaching.currentState.fallbackText}</p>}
                   {threeStageCoaching.currentState.limitations.map((limitation) => <p key={limitation}>{limitation}</p>)}
                 </section>

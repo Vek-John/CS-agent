@@ -14,7 +14,7 @@ import { fireReplay, self } from "../../../../libs/cs2d-analysis-adapter/src/win
 import { GET } from "../../app/api/review-history/[id]/route";
 import { DESKTOP_APP_ORIGIN_HEADER } from "../desktop/request-origin";
 import { buildInitialCoachingRouteState, createReviewPreparationOrchestrator } from "../coaching/cs2d-route-integration";
-import { buildThreeStageCoachingView, playerStateAtOrBefore } from "../coaching/cs2d-coaching-view";
+import { buildCoachingCueView, buildThreeStageCoachingView, playerStateAtOrBefore } from "../coaching/cs2d-coaching-view";
 import { buildTeachingDiagnosisInput } from "../coaching/teaching-diagnosis-host";
 import { buildSessionRecoveryRecord, createRecoverySessionIdentity, createRecoveryReviewPreparationDependencies, normalizeRecoveryAnalysis, restoreRecoveryArtifacts, validateStoredReviewArtifacts } from "../recovery/cs2d-session-recovery";
 import { validateReadyRevisionArtifacts, validateReviewArtifactAppend } from "./artifact-validation";
@@ -130,8 +130,13 @@ it.each(cases)("reopens persisted $name inventory without regenerating teaching"
     expect(state!.missing_fields.includes("inventory.count")).toBe(Boolean(known?.length));
     const material = normalized.candidate_set.materials.find(item => item.candidateId === cue.candidate_id);
     expect(material?.decisionSnapshot?.selectedPlayer.value?.grenades).toEqual(known ?? null);
-    const view = buildThreeStageCoachingView({ narration: savedNarration[cue.id], decisionState: state, outcomeFacts: [] });
-    expect(view.currentState.chips.filter(chip => chip.kind === "utility").map(chip => chip.text)).toEqual(known?.length === 0 ? ["无道具"] : []);
+    const view = buildThreeStageCoachingView({ narration: savedNarration[cue.id], decisionState: state,
+      semantics: { ...material, ...cue }, decisionTick: cue.decision_tick,
+      decisionFacts: buildCoachingCueView(cue, false).decisionFacts, outcomeFacts: [] });
+    const expectedUtility = known?.length === 0 ? ["无道具"]
+      : known?.[0] === "Flash" ? ["闪光弹（数量未知）"]
+      : known?.[0] === "Smoke" ? ["烟雾弹（数量未知）"] : [];
+    expect(view.currentState.chips.filter(chip => chip.kind === "utility").map(chip => chip.text)).toEqual(expectedUtility);
     const diagnostic = buildTeachingDiagnosisInput({ plan: recovered.plan, cue, material, timeline: normalized.match_timeline, selectedPlayerId: self },
       { cueId: cue.id, selectedGoal: "OTHER", response: "ANSWERED", source: "USER", limitations: [] });
     expect(diagnostic.decisionResources?.health).toBe(state!.health);
