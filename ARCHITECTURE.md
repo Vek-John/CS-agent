@@ -164,6 +164,8 @@ Parser来源追加frame-identity.v1。合法完整帧保持字段与既有回合
 
 教练状态栏可呈现已确认的中文道具种类并标注“数量未知”。展示须绑定当前玩家、同一sample tick、当前cue decision tick及OBSERVABLE Snapshot；canonical证据引用必须在当前cue已公开的DEMO/DECISION事实中解析到同sample tick，不能直接将重映射后的fact ID与原Timeline raw引用字符串比较。未知列表、其他库存缺口、跨身份/时间/来源均不生成种类chip；明确空与旧已保存精确数量保持原展示语义。此展示不提升专业判断或推定物理颗数。
 
+具有DecisionSnapshot的教练状态栏，生命、护甲、武器、道具、经济和个人位置也必须满足上述同玩家/采样/决策及canonical事实绑定。Snapshot已拒绝缺失或过旧的本人采样时，View不得通过Timeline最近旧行恢复这些资源；显示状态不可确认，独立可知的时钟、人数、目标状态仍可展示。无Snapshot的旧产物保留兼容展示，已提供决策时间时仍不能显示未来行。
+
 Parser追加grenade-inventory.v1，Adapter/Signal 1.11.0、Timeline1.2.0标记新派生语义。既有已保存bundle仍按原产物读取（兼容1.10.0等旧版），不悄悄重算或删除历史结论；重新解析/分析才获得新事实语义。不依据类型数声称携带N颗，不由道具存在直接批准战术建议。
 
 

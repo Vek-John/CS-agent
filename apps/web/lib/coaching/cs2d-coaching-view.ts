@@ -63,6 +63,18 @@ const GRENADE_NAMES = new Map([
   ["Molotov", "燃烧弹"], ["Decoy", "诱饵弹"]
 ]);
 
+/** Modern snapshots already enforce freshness; do not revive a rejected older track row. */
+function matchesDecisionState(state: PlayerStateSample, semantics: TrustedDecisionSemantics | undefined, decisionTick: number | undefined, decisionFacts: readonly Fact[] = []): boolean {
+  const snapshot = semantics?.decisionSnapshot;
+  // Legacy callers without a compact snapshot retain their existing presentation.
+  if (!snapshot) return decisionTick === undefined || (Number.isSafeInteger(decisionTick) && Number.isSafeInteger(state.tick) && state.tick <= decisionTick);
+  const evidence = snapshot.selectedPlayer;
+  return evidence.boundary === "OBSERVABLE" && evidence.value !== null &&
+    snapshot.selectedPlayerId === state.player_id && snapshot.sampledAtTick === state.tick &&
+    Number.isSafeInteger(decisionTick) && snapshot.decisionTick === decisionTick && Number.isSafeInteger(state.tick) && state.tick <= decisionTick! &&
+    evidence.evidenceRefs.some(ref => decisionFacts.some(fact => fact.id === ref && fact.source === "DEMO" && fact.availability === "DECISION" && fact.observed_by_player && fact.available_at_tick === state.tick));
+}
+
 /** Kinds can be known while physical counts are not; bind them to this exact sample. */
 function verifiedUtilityKindText(state: PlayerStateSample, semantics: TrustedDecisionSemantics | undefined, decisionTick: number | undefined, decisionFacts: readonly Fact[] = []): string | undefined {
   const snapshot = semantics?.decisionSnapshot;
@@ -72,9 +84,7 @@ function verifiedUtilityKindText(state: PlayerStateSample, semantics: TrustedDec
     kinds.length > GRENADE_NAMES.size || new Set(kinds).size !== kinds.length || !kinds.every(kind => GRENADE_NAMES.has(kind)) ||
     !state.missing_fields.includes("inventory.count") || state.missing_fields.some(field =>
       (field === "inventory" || field.startsWith("inventory.") || field.startsWith("inventory[")) && field !== "inventory.count") ||
-    snapshot.selectedPlayerId !== state.player_id || snapshot.sampledAtTick !== state.tick ||
-    !Number.isSafeInteger(decisionTick) || snapshot.decisionTick !== decisionTick || !Number.isSafeInteger(state.tick) || state.tick > decisionTick! ||
-    !evidence.evidenceRefs.some(ref => decisionFacts.some(fact => fact.id === ref && fact.source === "DEMO" && fact.availability === "DECISION" && fact.observed_by_player && fact.available_at_tick === state.tick))) return undefined;
+    !matchesDecisionState(state, semantics, decisionTick, decisionFacts)) return undefined;
   return `${kinds.map(kind => GRENADE_NAMES.get(kind)).join("、")}（数量未知）`;
 }
 
@@ -108,8 +118,10 @@ export function buildThreeStageCoachingView(input: {
   semantics?: TrustedDecisionSemantics;
 }): ThreeStageCoachingView {
   const chips: CoachingStatusChip[] = [];
-  const state = input.decisionState;
-  if (input.callout) chips.push({ kind: "location", text: input.callout });
+  const rawState = input.decisionState;
+  const state = rawState && matchesDecisionState(rawState, input.semantics, input.decisionTick, input.decisionFacts) ? rawState : undefined;
+  const playerStateUnknown = Boolean(input.semantics?.decisionSnapshot && !state);
+  if (input.callout && !playerStateUnknown) chips.push({ kind: "location", text: input.callout });
   if (state) {
     chips.push({ kind: "health", text: `${Math.max(0, state.health)} HP` });
     chips.push({
@@ -156,8 +168,8 @@ export function buildThreeStageCoachingView(input: {
   return {
     currentState: {
       chips,
-      limitations: input.semantics ? [...new Set([...situation.limitations, ...(assessment?.limitations ?? []).map(playerFacingLimitation)])].slice(0, 3) : [],
-      ...(chips.length === 0 ? { fallbackText: compactText(input.narration.currentSituation.text) } : {})
+      limitations: input.semantics ? [...new Set([...(playerStateUnknown ? ["无法确认该决策点的当前玩家状态，暂不展示生命、护甲等资源。"] : []), ...situation.limitations, ...(assessment?.limitations ?? []).map(playerFacingLimitation)])].slice(0, 3) : [],
+      ...(chips.length === 0 ? { fallbackText: playerStateUnknown ? "当前玩家状态暂无法确认。" : compactText(input.narration.currentSituation.text) } : {})
     },
     problem: {
       title: assessment ? titles[assessment.kind] : "这次处理的判断",

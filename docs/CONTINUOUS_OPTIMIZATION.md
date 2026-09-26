@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：状态栏旧采样误用修复（2026-09-26）
+
+- ID decision-state-freshness，基线9a8d6f5 clean；主控真实链/必要View改动及docs，revision_semantics_review默认配置独占新decision-state-freshness.test.ts，先调查不改生产。
+- 假设：View的最近旧状态可能与Snapshot null/当前缺本人矛盾。但Adapter常把decisionTick设为合法前一采样，且已有Snapshot门会去掉旧state事实/context，不能单凭无界查找函数宣称bug。A1实际Adapter→有效cue→View/恢复链小例；A2合法前置采样保持；A3有真实误导才窄修，否则记录拒绝门证据并关闭该假设；A4相关tests/TS/build和行动结论push。
+- 风险/阶段：最多8分钟首例+5分钟额外合法候选，不手改compiledPlan/降低提名门制造红例；候选被拒不是UI失败。合成fixture时间，不实测Demo；无模型/用户DB/UI/安装，root保护其他工作树，原A5独立。
+- 实际复现：独立WIN_RATE_DROP仍可产生不确定性cue；本人采样过旧或当前帧缺本人，Snapshot为null、事实/讲解已排除资源，但View显示旧40HP/75甲/ak47/$1,234。实际Adapter链7tests中2红→绿，DEATH/HP_CHANGE既有拒绝门与合法前置采样保持。
+- 仅View复用玩家/sample/decision/canonical引用绑定，禁止旧行恢复个人资源；未知提示优先。Parser/Adapter/Planner/候选门不改。65相关tests、TS、production build通过；代理默认配置完成新测试并RELEASE，主控审阅真实diff。[证据](validation/DECISION_STATE_FRESHNESS.md)。
+- 下一项：小验证候选annotation仍使用raw.state的位置是否进入不确定性cue的实际教学呈现；先追消费和复现，无误导不改。原A5独立等待桌面条件。
+
 ## 已交付：教练状态栏显示已确认道具种类（2026-09-26）
 
 - ID utility-kind-chip，基线81fc947 clean；主控View/Host接线/样式和单元测试/docs，partial_revision_restore默认配置独占上一轮SQLite恢复集成测试，其他owner RELEASE。已读emil/apple与Next测试指南，沿现有chip反馈，不加动画/依赖。

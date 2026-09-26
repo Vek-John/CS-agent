@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：Snapshot拒绝旧采样后，状态栏不能重新补回资源
+
+- 问题：Adapter已有正确Snapshot gate，不确定性WIN_RATE_DROP仍可保留教学cue；View最近旧行查找却绕过该结论，显示旧40HP/75甲/ak47/$1,234。普通DEATH/HP_CHANGE因缺独立上下文会被拒，不是UI复现。
+- 决策：只收紧现代View个人资源和位置绑定，复用种类chip已有同玩家/sample/decision及canonical事实规则；空Snapshot说明当前状态不可确认，独立局面与旧无Snapshot兼容保留。没有额外年龄阈值，没有更改候选提名或编译产物。
+- 验证：实际Adapter→正式cue→CoachingPackage/Narration→Host同输入View，2红→绿；7新tests加58相关测试、TS和Web build通过；既有SQLite恢复6情形保持。[证据](validation/DECISION_STATE_FRESHNESS.md)。
+- 限制：合成时间非实测Demo，没有新缺采样SQLite注入或锁屏UI。追加clock断言曾错误假定fixture公开时钟，已移除无依据断言，未修改生产规则。下一项追踪raw.state annotation是否存在同类实际消费误导，先证实再决定。
+
 ## 2026-09-26：把已确认道具种类呈现给玩家
 
 - 问题：完整种类已知但物理颗数未知时，状态栏完全不显示道具。复用已有chip显示中文种类/数量未知，明确空、完全未知和旧精确数量保持。
