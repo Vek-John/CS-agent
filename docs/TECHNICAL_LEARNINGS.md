@@ -2072,3 +2072,19 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 验证：扩展真实SQLite修订测试，注入同repository/authorizationStore的Memory runtime，经实际POST净化后进入Graph。USER纠正保留，管理ID不进Brief，旧DISPUTED聚合不作active；可验证资源诊断REINFORCE，但claims/verdict与无记忆基线一致。授权撤回后下一合法cue清空Brief、不再REINFORCE。4文件69tests、TypeScript和production build通过；最终目标断言复验3tests/TS。[证据](validation/CORRECTION_RECALL_CONSUMPTION.md)。
 - 决定/边界：现链已贯通，不新增重复召回逻辑。源码确认默认模式仅看corrections.length、工具只有偏好，原文不参与语义诊断；UNVERIFIABLE优先DEFER。不承诺理解了历史异议、改善专业判断或清除既往展示。Next after在该读链测试中拦截，不启动后续反思的异步写；实际写链由上一轮验证。无用户DB、模型或真实浏览器。
 - 可执行后继：独立只读跟踪发现TeachingDiagnosisPanel把除CLARIFY外所有模式都称“第一次讲清”。下一项改准确中性标题，不把模式提示包装成语义判断改善。
+
+
+## 2026-09-26：教学标题应忠实反映模式
+
+- 问题：Panel只区分CLARIFY与其他，复核、迁移检查和不可验证的DEFER都被误称“第一次讲清”。
+- 决定：使用覆盖CueCase七种pedagogyMode的类型约束文案表，继续消费原保存字段；“重新核对”“换个局面再检查”“待核实”不声称理解了异议或验证通过。无领域/架构契约变化。
+- 验证：Panel SSR、回放操作与真实Graph现有3文件32tests，TypeScript和production build通过；主控集中复核10行表和单处替换。未新增复写映射的测试，未做真实浏览器验收，判决/引用/状态/数据和交互处理器均无修改。
+- 设计：沿用emil-design-eng与apple-design的具体状态反馈、视觉克制；没有动画、样式或透明度变化，既有reduced-motion/transparency路径保持。
+
+| Before | After | Why |
+| --- | --- | --- |
+| REINFORCE/CHECK_TRANSFER都显示第一次讲清 | 重新核对 / 换个局面再检查 | 准确说明本次教学意图 |
+| DEFER显示第一次讲清 | 待核实 | 不把证据不足包装成讲清楚 |
+| 其余模式静默落入首次标签 | 七模式各有类型约束标签 | 避免旧模式恢复时失真 |
+
+下一项真实代码线索：目标关键词不区分明确否定，时间陈述也默认存在压力；先小例复现其对claim/诊断的影响，再以有限规则保守修复，不把词法分类声称完整语义理解。

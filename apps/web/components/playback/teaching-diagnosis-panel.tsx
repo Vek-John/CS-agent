@@ -29,6 +29,16 @@ const GOALS: readonly { value: ReflectionGoal; label: string }[] = [
   { value: "OTHER", label: "其他" },
 ];
 
+const PEDAGOGY_LABELS: Record<CueCase["pedagogyMode"], string> = {
+  INTRODUCE: "第一次讲清",
+  CLARIFY: "继续澄清",
+  CONTRAST: "对照理解",
+  CHECK_TRANSFER: "换个局面再检查",
+  REINFORCE: "重新核对",
+  BRIEF_REPEAT: "简要回顾",
+  DEFER: "待核实",
+};
+
 const DISAGREEMENT_OPTIONS = [
   "有队友语音",
   "这是固定战术",
@@ -212,7 +222,7 @@ export function TeachingDiagnosisPanel({
   return (
     <section className={styles.panel} aria-live="polite" aria-labelledby={`${cue.id}-diagnosis-title`}>
       <div className={styles.topline}>
-        <div className={styles.kicker}>你的思路 · {cueCase.pedagogyMode === "CLARIFY" ? "继续澄清" : "第一次讲清"}</div>
+        <div className={styles.kicker}>你的思路 · {PEDAGOGY_LABELS[cueCase.pedagogyMode]}</div>
         <span className={styles.counter}>2 / 2</span>
       </div>
       <h3 id={`${cue.id}-diagnosis-title`}>诊断完成</h3>

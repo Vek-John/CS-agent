@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：教学模式标题准确呈现（2026-09-26）
+
+- ID pedagogy-labels；基线8ceb81f clean，现有owner均RELEASE，主控独占Panel/docs，小文案映射不另派代理。沿用已读emil-design-eng/apple-design的具体反馈与克制原则，不新增动效/透明度/布局。
+- 目标：实际REINFORCE/CHECK_TRANSFER/DEFER不再显示“第一次讲清”；流程保存诊断→原Panel→对应中性标题；A1完整类型映射覆盖七模式，A2判决/引用/交互及旧记录门保持，A3现有相关tests/TS/build，A4学习/任务板与证据push。不扩语义诊断、模型或记忆调用。
+- 风险/阶段：措辞不能声称理解了异议或已经验证通过；5分钟源改/复核，10分钟验证，主控清测试build，无用户DB/服务/浏览器/安装部署。低影响文本修改不新增逐项复写映射的测试；使用现有真实diagnose SSR与Graph回归。旧UI A5独立待验。
+
+- 结果：完整类型映射七种现有模式，REINFORCE显示“重新核对”、CHECK_TRANSFER显示“换个局面再检查”、DEFER显示“待核实”；原INTRODUCE/CLARIFY保持，CONTRAST/BRIEF_REPEAT也有准确标题。3文件32既有tests、TypeScript/production build通过，主控集中复核，只有10行常量和1处呈现替换，没有改数据/操作/样式。
+- 限制/后继：现有SSR与Graph回归不是完整UI验收；未新增逐文案快照测试。原A5仍独立待验。下一项已定位真实教学语义风险：inferGoalFromText按关键词先后，可能把“不是拿信息，是保枪”归为GET_INFO；buildUserClaims又把任何含“时间”的描述写成存在时间压力。下轮先以小型真实diagnose输入复现，保守处理明确否定/中性陈述，不企图完整自然语言理解或引入新模型。
+
 ## 已交付：纠正召回到后续教学的实际消费（2026-09-26）
 
 - ID memory-correction-recall；基线28c44c5 clean；主控拥有history-idempotency.integration.test.ts及docs；revision_semantics_review默认配置只读消费语义，8分钟终点，无并发写。
