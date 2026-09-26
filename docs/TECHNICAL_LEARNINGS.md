@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：资料库失败与本地恢复是两个独立结果
+
+- 问题：近期保存期限测试只stub了本地persistStart，尚未证明资料库保存失败后的IndexedDB重开组合。
+- 结论：实际首Narration API失败后，未写资料库Recovery/head，但真实BrowserRuntime可写本地SESSION_STARTED并激活；IDB新Runtime保留原起点/路线/身份及受限摘要。IDB故障仅当前实例内存可用，新Runtime无记录；现有提示准确，不修改生产。
+- 验证：2新组合、85相关tests、TS/build通过，独立fake-indexeddb清理，root审diff/日志。[记录](validation/FAILED_START_LOCAL_RECOVERY.md)。不是完整Narration/Analysis资料库备份，BOOT/restore零新生成不代表Viewer重新选Demo无需解析。
+- 后继：核实Host本地恢复自动SELECT_PLAYER与MANAGED_LIBRARY创建历史分支的接线，避免把Runtime层通过外推成整个Host恢复完成。
+
 ## 2026-09-27：完整讲解也属于有界小产物
 
 - 问题/决策：首批Narration保存原为plain fetch/body，挂起阻挡起点；DAL默认256KiB小JSON上限且不能外置，适合复用既有TEACHING20秒期限。只扩一个artifact类型，不扩大文件或缩短已有预算。

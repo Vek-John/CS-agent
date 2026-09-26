@@ -2,6 +2,14 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已验证：起点保存失败后的本地重开（2026-09-27）
+
+- ID failed-start-local-recovery，基线a4ead91 clean；partial_revision_restore默认配置独占新recovery集成测试，root拥有必要生产修复/docs/最终检查。先读既有runtime覆盖，目标只验证最近起点失败→继续→新Runtime BOOT组合，不重复成功SQLite历史链。
+- A1单cue实际Adapter→真实API/Controller/起点保存失败→settle/activate→真实BrowserSessionRecoveryRuntime SESSION_STARTED；A2隔离IDB重开能读冻结路线、起点与已准备讲解且错误Demo仍拒；A3IDB故障仅内存DEGRADED、重开不假造记录，明确刷新丢失限制；A4相关tests/TS/build、root读diff/日志，只有证实缺口才改生产。
+- 风险/资源：fake-indexeddb独立数据库与finally清理，HTTP保存响应stub，不真实用户库/SQLite/网络/Demo/模型/GUI；5分钟smoke、10分钟有限验证、每测试60秒，两次基础设施失败先简化。原A5保持独立。
+- 结果：两核心组合首次通过，无生产必修。首Narration失败未写Recovery/head，但真实本地SESSION_STARTED后可继续；IDB新Runtime读回原身份/路线/起点及受限讲解摘要。IDB不可用时仅本窗口DEGRADED，新Runtime无record且保留刷新不可恢复提示。2新增/85相关tests、TS/build通过，root读真实diff/日志，资源清理。[记录](validation/FAILED_START_LOCAL_RECOVERY.md)。不声称完整Host或SQLite恢复。
+- 下一有限目标：本轮只覆盖Runtime重开；Host本地恢复会发SELECT_PLAYER，而PLAYER_SELECTED的MANAGED_LIBRARY分支仍调用createForPlayer，是否产生新空历史需沿真实bridge入口小验证。先查既有恢复模式意图/门，不假定是缺陷，不把本轮BOOT验证当作已经覆盖整个Host恢复路径。
+
 ## 已交付：完整讲解保存的等待期限（2026-09-27）
 
 - ID narration-save-deadline，基线0bcefe8 clean；root独占API小集合/既有保存seam集成测试/docs，无新委派，原执行者已释放。NarrationBundle存储为小JSON，默认上限256KiB，超过仅Analysis/Candidate能外置；保存route仍需物化已有分析校验，因此复用既有保守20秒而非缩短。
