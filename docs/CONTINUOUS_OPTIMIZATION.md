@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：库存语义的SQLite恢复（2026-09-26）
+
+- ID inventory-history-restore，基线12778fe clean；partial_revision_restore默认配置独占新inventory-restore.integration.test.ts，主控读真实恢复链/必要生产修复及文档，其他owner RELEASE。不重复Parser验证或读取Demo。
+- 目标/流程：当前Adapter1.11/Timeline1.2合成库存empty/Flash/Smoke/unknown→实际DesktopReviewLibrary隔离SQLite保存分析、候选、路线、讲解和recovery/runtimehead→close/reopen→artifact validation/HistoryRestoreController/实际恢复函数→教练View/数量投影。A1真实库重开保存语义保持；A2仅明确空为0/无道具、种类不冒充颗数；A3恢复使用已存route/narration，不新分析/生成；A4相关tests/TS/build和证据push，有失败才改生产。
+- 风险/边界：必须保存有效route/hash/recovery身份链，不能手拼无效快照绕过验证；源为合成fixture时间，不冒充真实Demo实测。5分钟链路/12分钟小测试/25分钟交付，每轮test60秒，mkdtemp库/伪Demo字节仅测试身份，owner finally关闭并只清自建临时目录；无真实用户DB、模型、网络、浏览器或安装，原A5独立。
+
+- 结果：新6情形通过，主控4文件45tests/TS/build通过。真实SQLite关闭重开→GET/HistoryRestore/恢复orchestrator/View保持空/种类/unknown，health/refs有效；冻结路线验证1次，重新分析/Narrator/prepareNarration/transport/Viewer source-load0，产物不改，READY_TO_START。无生产缺口，仅新增集成回归。[证据](validation/INVENTORY_HISTORY_RESTORE.md)。
+- 限制/下一项：合成Replay+微型资料库header，不是真实Demo/旧Artifact迁移/Graph/UI。agent默认配置RELEASE、临时库及所有进程清理，原A5独立。下一可见改进是当前View只显示精确数量，已确认Flash/Smoke种类因数量未知没有状态chip；按同一决策身份/采样边界显示已确认种类并标数量未知，保留明确空/完全unknown区别，沿现有chip无需新复杂UI。
+
 ## 已交付：收起主枪当前库存（2026-09-26）
 
 - ID primary-inventory-identity，基线2b36007 clean；主控Adapter来源/真实消费/docs，partial_revision_restore默认配置weapons/lib+0019/tool，revision_semantics_review默认配置primary源fixture及必要旧grenade helper提取适配。

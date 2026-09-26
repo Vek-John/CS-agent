@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：新库存语义经SQLite重开恢复保持
+
+- 问题/目标：上一轮只证明JSON往返，不能代替SQLite关闭重开与真正History Restore接线。六情形（明确空/Flash/Smoke/unknown/无效类型/旧无标记输入）用新Adapter产物进入真实库/API/恢复函数/教练View。
+- 结果：保存后重开语义保持，只有明确空是0/无道具；正向种类不冒充颗数，unknown不造零，健康和refs有效。冻结路线验证1次，重分析/讲解生成/transport/Viewer请求0，READY_TO_START且无NARRATION_UPDATE；没有生产缺口，不为制造变更改实现。
+- 验证：新增6集成、相关4文件45tests、TS/Web production build通过；临时SQLite最终关闭清理。[证据](validation/INVENTORY_HISTORY_RESTORE.md)。
+- 限制/后继：合成Replay和资料库微型header，非真实Demo/UI/bridge/Graph；旧无标记输入不冒称旧Artifact迁移。下一项实际体验机会：已确认道具种类在当前状态chip缺席，只因颗数未知；可在同一决策边界显示种类并标数量未知，不放松证据。原A5独立。
+
 ## 2026-09-26：收起主枪也必须读当前库存前缀
 
 - 问题：primary遍历历史children/index-only且遇枪早返回，既可造历史枪，又遮蔽后续未知。共享当前完整标签验证后才按旧primary/pistol优先级选择，grenade类型/unknown规则保持。
