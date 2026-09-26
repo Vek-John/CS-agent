@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已验证：真实Demo整场带看模块消费（2026-09-26）
+
+- ID real-guided-lifecycle，基线61ae6fe clean；root独占可复用验证工具/docs，无新代理。目标为当前Parser→Adapter→Session/Controller→Graph完成→受限总结真实数据消费，不重做字段/哈希一致性审计。
+- A1合成小smoke通过实际消费；A2授权60.6MB test_demo.dem单读/单WASM解析，同进程保留Replay，优先原Dog玩家，整场快速skip与混合反思路径；A3完整覆盖/结果门/确认次数/零工具及网络/最终摘要结果，实际缺口才修；A4相关tests/TS/build、匿名小摘要和证据push。
+- 风险/生命周期：解析同步WASM必须外部120秒进程期限，脚本仅返回计数/时间，不把Replay/身份/坐标送出进程；两次基础设施失败先简化。复用现有parser产物，不安装/重新构建/写用户Demo或SQLite；无UI/模型服务，胜率模型未运行须如实标明，不把模块驱动的tick通知当画面实测。执行完进程退出，不留后台资源。
+- 实际结果：60,601,900字节单读/单解析7.458秒，9回合/33段/44候选/4cue；ALL_SKIP为4跳过，MIXED为2跳过+2真实Graph诊断，两路径均Session/Graph完成4cue、摘要仅写一次，0工具/网络。NO_REPEATED_THEME是有界证据不足的正常结果，未生成虚假重复问题。
+- 交付：新增可复用validate-guided-lifecycle.ts，smoke通过、29相关tests、TS及production build通过。[记录](validation/REAL_GUIDED_LIFECYCLE.md)和匿名JSON已保存；没有发现需修改产品的缺口。root单进程完成，无代理/后台资源。
+- 限制/下一项：CS-Net未运行，使用实际事实的确定性路线；播放通知由harness驱动，持久化仅计数seam，不是UI/SQLite。下一有限任务验证真实分析/结束产物在隔离SQLite关闭重开后恢复，关注实际体积/等待及零重复分析，不触用户库、不做哈希或供应链审计。
+
 ## 已交付：已展示节点前的普通段自动补齐（2026-09-26）
 
 - ID presented-cue-order，基线d4b724e clean；root独占Controller/测试/docs，无新委派。上一轮真实手动回访序列已经证明缺段导致拒绝，本轮消除对外部再次触发的依赖。
