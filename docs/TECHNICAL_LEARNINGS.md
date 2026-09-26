@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：真实规模暴露版本链与候选证据保存门不匹配
+
+- 问题：真实60.6MB Demo结束产物首次写库时，恢复schema拒绝完整Parser版本链（>160）；修复后1.73MB独立CandidateSet又被256KiB小JSON门拒绝。小库存fixture未覆盖这两个实际规模边界。
+- 决策：Parser provenance单独512字符门，saved与ANALYSIS_READY一致、完整版本比较不变；仅CandidateSet增加既有gzip存储资格，复用文件Saga/物化读取，其他小产物限制不动。无数据库迁移、不截断版本、不降低语义验证。
+- 验证：真实API POST/PUT与SQLite Graph终结checkpoint→关闭重开→GET/HistoryRestore保持17项产物、4个跳过、NO_REPEATED_THEME摘要；分析5.88MB/候选1.73MB均gzip，保存3.927秒、重开204ms、零重新分析/讲解。141相关tests、opt-in真实验收、TS/Web build通过；独立窄审RELEASE。[证据](validation/REAL_HISTORY_REOPEN.md)。
+- 限制/行动：进程内HTTP handlers，不是Viewer/UI/Graph reconnect实测，旧应用不保证接受新长版本。每次小产物约200ms的重复保存成本成为下一轮测量目标；先确定耗时来源和安全收益，再决定实现，不默认扩大缓存。
+
 ## 2026-09-26：真实小Demo走完整跳过和混合诊断路线
 
 - 目标：前几轮生命周期修复需真实解析数据消费证据，不能只依赖合成cue。用现有授权60.6MB Demo，单进程持有Replay，不输出身份/位置，不重新比较字段或审计hash。

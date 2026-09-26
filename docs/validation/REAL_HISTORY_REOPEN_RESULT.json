@@ -1,0 +1,130 @@
+{
+  "status": "PASSED",
+  "source": "REAL_DEMO",
+  "demoBytes": 60601900,
+  "demoReads": 1,
+  "parsePasses": 1,
+  "parseMs": 7501,
+  "parserRevision": "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1.active-weapon-identity.v1.grenade-inventory.v1.primary-weapon.v1",
+  "analysisBytes": 5881159,
+  "analysisStorage": "GZIP_FILE",
+  "candidateStorage": "GZIP_FILE",
+  "artifactCount": 17,
+  "artifacts": [
+    {
+      "kind": "ANALYSIS_BUNDLE",
+      "requestBytes": 5881444,
+      "elapsedMs": 170
+    },
+    {
+      "kind": "CANDIDATE_SET",
+      "requestBytes": 1729563,
+      "elapsedMs": 159
+    },
+    {
+      "kind": "REVIEW_PLAN",
+      "requestBytes": 97021,
+      "elapsedMs": 225
+    },
+    {
+      "kind": "NARRATION_BUNDLE",
+      "requestBytes": 2241,
+      "elapsedMs": 219
+    },
+    {
+      "kind": "NARRATION_BUNDLE",
+      "requestBytes": 2442,
+      "elapsedMs": 223
+    },
+    {
+      "kind": "NARRATION_BUNDLE",
+      "requestBytes": 2467,
+      "elapsedMs": 239
+    },
+    {
+      "kind": "NARRATION_BUNDLE",
+      "requestBytes": 2353,
+      "elapsedMs": 215
+    },
+    {
+      "kind": "USER_INTERACTION",
+      "requestBytes": 436,
+      "elapsedMs": 218
+    },
+    {
+      "kind": "CUE_CASE",
+      "requestBytes": 757,
+      "elapsedMs": 237
+    },
+    {
+      "kind": "USER_INTERACTION",
+      "requestBytes": 436,
+      "elapsedMs": 214
+    },
+    {
+      "kind": "CUE_CASE",
+      "requestBytes": 777,
+      "elapsedMs": 213
+    },
+    {
+      "kind": "USER_INTERACTION",
+      "requestBytes": 436,
+      "elapsedMs": 214
+    },
+    {
+      "kind": "CUE_CASE",
+      "requestBytes": 777,
+      "elapsedMs": 217
+    },
+    {
+      "kind": "USER_INTERACTION",
+      "requestBytes": 436,
+      "elapsedMs": 219
+    },
+    {
+      "kind": "CUE_CASE",
+      "requestBytes": 758,
+      "elapsedMs": 253
+    },
+    {
+      "kind": "SESSION_SUMMARY",
+      "requestBytes": 500,
+      "elapsedMs": 213
+    },
+    {
+      "kind": "SESSION_RECOVERY",
+      "requestBytes": 98584,
+      "elapsedMs": 217
+    }
+  ],
+  "saveMs": 3927,
+  "reopenMs": 204,
+  "totalMs": 12130,
+  "lifecycle": {
+    "mode": "ALL_SKIP",
+    "rounds": 9,
+    "segments": 33,
+    "candidates": 44,
+    "cues": 4,
+    "skips": 4,
+    "diagnoses": 0,
+    "storedCases": 4,
+    "graphEvents": 34,
+    "graphCompletedCues": 4,
+    "summaryWrites": 1,
+    "summaryStatus": "DISABLED",
+    "summaryReason": "NO_REPEATED_THEME",
+    "themes": 0,
+    "sessionStatus": "COMPLETED",
+    "syntheticPlaybackNotifications": 24,
+    "toolPosts": 0,
+    "elapsedMs": 230
+  },
+  "restoredPhase": "WRAP_UP",
+  "restoredReviewStatus": "COMPLETED",
+  "newAnalysis": 0,
+  "newNarration": 0,
+  "networkCalls": 0,
+  "viewerRequests": 0,
+  "limitation": "Actual HTTP route handlers run in-process, not a listening server. Harness-driven Session ticks; no Viewer/UI or CS-Net inference. SQLite graph checkpoint persisted and terminal head validated; no graph reconnect dispatch."
+}

@@ -295,7 +295,7 @@ Coach Agent 对 manual visit 使用独立的结构化事件和 visit ID。该事
 
 桌面 `LocalReviewLibrary` 是一个深模块，位于受保护 App control plane、Viewer 原始文件 ingress、Application Support 文件系统与共享 SQLite owner 之间。其 interface 只接受 opaque `demoId`/`reviewId`/`revisionId`、有界 JSON Artifact 和短期 capability；路径解析、流式哈希、文件/数据库 Saga、引用检查、删除重试、校验与磁盘统计全部隐藏在实现内。生产 Adapter 使用 Application Support＋SQLite，测试 Adapter 使用临时目录/数据库；调用方不得绕过该 seam 直接拼接资料库路径或写表。
 
-固定关系为 `DemoAsset 1─N Review 1─N ReviewRevision 1─N ReviewArtifact`。`DemoAsset` 是 SHA-256 内容唯一的不可变 `.dem`；`Review` 是面向一个选中玩家、出现在历史侧栏的用户对象；`ReviewRevision` 是一次明确分析版本，重新分析只能追加 Revision；`ReviewArtifact` 保存 AnalysisBundle、CandidateSet、ReviewPlan、逐 cue Narration、CueCase、Tool Result 与 Session Summary。Revision 的 `artifactContractVersion=2` 要求独立 CandidateSet Artifact；迁移前的 v1 READY Revision 可以从已校验和的 AnalysisBundle 内恢复完全相同的 embedded CandidateSet，但不能据此创建新的 v2 READY/head。小型且不可重建的用户/LLM JSON 留在 SQLite；大型白名单 AnalysisBundle 使用 `library/artifacts/<review>/<revision>/` 下的校验和 gzip 文件；raw Replay、frames 和逐 tick 大对象永不成为 Artifact。
+固定关系为 `DemoAsset 1─N Review 1─N ReviewRevision 1─N ReviewArtifact`。`DemoAsset` 是 SHA-256 内容唯一的不可变 `.dem`；`Review` 是面向一个选中玩家、出现在历史侧栏的用户对象；`ReviewRevision` 是一次明确分析版本，重新分析只能追加 Revision；`ReviewArtifact` 保存 AnalysisBundle、CandidateSet、ReviewPlan、逐 cue Narration、CueCase、Tool Result 与 Session Summary。Revision 的 `artifactContractVersion=2` 要求独立 CandidateSet Artifact；迁移前的 v1 READY Revision 可以从已校验和的 AnalysisBundle 内恢复完全相同的 embedded CandidateSet，但不能据此创建新的 v2 READY/head。小型且不可重建的用户/LLM JSON 留在 SQLite；大型白名单 AnalysisBundle 与独立 CandidateSet 使用 `library/artifacts/<review>/<revision>/` 下的校验和 gzip 文件；raw Replay、frames 和逐 tick 大对象永不成为 Artifact。
 
 资料库布局复用 Tauri `dataDir`：现有 `cs-agent.sqlite3` 保持数据库路径，托管文件位于 `library/demos/<hash-prefix>/<sha256>.dem`，Artifact 位于 `library/artifacts/`，临时文件位于 `library/tmp/`。数据库只保存资料库根下的规范相对路径。导入 job、Artifact job 与删除 job 把文件系统和 SQLite 当作双资源 Saga。导入在文件 fsync、内容哈希/最小头校验和不可覆盖的同卷发布后只建立 `IMPORTING` Demo；Viewer 必须再用同一选定文件经过真实 Worker/WASM parser，并以一次性、绑定 Demo 的 VALIDATE capability 明确提交 `READY` 或 `CORRUPT`。只有 `READY` 可读；启动时未完成的 `IMPORTING` 收敛为 `CORRUPT`，物理 verify 只能降级既有 `READY`，绝不能替代 parser 晋升状态。
 
@@ -1499,7 +1499,7 @@ SQLite 小型 backup 只保存数据库真相和相对路径，不隐式复制�
 
 ### 10.2 本地 Demo 与 Artifact 文件
 
-`<Application Support>/library/` 只包含三个受管根：`demos/<hash-prefix>/<sha256>.dem`、`artifacts/<reviewId>/<revisionId>/`和 `tmp/`。Demo 以小写 SHA-256 唯一，文件名不参与去重；`.dem` 不入 SQLite BLOB。只有白名单且大型的 `AnalysisBundle` 可写 checksum 保护的 gzip，用户回答、讲解、诊断、Verdict、TransferRule、LearningThread、Tool Result 和 Summary 等不可重建小 JSON 留在 SQLite。
+`<Application Support>/library/` 只包含三个受管根：`demos/<hash-prefix>/<sha256>.dem`、`artifacts/<reviewId>/<revisionId>/`和 `tmp/`。Demo 以小写 SHA-256 唯一，文件名不参与去重；`.dem` 不入 SQLite BLOB。只有白名单且大型的 `AnalysisBundle`、`CandidateSet` 可写 checksum 保护的 gzip，用户回答、讲解、诊断、Verdict、TransferRule、LearningThread、Tool Result 和 Summary 等不可重建小 JSON 留在 SQLite。
 
 IMPORT、Artifact 发布与删除都有独立 job 表。Demo 写入顺序是“登记 job → 精确 tmp 文件 → 有界 backpressure pipeline 流式哈希/大小/最小头校验 → file fsync → 同卷不覆盖发布 → directory fsync → SQLite `IMPORTING` → Viewer 真实 parser → 一次性 VALIDATE → `READY|CORRUPT`”。受限 Node 24 下 file/directory barrier 必须使用 permission-aware 的异步 `FileHandle.sync()`；同步 `fsyncSync` 和 WriteStream `flush:true` 的底层 `fs.fsync` 都会被 Permission Model 拒绝，不能作为 desktop runtime 实现。启动 reconcile 只能在精确 `library/tmp` 内清理超时 partial并把失去内存 capability 的 `IMPORTING` 收敛为 `CORRUPT`；不允许扫描用户目录或自动删除 READY Demo。Settings verify 校验路径、大小和 checksum，但非 READY 状态必须保持非 READY，重新导入并经 parser 接受才可晋升。删除 Review 保留共享 Demo；删除 Demo 先展示完整关联总数与有界、可识别的 Review 明细，并用覆盖完整关联集合的 impact token 防止确认后的竞态，再以可重试 Saga 清理文件、表和 checkpoint。Review 删除按来源把 Memory evidence 改为不可用；Demo 删除按内容哈希覆盖包括 `source_review_id=NULL` 在内的 evidence，同时保留最小 opportunity/tombstone 防复活记录。
 
@@ -1518,6 +1518,8 @@ IMPORT、Artifact 发布与删除都有独立 job 表。Demo 写入顺序是“�
 进程内 MemorySaver 只用于明确的测试/开发且报告 `recoverableAfterRefresh=false`。IndexedDB saver 只保留为未选中的 Stage 0 能力实验；IndexedDB 在桌面与 Web 都只承担 Host Recovery Store，不能变成 Agent saver。
 
 ### 10.6 Host Recovery Store
+
+Parser provenance包含固定上游及有序补丁链，`SessionRecoveryRecord.versions.parser`和`ANALYSIS_READY.versions.parser`允许1–512字符并完整保留，恢复仍做精确版本比较；其他实体ID保持160字符上限，总记录预算不变。旧短版本兼容，新长版本不保证可被旧应用读取。
 
 浏览器原生 IndexedDB 保存有界 `SessionRecoveryRecord`，只用于少量未完成复盘的恢复，不是 LangGraph saver、Replay cache、Memory store 或历史列表。默认最多 3 条未完成记录、TTL 7 天、单条 JSON 不超过 1 MiB；完成会话立即删除。记录可包含会话身份与版本、冻结 ReviewPlan、最近 RecoveryBoundary、cue 摘要、最近 Agent checkpoint id、最多 64 条工具 ledger 摘要，以及当前 cue 与随后最多两个合法讲解产物；不得把跨 Demo Memory Record 或 principal cookie 放入该记录。
 

@@ -7,9 +7,10 @@ import { buildCs2dAnalysisBundle, type Cs2dReplay } from "../libs/cs2d-analysis-
 import { fireReplay, self } from "../libs/cs2d-analysis-adapter/src/window-self-fire-fixtures";
 import { assertValidReviewPlan, buildCoachingPackage, buildOutcomePackage, deterministicNarrationBundle } from "../libs/review-planner/src/index";
 import { createCoachingSession, reduceCoachingSession } from "../libs/session/src/index";
-import { createCoachAgentRuntime } from "../libs/coach-agent/src/runtime";
+import { createCoachAgentRuntime, type CoachAgentRuntimeOptions } from "../libs/coach-agent/src/runtime";
 import type { NarrationBundle } from "../libs/contracts/src/index";
-import type { SessionWrapUpResult } from "../libs/coach-agent/src/client";
+import type { CoachAgentResult } from "../libs/coach-agent/src/types";
+import type { SessionWrapUpResult } from "../libs/coach-agent/src/session-wrap-up";
 import { buildInitialCoachingRouteState } from "../apps/web/lib/coaching/cs2d-route-integration";
 import { CoachAgentStage3Controller } from "../apps/web/lib/coaching/coach-agent-stage3-controller";
 import { CoachAgentStage3HostAdapter, type Stage3HostAdapterInput } from "../apps/web/lib/coaching/coach-agent-stage3-host-adapter";
@@ -21,7 +22,17 @@ import { completeStage3SessionWrapUp } from "../apps/web/lib/coaching/session-wr
 // Caller imposes a 120s external deadline: a JS timer cannot interrupt synchronous WASM.
 // Replay remains in this process. Output contains counts only, never identities or positions.
 type Bundle = ReturnType<typeof buildCs2dAnalysisBundle>;
-export async function consumeGuidedRoute(bundle: Bundle, hash: string, mode: "ALL_SKIP" | "MIXED") {
+export interface GuidedRouteArtifacts {
+  session: ReturnType<typeof createCoachingSession>;
+  routeState: ReturnType<typeof buildInitialCoachingRouteState>;
+  narrationByCue: Record<string, NarrationBundle>;
+  summary: SessionWrapUpResult;
+  completedGraph: CoachAgentResult;
+}
+export async function consumeGuidedRoute(bundle: Bundle, hash: string, mode: "ALL_SKIP" | "MIXED", options: {
+  runtime?: CoachAgentRuntimeOptions;
+  capture?: (artifacts: GuidedRouteArtifacts) => void;
+} = {}) {
   const { review_plan: plan, candidate_set: set } = bundle;
   assertValidReviewPlan(bundle.match_timeline, plan);
   assert(plan.cues.length > 0, "NO_TEACHING_CUES");
@@ -33,7 +44,7 @@ export async function consumeGuidedRoute(bundle: Bundle, hash: string, mode: "AL
     sessionId: `validation-${mode}`, runId: `validation-${mode}` };
   let session = reduceCoachingSession(plan, createCoachingSession(plan, identity.sessionId, routeState), { type: "START" });
   let graphEvents = 0, toolPosts = 0, skips = 0, diagnoses = 0, storedCases = 0, summaryWrites = 0, ticks = 0;
-  const runtime = createCoachAgentRuntime({ checkpoint: "memory", policy: { selectCapability: async () => { throw new Error("POLICY_NOT_EXPECTED"); } } });
+  const runtime = createCoachAgentRuntime({ checkpoint: "memory", ...options.runtime, policy: { selectCapability: async () => { throw new Error("POLICY_NOT_EXPECTED"); } } });
   const adapter = new CoachAgentStage3HostAdapter();
   const controller = new CoachAgentStage3Controller({ adapter,
     dispatch: async event => { graphEvents++; const result = await runtime.dispatch(event); assert.equal(result.effects.length, 0, "NO_VISUAL_TOOL_EXPECTED"); return result; },
@@ -97,11 +108,11 @@ export async function consumeGuidedRoute(bundle: Bundle, hash: string, mode: "AL
     assert.equal(session.presented_cue_ids.length, plan.cues.length, "PRESENTED_CUE_COUNT");
     assert.equal(session.consumed_cue_ids.length, plan.cues.length, "CONSUMED_CUE_COUNT");
     assert.equal(session.user_events.filter(event => event.type === "REFLECTION_SKIPPED").length, skips, "SKIP_EVENT_COUNT");
-    const wrap: { value?: SessionWrapUpResult; graphCompleted?: number } = {};
+    const wrap: { value?: SessionWrapUpResult; graphCompleted?: number; graph?: CoachAgentResult } = {};
     let claimed = false;
     const finish = () => completeStage3SessionWrapUp({ controller, identity, isCurrent: () => true,
       claim: () => { if (claimed) return false; claimed = true; return true; }, onStart: () => {},
-      buildInput: result => { assert(result.state.sessionSummaryInput, "GRAPH_SUMMARY_MISSING"); wrap.graphCompleted = result.state.completedCueIds.length;
+      buildInput: result => { wrap.graph = result; assert(result.state.sessionSummaryInput, "GRAPH_SUMMARY_MISSING"); wrap.graphCompleted = result.state.completedCueIds.length;
         return buildStage3WrapUpInput(plan, result.state.sessionSummaryInput, narrationByCue, set, Object.values(session.cue_cases ?? {})); },
       persistence: { artifact: async type => { assert.equal(type, "SESSION_SUMMARY"); summaryWrites++; } },
       onRequest: () => {}, onResult: result => { wrap.value = result; }, onSaveError: () => { throw new Error("SUMMARY_SAVE_FAILED"); },
@@ -111,6 +122,8 @@ export async function consumeGuidedRoute(bundle: Bundle, hash: string, mode: "AL
     assert(!["MISSING_SESSION_SUMMARY", "INVALID_PRESENTABLE_INPUT"].includes(wrap.value.manifest.reason ?? ""), "WRAP_UP_FAILED");
     assert.equal(wrap.graphCompleted, plan.cues.length, "GRAPH_COMPLETED_CUE_COUNT");
     assert.equal(summaryWrites, 1, "SUMMARY_MUST_BE_WRITTEN_ONCE");
+    assert(wrap.graph);
+    options.capture?.({ session, routeState, narrationByCue, summary: wrap.value, completedGraph: wrap.graph });
     session = reduceCoachingSession(plan, session, { type: "COMPLETE_SESSION" });
     assert.equal(session.phase, "COMPLETED"); assert.equal(toolPosts, 0); assert.equal(adapter.lifecycleDegraded, false);
     return { mode, rounds: bundle.match_timeline.rounds.length, segments: plan.segments.length, candidates: set.candidates.length, cues: plan.cues.length,
@@ -130,7 +143,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       replay = fireReplay("DEATH"); hash = "a".repeat(64); selected = self;
     } else {
       assert(path && playerName, "Usage: --smoke | <existing.dem> <selected-player-name>");
-      const parser = await import("../.local-data/upstream/cs2d/apps/app/src/viewer/parser/demo_parser.js");
+      const parser = await import(/* @vite-ignore */ new URL("../.local-data/upstream/cs2d/apps/app/src/viewer/parser/demo_parser.js", import.meta.url).href);
       parser.initSync({ module: readFileSync(".local-data/upstream/cs2d/apps/app/src/viewer/parser/demo_parser_bg.wasm") });
       let bytes: Buffer | undefined = readFileSync(path); demoBytes = bytes.length;
       // The ordinary Host identity is computed from the same read; no separate integrity pass.

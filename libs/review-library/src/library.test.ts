@@ -891,7 +891,7 @@ describe("DesktopReviewLibrary revisions, artifacts, recovery, and deletion", ()
     await h.owner.close();
   });
 
-  it("keeps revisions/artifacts immutable and restores a checksum-verified external bundle", async () => {
+  it.each(["ANALYSIS_BUNDLE", "CANDIDATE_SET"] as const)("keeps revisions/artifacts immutable and restores an external %s", async artifactType => {
     const h = await harness({ smallJsonMaxBytes: 64 });
     const imported = await importValue(h.library, demoBytes(), "review-demo");
     const review = await h.library.createReview({
@@ -922,13 +922,15 @@ describe("DesktopReviewLibrary revisions, artifacts, recovery, and deletion", ()
     expect(small.storageKind).toBe("SQLITE_JSON");
     const largeInput = {
       reviewRevisionId: revision.reviewRevisionId,
-      artifactType: "ANALYSIS_BUNDLE" as const,
+      artifactType,
       artifactKey: "analysis",
       artifactRevision: 1,
       schemaVersion: "analysis.v1",
       payload: { data: "x".repeat(4096) },
       idempotencyKey: "analysis-v1",
     };
+    await expect(h.library.appendArtifact({ ...largeInput, artifactType: "NARRATION_BUNDLE", idempotencyKey: "oversized-narration" }))
+      .rejects.toMatchObject({ code: "ARTIFACT_TOO_LARGE" });
     const large = await h.library.appendArtifact(largeInput);
     expect(large.storageKind).toBe("GZIP_FILE");
     expect(large).not.toHaveProperty("payload");

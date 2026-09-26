@@ -19,6 +19,9 @@ export const MAX_RECOVERY_TOOL_LEDGER = 64;
 export const MAX_RECOVERY_NARRATION_ARTIFACTS = 3;
 
 const Id = z.string().min(1).max(160);
+// Parser provenance includes the pinned upstream plus its ordered extension chain.
+// Keep it verbatim for recovery equality; it is not a short entity identifier.
+const ParserVersion = z.string().min(1).max(512);
 const Hash = z.string().min(1).max(256);
 const Sha256 = z.string().regex(/^[a-f0-9]{64}$/i);
 
@@ -228,7 +231,7 @@ export const SessionRecoveryRecordSchema = z
     routeId: Id,
     routeHash: Hash,
     versions: z.object({
-      parser: Id,
+      parser: ParserVersion,
       analysisAdapter: Id,
       candidateGenerator: Id,
       director: Id,
@@ -280,7 +283,7 @@ export const SessionRecoveryEventSchema = z.discriminatedUnion("type", [
     selectedPlayerId: Id,
     routeId: Id,
     routeHash: Hash,
-    versions: z.object({ parser: Id, analysisAdapter: Id, planner: Id }).strict(),
+    versions: z.object({ parser: ParserVersion, analysisAdapter: Id, planner: Id }).strict(),
   }).strict(),
   z.object({
     type: z.literal("STABLE_BOUNDARY_REACHED"),

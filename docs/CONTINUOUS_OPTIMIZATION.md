@@ -2,6 +2,16 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：真实结束产物的隔离SQLite恢复（2026-09-26）
+
+- ID real-history-reopen，基线184ee6f clean；root独占opt-in集成测试/必要窄修/docs。先读既有inventory恢复链与真实API；不重复造存储层或绕过HTTP body门。
+- A1单读授权60.6MB Demo/单解析，实际Analysis序列化与结束产物；A2真实artifact POST写隔离库、提交WRAP_UP head、关闭重开；A3实际GET→HistoryRestoreController→恢复验证/冻结准备，零新分析/讲解/Viewer请求且摘要保留；A4相关tests/TS/build、小摘要与push。必须记录真实payload体积和等待，不把模拟存储当已验收。
+- 风险/所有权：bulk仅测试进程，临时目录由finally关闭owner并删除；同一读取供Parser和临时managed Demo导入，不再读用户文件。外部150秒/测试120秒期限；先合成smoke，连续两次同基础设施失败先简化。无用户SQLite、模型/网络、浏览器/安装，不触原A5；只根据实际失败调整产品。
+
+- 真实发现/交付：完整Parser版本>160阻断恢复；CandidateSet请求1.73MB超过小JSON门。只扩parser字段512且两事件一致、候选复用gzip；通过实际POST/PUT和真实SQLite completed checkpoint，不能直接DAL绕门。测试捕获WRAP_UP边界，先前harness错误已对齐生产契约。
+- 证据：最终60.6MB单读/解析7.501秒，17产物（分析5.88MB/候选1.73MB gzip）保存3.927秒，关闭重开GET/恢复204ms；4skip/摘要保持，零新生成/Viewer请求。141相关tests＋opt-in真实测试、TS/build通过；partial_revision_restore默认配置只读窄验收RELEASE，root读diff与结果。[记录](validation/REAL_HISTORY_REOPEN.md)。临时库/副本/进程清理，无用户库/安装/部署；UI/服务器/Graph重连未声称验收。
+- 下一有限目标：实际17次artifact保存约4秒且小记录单次约200ms，先测同一revision重复物化与语义校验各占比，评估减少等待的安全可行路径。root先小probe，无需桌面/Demo重解析/模型，避免任意缓存改变删除或revision语义；证据不足不改生产。原A5仍独立。
+
 ## 已验证：真实Demo整场带看模块消费（2026-09-26）
 
 - ID real-guided-lifecycle，基线61ae6fe clean；root独占可复用验证工具/docs，无新代理。目标为当前Parser→Adapter→Session/Controller→Graph完成→受限总结真实数据消费，不重做字段/哈希一致性审计。

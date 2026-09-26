@@ -1483,7 +1483,7 @@ export class DesktopReviewLibrary {
         .get(reviewRevisionId) as { review_id: string } | undefined;
       if (!revision) throw new ReviewLibraryError("REVISION_NOT_FOUND");
       const external = serialized.bytes > this.smallJsonMaxBytes;
-      if (external && input.artifactType !== "ANALYSIS_BUNDLE")
+      if (external && input.artifactType !== "ANALYSIS_BUNDLE" && input.artifactType !== "CANDIDATE_SET")
         throw new ReviewLibraryError("ARTIFACT_TOO_LARGE");
       const artifactId = randomUUID();
       const now = this.iso();

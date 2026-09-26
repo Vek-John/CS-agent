@@ -297,3 +297,19 @@ describe("schema-only Session Recovery contracts", () => {
     expect(reconnectDispositionFromLedger(resumed.toolLedger[0]!)).toEqual({ status: "NONE" });
   });
 });
+
+
+it("preserves bounded parser provenance in both saved recovery and analysis-ready events", () => {
+  const base = record();
+  for (const length of [160, 256, 512, 513]) {
+    const parser = "p".repeat(length);
+    const saved = SessionRecoveryRecordSchema.safeParse({ ...base, versions: { ...base.versions, parser } });
+    const ready = SessionRecoveryEventSchema.safeParse({ type: "ANALYSIS_READY", eventId: "analysis", recoveryId: base.recoveryId,
+      demoContentHash: base.demoContentHash, selectedPlayerId: base.selectedPlayerId, routeId: base.routeId, routeHash: base.routeHash,
+      versions: { parser, analysisAdapter: "analysis.v1", planner: "planner.v1" } });
+    expect(saved.success).toBe(length <= 512);
+    expect(ready.success).toBe(length <= 512);
+    if (saved.success) expect(saved.data.versions.parser).toBe(parser);
+  }
+  expect(SessionRecoveryRecordSchema.safeParse({ ...base, sessionId: "s".repeat(161) }).success).toBe(false);
+});
