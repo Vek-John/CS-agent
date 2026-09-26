@@ -1,0 +1,19 @@
+diff --git a/apps/app/src/viewer/ingest/useDemoParser.ts b/apps/app/src/viewer/ingest/useDemoParser.ts
+--- a/apps/app/src/viewer/ingest/useDemoParser.ts
++++ b/apps/app/src/viewer/ingest/useDemoParser.ts
+@@ -117,7 +117,14 @@
+     status.value = 'reading'
+     setPhase('reading')
+ 
+-    const buffer = await file.arrayBuffer()
++    let buffer: ArrayBuffer
++    try {
++      buffer = await file.arrayBuffer()
++    } catch {
++      error.value = '无法读取 Demo 文件，请重新选择后重试。'
++      status.value = 'error'
++      return
++    }
+     status.value = 'parsing'
+ 
+     let raw: ArrayBuffer

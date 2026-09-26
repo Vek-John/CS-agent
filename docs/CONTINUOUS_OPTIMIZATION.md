@@ -2,6 +2,13 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：文件读取失败可重试（2026-09-27）
+
+- ID parser-read-failure，基线1cdd3ce clean；root独占0023/registry/既有Parser测试/docs，无委派，旧执行者已RELEASE。实际file.arrayBuffer在catch外，拒绝时parse抛出且status留reading，Viewer仅error状态才展示错误。目标：拒读→error及明确重选提示→函数正常结算→下次可正常解析；A1实际composable小File拒读，A2读取局部catch，A3不启动任何Worker/不留下假Replay，保持下一次正常解析及温恢复，A4相关tests/两端TS/build后push。
+- 3个新用例（Error/string/undefined拒绝）原3红→绿；读取失败后Worker0，下一次完成并释放一次。共36相关tests、Web/Viewer TS与production build通过，root集中复查局部catch与patch升级；日志`.local-data/parser-read-failure/{red,tests,typecheck,viewer-typecheck,build,viewer-build}.txt`。10分钟有限任务，纯小File/FakeWorker，无真实Demo/DB/模型/GUI/新安装，所有进程退出。
+- 局部复用现有错误面板，沿已采用emil/apple准确反馈原则；不改布局/动效/键盘、读取耗时上限或并发/卸载。托管导入仍沿既有parse失败与finalize分类，本轮没有修改SQLite状态；未做真实撤权文件或桌面实测。
+- 下一有限目标：当前persistSelectedDemo catch只要有validationToken就finalize CORRUPT，即便失败发生在读File而非解析数据。先用隔离新导入小例核实是否把已完整保存但暂时无法读取的Demo错误判损坏，再根据现有IMPORTING/恢复语义确定修复，不放松READY验证门或动用户库。
+
 ## 已交付：解析结束后释放Parser Worker（2026-09-27）
 
 - ID parser-worker-release，基线6ed34d1 clean；root独占0022/registry/实际composable测试/benchmark内存字段/docs，partial_revision_restore默认只读5分钟预检和3分钟终审。目标：最终result成功/失败或worker error后释放捕获的Parser Worker，保留page Replay/voice/hash，下一次冷解析重建，progress不释放。A1真实WASM保留容量+实际composable失败测试；A2统一一次完成门；A3迟到回调不影响新Worker及温恢复；A4两端TS/build、相关tests/窄审后push。

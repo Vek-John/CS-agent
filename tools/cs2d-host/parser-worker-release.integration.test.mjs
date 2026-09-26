@@ -60,4 +60,16 @@ describe.skipIf(!source)('actual useDemoParser terminal worker lifetime',()=>{
     second.worker.onmessage({data:result()});await second.completion;
     expect(h.workers.filter(w=>w.parser)).toHaveLength(2);
   });
+  it.each([new Error('permission lost'), 'unavailable', undefined])('settles unreadable files as retryable error (%s)',async reason=>{
+    const h=harness();
+    await expect(h.parser.parse({name:'unreadable.dem',size:9,arrayBuffer:async()=>{throw reason;}})).resolves.toBeUndefined();
+    expect(h.parser.status.value).toBe('error');
+    expect(h.parser.error.value).toBe('无法读取 Demo 文件，请重新选择后重试。');
+    expect(h.parser.replay.value).toBeNull();expect(h.parser.demoContentHash.value).toBeNull();
+    expect(h.workers).toHaveLength(0);
+    const next=await h.start();next.worker.onmessage({data:result()});await next.completion;
+    expect(h.parser.status.value).toBe('done');expect(h.parser.error.value).toBeNull();
+    expect(next.worker.terminate).toHaveBeenCalledOnce();
+  });
+
 });

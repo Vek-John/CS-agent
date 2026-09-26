@@ -8,6 +8,12 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：读取异常必须结束reading状态
+
+- 问题：file.arrayBuffer拒绝发生在useDemoParser既有catch外，parse直接拒绝且Viewer留reading，现有error面板不出现。独立于解压/Parser是否成功。
+- 决策：读取局部catch设置error与“无法读取 Demo 文件，请重新选择后重试。”并返回，沿原解析失败的Promise<void>结算方式；不虚构文件损坏原因、不启动Worker、不自动重读。
+- 验证：3新增读失败→重选正常用例由红转绿，36相关tests、两端TS/build通过，root窄审和进程清理。日志`.local-data/parser-read-failure`；无真实文件撤权/GUI。托管导入catch的既有CORRUPT归类是后继独立问题，本轮不改变数据状态或READY门。
+
 ## 2026-09-27：释放结果不等于释放WASM线性内存
 
 - 证据：当前WASM解析60,601,900字节Demo后linear memory为184,483,840 bytes，调用result.free后不缩小；worker模块仍持有该实例。仅由此能说有可释放的Worker资源，不能量化浏览器RSS下降。
