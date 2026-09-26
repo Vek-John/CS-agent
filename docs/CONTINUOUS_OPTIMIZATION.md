@@ -2,6 +2,13 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已核实：公开时钟不依赖本人资源完整（2026-09-26）
+
+- ID clock-without-self，基线78fe948 clean，root独占diagnosis-clock.test.ts与本轮文档。A1真实Adapter缺本人frame但公开clock齐全→实际Host/诊断；A2只修证实的事实丢失，资源/时机判断门不放宽；A3相关tests/TS/build及行动结论push。无代理、Demo/DB/模型/GUI；小测试60秒，20分钟内闭合，root清理进程。
+- 结果：假设不成立。fresh_player_state实际上表示frame过旧，并非本人记录缺失。独立WIN_RATE_DROP信号正常提名的实际Adapter cue中，本人快照null、decisionResources缺省，公开clock仍进入时机measurement，判决保持INCONCLUSIVE。最初DEATH fixture缺本人无法提名，不将其作为产品故障；改用已有独立信号路径，不强造cue或降低提名门。
+- 不修改生产代码或拆出重复投影。新增这一跨层边界用例，关闭上轮“可能剔除”限制；后继选择已展示回合时间的明确数值追问，当前入口仅支持血量/护甲/道具/弹匣，先核实是否能复述当前clock而不扩成C4或时机判断。
+- 验收：21项相关测试、TypeScript和production build通过；无生产行为变化，root集中审diff，进程退出。初版fixture只读数组赋值已改成不可变构造；没有安装/部署或用户数据操作。
+
 ## 已交付：时机诊断消费已验证回合时钟（2026-09-26）
 
 - ID diagnosis-clock-context，基线0d83957 clean；root拥有可选紧凑DTO/Host投影/诊断/测试/docs。核实自适应trade/info/timing已有具体缺项说明，不重复加UI；新缺口是时机诊断没有接收当前已知回合时钟，仍笼统宣称缺剩余时间。
