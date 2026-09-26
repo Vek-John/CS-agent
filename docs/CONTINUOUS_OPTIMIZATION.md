@@ -7,6 +7,17 @@
 
 
 
+
+## 已交付：基础路线血量追问（2026-09-27）
+
+- ID baseline-health-question，基线f9714a5 clean，7f2b实际树；partial_revision_restore默认配置独占resource-source/questions及窄测试，Host仅questionInput传真实health chip文本；root docs/契约/最终检查与push，无其他活动写入者。A1实际Adapter→三段View→讲解→已完成Session→基础问答；A2显示与可信本人同采样血量一致才答；A3缺失/冲突/新鲜度/死亡/错人/source代际/结果gate/诊断回归、相关tests/两端TS/build。
+- A1已证实View显示40 HP且Session gate完成，baseline仍items=[]；最小接线后首例通过，Host只新增displayedHealthText传递，回答用canonical state Fact refs，不用raw state ID。
+- 严格只health，沿已读emil/apple与Next客户端边界，不改布局、不从用户文字解析数值、不因显示数字授予权限；引用绑定当前允许state事实，不能拿raw state ID冒充讲解引用。15分钟有限任务、5分钟A1、小fixture<60秒；零真实Demo/模型/用户库/安装/服务，执行者清进程后RELEASE。若发现View未知却显示数字先记独立问题，不顺带扩所有资源。
+
+
+- 交付：实际40 HP显示链1红→绿，16新增/5文件162tests通过；未知/陈旧/死亡/错人/冲突/旧source/错误显示拒答，诊断不可借baseline chip。root读实际diff与负例，Host仅一行接线。首Web TS发现测试可选轨迹数组，按Host的??[]修复后16项复验、两端TypeScript/production build全通过。执行者RELEASE，所有进程退出，日志.local-data/baseline-health-question；无GUI/SQLite实测。
+- 下一有限目标 baseline-health-display：View源码在整体matchesDecisionState通过后直接显示raw health，未单独核对snapshot.health或missing字段。先用重建的实际三段View小case核实未知/冲突健康字段是否仍显示确定数值；若成立，仅修health可见性并保留其他合法chips。上轮拒答负例沿用先前40 HP显示值，不冒称已复现View bug，不扩大资源矩阵或唤醒锁屏A5。
+
 ## 已交付：基础讲解时钟追问（2026-09-27）
 
 - ID baseline-clock-question，基线881902e clean，7f2b实际树，partial_revision_restore默认配置独占resource-source/current-cue-questions及窄测试；root独占docs/最终实际diff复查与TS/build/push，旧owner均RELEASE。目标为已在基础正文显示的合法时钟可被明确追问复述。

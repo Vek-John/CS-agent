@@ -2,7 +2,7 @@ import type { CoachingSessionState, CueCase, NarrationBundle, ReviewPlan, Transf
 import { CueCaseSchema } from "@cs-coach/coach-agent/client";
 import { getCurrentCue, getCurrentSegment } from "@cs-coach/session";
 import { observableSituation, playerFacingLimitation } from "./decision-presentation";
-import { matchDisplayedBaselineClock, matchDisplayedCueUtilityKinds, matchDisplayedCueResources, type CurrentCueResourceSource, type CueResourceKind, type VerifiedResourceText } from "./current-cue-resource-source";
+import { matchDisplayedBaselineHealth, matchDisplayedBaselineClock, matchDisplayedCueUtilityKinds, matchDisplayedCueResources, type CurrentCueResourceSource, type CueResourceKind, type VerifiedResourceText } from "./current-cue-resource-source";
 
 export const MAX_CUE_QUESTION_LENGTH = 300;
 export const CURRENT_CUE_QUESTIONS = ["这次判断依据是什么？", "当时有哪些已知事实？", "还有哪些未知条件？"] as const;
@@ -19,6 +19,7 @@ export interface CurrentCueQuestionInput {
   takenOver: boolean;
   resourceSource?: CurrentCueResourceSource;
   displayedUtilityText?: string;
+  displayedHealthText?: string;
 }
 interface CitedText { text: string; refs: readonly string[] }
 export interface CurrentCueQuestionContext {
@@ -29,6 +30,7 @@ export interface CurrentCueQuestionContext {
   limitationSource: string;
   resources: Partial<Record<CueResourceKind, VerifiedResourceText>>;
   clockSource?: "BASELINE" | "DIAGNOSTIC";
+  healthSource?: "BASELINE" | "DIAGNOSTIC";
   utilityKinds?: VerifiedResourceText;
   advice?: Pick<TransferRule, "when" | "do" | "unless" | "limitations" | "refs">;
 }
@@ -74,6 +76,7 @@ export function buildCurrentCueQuestionContext(input: CurrentCueQuestionInput): 
   let limitationSource: string;
   let resources: CurrentCueQuestionContext["resources"] = {};
   let clockSource: CurrentCueQuestionContext["clockSource"];
+  let healthSource: CurrentCueQuestionContext["healthSource"];
   let transferRule: TransferRule | undefined;
   let utilityKinds: VerifiedResourceText | undefined;
   if (input.diagnosticsEnabled && input.cueCase?.status !== "FALLBACK") {
@@ -96,6 +99,7 @@ export function buildCurrentCueQuestionContext(input: CurrentCueQuestionInput): 
     limitationSource = "当前诊断已显示的限制";
     resources = matchDisplayedCueResources(input.resourceSource, plan, cue, r.measurements);
     if (resources.clock) clockSource = "DIAGNOSTIC";
+    if (resources.health) healthSource = "DIAGNOSTIC";
   } else {
     const n = input.presentableNarration;
     if (!n || n.cueId !== cue.id || n.candidateId !== cue.candidate_id) return;
@@ -107,6 +111,8 @@ export function buildCurrentCueQuestionContext(input: CurrentCueQuestionInput): 
     utilityKinds = matchDisplayedCueUtilityKinds(input.resourceSource, plan, cue, input.displayedUtilityText);
     const clock = matchDisplayedBaselineClock(input.resourceSource, plan, cue, n.currentSituation);
     if (clock) { resources.clock = clock; clockSource = "BASELINE"; }
+    const health = matchDisplayedBaselineHealth(input.resourceSource, plan, cue, input.displayedHealthText);
+    if (health) { resources.health = health; healthSource = "BASELINE"; }
   }
   const idCounts = new Map<string, number>();
   for (const fact of cue.facts) idCounts.set(fact.id, (idCounts.get(fact.id) ?? 0) + 1);
@@ -119,8 +125,8 @@ export function buildCurrentCueQuestionContext(input: CurrentCueQuestionInput): 
   const shownLimitations = [...new Set(limitations.filter(Boolean).map(playerFacingLimitation))].slice(0, 4)
     .map(text => boundedText(text) ? text : "当前记录中的限制较长，请结合上方完整诊断查看；这里不截断后改变其含义。");
   return {
-    key: JSON.stringify([input.generation, session.id, plan.id, cue.id, visit?.visit_id ?? null, sourceRevision, facts, basis, shownLimitations, input.resourceSource?.revision, resources, clockSource, utilityKinds]),
-    facts, basis, limitations: shownLimitations, limitationSource, resources, clockSource, utilityKinds,
+    key: JSON.stringify([input.generation, session.id, plan.id, cue.id, visit?.visit_id ?? null, sourceRevision, facts, basis, shownLimitations, input.resourceSource?.revision, resources, clockSource, healthSource, utilityKinds]),
+    facts, basis, limitations: shownLimitations, limitationSource, resources, clockSource, healthSource, utilityKinds,
     ...(transferRule ? { advice: {
       when: transferRule.when, do: transferRule.do, unless: transferRule.unless,
       // Match the diagnosis surface, retaining its entire schema-bounded list.
@@ -178,10 +184,12 @@ export function answerGroundedCueQuestion(context: CurrentCueQuestionContext, qu
     return resource ? {
       text: resourceKind === "clock"
         ? "这是决策前最近采样的回合剩余时间，存在采样误差，不是 C4 倒计时；不能据此判断等待是否正确或可行。"
+        : resourceKind === "health" && context.healthSource === "BASELINE"
+        ? "这个血量已在当前状态栏显示，并与同一决策采样的本人记录一致；这里只复述记录，不构成战术建议或新的判断。"
         : resourceKind === "ammo"
         ? "这是决策前最近记录，不能保证决策瞬间的精确余量；采样后的换枪或换弹仍可能未知，备弹未知。不能仅据这个数值判错或建议换弹。"
         : "这个数值已在当前诊断中展示，并与当前可验证的本人资源记录一致；它本身不构成战术建议或新的判断。",
-      items: [resource], source: resourceKind === "clock" ? context.clockSource === "BASELINE" ? "当前讲解已显示的事实与公开回合时钟记录交叉核对" : "当前诊断数值证据与公开回合时钟记录交叉核对" : "当前诊断数值证据与本人资源记录交叉核对",
+      items: [resource], source: resourceKind === "clock" ? context.clockSource === "BASELINE" ? "当前讲解已显示的事实与公开回合时钟记录交叉核对" : "当前诊断数值证据与公开回合时钟记录交叉核对" : resourceKind === "health" && context.healthSource === "BASELINE" ? "当前状态已显示的血量与同一决策采样交叉核对" : "当前诊断数值证据与本人资源记录交叉核对",
     } : {
       text: `目前无法可靠核对${name}：缺少可匹配的已展示数值或合法来源，不能把未知补成0。${resourceKind === "ammo" ? "备弹也未知。" : ""}`,
       items: [], source: "当前资源的来源缺口",

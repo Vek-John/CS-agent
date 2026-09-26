@@ -1,5 +1,5 @@
 import { buildCoachingCueView, playerStateAtOrBefore } from "./cs2d-coaching-view";
-import { verifiedDisplayedUtilityEvidence } from "./utility-kind-evidence";
+import { matchesDecisionState, verifiedDisplayedUtilityEvidence } from "./utility-kind-evidence";
 import type { CoachCue, DecisionResources, DiagnosticMeasurement, ReviewPlan, TeachingDiagnosisInput } from "@cs-coach/contracts";
 import type { TeachingDiagnosisHostContext } from "./teaching-diagnosis-host";
 import { decisionFactsForCue } from "./teaching-diagnosis-host";
@@ -8,7 +8,7 @@ import { currentDiagnosisSnapshot, currentDiagnosisResources, currentDiagnosisWi
 
 /** Opaque, page-local provenance: a saved/labelled measurement cannot manufacture this source. */
 export interface CurrentCueResourceSource { readonly revision: number }
-const sources = new WeakMap<CurrentCueResourceSource, { plan: ReviewPlan; cue: CoachCue; resources?: DecisionResources; clock?: TeachingDiagnosisInput["decisionClock"]; clockFact?: VerifiedResourceText; utilityKinds?: VerifiedResourceText }>();
+const sources = new WeakMap<CurrentCueResourceSource, { plan: ReviewPlan; cue: CoachCue; resources?: DecisionResources; clock?: TeachingDiagnosisInput["decisionClock"]; clockFact?: VerifiedResourceText; health?: VerifiedResourceText; utilityKinds?: VerifiedResourceText }>();
 
 /** One immutable source entry per Host. Typing/replay do not rescan the timeline. */
 export class CurrentCueResourceCache {
@@ -48,9 +48,22 @@ export class CurrentCueResourceCache {
     const semantics = { ...material, ...cue };
     const displayedSnapshot = currentDiagnosisSnapshot({ ...context, material: undefined, cue: { ...cue, decisionSnapshot: semantics.decisionSnapshot } }, window);
     const state = belongs && displayedSnapshot ? playerStateAtOrBefore(timeline?.player_state_tracks ?? [], selectedPlayerId, cue.decision_tick) : undefined;
-    const utilityKinds = state ? verifiedDisplayedUtilityEvidence(state, semantics, cue.decision_tick, buildCoachingCueView(cue, false).decisionFacts) : undefined;
+    const viewFacts = buildCoachingCueView(cue, false).decisionFacts;
+    const utilityKinds = state ? verifiedDisplayedUtilityEvidence(state, semantics, cue.decision_tick, viewFacts) : undefined;
+    const stateRefs = displayedSnapshot?.selectedPlayer.evidenceRefs ?? [];
+    const validHealthRefs = stateRefs.length > 0 && stateRefs.length <= 8 && new Set(stateRefs).size === stateRefs.length && stateRefs.every(ref => {
+      const shown = viewFacts.filter(fact => fact.id === ref), canonical = decisionFacts.filter(fact => fact.id === ref);
+      const a = shown[0], b = canonical[0];
+      return shown.length === 1 && canonical.length === 1 && a && b && a.text === b.text &&
+        a.source === "DEMO" && b.source === "DEMO" && a.availability === "DECISION" && b.availability === "DECISION" &&
+        a.observed_by_player && b.observed_by_player && a.available_at_tick === state?.tick && b.available_at_tick === state?.tick && cue.observable_fact_refs.includes(ref);
+    });
+    const health = state && resources?.health !== undefined && validHealthRefs &&
+      state.health === resources.health && displayedSnapshot?.selectedPlayer.value?.health === resources.health &&
+      matchesDecisionState(state, semantics, cue.decision_tick, viewFacts)
+      ? { text: `${resources.health} HP`, refs: [...stateRefs] } : undefined;
     const source = Object.freeze({ revision: ++this.revision });
-    sources.set(source, { plan, cue, resources, clock, clockFact, utilityKinds });
+    sources.set(source, { plan, cue, resources, clock, clockFact, health, utilityKinds });
     this.last = { context: { ...context }, source };
     return source;
   }
@@ -105,4 +118,11 @@ export function matchDisplayedBaselineClock(source: CurrentCueResourceSource | u
   if (!origin || origin.plan !== plan || origin.cue !== cue || !origin.clock || !fact ||
     !shown.text.includes(fact.text) || !fact.refs.every(ref => shown.refs.filter(value => value === ref).length === 1)) return;
   return { text: fact.text, refs: [...fact.refs] };
+}
+
+/** A baseline chip is only a display match; the cache owns numeric health and canonical fact provenance. */
+export function matchDisplayedBaselineHealth(source: CurrentCueResourceSource | undefined, plan: ReviewPlan, cue: CoachCue, displayedText: string | undefined): VerifiedResourceText | undefined {
+  const origin = source && sources.get(source);
+  return origin && origin.plan === plan && origin.cue === cue && origin.health && origin.health.text === displayedText
+    ? { text: origin.health.text, refs: [...origin.health.refs] } : undefined;
 }

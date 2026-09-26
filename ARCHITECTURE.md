@@ -1663,7 +1663,7 @@ DiagnosticResult/hinge的条件级SUPPORTED、PARTIALLY_SUPPORTED或CONTRADICTED
 
 决策事实仅从当前已展示内容对应的cue事实中投影，必须DEMO、DECISION、observed_by_player、唯一引用ID、属于observable_fact_refs且available_at_tick不晚于decision_tick；OUTCOME/未来/全知事实不进入答案。诊断需通过既有CueCase schema和cue/candidate/reflection/hinge/result/verdict归属检查；完整异议修订的DISAGREED状态还需verdict.revision>=1且disagreement预算已使用1次，可在同一完整结果门后继续原追问，原来源key使修订前回调失效；依据仅取当前诊断evidenceRefs（基础讲解取assessment支持引用）与合法事实的交集，明确只解释部分依据。只有measurement来源或无法对齐时直说不能完整解释该判断，不把全部事实、既有数值或未过建议资格的advice拼成新的专业结论。未知条件只重述该可信表面已显示的限制，空列表不等于所有条件已知；内部ID和tick保留在本地来源引用中，不展示给玩家。
 
-资源数值追问仅在当前完整诊断分支启用：Host复用`currentDiagnosisWindow/currentDiagnosisResources`取得合法compact，并核对plan/cue/player/demo/material归属；必须与已展示measurement的唯一规范ID、数值类型/值、规范标签/单位和非空引用集合一致，不能凭label或历史measurement提权。普通资源引用沿原去重前8项规则，弹匣使用独立来源引用；缺失/冲突/不匹配均未知，不补0。ammo仍遵守原strict-prior、同实体、回合/新鲜度、最新样本缺失及事件变化失效门，回答必须带“决策前最近记录”、不能保证瞬间精确余量、采样后换枪/换弹可能未知及备弹未知；不据此判错或建议换弹。baseline、未可信history不借数值入口开放事实，假设/自称数值/其他cue问句不匹配明确问法。
+完整诊断分支的资源数值追问沿以下核对启用：Host复用`currentDiagnosisWindow/currentDiagnosisResources`取得合法compact，并核对plan/cue/player/demo/material归属；必须与已展示measurement的唯一规范ID、数值类型/值、规范标签/单位和非空引用集合一致，不能凭label或历史measurement提权。普通资源引用沿原去重前8项规则，弹匣使用独立来源引用；缺失/冲突/不匹配均未知，不补0。ammo仍遵守原strict-prior、同实体、回合/新鲜度、最新样本缺失及事件变化失效门，回答必须带“决策前最近记录”、不能保证瞬间精确余量、采样后换枪/换弹可能未知及备弹未知；不据此判错或建议换弹。未通过下述显示来源核对的baseline及未可信history不借数值入口开放事实，假设/自称数值/其他cue问句不匹配明确问法。
 
 完整诊断分支还可复述已展示的 TransferRule，仅接受“下次记住什么”“下次要记住什么”“复述一下当前建议”三个明确问法及现有标点/空白归一化。沿相同身份与完成门，when/do必须非空，原 when/do/unless 及全部有界 limitations 按诊断面板既有玩家文案投影展示，不套事实的400字或通用限制前4条裁剪。回复明确只复述已有建议及适用条件，不重新评判、不证明最优；引用仅为rule.refs与该上下文合法已显示决策事实引用的交集，不能当作每句动作已被证实。完整rule内容加入sourceRevision，同ID内容变化也使旧草稿/回答和回调失效；同visit同来源重播保持。基础讲解/fallback或缺失合格rule不显示该快捷入口，明确问法返回无可复述来源，不能借cue.advice、Narration或其他cue补齐；身份门未通过时仍关闭整个追问入口。旧保存rule只按已有内容复述，不补写历史缺失限制。仅投影已有schema有界字符串，不重扫Replay、不重新诊断或调用模型，原问法及资源cache保持。
 
@@ -1675,6 +1675,9 @@ DiagnosticResult/hinge的条件级SUPPORTED、PARTIALLY_SUPPORTED或CONTRADICTED
 基础讲解（含FALLBACK）也可复述当前正文已经呈现的公开回合时钟。来源cache保留同plan/cue及合法clock引用绑定的原决策事实，只有当前讲解正文完整包含该事实、引用匹配且原Session/Outcome门通过时，才复制该文本作答；原文中的“约秒”或“不足1秒”不重新取整。不根据用户输入、单独保存数字、隐藏clock或旧无时钟正文补答；清空/替换cache使旧source失效。诊断路径继续按原measurement匹配，回答来源区分基础讲解与诊断，不增加模型、工具或历史写入。
 
 道具种类追问仅在baseline三段讲解（包含FALLBACK）已呈现合法Narration时复述当前可见道具chip。Host提供实际chip文本，来源cache复用View同一库存种类投影并验证当前Snapshot、玩家/决策/采样及已允许事实引用；文本与可信来源完全相同才可答，显示字符串本身不授予事实权限。非空种类继续保留“数量未知”，不得按种类长度推算颗数；空列表只有来源确认空库存、原数量投影为0且实际显示“无道具”时可复述。诊断分支不能借隐藏的baseline chips开放种类答案，其他资源数值追问仍沿原完整诊断measurement门。匹配结果参与问答来源key，换显示或来源使旧回答/回调失效；不增加模型、工具、历史写入或战术建议。
+
+
+基础血量追问仅复述当前实际显示的health chip。Host传入显示文本，cache同时要求既有currentDiagnosisResources的合法health、View原同采样绑定、raw state与当前Snapshot数值一致、selectedPlayer canonical事实引用在cue/material中唯一且正文/来源/可用性/observed/时间一致，并属于当前observable refs；原始state ID不作为讲解引用。来源文本与实际chip完全相等才可回答，文本本身不授予权限。来源标签明确当前状态，缺失/冲突/陈旧/死亡/未知/换源仍拒绝，诊断不能借baseline chip绕过measurement门；不扩展护甲、弹匣或道具数量的baseline资格。
 
 职业案例未接入检索时不编造，语音/战术补充只作为未验证假设，不回写事实或改判；错误前提不被接受，不明确/越界问法给具体可问范围。文本不触发seek、工具、推进或回看，控制沿用已有明确按钮。提问不发送Reflection/Disagreement/Graph/Memory事件，不消耗诊断attempt，不新增模型请求。
 

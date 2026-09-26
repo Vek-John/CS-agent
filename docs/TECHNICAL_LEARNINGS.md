@@ -2580,3 +2580,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决策：复用页面内不透明source及当前plan/cue/clock，缓存单一合法clock ref对应原事实。cue/material文本、source、availability、observed及采样时刻一致，且当前正文完整含该文本、引用恰好匹配才复制；保留“约秒/不足1秒”而不重算数值。回答来源区分基础讲解与诊断，原结果gate和diagnostic measurement门不动。
 - 验证：1红→绿；21新增、4文件134tests、两端TypeScript/production build通过。覆盖亚秒原文、正文/引用缺失与冲突、未知/暂停/植包、错人/回合/新旧时间、opaque source伪造/换源/清空、旧正文不回填及未gate/忙态/接管拒绝；无fetch/输入写入。root读实际diff后补cue/material完整事实一致门，执行者RELEASE。日志.local-data/baseline-clock-question。
 - 限制与下一步：仅既有明确问法、单一合法clock事实；没有GUI或SQLite实测，不新增模型/工具/历史写入。现有问答面板对所有分支提示“我当时多少血”，但基础分支目前仍不消费health；下一有限任务先验证该默认路径与已显示自身状态是否不一致，再决定匹配来源后接线或收窄提示，不能读取隐藏资源。
+
+
+## 2026-09-27：基础状态栏已显示血量的只读追问
+
+- 问题：面板提示可问“我当时多少血”，实际Adapter→三段View显示40 HP且Session完成结果gate，基础问答却items=[]。这是默认分支未消费已显示血量，并非缺少Demo或诊断模型。
+- 决策：Host仅传实际health chip文本；cache联合既有currentDiagnosisResources与View同采样绑定，验证raw/snapshot/数值、cue/material canonical事实来源/可用性/observed/时间及唯一refs，再与显示字符串完全匹配。答复使用canonical Fact refs，不用raw state ID，不从输入文字解析血量；来源说明当前状态而非诊断。诊断原measurement门不变，scope仅health。
+- 验证：实际默认链1红→绿，16新增/5文件162tests通过；覆盖显示缺失/冲突、未知/陈旧/死亡/错人/值与引用冲突、source替换/清空/伪造/旧回调、未完成gate和诊断不能借chip。零fetch、输入不变，无模型/历史写入。最终两端TS/build结果见任务板；日志.local-data/baseline-health-question。
+- 限制/后继：未运行浏览器或SQLite验收，未扩其他资源。未知snapshot拒答测试沿用先前40 HP显示值，不能据此宣称未知View已复现错误；但源码显示View只过整体采样门便输出raw health，下一有限目标用重建View的小case核实未知/冲突字段是否仍显确定血量，成立才收窄该字段显示。
