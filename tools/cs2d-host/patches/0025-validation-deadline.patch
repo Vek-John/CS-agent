@@ -1,0 +1,71 @@
+diff --git a/apps/app/src/viewer/DemoAnalyzerView.vue b/apps/app/src/viewer/DemoAnalyzerView.vue
+--- a/apps/app/src/viewer/DemoAnalyzerView.vue
++++ b/apps/app/src/viewer/DemoAnalyzerView.vue
+@@ -604,22 +604,43 @@
+ }
+ 
+ async function finalizeManagedDemo(result: ManagedImportResponse, outcome: 'READY' | 'CORRUPT') {
+-  if (!result.validationToken) return
+-  const response = await fetch('/_desktop/library/import/finalize', {
+-    method: 'POST',
+-    headers: {
+-      Authorization: `Bearer ${result.validationToken}`,
+-      'X-CS-Agent-Demo-Id': result.demoId,
+-      'X-CS-Agent-Parse-Outcome': outcome,
+-    },
+-    credentials: 'omit',
+-    cache: 'no-store',
+-    redirect: 'error',
++  const validationToken = result.validationToken
++  if (!validationToken) return
++  // VALIDATE is single-use. An unconfirmed READY must not be retried as CORRUPT.
++  delete result.validationToken
++  const controller = new AbortController()
++  let timer: ReturnType<typeof setTimeout> | undefined
++  const timeout = new Promise<never>((_, reject) => {
++    timer = setTimeout(() => {
++      reject(new Error('DEMO_VALIDATION_TIMEOUT'))
++      controller.abort()
++    }, 20_000)
+   })
+-  const body = await response.json().catch(() => null) as Record<string, unknown> | null
+-  if (!response.ok || body?.schemaVersion !== 'desktop-library-validation.v1' ||
+-    body.demoId !== result.demoId || body.status !== (outcome === 'READY' ? 'READY' : 'CORRUPT')) {
+-    throw new Error('DEMO_VALIDATION_REJECTED')
++  const request = (async () => {
++    const response = await fetch('/_desktop/library/import/finalize', {
++      method: 'POST',
++      headers: {
++        Authorization: `Bearer ${validationToken}`,
++        'X-CS-Agent-Demo-Id': result.demoId,
++        'X-CS-Agent-Parse-Outcome': outcome,
++      },
++      credentials: 'omit',
++      cache: 'no-store',
++      redirect: 'error',
++      signal: controller.signal,
++    })
++    if (controller.signal.aborted) throw new Error('DEMO_VALIDATION_TIMEOUT')
++    const body = await response.json().catch(() => null) as Record<string, unknown> | null
++    if (controller.signal.aborted) throw new Error('DEMO_VALIDATION_TIMEOUT')
++    if (!response.ok || body?.schemaVersion !== 'desktop-library-validation.v1' ||
++      body.demoId !== result.demoId || body.status !== (outcome === 'READY' ? 'READY' : 'CORRUPT')) {
++      throw new Error('DEMO_VALIDATION_REJECTED')
++    }
++  })()
++  try {
++    await Promise.race([request, timeout])
++  } finally {
++    clearTimeout(timer)
+   }
+ }
+ 
+@@ -742,6 +763,8 @@
+       code,
+       message: code === 'MANAGED_DEMO_PARSE_FAILED'
+         ? 'Demo 尚未通过验证，请重新选择文件后重试。'
++        : code === 'DEMO_VALIDATION_TIMEOUT'
++          ? 'Demo 验证结果尚未确认，请重新选择文件后重试。'
+         : code === 'DEMO_VALIDATION_REJECTED'
+           ? 'Demo 已写入，但未能完成解析验证。'
+           : 'Demo 导入失败：本地资料库拒绝了该文件。',

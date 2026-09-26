@@ -1664,6 +1664,7 @@ export function Cs2dPlaybackHost({
           DEMO_SIZE_MISMATCH: "Demo 传输大小与选定文件不一致，已中止导入。",
           MANAGED_DEMO_PARSE_FAILED: "Demo 尚未通过验证，请重新选择文件后重试。",
           CONTENT_HASH_MISMATCH: "Demo 内容哈希与资料库记录不一致，已停止恢复。",
+          DEMO_VALIDATION_TIMEOUT: "Demo 验证结果尚未确认，请重新选择文件后重试。",
           DEMO_VALIDATION_REJECTED: "Demo 已写入，但未能完成解析验证。",
           DEMO_IMPORT_AUTHORIZATION_REJECTED: "Demo 导入权限已失效，请重新选择文件。",
           MANAGED_DEMO_LOAD_FAILED: "托管 Demo 读取失败，请在设置中验证资料库。",

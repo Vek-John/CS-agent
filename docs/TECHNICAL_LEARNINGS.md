@@ -8,6 +8,12 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：一次性验证的超时不应触发第二次提交
+
+- 问题：Viewer finalize fetch/json无期限；READY异常又用同token提交CORRUPT，服务端却在写入前已消费令牌。不能通过重复提交猜测第一次是否生效。
+- 决策：0025捕获并移除本地token、fetch/body共用20秒期限，超时先reject再abort；晚headers/body不发布结果，Host提示结果未确认。真正解析先失败仍可用尚未尝试token提交CORRUPT一次，清理本身也有界，不改READY门。
+- 验证：2核心红→绿，13新增/73相关tests、两端TS/build；补丁旧上下文被新patch覆盖的复用检查按完整0025 reverse限定修正，独立窄审无必修。[记录](validation/VALIDATION_DEADLINE.md)。无真实服务端事务/网络/GUI测量，超时不等于服务端回滚或数据未写入。
+
 ## 2026-09-27：区分不可读状态与损坏事实
 
 - 核实：ADR-0010明确中断验证也收敛CORRUPT，物理verify不能晋升。故读失败后的不可读状态符合现有安全边界，不应仅为文案新增状态或允许读取；真正不准确的是UI一律断言文件损坏。

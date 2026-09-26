@@ -2,6 +2,14 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：解析验证确认有界且只提交一次（2026-09-27）
+
+- ID validation-deadline，基线4a4bf2a clean；root独占0025/registry/Host timeout反馈/新实际Viewer函数测试/docs，partial_revision_restore默认5分钟预检与3分钟终审只读。目标为解析成功→VALIDATE确认fetch/body最长20秒→成功才ready，否则明确未确认/重选；A1真实函数两类挂起红，A2单期限与每token单尝试，A3迟到/旧代际/CORRUPT清理/协议拒绝保持，A4相关tests/两端TS/build及窄审push。
+- 预检事实：服务端先reserveCapability消费VALIDATE再enqueueWrite，小元数据无Demo流/Parser。函数先捕获并移除本地token，避免READY结果未知时catch再提交CORRUPT；解析本身先失败时仍有token，可CORRUPT一次。Promise.race与独立AbortController保证忽略abort的stub也结算，迟到headers不读JSON，body晚到不成功。超时不证明服务端撤销。
+- 验证：fetch/body原2红→绿；13新增/73相关tests通过，覆盖一次提交、20秒结算、无READY、迟到、较晚独立请求、旧load、无token、HTTP/schema/demo/status/JSON拒绝，timers归零。Web/Viewer TS与production build通过；Viewer首次build因0025覆盖0024上下文拒复用，现仅在0025完整reverse通过时承认旧0024被覆盖，build复验通过。独立终审无必修，RELEASE；[记录](validation/VALIDATION_DEADLINE.md)。
+- 风险/资源：小metadata+FakeTimer/transport，不给Demo流/解析加20秒，不自动重用nonce，不改数据库状态/门。root唯一进程owner，15分钟有限阶段，零Demo/用户DB/模型/GUI/新安装，全部进程退出，计时器清理。
+- 下一有限目标：现beginManagedLoad只abort传输/终止胜率Worker，parseManagedFile的串行tail仍等待旧Parser完成。先用挂起Parser小例核实用户换文件是否必须等旧解析；若有可观察等待，再设计可结算的取消，不以强杀Worker留下悬空promise，也不启动锁屏UI路径。
+
 ## 已交付：未通过验证不等于已证明文件损坏（2026-09-27）
 
 - ID import-validation-feedback，基线2185e82 clean；root独占两处Host/Sidebar文案、0024事件文案、registry、既有隔离library测试/docs，无委派。A1先核实真实ADR/状态机/重导恢复；事实为CORRUPT也承载中断/失去VALIDATE后的不可读状态，而非字节损坏证据。A2改“文件损坏”为“验证未通过”、失败提示明确重选，不改数据库状态或READY门；A3原记录同文件重导恢复与READ验证；A4相关tests/两端TS/build、集中diff后push。
