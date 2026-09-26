@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：玩家采样packed身份（2026-09-26）
+
+- ID frame-pawn-identity，基线af8e53a clean；主控Adapter/真实消费/docs，partial_revision_restore默认配置先接口预检后props/collector/assemble/lib和0016工具，revision_semantics_review默认配置独占源注入fixture/harness；已核实现有owner均RELEASE。
+- 目标：controller network packed句柄→当前匹配pawn→本人位置/资源，拒绝错serial/错class/冲突绑定；不把native转换套到network。A1实际采样入口生命周期红例；A2死pawn合法/当前绑定字段保持，未知不造错人状态；A3缺行不得使all-alive respawn提前（内部frame完整性）；A4相关tests/TS/Web及parser/Viewer build、真实前后消费比较、文档push。
+- 风险/阶段：玩家缺行会影响respawn和名单，需要同时查assemble/Adapter降级；不修改public Frame schema、cache/ADR/其他handle。5分钟接口、12分钟实现、20分钟交付；主控唯一60.6MB Demo控制器，bulk本地进程和临时压缩基线、仅统计输出，单运行120秒，不安装/模型/UI/用户DB。原A5独立保留。
+
+- 结果：真实采样/assemble源注入8红/2绿→10绿，80相关tests/13patch tests、native9+vendor33、TS/Web和WASM/Viewer build/TS通过；新增内部完整性同时保护respawn和两knife推断，缺当前名单不补旧人。真实7239帧/72193玩家行及9回合边界JSON字段一致，10人消费通过。[证据](validation/FRAME_PAWN_IDENTITY.md)。
+- 验证纠偏/后继：直接runtime-vs-JSON深比较误报-0，离线projection相等后简化JSON正规化，最终18行负零；共旧1/新3次parse，无产品改动迁就测试。全部进程/临时资源退出，两默认代理RELEASE；单样本不外推零缺行，无UI/DB质量结论。下一项有真实源码线索active_weapon_label的weapon handle仍index-only，弹药校验却已严格；先小生命周期证实错武器标签可能性和资源消费，避免全背包泛化。原A5独立等待。
+
 ## 已交付：几何字段完整性证据（2026-09-26）
 
 - ID geometry-field-evidence，基线fe1941a clean；主控独占geometry-fields诊断probe/真实读取/docs，revision_semantics_review默认配置只读消费链8分钟预检，其他owner RELEASE。

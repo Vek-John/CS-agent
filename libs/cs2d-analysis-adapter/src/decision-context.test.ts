@@ -56,6 +56,21 @@ describe("trusted compact decision snapshots", () => {
     expect(check(value, "flashAvailable")?.status).toBe("UNVERIFIABLE");
     expect(value.missingFields).toEqual(expect.arrayContaining(["current_side", "armor", "alive", "inventory", "damage_source", "enemy_visibility"]));
   });
+  it.each([0, 1])("does not fill a missing current player %s from the prior complete frame", (missing) => {
+    const source = round();
+    const current = { ...source, frames: [...source.frames, { tick: 136, t: 2.125, players: source.frames[0].players.filter(p => p.steamId !== `p${missing}`) }] };
+    const value = snapshot(current, 136);
+    expect(value.sampledAtTick).toBe(136);
+    expect(value.players).toHaveLength(9);
+    expect(value.aliveCounts.value).toBeNull();
+    expect(value.missingFields).toContain("complete_current_roster");
+    expect(check(value, "teammateAlive")?.status).not.toBe("INAPPLICABLE");
+    if (missing === 0) {
+      expect(value.selectedPlayer.value).toBeNull();
+      expect(value.missingFields).toEqual(expect.arrayContaining(["health", "alive", "current_side"]));
+    } else expect(value.selectedPlayer.value?.health).toBe(2);
+  });
+
   it("does not guess timers from match settings or eventual round duration", () => {
     const value = snapshot({ ...round(), events: [{ type: "bomb_planted", tick: 100, t: 1.5625, playerSteamId: "p5" }] });
     expect(value.clock.value).toEqual({ phase: "UNKNOWN", elapsedSeconds: null, remainingSeconds: null });

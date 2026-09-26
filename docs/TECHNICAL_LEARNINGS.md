@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：玩家采样拒绝替代pawn并保护回合推断
+
+- 问题：采样network packed handle走index-only查找，实体复用可错人；直接删坏行又会让剩余玩家“全活/全持刀”，误改freeze或刀局。
+- 决策：0016验证当前packed pawn及唯一controller owner，不native转换、不拒绝死pawn；坏绑定跳过并以内部identity_complete同时约束respawn和两处刀局推断。public Frame schema保持，Adapter现有当前缺名单/本人语义不补旧行。
+- 验证：真实源8红→10绿，80相关tests+13patch tests、native9+vendor33、TS/Web与WASM/Viewer build/TS通过。真实9回合7239帧72193玩家行及边界在JSON契约下前后一致，10人消费通过；初比较器对-0/JSON差异误报，离线projection比对定位后简化正规化，最终18行含-0，非产品回归。共修前1/修后3次解析，0网络。[证据](validation/FRAME_PAWN_IDENTITY.md)。
+- 限制：单样本不代表全Demo零缺行，不验证完整tick调度/外部身份真值，Viewer既有短暂保持前帧策略未变。下一独立检查active_weapon_label的index-only weapon路径与已校验ammo之间的资源矛盾，先小复现，不泛化全背包。代理/进程已释放，原A5独立。
+
 ## 2026-09-26：先测几何缺字段，再决定是否改协议
 
 - 问题：world_coord缺cell/offset时默认值可生成有限伪坐标，Adapter仅finite检查；直接删player又会伤害respawn/名单/资源，不是安全的局部修复。

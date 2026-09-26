@@ -156,3 +156,17 @@ it("registers death parties against current verified pawns while requiring a kno
   expect(additions).not.toMatch(/steam_from_pawn_handle|get_by_handle|m_hThrower|= 0\.0|m_iHealth/);
   expect(patch).toContain("self.events.push(RawEvent::Kill");
 });
+
+it("registers network controller identity and partial-frame inference guards", () => {
+  expect(CS2D_PATCH_FILES[15]).toMatch(/0016-frame-pawn-identity\.patch$/);
+  const patch = readFileSync(CS2D_PATCH_FILES[15], "utf8");
+  const additions = patch.split("\n").filter(line => line.startsWith("+") && !line.startsWith("+++")).join("\n");
+  expect(additions).toContain("Ok(FieldValue::Unsigned32(h)) if *h < 0xffffff");
+  expect(additions).toContain("owner == steam");
+  expect(additions).toContain("let pawn = match verified_controller_pawn(ctx, ctrl)");
+  expect(additions).toContain("if !f.identity_complete { return false; }");
+  expect(additions).toContain("if !f.identity_complete { return None; }");
+  expect(additions).toContain("&& f.identity_complete");
+  expect(additions).toContain("death-identity.v1.frame-identity.v1");
+  expect(additions).not.toMatch(/event_pawn_to_packed|m_lifeState|steam_from_pawn_handle/);
+});

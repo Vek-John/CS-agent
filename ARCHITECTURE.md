@@ -140,6 +140,15 @@ Parser追加`bomb-identity.v1`，Adapter manifest保留已知hurt/shot/ammo/bomb
 Parser追加`death-identity.v1`，Adapter记录完整已知来源链；旧产物仍直接恢复，不重算其事件索引。此修正只限定death事件身份与几何实体共源；不改变既有world_coord字段缺省规则、不扩展ADR或其他handle路径，不从击杀结果推断决策时可知敌情。
 
 
+### 2.4.6 玩家采样的network pawn身份
+
+帧采样的controller `m_hPlayerPawn`使用network packed布局，不能按native事件转换。采样前验证字段类型、有效packed范围、当前CCSPlayerPawn class/index/可见低10serial，以及唯一当前controller绑定与有效身份相符；不要求pawn存活，真实死亡状态仍应采集。失效绑定不得将替代实体的位置、生命、护甲、武器等状态归给原controller。
+
+无法确认参与采样的playing controller时，本帧保留其他有效玩家与原采样tick，内部RawFrame记为identity_complete=false；不造缺失玩家死亡或回填旧状态。此标记不进入public Replay schema。assemble的respawn全活满血推断和两处刀局推断不能用身份不完整帧制造freeze边界或刀局，其他已知事实仍分发。Adapter沿当前帧缺名单/缺本人降级，不从上一完整帧补人；移动提名遇本人缺样本中断。Viewer沿现有相邻帧策略，在缺行前最多保持前一有效采样至缺帧，缺base行不显示，不跨缺帧追找更远样本。
+
+Parser来源追加frame-identity.v1。合法完整帧保持字段与既有回合推断；无效绑定可能使个别玩家缺样本或保守放弃推断，不能声称任何Demo都零缺行。旧保存产物直接恢复，不重写其时间线。该修正不迁移tick_start cache、ADR或其他network handle。
+
+
 ### 2.5 事实、推断、建议分层
 
 - `Fact`：Demo 可直接验证；

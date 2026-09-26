@@ -1,0 +1,129 @@
+--- a/packages/parser/src/props.rs
++++ b/packages/parser/src/props.rs
+@@ -243,6 +243,27 @@
+         owner = Some(steam);
+     }
+     owner
++}
++
++// Controller m_hPlayerPawn is already network-packed: never apply native conversion.
++// Sampling requires this controller to be the unique current owner of that pawn.
++pub(crate) fn verified_controller_pawn<'a>(ctx: &'a Context, controller: &Entity) -> Option<&'a Entity> {
++    if controller.class().name() != "CCSPlayerController" { return None; }
++    let steam = prop_u64(controller, "m_steamID");
++    if steam == 0 || steam == u64::MAX { return None; }
++    let packed = match controller.get_property_by_name("m_hPlayerPawn") {
++        Ok(FieldValue::Unsigned32(h)) if *h < 0xffffff => *h,
++        _ => return None,
++    };
++    let pawn = ctx.entities().get_by_index((packed & 0x3fff) as usize).ok()?;
++    let bindings = ctx.entities().iter().filter(|e| e.class().name() == "CCSPlayerController").filter_map(|ctrl| {
++        match ctrl.get_property_by_name("m_hPlayerPawn") {
++            Ok(FieldValue::Unsigned32(h)) => Some((*h, prop_u64(ctrl, "m_steamID"))),
++            _ => None,
++        }
++    });
++    let owner = packed_pawn_owner(packed, pawn.class().name(), pawn.index(), pawn.serial(), bindings)?;
++    (owner == steam).then_some(pawn)
+ }
+ 
+ // A valid pawn with an unknown owner retains geometry; an invalid pawn provides neither.
+--- a/packages/parser/src/collector.rs
++++ b/packages/parser/src/collector.rs
+@@ -11,6 +11,8 @@
+ use std::collections::HashMap;
+ 
+ pub(crate) struct RawFrame {
++    /// Every eligible playing controller supplied a current verified pawn row.
++    pub(crate) identity_complete: bool,
+     pub(crate) clock: Option<RoundClockSample>,
+     pub(crate) tick: u32,
+     pub(crate) players: Vec<PlayerState>,
+@@ -378,12 +380,9 @@
+         self.last_cap = tick;
+ 
+         let mut players = Vec::with_capacity(10);
++        let mut identity_complete = true;
+         for ctrl in ctx.entities().iter() {
+             if ctrl.class().name() != "CCSPlayerController" {
+-                continue;
+-            }
+-            let steam = prop_u64(ctrl, "m_steamID");
+-            if steam == 0 {
+                 continue;
+             }
+             // Skip coaches: they own a CCSPlayerController and a pawn that is
+@@ -395,16 +394,20 @@
+             if side_of(prop_i32(ctrl, "m_iTeamNum")).is_none() {
+                 continue;
+             }
++            let steam = prop_u64(ctrl, "m_steamID");
++            if steam == 0 || steam == u64::MAX {
++                identity_complete = false;
++                continue;
++            }
+             let steam_id = steam.to_string();
+-            let handle = prop_u32(ctrl, "m_hPlayerPawn");
+-            let pawn = match ctx.entities().get_by_handle(handle as usize) {
+-                Ok(p) => p,
+-                Err(_) => continue,
++            let pawn = match verified_controller_pawn(ctx, ctrl) {
++                Some(p) => p,
++                None => { identity_complete = false; continue; }
+             };
+             let team = prop_i32(pawn, "m_iTeamNum");
+             let side = match side_of(team) {
+                 Some(s) => s,
+-                None => continue,
++                None => { identity_complete = false; continue; }
+             };
+ 
+             // Metadata (name + starting side) the first time we see the player.
+@@ -450,7 +453,7 @@
+                 grenades: grenade_inventory(ctx, pawn),
+             });
+         }
+-        self.frames.push(RawFrame { tick, players, clock: None });
++        self.frames.push(RawFrame { tick, players, clock: None, identity_complete });
+ 
+         // Grenade projectile flight points on this sampled tick.
+         for e in ctx.entities().iter() {
+--- a/packages/parser/src/assemble.rs
++++ b/packages/parser/src/assemble.rs
+@@ -109,6 +109,8 @@
+             if f.tick < start_tick || f.tick > end_tick {
+                 continue;
+             }
++            // Missing identities cannot prove that every player held only a knife.
++            if !f.identity_complete { return false; }
+             for p in &f.players {
+                 saw_player = true;
+                 if p.weapon != "Faca" && !p.weapon.is_empty() {
+@@ -159,6 +161,8 @@
+             if f.tick < win_start || f.tick >= win_end || pistol_start.is_some() {
+                 continue;
+             }
++            // Do not split a knife round from a partial roster snapshot.
++            if !f.identity_complete { return None; }
+             let armed = f
+                 .players
+                 .iter()
+@@ -246,6 +250,7 @@
+             .find(|f| {
+                 f.tick >= lo
+                     && f.tick <= hi
++                    && f.identity_complete
+                     && !f.players.is_empty()
+                     && f.players.iter().all(|p| p.alive && p.health == 100)
+             })
+--- a/packages/parser/src/lib.rs
++++ b/packages/parser/src/lib.rs
+@@ -22,7 +22,7 @@
+ use collector::Collector;
+ 
+ const DEMO_TICK_RATE: f64 = 64.0;
+-const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1";
++const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1";
+ 
+ /// Parses the bytes of a `.dem` in a single pass and returns `(Replay JSON, voice
+ /// blob)`. The `Replay` matches `replay-schema 2D`; the blob follows the `CLV2`
