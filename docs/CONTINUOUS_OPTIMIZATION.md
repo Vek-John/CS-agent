@@ -6,6 +6,18 @@
 
 
 
+
+## 已交付：基础讲解时钟追问（2026-09-27）
+
+- ID baseline-clock-question，基线881902e clean，7f2b实际树，partial_revision_restore默认配置独占resource-source/current-cue-questions及窄测试；root独占docs/最终实际diff复查与TS/build/push，旧owner均RELEASE。目标为已在基础正文显示的合法时钟可被明确追问复述。
+- A1真实Adapter→讲解→Session已完成gate→基础问答复现；A2复用不透明source和当前plan/cue/clock、正文及引用匹配，不从用户文本推数，不借隐藏clock或旧无引用正文；A3未知/暂停/植包、错来源/未gate/换cue/旧正文拒绝，诊断路径仍过原measurement门，相关tests/两端TS/build后push。
+- A1真实默认链已红：正文已呈现“约110秒”且Session结果gate完成，基础问答却items=[]。批准cache存单一合法clock ref对应原事实文本，按当前正文与引用匹配后复制；不重新格式化秒数或从用户输入取值。
+- 风险/边界：不足1秒不可改成确定1秒，基线回答不能冒称来自诊断；只读、零模型/工具/历史写入，15分钟有限任务、5分钟A1、单测试<60秒，无Demo重读/GUI/用户库/安装/服务。同设施两败简化，执行者清理进程后RELEASE。沿已读emil/apple交互与Next客户端边界，本轮不改组件/布局。
+
+
+- 交付：单一合法clock原事实在当前正文/refs/opaque source都匹配时可复述，亚秒不重算；基础source标签正确，诊断原门保持。21新增、4文件134tests及两端TS/build通过。root源码复查要求cue/material除正文还匹配来源/可用性/observed/时间，补一条冲突负例闭合；无Host/组件/schema修改。执行者RELEASE，所有测试/构建进程退出，日志.local-data/baseline-clock-question；未进行GUI/SQLite实测。
+- 下一有限目标 baseline-health-question：组件在基础路线也提示可问“我当时多少血”，但基础context.resources现只有clock。先用已显示自身状态的实际基础链验证这一常用问题是否仍拒答；只在当前显示与不透明source/采样/身份一致时考虑接线，不借隐藏数值，不扩展任意问句语义或资源矩阵。
+
 ## 已交付：当前情况正文与引用一致（2026-09-27）
 
 - ID narration-visible-references，基线81980c9 clean，真实7f2b，root独占小实现/测试/docs/checks/push，无新委派，原owner均RELEASE。A1在现有7事实/第6超长/真实时钟链加入精确引用断言；A2只让currentSituation.refs随实际选入正文的事实，其他字段语义不变；A3有界正文、零请求、旧保存恢复、相关tests/两端TS/build后push。

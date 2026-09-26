@@ -2572,3 +2572,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决策：复用同一选句过程收集presentedFacts，仅对currentSituation收窄引用，不更改正文或其它字段依据。无facts的claim-only有限上下文回退保留，非法ref仍过滤/拒绝。新本地投影1.2，旧JSON讲解恢复保持原样。
 - 验证：3红→绿，加1条claim-only回退；6文件87tests及2文件15项工具/Host默认闭环通过，两端TypeScript/production build通过。没有真实Demo、模型、GUI或用户库操作，原选句/时钟/专业判断/工具门未修改。日志.local-data/narration-visible-references。
 - 下一行动：源码已核实基础讲解追问分支只匹配utilityKinds，resources保持空；clock答案目前只从诊断measurements分支取得。下一小验证应确认已在基础正文显示的合法时钟，是否仍被“当时回合还剩多久”拒答；有缺口才复用现有source身份与可见引用门接线，不增加任意语义匹配。
+
+
+## 2026-09-27：基础讲解也能复述已显示的公开时钟
+
+- 问题：真实小Adapter→讲解→Session完成gate链已显示“约110秒”，但基础问答resources仍空，仅诊断measurement分支有clock，因此明确时钟追问返回items=[]。
+- 决策：复用页面内不透明source及当前plan/cue/clock，缓存单一合法clock ref对应原事实。cue/material文本、source、availability、observed及采样时刻一致，且当前正文完整含该文本、引用恰好匹配才复制；保留“约秒/不足1秒”而不重算数值。回答来源区分基础讲解与诊断，原结果gate和diagnostic measurement门不动。
+- 验证：1红→绿；21新增、4文件134tests、两端TypeScript/production build通过。覆盖亚秒原文、正文/引用缺失与冲突、未知/暂停/植包、错人/回合/新旧时间、opaque source伪造/换源/清空、旧正文不回填及未gate/忙态/接管拒绝；无fetch/输入写入。root读实际diff后补cue/material完整事实一致门，执行者RELEASE。日志.local-data/baseline-clock-question。
+- 限制与下一步：仅既有明确问法、单一合法clock事实；没有GUI或SQLite实测，不新增模型/工具/历史写入。现有问答面板对所有分支提示“我当时多少血”，但基础分支目前仍不消费health；下一有限任务先验证该默认路径与已显示自身状态是否不一致，再决定匹配来源后接线或收窄提示，不能读取隐藏资源。

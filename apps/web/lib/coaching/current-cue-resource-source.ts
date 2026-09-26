@@ -8,7 +8,7 @@ import { currentDiagnosisSnapshot, currentDiagnosisResources, currentDiagnosisWi
 
 /** Opaque, page-local provenance: a saved/labelled measurement cannot manufacture this source. */
 export interface CurrentCueResourceSource { readonly revision: number }
-const sources = new WeakMap<CurrentCueResourceSource, { plan: ReviewPlan; cue: CoachCue; resources?: DecisionResources; clock?: TeachingDiagnosisInput["decisionClock"]; utilityKinds?: VerifiedResourceText }>();
+const sources = new WeakMap<CurrentCueResourceSource, { plan: ReviewPlan; cue: CoachCue; resources?: DecisionResources; clock?: TeachingDiagnosisInput["decisionClock"]; clockFact?: VerifiedResourceText; utilityKinds?: VerifiedResourceText }>();
 
 /** One immutable source entry per Host. Typing/replay do not rescan the timeline. */
 export class CurrentCueResourceCache {
@@ -30,14 +30,27 @@ export class CurrentCueResourceCache {
       && (!material || material.candidateId === cue.candidate_id);
     const window = belongs ? currentDiagnosisWindow(context) : undefined;
     const resources = belongs ? currentDiagnosisResources(context, window) : undefined;
-    const clock = belongs ? projectDiagnosisClock(currentDiagnosisSnapshot(context, window), decisionFactsForCue(cue, material)) : undefined;
+    const snapshot = belongs ? currentDiagnosisSnapshot(context, window) : undefined;
+    const decisionFacts = decisionFactsForCue(cue, material);
+    const clock = belongs ? projectDiagnosisClock(snapshot, decisionFacts) : undefined;
+    const clockFacts = clock ? decisionFacts.filter(fact => clock.evidenceRefs.includes(fact.id)) : [];
+    const fact = clockFacts[0];
+    const cueClockFacts = fact ? cue.facts.filter(candidate => candidate.id === fact.id) : [];
+    const clockFact = clock?.evidenceRefs.length === 1 && clockFacts.length === 1 && fact &&
+      cueClockFacts.length === 1 && cueClockFacts[0].text === fact.text &&
+      cueClockFacts[0].source === fact.source && cueClockFacts[0].availability === fact.availability &&
+      cueClockFacts[0].observed_by_player === fact.observed_by_player && cueClockFacts[0].available_at_tick === fact.available_at_tick &&
+      fact.source === "DEMO" && fact.observed_by_player && fact.availability === "DECISION" &&
+      fact.available_at_tick === snapshot?.sampledAtTick && cue.observable_fact_refs.includes(fact.id) &&
+      fact.text.trim().length > 0 && fact.text.length <= 400
+      ? { text: fact.text, refs: [fact.id] } : undefined;
     // Match the baseline View's precedence and fact surface, while requiring current freshness.
     const semantics = { ...material, ...cue };
     const displayedSnapshot = currentDiagnosisSnapshot({ ...context, material: undefined, cue: { ...cue, decisionSnapshot: semantics.decisionSnapshot } }, window);
     const state = belongs && displayedSnapshot ? playerStateAtOrBefore(timeline?.player_state_tracks ?? [], selectedPlayerId, cue.decision_tick) : undefined;
     const utilityKinds = state ? verifiedDisplayedUtilityEvidence(state, semantics, cue.decision_tick, buildCoachingCueView(cue, false).decisionFacts) : undefined;
     const source = Object.freeze({ revision: ++this.revision });
-    sources.set(source, { plan, cue, resources, clock, utilityKinds });
+    sources.set(source, { plan, cue, resources, clock, clockFact, utilityKinds });
     this.last = { context: { ...context }, source };
     return source;
   }
@@ -83,4 +96,13 @@ export function matchDisplayedCueUtilityKinds(source: CurrentCueResourceSource |
   const origin = source && sources.get(source);
   return origin && origin.plan === plan && origin.cue === cue && origin.utilityKinds && origin.utilityKinds.text === displayedText
     ? { text: origin.utilityKinds.text, refs: [...origin.utilityKinds.refs] } : undefined;
+}
+
+/** Copy the sourced sentence only if that exact fact is visible in the current baseline narration. */
+export function matchDisplayedBaselineClock(source: CurrentCueResourceSource | undefined, plan: ReviewPlan, cue: CoachCue, shown: VerifiedResourceText): VerifiedResourceText | undefined {
+  const origin = source && sources.get(source);
+  const fact = origin?.clockFact;
+  if (!origin || origin.plan !== plan || origin.cue !== cue || !origin.clock || !fact ||
+    !shown.text.includes(fact.text) || !fact.refs.every(ref => shown.refs.filter(value => value === ref).length === 1)) return;
+  return { text: fact.text, refs: [...fact.refs] };
 }
