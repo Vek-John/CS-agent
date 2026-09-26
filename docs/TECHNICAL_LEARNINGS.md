@@ -1989,3 +1989,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：不改精确checkpoint契约、不直接用latest Graph。对当前CUE_PAUSED的合法同cue/候选case，比对revision/尝试预算；保存端领先则在Controller镜像之前拒绝接受，走Host既有DEGRADED，保留新展示、异议次数和原head。验收回调必须在镜像错误吞并catch之外，不能事后才发现回退。
 - 验证：partial_revision_restore默认配置复现红例后释放；主控接管实现。6文件129tests、TS/production build通过，强化Panel显示/按钮断言后目标2tests/TS通过；独立只读终审无must-fix。[证据](validation/PARTIAL_TEACHING_RECOVERY.md)。
 - 限制：Graph dispatch自身仍可能写checkpoint；该门不是跨cue/同版本内容的完整一致性校验，也不是自动修复未提交head。无真实SQLite/UI/Demo/模型或用户数据操作，普通恢复与基础回放保持；后续先核实未激活Recovery artifact能否按现有提交契约安全重试，不猜最新checkpoint。
+
+
+## 2026-09-26：恢复重试须先有提交资格，教学保存也需有界等待
+
+- 核实：API runtime-head 按请求 Revision 验证目标产物，DAL 事务中的已有保护只在同 Revision 比较身份、路线游标/完成数及 WRAP_UP；同 cue 的 C0/C1 可计数相同，跨 Revision 不走该比较。SQLite 写事务不是 expected-head CAS。因此本轮不增加自动重试或从未激活 artifact 猜最新恢复点。后继最小前提是所有相关写入在事务内检查 expected head，已等于目标时幂等成功，其他并发变更拒绝；不能仅给重试请求加门而保留原请求无条件提交。
+- 问题/决定：USER_INTERACTION 及四类教学投影原先直接 fetch/json，悬挂时挡住教学保存与后续 head。只对这五类复用既有 deadline，每请求20秒，返回 TEACHING_SAVE_TIMEOUT；成功 payload、idempotencyKey、HTTP错误和空JSON语义不变。原失败路径保留显示、禁本次 head；不自动重试或回滚已存产物。
+- 验证：五类 fetch 悬挂＋实际Controller保存链 busy 不释放共6红→绿；扩 body迟到、成功顺序/幂等、HTTP错误、AnalysisBundle不受影响。相关6文件77tests，TS与production build见[证据](validation/TEACHING_SAVE_DEADLINE.md)。默认 partial_revision_restore 只读独审无must-fix，已 RELEASE。
+- 限制：每请求20秒，不是端到端总时限或服务端SLA；超时不证明服务端未写入，无法据此安全自动重试。USER_INTERACTION失败后原流程仍可诊断，interactionDurable=false阻止head。验证是实际API/Controller/helper与假transport，不冒称Host挂载、真实SQLite/浏览器；不操作用户Demo/DB/密钥，无模型调用。后续优先小型真实SQLite复现同cue旧提交覆盖，再定义最小CAS接线。

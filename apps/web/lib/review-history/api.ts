@@ -38,10 +38,14 @@ async function responseJson<T>(response: Response): Promise<T> {
 // Only checkpoint JSON mutations: SESSION_RECOVERY <=256 KiB stored JSON; head <=128,000 bytes.
 // Endpoints may materialize existing analysis for validation, so use a conservative local wait policy.
 export const CHECKPOINT_REQUEST_TIMEOUT_MS = 20_000;
-async function checkpointJson(fetcher: typeof fetch, endpoint: string, init: RequestInit): Promise<void> {
+export const TEACHING_SAVE_TIMEOUT_MS = 20_000;
+// Only per-cue teaching projections and user input. Large analysis/route payloads retain their own lifetime.
+const TEACHING_ARTIFACT_TYPES = new Set(["USER_INTERACTION", "CUE_CASE", "DIAGNOSTIC_RESULT", "TRANSFER_RULE", "LEARNING_THREAD"]);
+async function checkpointJson(fetcher: typeof fetch, endpoint: string, init: RequestInit, teaching = false): Promise<void> {
   const response = await requestJsonWithDeadline(fetcher, endpoint, init, {
-    timeoutMs: CHECKPOINT_REQUEST_TIMEOUT_MS, timeoutError: () => new ReviewHistoryApiError("CHECKPOINT_SAVE_TIMEOUT"),
-    cancelMessage: "Checkpoint save cancelled", readErrorBody: true, allowInvalidJson: true,
+    timeoutMs: teaching ? TEACHING_SAVE_TIMEOUT_MS : CHECKPOINT_REQUEST_TIMEOUT_MS,
+    timeoutError: () => new ReviewHistoryApiError(teaching ? "TEACHING_SAVE_TIMEOUT" : "CHECKPOINT_SAVE_TIMEOUT"),
+    cancelMessage: teaching ? "Teaching save cancelled" : "Checkpoint save cancelled", readErrorBody: true, allowInvalidJson: true,
   });
   if (!response.ok) {
     const body = response.payload;
@@ -141,6 +145,7 @@ export function createReviewHistoryApi(fetcher: typeof fetch = fetch) {
       const endpoint = `/api/review-history/${encodeURIComponent(reviewId)}/artifacts`;
       const request = { method: "POST", headers: JSON_HEADERS, cache: "no-store" as const, body: JSON.stringify(input) };
       if (input.artifactType === "SESSION_RECOVERY") await checkpointJson(fetcher, endpoint, request);
+      else if (TEACHING_ARTIFACT_TYPES.has(input.artifactType)) await checkpointJson(fetcher, endpoint, request, true);
       else await responseJson(await fetcher(endpoint, request));
     },
     async commitRuntimeHead(reviewId: string, input: Record<string, unknown>): Promise<void> {

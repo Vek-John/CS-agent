@@ -2,6 +2,16 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：教学保存等待上限与恢复重试资格（2026-09-26）
+
+- 基线 e27360e clean；主控有限 goal 独占 API/目标测试/docs；partial_revision_restore 默认配置只读 DAL/route，8 分钟内交付并 RELEASE，无服务/DB/文件写入。
+- 资格核实结果：现有 head 事务仅保证原子与部分进度单调；同 cue 的新旧 checkpoint 计数可相同，跨 Revision 也无 expected-head CAS。捕获旧请求并不能安全自动重试，须所有相关写入共同采用事务内 expected-head 比较；本轮不接通用重试，不猜 latest Graph。
+- 转向已核实的独立缺口：反思/异议 USER_INTERACTION 与后续四种教学 artifact 仍直接 fetch/json，无等待上限。流程：提交教学内容→单次请求超过 20 秒→既有失败提示/保留展示/释放等待→不提交新的 head；成功路径保持原顺序。
+- A1 小型 fetch/body 悬挂红例；A2 五类教学小产物复用既有 deadline，晚响应不继续保存链，不自动重试；A3 真实 API＋PersistenceController＋persistTeachingBeforeRuntimeHead 验证失败阻止 head、成功保持 payload/idempotency，AnalysisBundle 等大产物不套此限制；A4 相关 tests/TS/build；A5 窄独审、学习/证据/commit/push。
+- 范围/风险：仅客户端等待，不保证服务端取消或数据未落盘，不改变恢复选择/DB/Graph/schema；不能把未确认报成功。5 分钟红例、10 分钟修复、15 分钟验证，最多两次基础设施失败先简化。无 Demo/模型/浏览器服务/真实DB/密钥/安装部署；主控清测试/build，无整页 UI 验收承诺。后继明确为 head CAS 最小契约，优先以真实 SQLite 小复现再实现，不让旧 UI A5 阻塞。
+
+- 结果：6个真实API/保存helper红例转绿，相关6文件77tests、TypeScript和production build均通过；新增9项测试涵盖5类fetch/body、晚成功、失败阻head、成功原序/幂等、HTTP code与大AnalysisBundle隔离。主控实际diff复核，partial_revision_restore窄独审无must-fix并 RELEASE。[证据](validation/TEACHING_SAVE_DEADLINE.md)。无产品重试入口；错误提示沿现有Host。自有测试/build均退出，commit/push后释放写入。
+
 ## 已交付：部分提交时禁止教学内容回退（2026-09-26）
 
 - 基线c5b6aa4 clean；主控有限goal拥有产品/docs，partial_revision_restore默认配置独占一个recovery测试，真实C0→C1及历史保存/旧head→重连复现后RELEASE。其测试明确内存append和head失败注入，不冒称完整SQLite/UI。
