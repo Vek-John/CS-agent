@@ -42,12 +42,13 @@ async function benchmark(input) {
   // warms the OS cache and is explicitly excluded from both load measurements.
   let started = performance.now(); const expectedHash = await hash(readBytes());
   report.identityPreparationMs = Math.round(performance.now()-started);
-  let wasm;
+  let wasm; let wasmExports;
   if (!smoke) {
     wasm = await import(pathToFileURL(resolve(upstream, 'apps/app/src/viewer/parser/demo_parser.js')).href);
     started = performance.now();
-    wasm.initSync({ module: readFileSync(resolve(upstream, 'apps/app/src/viewer/parser/demo_parser_bg.wasm')) });
+    wasmExports = wasm.initSync({ module: readFileSync(resolve(upstream, 'apps/app/src/viewer/parser/demo_parser_bg.wasm')) });
     report.wasmInitMs = Math.round(performance.now()-started);
+    report.wasmLinearBytesAfterInit = wasmExports.memory.buffer.byteLength;
   }
   const counters = { read: 0, parse: 0, digest: 0, flush: 0 };
   let parseTimings;
@@ -93,7 +94,7 @@ async function benchmark(input) {
     assert.equal(calls.read, 1); assert.equal(calls.parse, stage==='WARM_RESTORE'?0:1);
     if (stage!=='WARM_RESTORE') firstReplay=parser.replay.value;
     else { assert(parser.replay.value === firstReplay, 'WARM_REPLAY_REFERENCE_CHANGED'); assert.equal(calls.digest,1); assert.equal(calls.flush,1); }
-    report.stages.push({ stage, elapsedMs: Math.round(elapsedMs), calls, ...(stage!=='WARM_RESTORE' ? { parseTimings } : {}), memoryBefore, memoryAfter: process.memoryUsage(), cumulativeMaxRssKiB: process.resourceUsage().maxRSS });
+    report.stages.push({ stage, elapsedMs: Math.round(elapsedMs), calls, ...(stage!=='WARM_RESTORE' ? { parseTimings } : {}), memoryBefore, memoryAfter: process.memoryUsage(), wasmLinearBytes: wasmExports?.memory.buffer.byteLength ?? null, cumulativeMaxRssKiB: process.resourceUsage().maxRSS });
     process.stdout.write(JSON.stringify({ stage, elapsedMs: Math.round(elapsedMs), calls })+'\n');
   }
   report.roundCount=parser.replay.value.rounds.length; report.playerCount=parser.replay.value.players.length;

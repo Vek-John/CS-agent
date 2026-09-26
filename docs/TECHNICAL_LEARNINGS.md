@@ -8,6 +8,12 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：释放结果不等于释放WASM线性内存
+
+- 证据：当前WASM解析60,601,900字节Demo后linear memory为184,483,840 bytes，调用result.free后不缩小；worker模块仍持有该实例。仅由此能说有可释放的Worker资源，不能量化浏览器RSS下降。
+- 决策：0022在page收到最终成功/失败或error后，用settled一次门卸载handler并terminate捕获的w；仅匹配当前引用才清worker，迟到回调先拒绝。Replay/voice/hash保留，下一次冷parse通过ensureWorker重建，温恢复继续使用page结果。
+- 验证：5新增/33相关tests、两端TS/build，独立窄审无必修。[记录](validation/PARSER_WORKER_RELEASE.md)。benchmark新增WASM容量字段供后续成本探针，不额外重复真实Demo；未实测浏览器RSS、跨线程voice转移或新Worker冷启动延迟，不改变未完成卸载/并发解析。
+
 ## 2026-09-27：温恢复的真实计算成本与测量范围
 
 - 决策：用父进程120秒约束的单Node child执行当前Viewer函数+真实WASM，raw/Replay留child，只输出摘要。首次身份预读和WASM init独立计时；明确禁用ready资格构造同命令重复解析基线，避免只拿首次编译成本比较。

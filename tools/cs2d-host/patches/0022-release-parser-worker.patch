@@ -1,0 +1,55 @@
+diff --git a/apps/app/src/viewer/ingest/useDemoParser.ts b/apps/app/src/viewer/ingest/useDemoParser.ts
+--- a/apps/app/src/viewer/ingest/useDemoParser.ts
++++ b/apps/app/src/viewer/ingest/useDemoParser.ts
+@@ -122,8 +122,8 @@
+ 
+     let raw: ArrayBuffer
+     try {
+-      // Decompress first, in a throwaway worker, then parse in the long-lived
+-      // one (keeps the parser's memory free of the zstd decoder's heap).
++      // Decompress first in a throwaway worker, then use a separate parser
++      // worker so the zstd decoder's heap never overlaps the parser's heap.
+       raw = await decompress(buffer)
+     } catch (err) {
+       error.value = err instanceof Error ? err.message : String(err)
+@@ -134,7 +134,18 @@
+     const w = ensureWorker()
+ 
+     await new Promise<void>((resolve) => {
++      let settled = false
++      const finish = () => {
++        if (settled) return
++        settled = true
++        w.onmessage = null
++        w.onerror = null
++        w.terminate()
++        if (worker === w) worker = null
++        resolve()
++      }
+       w.onmessage = (e: MessageEvent<ParseResponse>) => {
++        if (settled) return
+         const msg = e.data
+         if (msg.type === 'progress') {
+           if (msg.phase === 'parsing' && msg.totalTicks) {
+@@ -155,16 +166,17 @@
+           error.value = msg.error
+           status.value = 'error'
+         }
+-        resolve()
++        // The received Replay/voice buffers now belong to this page. Release
++        // the parser's grow-only WASM heap while keeping those results usable.
++        finish()
+       }
+       // A worker crash (e.g. out-of-memory on a huge demo) would otherwise leave
+       // the UI stuck on "parsing" forever — surface it as an error instead.
+       w.onerror = (ev) => {
++        if (settled) return
+         error.value = ev.message || 'O worker de parsing falhou (memória?).'
+         status.value = 'error'
+-        worker?.terminate()
+-        worker = null
+-        resolve()
++        finish()
+       }
+       // Transfer the buffer (zero-copy) to the worker.
+       w.postMessage({ buffer: raw, frameRate: 8 }, [raw])

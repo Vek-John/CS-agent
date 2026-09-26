@@ -2,6 +2,13 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：解析结束后释放Parser Worker（2026-09-27）
+
+- ID parser-worker-release，基线6ed34d1 clean；root独占0022/registry/实际composable测试/benchmark内存字段/docs，partial_revision_restore默认只读5分钟预检和3分钟终审。目标：最终result成功/失败或worker error后释放捕获的Parser Worker，保留page Replay/voice/hash，下一次冷解析重建，progress不释放。A1真实WASM保留容量+实际composable失败测试；A2统一一次完成门；A3迟到回调不影响新Worker及温恢复；A4两端TS/build、相关tests/窄审后push。
+- 风险：结果交接前不能释放，旧onerror不能用全局worker终止新请求；finish先settled，再卸载两个handler/terminate捕获w，仅worker===w清引用。postMessage接收后page拥有Replay和转移voice，0021无需Worker。未完成卸载/并发非managed parse不纳入本轮。原Demo只读一次，独立Node被Python父进程120秒约束、heap3GiB，raw留进程只返回四个计量；没有GUI/DB/模型/新安装。
+- 实测：60,601,900字节Demo，WASM memory由1,114,112升至184,483,840 bytes，result.free后仍为184,483,840（约176MiB），并非RSS下降证明。实际useDemoParser+FakeWorker 5业务红→绿，首次import.meta提取错误不算红；总33相关tests和两端TS/build通过。独立终审无must-fix，执行者RELEASE；所有进程退出。[记录](validation/PARSER_WORKER_RELEASE.md)。
+- 下一有限目标：源码中file.arrayBuffer发生在读取错误catch之外，下一轮以拒绝读取的小File验证是否留下reading状态/未结算反馈；只在当前异常路径有实际缺口时收敛，不顺便重做整个取消/解析并发。
+
 ## 已验证：真实Demo温恢复成本（2026-09-27）
 
 - ID managed-replay-cost，基线4aa4555 clean；root独占新benchmark/docs，partial_revision_restore默认只读3分钟方法复查。目标为已授权test_demo.dem做有界初次解析/重复解析/温恢复对照；A1既有12项Viewer小例及新CLI smoke，A2单child真实WASM+Viewer函数，仅返回摘要，A3注明读取/哈希、首次初始化、内存和省略成本，A4相关tests/TS/build与提交push。无产品行为改动。
