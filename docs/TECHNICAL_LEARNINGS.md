@@ -2023,3 +2023,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：只在FAILED更新的同一事务内检查activeRevision READY与head精确SESSION_RECOVERY ID/key/revision绑定；命中则保留Review/Revision状态及时间，否则原失败处理不变。没有扫描文件或修复旧数据。Host只描述“保存未确认”，不把未知响应当作确定失败。
 - 验证：partial_revision_restore默认配置独占DAL/tests，2红→绿；新增6项真实tmp SQLite覆盖两种提交/失败顺序、旧路线与多个准备版本、不完整绑定/非READY/非active反例。主控复核真实diff并运行相关4文件42tests、TypeScript/production build；revision_semantics_review默认独立只读审查无must-fix。[证据](validation/PRESERVE_CONFIRMED_REVIEW_STATUS.md)。
 - 限制：未指定Revision的失败通知无法可靠标记某个新分析失败，有有效head时因此不批量更新任何准备版本；不自动修复以前误标数据。未执行真实HTTP丢包/浏览器/用户库，无Demo/模型/服务/部署安装；tmp已清。下一项核实失败收尾markFailed/列表refresh的无界等待是否阻挡基础Session激活。
+
+
+## 2026-09-26：起点确认与历史界面收尾不是同一启动依赖
+
+- 问题：成功保存后还await列表刷新，失败后await markFailed和列表刷新，才激活Session；这些请求悬挂会让已准备好的会话一直不能启动。原then/ catch还把activateSession异常误当保存失败再markFailed。
+- 决定：durabilityCommit仅含真正保存，settlePreparedCoachingStart区分已确认/未确认后调用原激活函数，旁路独立观察收尾错误；保存未结束和旧代际仍拒绝提前激活。首屏刷新按请求/代际发布，后台不清已有警告，主动刷新行为保持。不改Graph/Session门/存储协议。
+- 验证：生产协调函数→真实activatePreparedCoachingSession→Session，3种收尾悬挂均已挂载且只启动一次；保存未决/切代/晚标记/收尾错误与激活异常分类覆盖。独审发现列表失败仍覆盖“保存未确认”，抽出当前refresh-history-page副作用并验证成功/失败保留警告、晚结果与普通手动刷新。最终4文件73tests、TS/production build通过。[证据](validation/PREPARED_START_BOOKKEEPING.md)。
+- 分工/限制：主控全部实现；默认revision_semantics_review只读独审并确认修复，无其他写owner或服务。未测完整Host/浏览器或真实网络；没有用户Demo/DB/密钥/模型/安装部署。后台status/list本身仍无期限，当前仅解除其启动依赖，下一项针对小DTO生命周期收敛。

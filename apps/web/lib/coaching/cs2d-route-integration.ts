@@ -413,6 +413,28 @@ export function createReviewPreparationOrchestrator(
 }
 
 /** Coordinates the awaited durable start with the Host's current route generation. */
+export async function settlePreparedCoachingStart(input: {
+  durability: Promise<void>;
+  isCurrent: () => boolean;
+  saved: () => void;
+  unconfirmed: () => void;
+  activate: () => Promise<boolean>;
+  markFailed?: () => Promise<void>;
+  refreshHistory?: (confirmed: boolean) => Promise<void>;
+}): Promise<boolean> {
+  const confirmed = await input.durability.then(() => true, () => false);
+  if (!input.isCurrent()) return false;
+  if (confirmed) input.saved(); else input.unconfirmed();
+  // Sidebar bookkeeping is not a prerequisite for the already prepared local session.
+  // Observe all failures; a superseded owner must not start a follow-up refresh.
+  void (async () => {
+    if (!confirmed) await input.markFailed?.().catch(() => undefined);
+    if (input.isCurrent()) await input.refreshHistory?.(confirmed);
+  })().catch(() => undefined);
+  return input.activate();
+}
+
+/** Coordinates local Recovery persistence with the Host's current route generation. */
 export async function activatePreparedCoachingSession<T>(input: {
   plan: ReviewPlan;
   initialSession: CoachingSessionState;

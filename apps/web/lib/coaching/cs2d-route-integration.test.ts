@@ -8,8 +8,67 @@ import {
   buildInitialCoachingRouteState,
   createCs2dReviewPreparationDependencies,
   createReviewPreparationOrchestrator,
+  settlePreparedCoachingStart,
+  activatePreparedCoachingSession,
   routeSnapshot
 } from "./cs2d-route-integration";
+
+describe("prepared start settlement", () => {
+  function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(yes => { resolve = yes; }); return { promise, resolve }; }
+  it.each(["saved-refresh", "failed-mark", "failed-refresh"])("starts the real Session while %s bookkeeping is pending", async stage => {
+    const { createCoachingSession } = await import("@cs-coach/session");
+    const plan = compiledPlan(); const route = buildInitialCoachingRouteState(plan);
+    const gate = deferred<void>(); const mount = vi.fn(); const persist = vi.fn(async () => undefined);
+    const saved = vi.fn(); const unconfirmed = vi.fn();
+    const markFailed = vi.fn(() => stage === "failed-mark" ? gate.promise : Promise.resolve());
+    const refreshHistory = vi.fn(() => gate.promise);
+    const activate = vi.fn(() => activatePreparedCoachingSession({ plan,
+      initialSession: createCoachingSession(plan, "prepared-start-test", route), isCurrent: () => true,
+      latestRouteState: () => route, persistStart: persist, acceptPersistedStart: vi.fn(), mountSession: mount,
+    }));
+    const result = await settlePreparedCoachingStart({ durability: stage === "saved-refresh" ? Promise.resolve() : Promise.reject(new Error("save unknown")),
+      isCurrent: () => true, saved, unconfirmed, activate, markFailed, refreshHistory });
+    expect(result).toBe(true); expect(mount).toHaveBeenCalledOnce(); expect(persist).toHaveBeenCalledOnce();
+    expect(activate).toHaveBeenCalledOnce();
+    expect(saved).toHaveBeenCalledTimes(stage === "saved-refresh" ? 1 : 0);
+    expect(unconfirmed).toHaveBeenCalledTimes(stage === "saved-refresh" ? 0 : 1);
+    expect(markFailed).toHaveBeenCalledTimes(stage === "saved-refresh" ? 0 : 1);
+    gate.resolve(); await Promise.resolve(); await Promise.resolve();
+    expect(mount).toHaveBeenCalledOnce();
+  });
+
+  it("waits for durability and discards a superseded start before feedback or activation", async () => {
+    const gate = deferred<void>(); let current = true;
+    const activate = vi.fn(async () => true); const saved = vi.fn(); const unconfirmed = vi.fn(); const refreshHistory = vi.fn();
+    const pending = settlePreparedCoachingStart({ durability: gate.promise, isCurrent: () => current, saved, unconfirmed, activate, refreshHistory });
+    await Promise.resolve(); expect(activate).not.toHaveBeenCalled();
+    current = false; gate.resolve(); expect(await pending).toBe(false);
+    expect(saved).not.toHaveBeenCalled(); expect(unconfirmed).not.toHaveBeenCalled(); expect(refreshHistory).not.toHaveBeenCalled();
+  });
+
+  it("does not start a follow-up refresh after a late failure marker belongs to an old generation", async () => {
+    const gate = deferred<void>(); let current = true; const refreshHistory = vi.fn();
+    await settlePreparedCoachingStart({ durability: Promise.reject(new Error("save unknown")), isCurrent: () => current,
+      saved: vi.fn(), unconfirmed: vi.fn(), activate: async () => true, markFailed: () => gate.promise, refreshHistory });
+    current = false; gate.resolve(); await Promise.resolve(); await Promise.resolve();
+    expect(refreshHistory).not.toHaveBeenCalled();
+  });
+
+  it("observes bookkeeping errors without misclassifying activation failures as failed saves", async () => {
+    const markFailed = vi.fn(); const unconfirmed = vi.fn(); const activationError = new Error("local activation failed");
+    await expect(settlePreparedCoachingStart({ durability: Promise.resolve(), isCurrent: () => true,
+      saved: vi.fn(), unconfirmed, markFailed, refreshHistory: async () => { throw new Error("list failed"); },
+      activate: async () => { throw activationError; },
+    })).rejects.toBe(activationError);
+    expect(markFailed).not.toHaveBeenCalled(); expect(unconfirmed).not.toHaveBeenCalled();
+    const refresh = vi.fn(async () => { throw new Error("list failed"); });
+    expect(await settlePreparedCoachingStart({ durability: Promise.reject(new Error("save unknown")), isCurrent: () => true,
+      saved: vi.fn(), unconfirmed, markFailed: async () => { throw new Error("status failed"); },
+      refreshHistory: refresh, activate: async () => true,
+    })).toBe(true);
+    await Promise.resolve(); expect(refresh).toHaveBeenCalledWith(false);
+  });
+});
 
 function compiledPlan() {
   const base = createFixtureReviewPlan(createSyntheticMirageTimeline());

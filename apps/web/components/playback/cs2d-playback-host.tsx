@@ -106,6 +106,7 @@ import {
 import { createSessionRecoveryRuntime } from "../../lib/recovery/session-recovery-runtime";
 import {
   activatePreparedCoachingSession,
+  settlePreparedCoachingStart,
   createReviewPreparationOrchestrator,
   createCs2dReviewPreparationDependencies,
   buildInitialCoachingRouteState,
@@ -178,6 +179,7 @@ import { CoachSetupFlow, type CoachSetupStep } from "./coach-setup-flow";
 import { LiquidPhaseStatus } from "./liquid-phase-status";
 import { ReviewHistorySidebar, type ReviewHistoryItem } from "../history/review-history-sidebar";
 import { createReviewHistoryApi, ReviewHistoryApiError } from "../../lib/review-history/api";
+import { refreshHistoryPage } from "../../lib/review-history/refresh-history-page";
 import { HistoryRestoreController, HistoryRestoreError } from "../../lib/review-history/history-restore-controller";
 import { HistoryPersistenceController, type RuntimeHeadRetry } from "../../lib/review-history/history-persistence-controller";
 import {
@@ -466,6 +468,7 @@ export function Cs2dPlaybackHost({
   const [historyImportProgress, setHistoryImportProgress] = useState<{ requestId: string; completedBytes: number; totalBytes: number }>();
   const historyDurabilityReadyRef = useRef<Promise<void> | undefined>(undefined);
   const historyOpenEpochRef = useRef(0);
+  const historyRefreshEpochRef = useRef(0);
   const expectedManagedSourceRef = useRef<ExpectedManagedReplayIdentity | undefined>(undefined);
 
   useEffect(() => {
@@ -686,21 +689,20 @@ export function Cs2dPlaybackHost({
   }, [config.origin]);
 
   const reviewHistoryApi = useMemo(() => createReviewHistoryApi(), []);
-  const refreshReviewHistory = useCallback(async () => {
+  const refreshReviewHistory = useCallback(async (isCurrent: () => boolean = () => true, clearError = true) => {
+    if (!isCurrent()) return;
+    const request = ++historyRefreshEpochRef.current;
+    const ownsRequest = () => request === historyRefreshEpochRef.current;
     if (!desktopLibraryEnabled) {
       setHistoryItems([]);
       setHistoryError(undefined);
       return;
     }
-    setHistoryLoading(true);
-    try {
-      const page = await reviewHistoryApi.list(historySearch || undefined);
-      setHistoryItems(page.items);
-      setHistoryNextCursor(page.nextCursor);
-      setHistoryError(undefined);
-    }
-    catch { setHistoryError("无法读取本地复盘历史。"); }
-    finally { setHistoryLoading(false); }
+    await refreshHistoryPage({
+      load: () => reviewHistoryApi.list(historySearch || undefined),
+      accept: page => { setHistoryItems(page.items); setHistoryNextCursor(page.nextCursor); },
+      isCurrent, ownsRequest, clearError, setLoading: setHistoryLoading, setError: setHistoryError,
+    });
   }, [desktopLibraryEnabled, historySearch, reviewHistoryApi]);
   useEffect(() => { void refreshReviewHistory(); }, [refreshReviewHistory]);
   const loadMoreReviewHistory = useCallback(async () => {
@@ -1777,7 +1779,7 @@ export function Cs2dPlaybackHost({
         setReviewPreparationStatus(undefined);
         userTookOverRef.current = false;
         setUserTookOver(false);
-        void historyPersistenceControllerRef.current?.markFailed().then(refreshReviewHistory).catch(() => setHistoryError("分析失败，且复盘状态未能保存。"));
+        void historyPersistenceControllerRef.current?.markFailed().then(() => refreshReviewHistory()).catch(() => setHistoryError("分析失败，且复盘状态未能保存。"));
         return;
       }
       if (payload.type === "ANALYSIS_READY") {
@@ -1894,7 +1896,7 @@ export function Cs2dPlaybackHost({
                 detail: "整场讲解暂时未能准备好，可以重新尝试。"
               });
               void historyPersistenceControllerRef.current?.markFailed()
-                .then(refreshReviewHistory)
+                .then(() => refreshReviewHistory())
                 .catch(() => setHistoryError("讲解准备失败，且复盘状态未能保存。"));
               return;
             }
@@ -1935,7 +1937,7 @@ export function Cs2dPlaybackHost({
                 setReviewPreparationStatus({ phase: "ERROR", detail: "可恢复起点校验失败，请刷新页面后重新选择 Demo。" });
                 if (desktopLibraryEnabled) {
                   void historyPersistenceControllerRef.current?.markFailed()
-                    .then(refreshReviewHistory)
+                    .then(() => refreshReviewHistory())
                     .catch(() => setHistoryError("复盘准备失败，且失败状态未能保存。"));
                 }
                 return;
@@ -2000,24 +2002,26 @@ export function Cs2dPlaybackHost({
                       readiness: preparationEvent.routeState.readiness,
                     },
                   });
-                  await refreshReviewHistory();
                 }
               })();
               historyDurabilityReadyRef.current = durabilityCommit;
-              void durabilityCommit.then(async () => {
-                if (preparationEvent.generationId !== String(generationRef.current)) return;
-                setReviewPreparationStatus({ phase: "READY", detail: "教学路线与可恢复起点已就绪。" });
-                await activateSession();
-              }).catch(async () => {
-                if (preparationEvent.generationId !== String(generationRef.current)) return;
-                historyDurabilityReadyRef.current = undefined;
-                setHistoryError("复盘保存未确认；当前会话仍可继续。");
-                setReviewPreparationStatus({ phase: "ERROR", detail: "教学路线可用，但可恢复起点保存未确认。" });
-                if (desktopLibraryEnabled) {
-                  await historyPersistenceControllerRef.current?.markFailed().catch(() => undefined);
-                  await refreshReviewHistory().catch(() => undefined);
-                }
-                await activateSession();
+              const isCurrentStart = () => preparationEvent.generationId === String(generationRef.current);
+              void settlePreparedCoachingStart({
+                durability: durabilityCommit, isCurrent: isCurrentStart,
+                saved: () => setReviewPreparationStatus({ phase: "READY", detail: "教学路线与可恢复起点已就绪。" }),
+                unconfirmed: () => {
+                  historyDurabilityReadyRef.current = undefined;
+                  setHistoryError("复盘保存未确认；当前会话仍可继续。");
+                  setReviewPreparationStatus({ phase: "ERROR", detail: "教学路线可用，但可恢复起点保存未确认。" });
+                },
+                activate: activateSession,
+                ...(desktopLibraryEnabled ? {
+                  markFailed: () => historyPersistenceControllerRef.current!.markFailed(),
+                  refreshHistory: () => refreshReviewHistory(isCurrentStart, false),
+                } : {}),
+              }).catch(() => {
+                if (!isCurrentStart()) return;
+                setReviewPreparationStatus({ phase: "ERROR", detail: "本地复盘会话暂未启动，请重新打开复盘。" });
               });
             }
           });
@@ -2026,7 +2030,7 @@ export function Cs2dPlaybackHost({
           setReviewPreparationStatus({ phase: "ERROR", detail: "教学路线输入校验失败。" });
           if (desktopLibraryEnabled) {
             void historyPersistenceControllerRef.current?.markFailed()
-              .then(refreshReviewHistory)
+              .then(() => refreshReviewHistory())
               .catch(() => setHistoryError("分析结果无效，且复盘失败状态未能保存。"));
           }
         }
@@ -3230,7 +3234,7 @@ export function Cs2dPlaybackHost({
             onLoadMore={() => void loadMoreReviewHistory()}
             onOpenReview={(reviewId) => void openHistoryReview(reviewId)}
             onStartOver={(review) => void openHistoryReview(review.id, "RESTORE", true)}
-            onRenameReview={(review) => { const title = window.prompt("复盘名称", review.title); if (title) void reviewHistoryApi.rename(review.id, title).then(refreshReviewHistory).catch(() => setHistoryError("重命名失败。")); }}
+            onRenameReview={(review) => { const title = window.prompt("复盘名称", review.title); if (title) void reviewHistoryApi.rename(review.id, title).then(() => refreshReviewHistory()).catch(() => setHistoryError("重命名失败。")); }}
             onReanalyzeReview={(review) => { if (window.confirm("重新分析会创建一个新版本，保留当前复盘。是否继续？")) void reanalyzeHistoryReview(review.id); }}
             onCreateForAnotherPlayer={(review) => void openHistoryReview(review.id, "SELECT_PLAYER")}
             onDeleteReview={(review) => { if (window.confirm(`删除“${review.title}”这条复盘？原始 Demo 会保留。`)) void reviewHistoryApi.removeReview(review.id).then(() => { if (historyActiveReviewId === review.id) setHistoryActiveReviewId(undefined); return refreshReviewHistory(); }).catch(() => setHistoryError("删除复盘失败。")); }}

@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：起点收尾不阻挡基础会话激活（2026-09-26）
+
+- 基线5558690 clean；主控有限goal独占Host/route-integration及tests/docs，既有owner已RELEASE。实际证据：成功durabilityCommit包含await列表刷新；失败catch等待markFailed再列表刷新，最后才activateSession。
+- 目标/流程：起点提交结果确定→反馈已确认/未确认→启动现有本地Session；状态标记/历史列表更新独立收尾。A1成功刷新悬挂与失败标记/刷新悬挂都不能拖住激活；A2保存尚未结束不能提前启动、切代不启动/不发布旧刷新；A3激活异常不能被误分类为保存失败再markFailed，旁路错误被观察，不重试/不改head/诊断；A4相关tests/TS/build与窄审；A5架构学习证据push。
+- 风险/边界：列表刷新会清错误并写React状态，需代际/请求归属，未确认提示不能被成功旁路刷新抹掉；本轮不为所有请求加通用deadline/队列，不加UI控制/Graph能力，不绕原activatePreparedCoachingSession的Recovery持久化和路线门。5分钟小链、12分钟实现、10分钟验证；无用户数据/Demo/模型/服务/安装部署，测试进程主控清理。原UI A5仍独立待验，模块/源审不冒称完整Host。
+
+- 结果：成功/失败路径均解除列表与状态收尾等待，仍等待真实durability和原本地Recovery激活门。新增真实Session激活与挂起收尾测试；revision_semantics_review只读独审发现列表失败会覆盖保存警告，抽出当前刷新副作用为可验证窄helper修复并补5项测试，复核关闭must-fix。最终4文件73tests、TS/production build通过，owner RELEASE。[证据](validation/PREPARED_START_BOOKKEEPING.md)。
+- 边界/后继：未挂载完整Host/真实浏览器，没有新增API超时或取消语义；后台status/list请求本身仍可能长期悬挂，但已不阻挡Session。下一项针对这两个小DTO请求核实有界等待和旧请求回收，不扩到大detail/Demo/所有持久化。测试/build退出，commit/push后本轮释放，原UI A5独立待验。
+
 ## 已交付：未知保存结果不得降级可恢复历史（2026-09-26）
 
 - 基线19b1a17 clean；主控有限goal拥有Host文案/docs/接线验证；partial_revision_restore默认配置独占library.ts/library.test.ts，在临时SQLite复现并窄修。现无其他写owner。
