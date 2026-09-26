@@ -2,6 +2,16 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：时机诊断消费已验证回合时钟（2026-09-26）
+
+- ID diagnosis-clock-context，基线0d83957 clean；root拥有可选紧凑DTO/Host投影/诊断/测试/docs。核实自适应trade/info/timing已有具体缺项说明，不重复加UI；新缺口是时机诊断没有接收当前已知回合时钟，仍笼统宣称缺剩余时间。
+- A1实际Adapter带clock小fixture→当前Host packet→时机诊断；A2只投影同决策fresh Snapshot OBSERVABLE LIVE剩余秒数和允许的决策refs，作为背景测量；A3未知/旧/错player/结果ref不输出数值，诊断保持UNVERIFIABLE/INCONCLUSIVE、无目标/替代方案推断，旧packet兼容；A4相关tests/TS/build/窄审和push。
+- 仅数据接线和既有测量显示，无新UI布局/模型/工具能力；root20分钟任务，测试60秒、只读独审按需默认3分钟。无Demo/DB/网络/安装/GUI，合成时钟不冒称真实Demo；不改变PlayerState缺失门，进程清理，A5独立。
+
+- 交付：自适应缺项原已有具体解释，不重复加UI；补可选decisionClock，从fresh当前Snapshot公开LIVE余量及允许refs经严格事件进入时机诊断。现有数值列表显示最近采样约秒数，保持UNVERIFIABLE/INCONCLUSIVE，非C4/时机判定。
+- 验收：13新集成tests、244项不同相关tests、TS/build通过；Adapter/严格事件/诊断/实际Panel SSR和JSON重载。partial_revision_restore默认只读RELEASE，无must-fix；主控审diff，进程退出，无用户数据/模型/部署。[记录](validation/DIAGNOSIS_CLOCK_CONTEXT.md)。
+- 下一有限目标：公共clock复用了currentDiagnosisSnapshot本人新鲜度门；用缺本人但公共时钟完整的当前Adapter场景核实是否误丢有效时间，若真实可达再独立投影，个人资源和未知倒计时仍保持原门。A5独立，无真实Demo/GUI重试。
+
 ## 已交付：不确定性讲解的具体回看问题（2026-09-26）
 
 - ID uncertainty-review-questions，基线ed1dc29 clean；root独占展示投影/Host小接线/测试/docs。当前betterPlay无可验证方案时固定泛化提示，而当前Snapshot已区分tradeWindow/目标等待/道具用途/替代位置缺项。

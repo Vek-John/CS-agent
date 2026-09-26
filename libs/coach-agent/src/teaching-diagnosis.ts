@@ -146,6 +146,7 @@ export const TeachingDiagnosisInputSchema = z.object({
   outcomeFacts: z.array(OutcomeFactSchema).max(16),
   decisionState: PlayerStateSchema.optional(),
   decisionResources: DecisionResourcesSchema.optional(),
+  decisionClock: z.object({ remainingSeconds: z.number().finite().positive(), evidenceRefs: z.array(IdSchema).min(1).max(8) }).strict().optional(),
   decisionRoster: z.object({ aliveTeammates: z.number().int().min(0).max(4), evidenceRefs: z.array(IdSchema).max(32) }).strict().optional(),
   focusCode: z.string().max(160).optional(),
   economyClass: z.enum(["PISTOL", "ECO", "FORCE", "FULL", "UNKNOWN"]).optional(),
@@ -629,16 +630,20 @@ export function executeDiagnostic(
     });
   }
   if (capability.kind === "VERIFY_EXPOSURE_ASSUMPTION") {
+    const allowedClockRefs = new Set(input.decisionFacts.filter(fact => fact.source === "DEMO" && fact.availability === "DECISION" && fact.observed_by_player).map(fact => fact.id));
+    const clock = input.decisionClock?.evidenceRefs.every(ref => allowedClockRefs.has(ref)) ? input.decisionClock : undefined;
     return DiagnosticResultSchema.parse({
       resultId: `diagnostic-${input.cueId}-${capability.kind.toLowerCase()}`,
       capabilityId: capability.id,
       cueId: input.cueId,
       hingeId: hinge.hingeId,
       status: "UNVERIFIABLE",
-      evidenceRefs: refs,
-      measurements: [],
-      explanation: "这次判断的关键是时机和暴露窗口；当前 Demo 分析没有可靠的时机比较器，不能用资源状态或结果倒推时机是否正确。",
-      limitations: unique([...commonLimitations, "缺少可验证的时机窗口、剩余时间与替代选项比较数据。"]),
+      evidenceRefs: unique([...refs, ...(clock?.evidenceRefs ?? [])]),
+      measurements: clock ? [{ id: `measurement-${input.cueId}-round-time`, label: "决策前最近采样的回合剩余时间（约）", value: Math.ceil(clock.remainingSeconds), unit: "秒", evidenceRefs: clock.evidenceRefs }] : [],
+      explanation: clock
+        ? "已知决策前最近采样的回合剩余时间，但它不能代表 C4 倒计时，也不能证明等待或继续接触是否可行；仍缺少安全路线、接触时机和替代选项的比较证据。"
+        : "这次判断的关键是时机和暴露窗口；当前 Demo 分析没有可靠的时机比较器，不能用资源状态或结果倒推时机是否正确。",
+      limitations: unique([...commonLimitations, clock ? "回合剩余时间只作背景；目标倒计时、可行路线和替代时机仍未确认。" : "缺少可验证的时机窗口、剩余时间与替代选项比较数据。"]),
     });
   }
   if (capability.kind === "VERIFY_TRADE_ASSUMPTION") {

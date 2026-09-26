@@ -279,6 +279,8 @@ Host先通过既有本人/当前回合/生命/新鲜度与snapshot门，再独�
 
 基础三段讲解对INSUFFICIENT_EVIDENCE且同决策Snapshot可显示最多三个“回看时先核实”问题。只映射已知的未确认条件code；已确认/不可行/OUTCOME条件不作为未知问题，闪光用途问题还须本人OBSERVABLE库存确认有闪光。问句与原建议正文分开，不进入Narration、Advice、判断、Memory或主题统计；不显示原始reason/字段名，不改变证据门。缺失/错决策/未来采样Snapshot不产生此投影。
 
+TeachingDiagnosisInput可选decisionClock仅含remainingSeconds与evidenceRefs。Host从同玩家/回合/决策、非未来且足够新的Snapshot提取OBSERVABLE LIVE正有限回合余量，全部引用须属于当前已允许的DEMO observed决策事实；严格事件不传原始服务器时间或状态帧。时机诊断以最近采样约秒数呈现此背景，再次核对决策引用，保持UNVERIFIABLE/INCONCLUSIVE，不把回合余量当C4倒计时、等待可行性或时机优劣证据。旧packet和未知值不补零。
+
 ### 2.14 默认顺序路线与用户点播 cue
 
 Graph首次COMPLETE_SESSION将routeCursor推进到最后已观察段之后并进入WRAP_UP；已完成会话由Runtime去重，不重复推进。Session在COMPLETED时也可捕获同一WRAP_UP末端，但必须保持准确末索引、末tick、无当前cue和合法进度。

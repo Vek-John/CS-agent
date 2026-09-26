@@ -95,6 +95,12 @@ export function buildTeachingDiagnosisInput(
   const decisionResources = currentDiagnosisResources(context, window);
   const economyClass = context.material?.economy;
   const snapshot = currentDiagnosisSnapshot(context, window);
+  const clock = snapshot?.clock;
+  const clockRefs = clock?.evidenceRefs.filter(ref => decisionFacts.some(fact => fact.id === ref && fact.source === "DEMO" && fact.observed_by_player)) ?? [];
+  const decisionClock = clock?.boundary === "OBSERVABLE" && clock.value?.phase === "LIVE" &&
+    typeof clock.value.remainingSeconds === "number" && Number.isFinite(clock.value.remainingSeconds) && clock.value.remainingSeconds > 0 &&
+    clockRefs.length > 0 && clockRefs.length === clock.evidenceRefs.length
+    ? { remainingSeconds: clock.value.remainingSeconds, evidenceRefs: unique(clockRefs).slice(0, 8) } : undefined;
   const counts = snapshot?.aliveCounts.value;
   const selfAlive = snapshot?.selectedPlayer.value?.alive;
   const roster = snapshot && snapshot.aliveCounts.boundary === "OBSERVABLE" && snapshot.selectedPlayer.boundary === "OBSERVABLE" && typeof selfAlive === "boolean" && (snapshot.selectedPlayer.value?.side === "T" || snapshot.selectedPlayer.value?.side === "CT") && counts?.includesSelectedPlayer === true && Number.isSafeInteger(counts.allies) && counts.allies >= (selfAlive ? 1 : 0) && counts.allies <= (selfAlive ? 5 : 4) && !snapshot.missingFields.includes("complete_current_roster") && !snapshot.missingFields.includes("alive") && !snapshot.missingFields.includes("current_side")
@@ -128,6 +134,7 @@ export function buildTeachingDiagnosisInput(
     outcomeFacts,
     ...(decisionResources ? { decisionResources } : {}),
     ...(roster ? { decisionRoster: roster } : {}),
+    ...(decisionClock ? { decisionClock } : {}),
     ...(context.cue.primary_focus_code ? { focusCode: context.cue.primary_focus_code } : {}),
     ...(economyClass ? { economyClass } : {}),
     ...(context.learningThreads ? { existingThreads: context.learningThreads } : {}),
