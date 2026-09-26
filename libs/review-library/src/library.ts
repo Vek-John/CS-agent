@@ -1904,6 +1904,19 @@ export class DesktopReviewLibrary {
     if (status !== "PREPARING" && status !== "FAILED" && status !== "STALE")
       throw new ReviewLibraryError("INVALID_ARGUMENT");
     await this.owner.enqueueWrite((db) => {
+      if (status === "FAILED" && db.prepare(
+        `SELECT 1 FROM reviews r
+         JOIN review_runtime_heads h ON h.review_id=r.review_id AND h.review_revision_id=r.active_revision_id
+         JOIN review_revisions rr ON rr.review_revision_id=h.review_revision_id AND rr.review_id=r.review_id AND rr.status='READY'
+         JOIN review_artifacts a ON a.artifact_id=h.recovery_artifact_id
+           AND a.review_revision_id=h.review_revision_id AND a.artifact_type='SESSION_RECOVERY'
+           AND a.artifact_key=h.recovery_artifact_key AND a.artifact_revision=h.recovery_artifact_revision
+         WHERE r.review_id=?`,
+      ).get(reviewId)) {
+        // An unconfirmed response or failed new analysis does not revoke an
+        // already committed route, nor identify which preparing revision failed.
+        return;
+      }
       const result = db
         .prepare("UPDATE reviews SET status=?,last_opened_at=? WHERE review_id=?")
         .run(status, this.iso(), reviewId);

@@ -2011,8 +2011,8 @@ export function Cs2dPlaybackHost({
               }).catch(async () => {
                 if (preparationEvent.generationId !== String(generationRef.current)) return;
                 historyDurabilityReadyRef.current = undefined;
-                setHistoryError("复盘产物未能完整提交；当前会话仍可继续，历史记录已标记失败。");
-                setReviewPreparationStatus({ phase: "ERROR", detail: "教学路线可用，但可恢复起点保存失败。" });
+                setHistoryError("复盘保存未确认；当前会话仍可继续。");
+                setReviewPreparationStatus({ phase: "ERROR", detail: "教学路线可用，但可恢复起点保存未确认。" });
                 if (desktopLibraryEnabled) {
                   await historyPersistenceControllerRef.current?.markFailed().catch(() => undefined);
                   await refreshReviewHistory().catch(() => undefined);

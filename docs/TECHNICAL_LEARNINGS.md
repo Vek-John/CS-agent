@@ -2015,3 +2015,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 验证：相关7文件121tests通过；追加重试已发后owner/新教学变化再收到ACK，以及二次瞬时失败的定向回归后Mirror31tests、TypeScript、production build通过。请求序列artifact→head→head且两个head body相同，Recovery dispatch只一次，晚ACK accept=0、冲突不发布；真实CAS测试保留。[证据](validation/EXPLICIT_HEAD_RETRY.md)。
 - 分工：revision_semantics_review默认配置独占Sidebar/SSR测试，遵循emil/Apple复用原样式；partial_revision_restore只读终审无must-fix并建议在途ACK测试，主控补齐。均RELEASE、无进程残留。
 - 限制：组件SSR/callback和生产API/Controller/Mirror验证不是完整Host/真实浏览器；原桌面A5仍独立待验。超时不能证明服务端未提交，旧控制面仍按精确head恢复。不操作用户数据/模型/服务/安装部署。下一项实际线索：起点durabilityCommit失败后会markFailed并激活本地会话；需核实head已落盘但ACK丢失时是否错误标记有效历史，先小复现再决定修复。
+
+
+## 2026-09-26：失败通知不应撤销已确认的恢复点
+
+- 问题：起点head已经在服务端提交但ACK未知，Host会调用markFailed；旧DAL无条件将Review标FAILED并批量改全部PREPARING Revision。重新分析失败同样会误标仍有旧可用路线的历史。
+- 决定：只在FAILED更新的同一事务内检查activeRevision READY与head精确SESSION_RECOVERY ID/key/revision绑定；命中则保留Review/Revision状态及时间，否则原失败处理不变。没有扫描文件或修复旧数据。Host只描述“保存未确认”，不把未知响应当作确定失败。
+- 验证：partial_revision_restore默认配置独占DAL/tests，2红→绿；新增6项真实tmp SQLite覆盖两种提交/失败顺序、旧路线与多个准备版本、不完整绑定/非READY/非active反例。主控复核真实diff并运行相关4文件42tests、TypeScript/production build；revision_semantics_review默认独立只读审查无must-fix。[证据](validation/PRESERVE_CONFIRMED_REVIEW_STATUS.md)。
+- 限制：未指定Revision的失败通知无法可靠标记某个新分析失败，有有效head时因此不批量更新任何准备版本；不自动修复以前误标数据。未执行真实HTTP丢包/浏览器/用户库，无Demo/模型/服务/部署安装；tmp已清。下一项核实失败收尾markFailed/列表refresh的无界等待是否阻挡基础Session激活。

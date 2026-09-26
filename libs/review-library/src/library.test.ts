@@ -1484,7 +1484,7 @@ describe("DesktopReviewLibrary revisions, artifacts, recovery, and deletion", ()
 
 
 describe("runtime head compare-and-swap", () => {
-  async function setup() {
+  async function setup(routeStart = false) {
     let time = Date.parse("2026-09-26T00:00:00Z");
     const h = await harness({ now: () => new Date(time++) });
     const imported = await importValue(h.library, demoBytes(), "cas-demo");
@@ -1495,8 +1495,8 @@ describe("runtime head compare-and-swap", () => {
     const input: CommitRuntimeHeadInput = { reviewId: review.reviewId, reviewRevisionId: revision.reviewRevisionId,
       recoveryArtifactKey: "same-cue-c0", recoveryArtifactRevision: 1,
       sessionId: "session-cas", runId: "run-cas", demoId: imported.demo.demoId, demoContentHash: imported.demo.contentHash,
-      selectedPlayerId: "player-a", routeId: "route-a", routeHash: "route-hash", recoveryBoundary: "CUE_PAUSED",
-      checkpointThreadId: "thread-cas", checkpointNamespace: "", checkpointId: "checkpoint-c0", currentCueId: "cue-0",
+      selectedPlayerId: "player-a", routeId: "route-a", routeHash: "route-hash", recoveryBoundary: routeStart ? "ROUTE_START" : "CUE_PAUSED",
+      ...(routeStart ? {} : { checkpointThreadId: "thread-cas", checkpointNamespace: "", checkpointId: "checkpoint-c0", currentCueId: "cue-0" }),
       defaultRouteCursor: 0, completedCueCount: 0, totalCueCount: 1, stableProgress: { completedCueIds: [] } };
     async function checkpoint(head: CommitRuntimeHeadInput) {
       await saver.put({ configurable: { thread_id: head.checkpointThreadId!, checkpoint_ns: head.checkpointNamespace! } },
@@ -1505,7 +1505,7 @@ describe("runtime head compare-and-swap", () => {
           selectedPlayerId: head.selectedPlayerId, routeId: head.routeId, routeHash: head.routeHash,
         } }, channel_versions: {}, versions_seen: {} }, { source: "input", step: 0, parents: {} }, {});
     }
-    await checkpoint(input);
+    if (!routeStart) await checkpoint(input);
     await appendCriticalArtifacts(h.library, revision.reviewRevisionId, "cas-c0", input);
     async function successor(previousArtifactId: string, anotherRevision = false, suffix = "c1"): Promise<CommitRuntimeHeadInput> {
       const next = { ...input, expectedRecoveryArtifactId: previousArtifactId, recoveryArtifactKey: `same-cue-${suffix}`, checkpointId: `checkpoint-${suffix}`,
@@ -1521,6 +1521,61 @@ describe("runtime head compare-and-swap", () => {
     }
     return { ...h, input, successor };
   }
+
+  it("preserves a confirmed ROUTE_START after its acknowledgement is lost and failure is reported", async () => {
+    const h = await setup(true);
+    try {
+      const committed = await h.library.commitRuntimeHead(h.input); // Server committed; caller receives no acknowledgement.
+      const before = h.owner.db.prepare("SELECT * FROM reviews WHERE review_id=?").get(h.input.reviewId);
+      const revisions = h.owner.db.prepare("SELECT * FROM review_revisions WHERE review_id=?").all(h.input.reviewId);
+      const result = await h.library.updateReviewStatus(h.input.reviewId, "FAILED");
+      expect(result.status).toBe("IN_PROGRESS");
+      expect(h.owner.db.prepare("SELECT * FROM reviews WHERE review_id=?").get(h.input.reviewId)).toEqual(before);
+      expect(h.owner.db.prepare("SELECT * FROM review_revisions WHERE review_id=?").all(h.input.reviewId)).toEqual(revisions);
+      await expect(h.library.commitRuntimeHead(h.input)).resolves.toEqual(committed);
+    } finally { await h.owner.close(); }
+  });
+
+  it("preserves an older confirmed route and all preparing revisions when reanalysis fails", async () => {
+    const h = await setup(true);
+    try {
+      const committed = await h.library.commitRuntimeHead(h.input);
+      for (const name of ["failed-attempt", "other-attempt"]) {
+        await h.library.startRevision({ reviewId: h.input.reviewId, analysisVersion: name, graphVersion: "g1", promptVersion: "p1", modelMetadata: {}, routeId: name, routeHash: name });
+      }
+      const before = h.owner.db.prepare("SELECT * FROM reviews WHERE review_id=?").get(h.input.reviewId);
+      const revisions = h.owner.db.prepare("SELECT * FROM review_revisions WHERE review_id=? ORDER BY review_revision_id").all(h.input.reviewId);
+      await h.library.updateReviewStatus(h.input.reviewId, "FAILED");
+      expect(h.owner.db.prepare("SELECT * FROM reviews WHERE review_id=?").get(h.input.reviewId)).toEqual(before);
+      expect(h.owner.db.prepare("SELECT * FROM review_revisions WHERE review_id=? ORDER BY review_revision_id").all(h.input.reviewId)).toEqual(revisions);
+      expect((await h.library.loadReview(h.input.reviewId)).runtimeHead).toEqual(committed);
+    } finally { await h.owner.close(); }
+  });
+
+  it("marks a genuinely unconfirmed review failed while allowing its late first head to commit", async () => {
+    const h = await setup(true);
+    try {
+      expect((await h.library.updateReviewStatus(h.input.reviewId, "FAILED")).status).toBe("FAILED");
+      expect(h.owner.db.prepare("SELECT status FROM review_revisions WHERE review_revision_id=?").get(h.input.reviewRevisionId)).toEqual({ status: "FAILED" });
+      const committed = await h.library.commitRuntimeHead(h.input);
+      const loaded = await h.library.loadReview(h.input.reviewId);
+      expect(loaded.review.status).toBe("IN_PROGRESS"); expect(loaded.runtimeHead).toEqual(committed);
+      expect(loaded.revisions.find(r => r.reviewRevisionId === h.input.reviewRevisionId)?.status).toBe("READY");
+    } finally { await h.owner.close(); }
+  });
+
+  it.each(["unbound", "not-ready", "inactive"])("does not mistake a %s head for an active confirmed route", async condition => {
+    const h = await setup(true);
+    try {
+      await h.library.commitRuntimeHead(h.input);
+      await h.owner.enqueueWrite(db => {
+        if (condition === "unbound") db.prepare("UPDATE review_runtime_heads SET recovery_artifact_id=NULL,recovery_artifact_key=NULL,recovery_artifact_revision=NULL WHERE review_id=?").run(h.input.reviewId);
+        if (condition === "not-ready") db.prepare("UPDATE review_revisions SET status='FAILED' WHERE review_revision_id=?").run(h.input.reviewRevisionId);
+        if (condition === "inactive") db.prepare("UPDATE reviews SET active_revision_id=NULL WHERE review_id=?").run(h.input.reviewId);
+      });
+      expect((await h.library.updateReviewStatus(h.input.reviewId, "FAILED")).status).toBe("FAILED");
+    } finally { await h.owner.close(); }
+  });
 
   it.each([false, true])("rejects a delayed old head after a newer target (another revision: %s)", async anotherRevision => {
     const h = await setup();

@@ -1414,6 +1414,8 @@ Review 表的关系固定为 `demo_assets 1─N reviews 1─N review_revisions 1
 
 RuntimeHead 提交采用事务内 compare-and-swap：HTTP 必须携带 `expectedRecoveryArtifactId`（首次为 null），DAL 缺失也仅按 null 处理，不能无条件覆盖已有 head。目标不同则当前 artifact ID 必须等于预期，否则返回 `RUNTIME_HEAD_CONFLICT`（HTTP 409）；同目标仅在全部持久 head 字段、stableProgress 及该请求负责的 Review status/completedAt/activeRevision 一致时幂等返回，不重写更新时间，同目标不同字段也拒绝。原身份/产物/单调进度门保留。返回值取自本次事务内确认的行，不能在等待后重新读取可能已推进的 head 作为本次 ACK。无需存储迁移。
 
+通用失败标记 `updateReviewStatus(FAILED)` 不能覆盖已提交的可恢复历史：在同一SQLite写事务中，若当前activeRevision处于READY且其head通过ID/key/revision精确引用本Revision的SESSION_RECOVERY artifact，则本次失败标记不改变Review状态/时间，也不批量标记其他PREPARING Revision。无该绑定时保留原失败处理。该保护用于起点提交已落盘但ACK未知、或新分析失败而旧稳定路线仍可用的情况；不重新核查文件、不重建状态、不修复以前已误标数据。客户端只能说明“保存未确认”，不能凭网络失败声称历史已标记失败。
+
 HistoryPersistenceController 按 owner generation 串行提交 head，捕获排队输入，在有效成功 ACK 后推进 expected ID；reset/adopt/create 使旧排队请求及迟到 ACK 失效。新 Review 从 null 开始；历史 RESTORE/REANALYZE/SELECT_PLAYER 从读取的 head 初始化。旧存储 head 缺全部 artifact 绑定但 Review/Demo 身份匹配时仅可用 null 开始显式重新分析；它仍不能精确恢复，也不能作为新保存 ACK。已存旧数据不因新提交协议失效，旧无 expected 字段的 HTTP 写客户端需加载匹配版本。
 
 超时/冲突后保持原 expected ID，不自动读取新 head、rebase 或重试；原请求可能仍在服务端完成。CAS 保护迟到网络请求及并发竞争，不替代上游业务事件归属/顺序门，也不识别主动以最新 token 再提交的语义旧状态。默认Agent镜像的有限显式重试入口按下述规则执行；不满足资格时可重新打开历史读取已确认状态。

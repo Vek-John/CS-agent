@@ -2,6 +2,16 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：未知保存结果不得降级可恢复历史（2026-09-26）
+
+- 基线19b1a17 clean；主控有限goal拥有Host文案/docs/接线验证；partial_revision_restore默认配置独占library.ts/library.test.ts，在临时SQLite复现并窄修。现无其他写owner。
+- 真实调用：起点durabilityCommit catch总会markFailed；API PATCH→updateReviewStatus(FAILED)无条件改Review及全部PREPARING Revision。预期流程：head成功但ACK丢失/新分析失败→失败标记请求→若已有匹配activeRevision且READY的精确head，同事务保留可恢复状态；未有可用head仍按原失败处理。
+- A1真实SQLite先红后绿覆盖ACK未知后不降级；A2旧head与新准备Revision并存不污染旧记录和其他准备版本；A3无有效head原失败保持、失败后晚head能提交、CAS幂等不回归；A4相关tests/TS/build与只读窄审；A5架构学习证据commit/push。
+- 风险/边界：状态更新与head竞争必须同事务；不是删除失败语义、数据完整性审计或历史批量修复。只用既有绑定/READY资格，不扫描用户产物、不迁移/重解析/猜latest；5分钟红例、12分钟实现、15分钟验证，owner清tmpSQLite/测试；主控不启用锁屏UI、不部署安装/触碰密钥。Host未知结果文案不能再声称“历史已标记失败”。
+
+- 交付：DAL仅FAILED更新增加13行事务内精确绑定保护；2个真实SQLite红例转绿，新增6项涵盖旧head/并存准备Revision、无head晚提交和不合格绑定。Host两处文案改“保存未确认”，不声称已标失败。主控复核真实diff，4文件42tests、TS/production build通过；revision_semantics_review独审无must-fix，两owner RELEASE。[证据](validation/PRESERVE_CONFIRMED_REVIEW_STATUS.md)。
+- 限制：不修既有误标数据；有有效head时未指定Revision的失败请求不会替某个新准备版本标失败。仅tmp SQLite，无真实HTTP丢包/桌面/用户DB。后继实际线索：同一catch仍await markFailed和refreshReviewHistory后才activateSession，二者网络未设等待上限，可能让“仍可继续”悬挂；下一轮小复现并确定失败收尾与基础激活的必要依赖，不扩大持久化框架。测试/build已退出，commit/push后释放。
+
 ## 已交付：当前会话恢复点显式重试（2026-09-26）
 
 - 基线a9c80a8 clean；主控有限goal独占Controller/Mirror/Host/tests/docs；revision_semantics_review默认配置独占历史栏UI及窄测试，复用emil/Apple与原样式；无并发同文件写入。
