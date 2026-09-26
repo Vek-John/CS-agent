@@ -1049,7 +1049,10 @@ describe("return-and-fire adapter boundary", () => {
     expect(baseline.review_plan.cues).toHaveLength(1);
     expect(attributed.candidate_set.candidates.some(candidate => candidate.source.kind === "RETURN_AND_FIRE")).toBe(true);
     expect(attributed.candidate_set.candidates.some(candidate => candidate.source.kind === "WIN_RATE_DROP")).toBe(true);
-    expect(attributed.review_plan.cues).toEqual(baseline.review_plan.cues);
+    // Prior self-fire now enriches only the existing decision-state prose; the selected window and all other cue data stay fixed.
+    const withoutPriorFireSentence = attributed.review_plan.cues.map(cue => ({ ...cue,
+      facts: cue.facts.map(fact => ({ ...fact, text: fact.text.replace(" 决策前近期记录到本人开火。", "") })) }));
+    expect(withoutPriorFireSentence).toEqual(baseline.review_plan.cues);
     expect(attributed.review_plan.segments).toEqual(baseline.review_plan.segments);
   });
   it("binds sampled self movement and explicit fire as an action, independently of outcome frames", () => {

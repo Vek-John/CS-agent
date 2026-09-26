@@ -3,6 +3,19 @@
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
 
+
+## 已交付：决策前本人开火消费（2026-09-27）
+
+- ID decision-prior-self-fire，基线f8d805d clean，实际7f2b。partial_revision_restore默认配置先独占.local-data小probe与来源诊断，root独占docs/契约决策/最终验证与push；A1回报后再分配最小产品文件，不并发修改。
+- 目标：已有明确本人shot是否进入当前情况讲解；A1实际Adapter→CoachingPackage→确定性Narrator对照本人/未知/未来；A2仅有可观察收益才补短时有界来源事实，保持选点/窗口/评分/专业资格；A3归属、时间、跨死亡和历史兼容、相关tests/两端TS/build、集中diff审查后push。决策前事实不等于处理窗口动作，不用它开放慢放资格或接敌判断。
+- A1已证实：合成decision1400前本人shot1392已有Timeline WEAPON_FIRE，但实际CoachingPackage/currentSituation正文与未知actor对照相同；future1404仅进入playerAction。批准A2最小契约：可选snapshot.selfFireEvents保存来源，发生说明附加现有state事实，不新增Narrator选择特例或挤走原前三项；1.12派生并兼容1.11，禁止改变动作资格。
+- 风险：Narrator仅前三事实，新增字段可能只增数据而不改善正文；sourceRefs必须保留且不能跨玩家/回合/死亡。5分钟小验证、15分钟有限实现，同设施两败简化；零真实Demo/模型/Jev/GUI/用户库/安装/服务，单执行者负责临时进程退出。没有收益就保留证据并转下一独立目标，原A5不阻塞此线。
+
+
+- 交付：selfFireEvents有界来源与原state一句说明已接通，原state采样tick、前三项、route/score/assessment/actionRefs保持；sample之后decision之前的shot暂不合并。20新增、7文件170tests通过；主控读真实diff/测试并补验资源、库存与新链3文件86tests（包含20新增，不累加冒充独立数量）。首次TS发现严格shape后tick缺类型收窄及测试optional/kill字段，主控修正后两端TS/build全通过。
+- prior_fire_boundary_review默认配置独立只读审查，无must-fix（审查时新测试未落盘，后由root读测）；另26既有tests通过不计为新增。两位执行者RELEASE，全部probe/test/build退出，无真实Demo/模型/UI/用户库操作。[验证](validation/DECISION_PRIOR_SELF_FIRE.md)。
+- 下一有限目标 narration-clock-coverage：源码显示当前情况固定前三事实，已知公开回合时钟排在人身状态/受击/人数/比分后。先用完整人数+受击小场景核实是否在正文中遗漏，有实际缺口才设计有界事实选择，不更改时钟可知性/专业判断，不重跑Parser或旧UI矩阵。
+
 ## 已交付学习：动作事实覆盖（2026-09-27）
 
 - ID action-fact-coverage，基线961ad1b clean，root独占本轮小验证/docs/checks/push，无委派或其他活动写入者。A1来源与现有判断门；A2小fixture验证覆盖缺口是否真正进入带看；A3只保留有收益变更，相关tests/两端TS/build后push。15分钟有界调查，无真实Demo/模型/UI/用户数据；临时脚本单进程退出，遇两次别名解析失败简化源码相对导入。

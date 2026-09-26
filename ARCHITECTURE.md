@@ -126,6 +126,11 @@ Adapter 1.8.0 只为已有 DEATH / HP_CHANGE 候选补充处理窗口本人开�
 `CanonicalAnalysisFact` 与 `PlayerActionFact` 的可选 `presentationOnly: true` 表示这种补充发生事实。它可进入 CoachingPackage、Narrator、cue action_facts 及 Stage3 既有动作回看资格，但不获得 Director 两处有动作排序加分，不充当 verified behavior hypothesis 的过程证据、不进入结构化决策评估动作，也不触发不可回撤动作文本推断。诊断严格传输 schema 保留该标记。旧动作缺省字段继续沿用旧语义，旧包不回填或重写；Adapter 解码保留 1.7.0 及既有兼容版本，新增来源由 Adapter/signals 1.8.0 和 CandidateGenerator 2.4.0 标识。专业判断、建议适用性和引用/未来边界保持原门禁。
 
 
+Adapter/signals 1.12.0 可将决策前近期本人开火作为自身状态的补充发生事实。可选 `DecisionSnapshot.selfFireEvents` 只保存 `DEMO_WEAPON_FIRE` 来源、原 parser 数组索引引用和 canonical tick；最多三条、严格决策前10秒内、同回合 live 范围，且不晚于新鲜存活状态的 sampledAtTick。已知本人死亡（kill、dead/零生命采样或致死hurt报告）已发生时拒绝，死亡时间不可用时保守拒绝。样本之后、决策之前的射击暂不合并，不能借此移动状态事实时间或放松库存/资源的采样绑定。
+
+发生说明附加到原自身状态 DECISION_CONTEXT 文本和来源引用，状态事实可用时刻保持原采样 tick，原前三条讲解内容仍保留。此事实不进入 PLAYER_ACTION、不开放动作工具、不生成接触/目标/命中/意图判断或新增候选。历史snapshot缺字段仍兼容，旧1.11及既有版本保存产物直接读取，不回填或重算；不改变专业判断、建议适用性和决策窗口。
+
+
 ### 2.4.4 安包与拆包事件的即时归属
 
 `bomb_planted`、`bomb_defused`、`bomb_exploded`共用上述native事件pawn验证；在事件发生时只解析一次，actor与安包几何来自同一当前pawn。pawn无效、class/serial不匹配时，公共事件kind/canonical tick及拆包完成标记仍保留，actor与安包几何为null；有效pawn但owner未知时仅保留有效几何，不猜玩家。拆包与爆炸不附坐标。此修正不迁移其他事件或network handle。

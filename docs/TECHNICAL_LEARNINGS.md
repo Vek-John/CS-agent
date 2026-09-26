@@ -2547,3 +2547,12 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决策：小fixture中独立shot加入KILL展示材料后仍NO_TEACHING_VALUE/0cue；增加字段无法改善当前带看。撤回试验，保持原版本/资格/引用门，记录来源覆盖和上下文门，而不为工具调用数扩展范围。
 - 验证：实际Adapter与Director小消融、既有5文件62tests通过；探针无真实Demo/模型/网络/GUI。见[记录](validation/ACTION_FACT_COVERAGE.md)。产品与测试文件已恢复本轮开始的干净内容。
 - 限制与行动：合成覆盖不代表真实射击分布；独立过程依据充分的其他KILL情境未否定。下一项先核实决策前本人WEAPON_FIRE的现有教学消费，严格区分已发生自身动作与敌情/判断依据。
+
+
+## 2026-09-27：决策前本人开火进入当前情况说明
+
+- 问题：明确本人开火已进入Timeline WEAPON_FIRE，但小合成case决策1400前shot1392的CoachingPackage/currentSituation与未知actor对照完全相同。既有窗口开火只覆盖决策之后，因此不能代替决策前已发生的自身行为背景。
+- 决策：可选selfFireEvents保存最多三条原事件来源，合格时将一句发生说明附加原state事实，保留Narrator前三条顺序和数量。决策前10秒、同live回合、新鲜存活与死亡拒绝门保持保守，不进入PLAYER_ACTION、不放宽判断或工具资格。
+- 接线发现：资源展示要求state事实available_at_tick严格等于采样tick。不能将它移到更晚shot时间；因此只接入不晚于sampledAtTick的shot，样本后/决策前暂不投影。保留原资源校验和事实采样时刻，比更改全局Narrator选句规则更窄。
+- 验证：A1/A2小probe证明正文从缺失到出现一次，原比分/时钟仍在；未知/未来保持隔离。最终回归、兼容与构建结果见任务板和[验证记录](validation/DECISION_PRIOR_SELF_FIRE.md)。
+- 限制：纯自身发生事实不证明目标、命中、LOS、战术意图或专业判断改善；未新增真实Demo解析/模型/UI验证，旧保存产物不回填。

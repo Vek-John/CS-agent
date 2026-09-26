@@ -1,3 +1,4 @@
+import { decisionSelfFireText } from "./decision-self-fire";
 import { verifiedGrenadeKinds } from "./grenade-kinds";
 import { normalizeWeaponAmmo, type Cs2dWeaponAmmo } from "./weapon-ammo";
 import { windowSelfFire } from "./window-self-fire";
@@ -91,10 +92,10 @@ function parserVersion(replay: Cs2dReplay): string {
   return known ? `${base}/${known.join("/")}` : base;
 }
 
-export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.11.0" as const;
+export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.12.0" as const;
 export const CS2D_TIMELINE_VERSION = "zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec/timeline/1.2.0" as const;
 export const CS2D_OBSERVATION_VERSION = "cs2d-analysis-adapter/1.7.0/internal-observation" as const;
-export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.11.0/signals" as const;
+export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.12.0/signals" as const;
 export const CS2D_PLANNER_VERSION = "cs2d-analysis-adapter/1.6.0/planner" as const;
 
 /** MVP pacing target: a full match should feel coached, not interrupted. */
@@ -279,7 +280,7 @@ export interface Cs2dExcludedRound {
 }
 
 export interface Cs2dAnalysisMetadata {
-  readonly adapter_version: typeof CS2D_ADAPTER_VERSION | "cs2d-analysis-adapter/1.10.0" | "cs2d-analysis-adapter/1.9.0" | "cs2d-analysis-adapter/1.8.0" | "cs2d-analysis-adapter/1.7.0" | "cs2d-analysis-adapter/1.6.1" | "cs2d-analysis-adapter/1.6.0" | "cs2d-analysis-adapter/1.5.2" | "cs2d-analysis-adapter/1.5.1" | "cs2d-analysis-adapter/1.5.0" | "cs2d-analysis-adapter/1.4.0";
+  readonly adapter_version: typeof CS2D_ADAPTER_VERSION | "cs2d-analysis-adapter/1.11.0" | "cs2d-analysis-adapter/1.10.0" | "cs2d-analysis-adapter/1.9.0" | "cs2d-analysis-adapter/1.8.0" | "cs2d-analysis-adapter/1.7.0" | "cs2d-analysis-adapter/1.6.1" | "cs2d-analysis-adapter/1.6.0" | "cs2d-analysis-adapter/1.5.2" | "cs2d-analysis-adapter/1.5.1" | "cs2d-analysis-adapter/1.5.0" | "cs2d-analysis-adapter/1.4.0";
   readonly source: Cs2dReplaySourceMetadata;
   readonly input_map: string;
   readonly selected_steam_id: string;
@@ -995,8 +996,8 @@ function buildCanonicalGeneratorInput(
         kind: "DECISION_CONTEXT",
         roundNumber: raw.round.number,
         tick: state.sample.tick,
-        text: stateFactText(state),
-        sourceRefs: [...state.sample.fact_refs],
+        text: [stateFactText(state), sourceSnapshot.selfFireEvents?.length ? decisionSelfFireText() : undefined].filter(Boolean).join(" "),
+        sourceRefs: [...state.sample.fact_refs, ...(sourceSnapshot.selfFireEvents ?? []).map(event => event.sourceRef)],
         observedByPlayer: true,
         missingFields: [...state.sample.missing_fields],
         limitations: [CS2D_LIMITATIONS.frameSampling]
@@ -1593,7 +1594,7 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
     throw new Error("cs2d win-probability contract is invalid.");
   }
   if (
-    ![CS2D_ADAPTER_VERSION, "cs2d-analysis-adapter/1.10.0", "cs2d-analysis-adapter/1.9.0", "cs2d-analysis-adapter/1.8.0", "cs2d-analysis-adapter/1.7.0", "cs2d-analysis-adapter/1.6.1", "cs2d-analysis-adapter/1.6.0", "cs2d-analysis-adapter/1.5.2", "cs2d-analysis-adapter/1.5.1", "cs2d-analysis-adapter/1.5.0", "cs2d-analysis-adapter/1.4.0"].includes(bundle.metadata.adapter_version) ||
+    ![CS2D_ADAPTER_VERSION, "cs2d-analysis-adapter/1.11.0", "cs2d-analysis-adapter/1.10.0", "cs2d-analysis-adapter/1.9.0", "cs2d-analysis-adapter/1.8.0", "cs2d-analysis-adapter/1.7.0", "cs2d-analysis-adapter/1.6.1", "cs2d-analysis-adapter/1.6.0", "cs2d-analysis-adapter/1.5.2", "cs2d-analysis-adapter/1.5.1", "cs2d-analysis-adapter/1.5.0", "cs2d-analysis-adapter/1.4.0"].includes(bundle.metadata.adapter_version) ||
     bundle.metadata.source.repository !== CS2D_SOURCE.repository ||
     bundle.metadata.source.commit !== CS2D_SOURCE.commit ||
     bundle.metadata.renderer_input !== false ||

@@ -1,3 +1,4 @@
+import { decisionSelfFireEvents, MAX_DECISION_SELF_FIRE_EVENTS } from "./decision-self-fire";
 import { verifiedGrenadeKinds } from "./grenade-kinds";
 import { decisionSelfHurtEvents, selfHurtFactText, MAX_SELF_HURT_EVENTS } from "./self-hurt";
 import { readRoundClock, publicRoundClockFact } from "./round-clock";
@@ -81,6 +82,7 @@ export function buildDecisionSnapshot(input: {
   if (!hasRoundClock) missingFields.push("round_timer");
   const snapshot: DecisionSnapshot = {
     version: "decision-snapshot.v1", snapshotId, roundNumber: round.number, selectedPlayerId, decisionTick, sampledAtTick: frame?.tick ?? null,
+    selfFireEvents: decisionSelfFireEvents({ round, selectedPlayerId, decisionTick, sampledAtTick: frame?.tick ?? null, tickRate, alive: Boolean(fresh && selected?.alive === true && selected.health > 0) }),
     ...(Array.isArray(round.hurtEvents) ? { selfHurtEvents: decisionSelfHurtEvents(round, selectedPlayerId, decisionTick, tickRate, Boolean(fresh && selected?.alive === true)) } : {}),
     selectedPlayer: value(fresh && selected ? { side, alive: boolOrNull(selected.alive), health: numberOrNull(selected.health), armor: numberOrNull(selected.armor), helmet: boolOrNull(selected.helmet), weapon: textOrNull(selected.weapon), grenades: grenadeKinds ?? null, money: numberOrNull(selected.money), equipmentValue: numberOrNull(selected.equipValue), hasDefuseKit: boolOrNull(selected.defuser), callout: mirageChineseCallout(selected.lastPlaceName) ?? null } : null, "OBSERVABLE", fresh ? [] : ["决策前缺少足够新的玩家状态。"]),
     aliveCounts: value(complete && side ? { allies: allies.length, enemies: all.filter((player) => player.side !== side && player.alive === true).length, includesSelectedPlayer: true } : null, "OBSERVABLE"),
@@ -133,7 +135,7 @@ function exactKeys(value: unknown, keys: readonly string[], label: string): asse
 
 /** Validate nested information boundaries before accepting a persisted or worker packet. */
 export function assertDecisionContextShape(snapshot: DecisionSnapshot): void {
-  exactKeys(snapshot, ["version", "snapshotId", "roundNumber", "selectedPlayerId", "decisionTick", "sampledAtTick", "selectedPlayer", "aliveCounts", "players", "score", "clock", "bomb", "supportChecks", "pressureChecks", "spatialChecks", "missingFields", "limitations", ...(snapshot.selfHurtEvents === undefined ? [] : ["selfHurtEvents"])], "DecisionSnapshot");
+  exactKeys(snapshot, ["version", "snapshotId", "roundNumber", "selectedPlayerId", "decisionTick", "sampledAtTick", "selectedPlayer", "aliveCounts", "players", "score", "clock", "bomb", "supportChecks", "pressureChecks", "spatialChecks", "missingFields", "limitations", ...(snapshot.selfHurtEvents === undefined ? [] : ["selfHurtEvents"]), ...(snapshot.selfFireEvents === undefined ? [] : ["selfFireEvents"])], "DecisionSnapshot");
   if (typeof snapshot.snapshotId !== "string" || typeof snapshot.selectedPlayerId !== "string" || !Number.isSafeInteger(snapshot.roundNumber)) throw new Error("DecisionSnapshot identity is invalid.");
   const values: [DecisionValue<unknown>, readonly string[]][] = [
     [snapshot.selectedPlayer, ["side", "alive", "health", "armor", "helmet", "weapon", "grenades", "money", "equipmentValue", "hasDefuseKit", "callout"]],
@@ -146,6 +148,15 @@ export function assertDecisionContextShape(snapshot: DecisionSnapshot): void {
     exactKeys(field, ["value", "boundary", "evidenceRefs", "limitations"], "DecisionValue");
     if (field.value !== null) exactKeys(field.value, keys, "DecisionValue payload");
     assertStrings(field.evidenceRefs); assertStrings(field.limitations);
+  }
+  if (snapshot.selfFireEvents !== undefined) {
+    if (!Array.isArray(snapshot.selfFireEvents) || snapshot.selfFireEvents.length > MAX_DECISION_SELF_FIRE_EVENTS || new Set(snapshot.selfFireEvents.map(event => event.sourceRef)).size !== snapshot.selfFireEvents.length) throw new Error("Decision self-fire evidence is unbounded or duplicated.");
+    for (const event of snapshot.selfFireEvents) {
+      exactKeys(event, ["source", "sourceRef", "tick"], "Decision self-fire event");
+      if (event.source !== "DEMO_WEAPON_FIRE" || typeof event.sourceRef !== "string" || !new RegExp(`^cs2d-r${snapshot.roundNumber}-event-[1-9][0-9]*$`).test(event.sourceRef) || event.sourceRef.length > 160 ||
+        typeof event.tick !== "number" || !Number.isSafeInteger(event.tick) || event.tick < 0 || event.tick >= snapshot.decisionTick || snapshot.sampledAtTick === null || event.tick > snapshot.sampledAtTick) throw new Error("Decision self-fire event has invalid or non-prior evidence.");
+    }
+    if (snapshot.selfFireEvents.length && (snapshot.selectedPlayer.boundary !== "OBSERVABLE" || snapshot.selectedPlayer.value?.alive !== true || !(typeof snapshot.selectedPlayer.value.health === "number" && snapshot.selectedPlayer.value.health > 0))) throw new Error("Decision self-fire evidence requires a live selected player.");
   }
   if (snapshot.selfHurtEvents !== undefined) {
     if (!Array.isArray(snapshot.selfHurtEvents) || snapshot.selfHurtEvents.length > MAX_SELF_HURT_EVENTS || new Set(snapshot.selfHurtEvents.map(event => event.sourceRef)).size !== snapshot.selfHurtEvents.length) throw new Error("Decision self-hurt evidence is unbounded or duplicated.");

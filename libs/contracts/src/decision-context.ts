@@ -39,6 +39,8 @@ export interface DecisionSnapshot {
   selectedPlayerId: string;
   decisionTick: number;
   sampledAtTick: number | null;
+  /** Bounded prior self-fire occurrences at or before the selected state sample; not action/intent evidence. */
+  selfFireEvents?: readonly { source: "DEMO_WEAPON_FIRE"; sourceRef: string; tick: number }[];
   /** Optional for immutable legacy records. Strictly before decisionTick; no attacker or damage amounts. */
   selfHurtEvents?: readonly { source: "DEMO_PLAYER_HURT"; sourceRef: string; tick: number }[];
   selectedPlayer: DecisionValue<{
