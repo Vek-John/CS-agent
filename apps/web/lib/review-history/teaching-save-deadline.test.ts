@@ -12,7 +12,7 @@ function deferred<T>() {
 }
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); });
 
-it.each(types)("bounds %s fetch and JSON waiting without trusting late success", async artifactType => {
+it.each([...types, "SESSION_SUMMARY"] as const)("bounds %s fetch and JSON waiting without trusting late success", async artifactType => {
   for (const stage of ["fetch", "body"] as const) {
     vi.useFakeTimers();
     const gate = deferred<unknown>();

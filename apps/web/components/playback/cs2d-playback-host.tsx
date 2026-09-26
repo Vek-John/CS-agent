@@ -119,7 +119,7 @@ import {
 } from "../../lib/coaching/cs2d-coaching-view";
 import { CoachingStatusList } from "./coaching-status-list";
 import { loadLocalGameAssetCatalog } from "../../lib/assets/local-game-asset-catalog";
-import { completeStage3SessionWrapUp, createSessionWrapUpGuard } from "../../lib/coaching/session-wrap-up-completion";
+import { completeStage3SessionWrapUp, createSessionWrapUpGuard, type SessionSummarySaveRetry } from "../../lib/coaching/session-wrap-up-completion";
 import { completedReviewTargets, sessionWrapUpPresentation, SessionWrapUpPanel } from "../../lib/coaching/session-wrap-up-presentation";
 import { buildStage3WrapUpInput } from "../../lib/coaching/coach-agent-stage3-wrap-up";
 import {
@@ -428,6 +428,9 @@ export function Cs2dPlaybackHost({
   const [stage3WrapUpResult, setStage3WrapUpResult] = useState<SessionWrapUpResult>();
   const [stage3WrapUpRequest, setStage3WrapUpRequest] = useState<SessionWrapUpRequest>();
   const [stage3WrapUpError, setStage3WrapUpError] = useState<string>();
+  const [summarySaveRetry, setSummarySaveRetry] = useState<SessionSummarySaveRetry>();
+  const [summarySaveBusy, setSummarySaveBusy] = useState(false);
+  const [summarySaveConfirmed, setSummarySaveConfirmed] = useState(false);
   const stage3WrapUpGenerationRef = useRef<number | undefined>(undefined);
   const [timelineHorizontalZoom, setTimelineHorizontalZoom] = useState(1);
   const [winRateVerticalZoom, setWinRateVerticalZoom] = useState(1);
@@ -640,6 +643,7 @@ export function Cs2dPlaybackHost({
     setStage3WrapUpResult(undefined);
     setStage3WrapUpRequest(undefined);
     setStage3WrapUpError(undefined);
+    setSummarySaveRetry(undefined); setSummarySaveBusy(false); setSummarySaveConfirmed(false);
     stage2PendingRef.current = undefined;
     stage2StartedCueRef.current = undefined;
     stage2IdentityRef.current = undefined;
@@ -3139,7 +3143,7 @@ export function Cs2dPlaybackHost({
         setStage3WrapUpStatus(presentation.status);
         setStage3WrapUpError(presentation.error);
       },
-      onSaveError: () => setHistoryError("全场总结保存失败。已完成的复盘和回看不受影响。"),
+      onSaveError: retry => { setSummarySaveRetry(retry); setSummarySaveConfirmed(false); },
     });
   }, [activePlan, bundle?.candidate_set, narrationByCue, stage3Mode]);
 
@@ -3148,6 +3152,20 @@ export function Cs2dPlaybackHost({
     if (session.phase !== "WRAP_UP" && session.phase !== "COMPLETED") return;
     void requestStage3WrapUp(stage3IdentityContext, generationRef.current);
   }, [requestStage3WrapUp, session, stage3IdentityContext, stage3Mode]);
+
+  const retrySummarySave = useCallback(async () => {
+    const retry = summarySaveRetry;
+    if (!retry?.isCurrent() || summarySaveBusy) return;
+    setSummarySaveBusy(true);
+    try {
+      const saved = await retry.retry();
+      if (saved && retry.isCurrent()) {
+        setSummarySaveRetry(current => current === retry ? undefined : current);
+        setSummarySaveConfirmed(true);
+      }
+    } catch { /* Keep the same bounded result available for another explicit retry. */ }
+    finally { if (retry.isCurrent()) setSummarySaveBusy(false); }
+  }, [summarySaveBusy, summarySaveRetry]);
 
   const recoveryStatusKind: SessionRecoveryStatusKind | undefined = recoveryResult?.record
     ? recoveryResult.status === "READY"
@@ -3466,6 +3484,8 @@ export function Cs2dPlaybackHost({
           {session && stage3Mode && ["WRAP_UP", "COMPLETED"].includes(session.phase) ? (
             <SessionWrapUpPanel status={stage3WrapUpStatus} result={stage3WrapUpResult} request={stage3WrapUpRequest}
               plan={activePlan} phase={session.phase} error={stage3WrapUpError} session={session}
+              saveRetry={summarySaveRetry?.isCurrent() ? { busy: summarySaveBusy, onRetry: () => void retrySummarySave() } : undefined}
+              saveConfirmed={summarySaveConfirmed}
               onReviewCue={reviewCompletedCue} playbackAvailable={Boolean(replay) && !historyLoading && !recoveryLandingRef.current}
               onComplete={() => transition({ type: "COMPLETE_SESSION" })} />
           ) : null}

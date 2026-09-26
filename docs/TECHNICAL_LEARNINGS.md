@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：总结重试应保留内容和owner而不是重新生成
+
+- 问题：SESSION_SUMMARY写失败只有通用错误，既有RuntimeHeadRetry不能补写它；请求也没有小artifact的等待期限。
+- 决策：生成后先复制快照，原key/revision/幂等键显式重试；并发共享promise、成功关闭、失败保留供下一次点击。Host guard增加persistence ownershipGeneration，阻止同ID重新adopt后的旧句柄。卡内区分未保存/保存中/已保存，原总结与完成回看不变；请求复用20秒总期限。
+- 验证：7新重试用例＋1摘要期限用例，95相关tests、TS/build通过，独立窄审无must-fix。[记录](validation/SUMMARY_SAVE_RETRY.md)。快照不会被UI修改、不会重调总结、晚响应不写新owner状态。
+- 限制/后继：外部存储/网络是fake、Panel为SSR，未真实断网/浏览器。内存重试不持久化到刷新后，也不确认RuntimeHead；下一项核实已结束Graph检查点在自由seek/提前完成时能否收敛到历史终结恢复点。
+
 ## 2026-09-26：播放接管不等于终结总结失去归属
 
 - 问题：普通时间轴在COMPLETE_SESSION等待期间接管，原Host的!userTookOver门丢弃同会话总结；Controller已完成去重使再请求也没有结果。真实Controller deferred单例得到onResult=0红例。

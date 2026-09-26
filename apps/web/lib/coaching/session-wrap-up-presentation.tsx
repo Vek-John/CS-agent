@@ -81,8 +81,9 @@ export function completedReviewTargets(plan?: ReviewPlan, session?: CoachingSess
   });
 }
 
-export function SessionWrapUpPanel({ status, result, plan, phase, error, onComplete, session, onReviewCue, playbackAvailable = false }: {
+export function SessionWrapUpPanel({ status, result, plan, phase, error, onComplete, session, onReviewCue, playbackAvailable = false, saveRetry, saveConfirmed = false }: {
   status: string; result?: SessionWrapUpResult;
+  saveRetry?: { busy: boolean; onRetry: () => void }; saveConfirmed?: boolean;
   request?: import("@cs-coach/coach-agent/client").SessionWrapUpRequest;
   plan?: import("@cs-coach/contracts").ReviewPlan;
   phase: string; error?: string; onComplete: () => void;
@@ -94,6 +95,12 @@ export function SessionWrapUpPanel({ status, result, plan, phase, error, onCompl
     <small>本场复盘总结</small>
     {status === "LOADING" ? <p>正在整理已完成且可呈现的讲解点。</p> : null}
     <SessionWrapUpNotice error={error} />
+    {saveRetry ? <div role="status">
+      <p>{saveRetry.busy ? "正在保存总结…" : "总结暂未保存，离开页面后可能无法恢复。当前复盘和回看仍可继续。"}</p>
+      <div className="cs2d-coach-result-actions cs2d-coach-review-links">
+        <button type="button" disabled={saveRetry.busy} onClick={saveRetry.onRetry}>{saveRetry.busy ? "保存中…" : "重试保存总结"}</button>
+      </div>
+    </div> : saveConfirmed ? <p role="status">总结已保存。</p> : null}
     {(result?.bundle.themes.length ?? 0) > 0 ? <div>{result?.bundle.themes.slice(0, 3).map((theme, index) => {
       const roundLabels = representativeRoundLabels(theme, plan);
       return <article key={`${theme.focus}-${index}`} className="cs2d-coach-card">

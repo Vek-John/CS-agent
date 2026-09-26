@@ -2,6 +2,16 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：总结保存失败的同内容重试（2026-09-26）
+
+- ID summary-save-retry，基线0e1b0ed clean；root独占完成seam/Host/Panel/测试/docs。已核实仅historyError，无总结重试；RuntimeHeadRetry只重交恢复点，不能复用为重新生成总结。
+- A1保存失败保留结果快照+原owner显式重试；A2同payload/key/revision重复点击合并，成功只清自身状态，零Graph/重新总结；A3切历史/同ID重新adopt、保存中切换及再次失败正确收敛，既有回看/完成仍可用；A4相关tests/TS/build/窄审后push。
+- 风险/资源：长驻重试必须捕获persistence ownershipGeneration和现有session/run/epoch门，不能把旧内容写新历史；只内存留一个总结，刷新不假称可恢复。已有emil/apple规则与原生disabled/busy按钮复用，无新动画/布局系统。先小deferred/真实HistoryPersistenceController，必要隔离API重试验证；不用户DB/Demo/模型/UI锁屏/安装。20分钟有限交付，测试60秒，root清理进程；独立只读审查默认配置3分钟上限。
+
+- 交付：内存保留结果快照，原summary key/revision/幂等键重试，双击共用promise、成功关闭；owner guard增加persistence ownershipGeneration。同ID重开/历史切换拒旧，Panel显示失败/忙/成功，零重新生成。SESSION_SUMMARY接入原20秒fetch+body期限。
+- 证据：7新重试＋1期限用例，95相关tests/TS/build通过；partial_revision_restore默认只读RELEASE，root核diff。[记录](validation/SUMMARY_SAVE_RETRY.md)。mock外部append/网络、SSR非完整浏览器，进程退出，无用户数据/部署。
+- 下一有限任务：实际mirror源码仍拒takenOver，stable recovery builder只收WRAP_UP不收COMPLETED。沿真实终结事件的延迟序列核实自由seek/提前点完成时head是否停前cue，若存在则窄修终结恢复收敛；不把本次summary保存成功当作head成功，不重跑同一真实Demo存储链或锁屏UI。
+
 ## 已交付：总结生成与自由回看的生命周期分离（2026-09-26）
 
 - ID wrap-up-takeover，基线35d37ee clean；root独占完成seam/Host/回归/docs。当前Host将userTookOver作为总结归属条件，普通时间轴自由seek可能丢在途结果且Controller去重阻止再产出。

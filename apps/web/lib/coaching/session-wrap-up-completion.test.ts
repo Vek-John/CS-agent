@@ -51,6 +51,7 @@ it.each([false, true])("only surfaces a delayed save error in its own active rev
   const pending = completeAndSaveSessionWrapUp({ ...input, buildInput: () => null });
   // Missing-summary publication is synchronous; pending durability cannot block it.
   expect(input.onResult).toHaveBeenCalledWith(expect.objectContaining({ status: "FALLBACK", manifest: expect.objectContaining({ reason: "MISSING_SESSION_SUMMARY" }) }));
+  await Promise.resolve(); // Retained saver installs its in-flight owner before starting I/O.
   expect(deps.appendArtifact).toHaveBeenCalledWith("review", expect.objectContaining({ revisionId: "revision" }));
   if (switchReview) persistence.adopt("new-review", "new-revision", "demo");
   reject(new Error("private storage error details"));
