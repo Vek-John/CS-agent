@@ -938,7 +938,7 @@ export function Cs2dPlaybackHost({
     const isCurrent = () => historyOpenEpochRef.current === operationEpoch &&
       managedRequestMatchesExpected(expectedManagedSourceRef.current, payload.requestId);
     setHistoryImportProgress(undefined);
-    await refreshReviewHistory();
+    await refreshReviewHistory(isCurrent);
     if (recoveringImport || !isCurrent()) return;
     if (!payload.deduplicated) return;
     try {
@@ -1638,6 +1638,7 @@ export function Cs2dPlaybackHost({
         historyOpenEpochRef.current += 1;
         historyRestoreControllerRef.current?.cancel();
         expectedManagedSourceRef.current = { requestId: payload.requestId };
+        setHistoryError(undefined);
         setHistoryImportProgress({ requestId: payload.requestId, completedBytes: 0, totalBytes: payload.byteSize });
         void reviewHistoryApi.importCapability({ requestId: payload.requestId, originalFilename: payload.originalFilename, byteSize: payload.byteSize })
           .then(({ capabilityToken }) => {

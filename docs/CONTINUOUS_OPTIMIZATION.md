@@ -2,6 +2,13 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：重新导入的错误反馈（2026-09-27）
+
+- ID import-retry-feedback，基线82be693 clean；root独占Host两处接线/docs，无委派，其他执行者已释放。流程：新有效DEMO_IMPORT_REQUESTED→清旧错误并显示新progress→仅当前请求发布失败；取消选择不产生该事件，保留原提示。A1查真实Sidebar同时渲染error/progress及成功刷新清error；A2只清新操作旧反馈；A3导入后刷新绑定已有epoch/requestId，迟到结果不清新错误；A4相关tests/TS/build、窄diff复查后push。
+- 风险与边界：复用现有refreshHistoryPage当前性门，不新增状态机/重试/超时；导入按钮本身不清错，当前失败映射保留。emil/apple即时准确反馈规则，无样式、键盘或动效变化。root拥有测试/build进程，10分钟有限阶段；零Demo/用户库/模型/GUI/新安装，不为两行接线新增镜像测试。
+- 交付：Sidebar/授权期限/刷新3文件14测试，Host bridge/恢复导入2文件35测试，共49通过；最终两处接线后TypeScript、Web production build exit 0。既有刷新测试覆盖旧route/request迟到成功与失败不发布，新授权独立期限及错误反馈保持；本轮未新增重复实现测试。日志`.local-data/import-retry-feedback/{tests,bridge-tests,typecheck,build}.txt`；root完成两行diff复查，所有进程退出，无Viewer源码改动，无GUI/SQLite实测。
+- 下一有限目标有源码证据：handleSuccessfulDemoImport等列表刷新和demoImpact后才弹去重确认，但普通PLAYER_SELECTED不改变它使用的epoch/requestId。下一轮小验证用户已选人并开始准备后，迟到去重弹窗是否仍会打断当前流程；若成立按明确的新复盘意图失效提示，不重做恢复模式既有修复。
+
 ## 已交付：同一Demo可重新选择（2026-09-27）
 
 - ID demo-picker-reselection，基线42222ca clean；root独占0020 Viewer补丁、patch registry/docs，无委派。目标：授权失败后再次选择原Demo能重发请求；流程为主文件入口→选择→同步保留File→清空input值→后续可再次选择。复用现有.cs2dv入口的清值方式，不改协议、自动重试、拖放、解析或教学边界。
