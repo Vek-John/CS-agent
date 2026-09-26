@@ -10,7 +10,7 @@ function harness(){
   vi.useFakeTimers();
   const workers=[],events=[];
   class FakeWorker{constructor(){this.terminate=vi.fn();workers.push(this);}postMessage(value){this.request=value;}}
-  const ctx={Worker:FakeWorker,URL,Error,route:{query:{}},winRateWorker:null,winRateRequestId:0,cancelWinRateRequest:null,WIN_RATE_IDLE_TIMEOUT_MS:120000,setTimeout,clearTimeout,CS_NET_DEFAULT_PROVIDER:'wasm-int8',CS_NET_DEFAULT_BATCH_SIZE:16,emitPlaybackEvent:e=>events.push(e),console:{info:()=>{}}};
+  const ctx={Worker:FakeWorker,URL,Error,route:{query:{}},winRateWorker:null,winRateRequestId:0,cancelWinRateRequest:null,winRateSkipRequest:null,WIN_RATE_IDLE_TIMEOUT_MS:120000,setTimeout,clearTimeout,CS_NET_DEFAULT_PROVIDER:'wasm-int8',CS_NET_DEFAULT_BATCH_SIZE:16,emitPlaybackEvent:e=>events.push(e),console:{info:()=>{}}};
   const cancel=source.match(/function cancelWinRate\([\s\S]*?\n}(?=\n)/)?.[0]??'';
   const fn=source.match(/function inferWinRate\([\s\S]*?\n}(?=\n)/)[0].replaceAll('import.meta.url',JSON.stringify('file:///viewer/DemoAnalyzerView.vue'));
   runInNewContext(stripTypeScriptTypes(cancel+'\n'+fn),ctx);
@@ -41,9 +41,10 @@ describe.skipIf(!source)('actual win-rate Worker error ownership',()=>{
     const h=harness();
     try{
       h.start();const old=h.workers[0],oldMessage=old.onmessage;const pending=h.start(),current=h.workers[1];
+      const initialEvents=h.events.length;
       oldMessage({data:{type:'progress',requestId:old.request.requestId,phase:'inference',completed:1,total:2}});
       current.onmessage({data:{type:'progress',requestId:current.request.requestId,phase:'inference',completed:1,total:2}});
-      expect(h.events).toHaveLength(1);expect(h.events[0].type).toBe('ANALYSIS_PROGRESS');
+      expect(h.events).toHaveLength(initialEvents+1);expect(h.events.at(-1).type).toBe('ANALYSIS_PROGRESS');
       ready(current);await pending;
     }finally{h.cleanup();}
   });

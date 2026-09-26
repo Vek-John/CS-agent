@@ -10,7 +10,7 @@ function harness(){
   vi.useFakeTimers();const workers=[],events=[];
   class FakeWorker{constructor(){this.terminate=vi.fn();workers.push(this);}postMessage(request){this.request=request;}}
   const replay={players:[{steamId:'player',name:'Player',startSide:'T'}],rounds:[{frames:[{}]}]};
-  const ctx={Worker:FakeWorker,URL,Error,AbortController,setTimeout,clearTimeout,performance,console:{info:()=>{}},route:{query:{},params:{}},winRateWorker:null,winRateRequestId:0,cancelWinRateRequest:null,
+  const ctx={Worker:FakeWorker,URL,Error,AbortController,setTimeout,clearTimeout,performance,console:{info:()=>{}},route:{query:{},params:{}},winRateWorker:null,winRateRequestId:0,cancelWinRateRequest:null,winRateSkipRequest:null,
     CS_NET_DEFAULT_PROVIDER:'wasm-int8',CS_NET_DEFAULT_BATCH_SIZE:16,WIN_RATE_IDLE_TIMEOUT_MS:120000,
     emitPlaybackEvent:e=>events.push(e),buildCs2dAnalysisBundle:vi.fn(input=>({test:true,hasWinRate:!!input.winProbabilityTimeline})),serializeCs2dAnalysisBundle:JSON.stringify,
     parser:{cancel:vi.fn(),replay:{value:replay},demoContentHash:{value:'a'.repeat(64)},hashLatencyMs:{value:1}},

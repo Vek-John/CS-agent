@@ -92,6 +92,7 @@ export interface AnalysisFailedEvent {
   message: string;
 }
 export interface AnalysisProgressEvent {
+  analysisRequestId?: number;
   type: "ANALYSIS_PROGRESS";
   schemaVersion: "cs2d-analysis-progress.v1";
   selectedPlayerId: string;
@@ -254,6 +255,7 @@ export type PlaybackCommand =
   | { type: "seekCanonicalTick"; canonicalTick: number }
   /** Strict recovery/player-selection command; the iframe resolves the id locally. */
   | { type: "selectPlayer"; playerId: string }
+  | { type: "skipWinRate"; selectedPlayerId: string; analysisRequestId: number }
   | { type: "selectRound"; roundIndex: number }
   | { type: "setSpeed"; speed: number }
   | { type: "setCamera"; mode: PlaybackCameraMode }
@@ -425,7 +427,8 @@ function isEvent(value: unknown): value is PlaybackBridgeEvent {
       nonEmpty(value.message) && value.message.length <= 512;
   }
   if (value.type === "ANALYSIS_PROGRESS") {
-    return exactKeys(value, ["type", "schemaVersion", "selectedPlayerId", "phase", "completed", "total", "detail"]) &&
+    return exactKeys(value, ["type", "schemaVersion", "selectedPlayerId", "phase", "completed", "total", "detail", ...(Object.prototype.hasOwnProperty.call(value, "analysisRequestId") ? ["analysisRequestId"] : [])]) &&
+      (value.analysisRequestId === undefined || (Number.isSafeInteger(value.analysisRequestId) && (value.analysisRequestId as number) > 0)) &&
       value.schemaVersion === "cs2d-analysis-progress.v1" && nonEmpty(value.selectedPlayerId) &&
       (value.phase === "downloading" || value.phase === "inference" || value.phase === "unavailable") &&
       finite(value.completed) && value.completed >= 0 && finite(value.total) && value.total >= 0 &&
@@ -464,6 +467,7 @@ export function isPlaybackCommandEnvelope(value: unknown): value is PlaybackComm
   }
   if (payload.type === "seekCanonicalTick") return exactKeys(payload, ["type", "canonicalTick"]) && finite(payload.canonicalTick);
   if (payload.type === "selectPlayer") return exactKeys(payload, ["type", "playerId"]) && nonEmpty(payload.playerId) && payload.playerId.length <= 160;
+  if (payload.type === "skipWinRate") return exactKeys(payload, ["type", "selectedPlayerId", "analysisRequestId"]) && nonEmpty(payload.selectedPlayerId) && payload.selectedPlayerId.length <= 160 && Number.isSafeInteger(payload.analysisRequestId) && (payload.analysisRequestId as number) > 0;
   if (payload.type === "selectRound") return exactKeys(payload, ["type", "roundIndex"]) && safeIndex(payload.roundIndex);
   if (payload.type === "setSpeed") return exactKeys(payload, ["type", "speed"]) && finite(payload.speed) && payload.speed > 0 && payload.speed <= 16;
   if (payload.type === "setCamera") return exactKeys(payload, ["type", "mode"]) && (payload.mode === "full" || payload.mode === "target");

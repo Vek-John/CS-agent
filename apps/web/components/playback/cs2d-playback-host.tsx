@@ -169,6 +169,7 @@ import {
   SessionRecoveryStatus,
   type SessionRecoveryStatusKind,
 } from "./session-recovery-status";
+import { WinRateFallbackControl, type WinRateFallbackTarget } from "../../lib/coaching/win-rate-user-fallback";
 import { CoachSetupFlow, type CoachSetupStep } from "./coach-setup-flow";
 import { LiquidPhaseStatus } from "./liquid-phase-status";
 import { ReviewHistorySidebar, type ReviewHistoryItem } from "../history/review-history-sidebar";
@@ -393,6 +394,8 @@ export function Cs2dPlaybackHost({
   const teachingThreadsRef = useRef<readonly LearningThread[]>([]);
   const [analysisError, setAnalysisError] = useState<string>();
   const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgressEvent>();
+  const winRateFallbackRef = useRef(new WinRateFallbackControl());
+  const [winRateFallback, setWinRateFallback] = useState<WinRateFallbackTarget>();
   const [reviewPreparationStatus, setReviewPreparationStatus] = useState<ReviewPreparationStatus>();
   // Kept out of visible copy: telemetry is a validation/diagnostics boundary,
   // not a player-facing performance control.
@@ -643,6 +646,7 @@ export function Cs2dPlaybackHost({
   }, [acceptRecoveryResult, currentStableRecoveryRecord]);
 
   const invalidateGeneration = useCallback(() => {
+    winRateFallbackRef.current.close(); setWinRateFallback(undefined);
     stage2AckTimeoutRef.current.clear();
     stage2AdapterRef.current.cancel(generationRef.current);
     stage3ControllerRef.current?.reset();
@@ -1631,6 +1635,7 @@ export function Cs2dPlaybackHost({
       ) return;
 
       if (payload.type === "DEMO_IMPORT_REQUESTED") {
+        winRateFallbackRef.current.close(); setWinRateFallback(undefined);
         historyOpenEpochRef.current += 1;
         historyRestoreControllerRef.current?.cancel();
         expectedManagedSourceRef.current = { requestId: payload.requestId };
@@ -1768,6 +1773,7 @@ export function Cs2dPlaybackHost({
       }
       if (payload.type === "ANALYSIS_PROGRESS") {
         if (!analysisEventMatchesSelectedPlayer(selectedPlayerIdRef.current, payload.selectedPlayerId)) return;
+        setWinRateFallback(winRateFallbackRef.current.update(payload, selectedPlayerIdRef.current, historyPlaybackOnlyRef.current || Boolean(liveSessionRef.current)));
         setAnalysisProgress(payload);
         return;
       }
@@ -1801,6 +1807,7 @@ export function Cs2dPlaybackHost({
         return;
       }
       if (payload.type === "ANALYSIS_READY") {
+        if (analysisEventMatchesSelectedPlayer(selectedPlayerIdRef.current, payload.selectedPlayerId)) { winRateFallbackRef.current.close(); setWinRateFallback(undefined); }
         void runHistoryAnalysisGeneration(historyPlaybackOnlyRef.current, async () => {
         if (!analysisEventMatchesSelectedPlayer(selectedPlayerIdRef.current, payload.selectedPlayerId)) return;
         if (handleRecoveryAnalysisReady(payload)) return;
@@ -3165,6 +3172,14 @@ export function Cs2dPlaybackHost({
       : phase === "READY"
         ? `${replay?.map ?? "Demo"} 已就绪`
         : "回放暂不可用";
+  const chooseBasicRoute = (target: WinRateFallbackTarget) => {
+    if (!iframeRef.current?.contentWindow || historyPlaybackOnlyRef.current || liveSessionRef.current || selectedPlayerIdRef.current !== target.selectedPlayerId) return;
+    const command = winRateFallbackRef.current.claim(target);
+    if (!command) return;
+    setWinRateFallback(winRateFallbackRef.current.current);
+    send(command);
+  };
+
   const analysisPercent = analysisProgress && analysisProgress.total > 0
     ? Math.round((analysisProgress.completed / analysisProgress.total) * 100)
     : undefined;
@@ -3258,10 +3273,12 @@ export function Cs2dPlaybackHost({
             title="cs2d 本地 Demo 回放"
             allow="fullscreen; cross-origin-isolated"
             onLoad={() => {
+              winRateFallbackRef.current.reset(); setWinRateFallback(undefined);
               stage3ControllerRef.current?.bridgeLost();
               setPhase((current) => current === "BOOTING" ? "WAITING_FOR_DEMO" : current);
             }}
             onError={() => {
+              winRateFallbackRef.current.reset(); setWinRateFallback(undefined);
               stage3ControllerRef.current?.bridgeLost();
               setPhase("ERROR");
             }}
@@ -3340,7 +3357,7 @@ export function Cs2dPlaybackHost({
             </section>
           ) : null}
 
-          {!session && !recoveryStatusKind ? <CoachSetupFlow steps={setupSteps} /> : null}
+          {!session && !recoveryStatusKind ? <CoachSetupFlow steps={setupSteps} winRateFallback={winRateFallback && !historyPlaybackOnlyRef.current && winRateFallback.selectedPlayerId === selected?.playerId ? { requested: winRateFallback.requested, onChoose: () => chooseBasicRoute(winRateFallback) } : undefined} /> : null}
 
           {diagnosticsEnabled && activeTeachingCase?.status !== "FALLBACK" && session && (!userTookOver || Boolean(session.manual_cue_visit)) && cue && (cueRevealed || session.manual_cue_visit?.cue_id === cue.id) && session.phase === "PAUSED_FOR_COACHING" && session.outcome_completion?.status === "COMPLETE" ? (
             <TeachingDiagnosisPanel

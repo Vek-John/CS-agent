@@ -2,6 +2,18 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：等待胜率时主动转基础路线（2026-09-27）
+
+- ID win-rate-user-fallback，基线009ce8a clean；真实7f2b checkout复用，partial_revision_restore默认配置独占Host/setup flow、bridge contract、Viewer/0030/registry与对应tests；root独占docs/ARCH、独立复查和最终TS/build/commit push。上轮执行者已完成并RELEASE，无重复派发；其他工作树不动。
+- 用户路径：选人→胜率计算期间显示“先用基础路线”及不含胜率的说明→点击→结束当前可选推理→既有基础Adapter路线，后续晚模型结果不覆盖。正常成功、生命周期取消与用户主动跳过分开；历史RESTORE不出现入口也不启动模型。
+- A1小Worker pending→当前身份命令→立即清理并仅一次基础bundle；A2错player/旧request/重复/完成后/换Demo/卸载不污染新任务；A3两端严格schema、旧progress兼容、Host按钮与本轮pending绑定，交互及时且原生键盘可用；A4相关tests、两端TS/build、源码独立复查后push。有限实现不改算法、引用门、数据库或持久化路线。
+- 风险预检：parent/Stage双bridge监听、Host多处reset、同玩家新request及迟到命令；命令携带当前推理身份并在Viewer结算一次，不能用无身份全局cancel。5分钟接口/首例检查、20分钟有限实现，每test60秒；小Replay/FakeWorker，零真实模型/大Demo/用户库/安装，两次相同基础设施失败即简化。执行者清理测试timer/Worker/临时checkout，root负责构建与有条件的独立UI小验收；emil/apple沿既有样式与reduced偏好，无新动画。
+
+
+- 交付：9项新Viewer/bridge source、3项Host helper/组件、2项schema，共14新增；7文件66相关tests通过。主控独立读关键diff/协议/取消生命周期后，两端TS/build通过；Web首次TS暴露可选链相等无法收窄this.target，改显式current存在检查，受影响3tests及Web TS/build复验通过。0030当前reuse、隔离0029→0030升级/再reuse通过，执行者RELEASE，临时资源清理。
+- 界面独立验证：IAB隐藏tab加载真实CoachSetupFlow与helper/CSS，Return仅发1命令、按钮立即禁用/status更新，再按Return仍1；340px宽未溢出。保留reduced样式，新区无动画/透明层；未切换OS偏好、未作真实Demo整场GUI。临时本地页与服务器已关闭。[验证记录](validation/WIN_RATE_USER_FALLBACK.md)。
+- 下一有限目标（win-rate-first-progress-cost）：已有idle策略和用户主动出口，接下来核实现有本地模型资产与真实runtime telemetry能否分清模型读取、session创建和首批推理的等待。先读已有测量，缺少新证据才做单一小样本；资产/运行时不齐就记录具体缺项，不下载/安装、不重跑整场或同一拒判集合。以确定下一处等待优化为交付，不为增加监控字段而改代码。
+
 ## 已交付：可选胜率停滞不阻断基础带看（2026-09-27）
 
 - ID win-rate-idle-fallback，基线358329d clean；partial_revision_restore默认配置独占0029/Viewer生命周期/registry及source测试，root独占apps/web新增无胜率启动验证、docs、最终独立审查/两端TS/build/commit push。核实inferWinRate及模型fetch/create/run无结果期限，Host只展示progress；既有catch已能生成基础bundle，但Worker无消息时不可达。

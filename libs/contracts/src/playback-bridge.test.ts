@@ -366,3 +366,22 @@ describe("cs2d playback bridge", () => {
     })).toBe(true);
   });
 });
+
+describe("identified optional win-rate fallback", () => {
+  const command = { type: "skipWinRate", selectedPlayerId: "player", analysisRequestId: 1 };
+  const envelope = (payload: unknown) => ({ channel: PLAYBACK_BRIDGE_CHANNEL, direction: "command", payload });
+  it("requires an exact player/request command with a positive safe integer", () => {
+    expect(isPlaybackCommandEnvelope(envelope(command))).toBe(true);
+    for (const analysisRequestId of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, "1", undefined]) expect(isPlaybackCommandEnvelope(envelope({ ...command, analysisRequestId }))).toBe(false);
+    expect(isPlaybackCommandEnvelope(envelope({ ...command, extra: true }))).toBe(false);
+    expect(isPlaybackCommandEnvelope(envelope({ ...command, selectedPlayerId: " " }))).toBe(false);
+  });
+  it("accepts both legacy progress and valid identified progress, rejecting new malformed fields", () => {
+    const progress = { type: "ANALYSIS_PROGRESS", schemaVersion: "cs2d-analysis-progress.v1", selectedPlayerId: "player", phase: "inference", completed: 0, total: 1, detail: "pending" };
+    const event = (payload: unknown) => ({ channel: PLAYBACK_BRIDGE_CHANNEL, direction: "event", payload });
+    expect(isPlaybackEventEnvelope(event(progress))).toBe(true);
+    expect(isPlaybackEventEnvelope(event({ ...progress, analysisRequestId: 1 }))).toBe(true);
+    for (const analysisRequestId of [0, -1, 1.5, NaN, Infinity, "1"]) expect(isPlaybackEventEnvelope(event({ ...progress, analysisRequestId }))).toBe(false);
+    expect(isPlaybackEventEnvelope(event({ ...progress, analysisRequestId: 1, rawReplay: {} }))).toBe(false);
+  });
+});

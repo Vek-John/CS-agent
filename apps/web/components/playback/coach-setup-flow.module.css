@@ -164,3 +164,7 @@
   .copy p,
   .privacy { color: var(--text-secondary); }
 }
+
+.optionalAnalysis { padding: 0.65rem 0.78rem; display: grid; gap: 0.5rem; }
+.optionalAnalysis p { margin: 0; color: var(--text-secondary); font-size: 0.7rem; line-height: 1.5; }
+.optionalAnalysis button { justify-self: start; max-width: 100%; }

@@ -24,7 +24,7 @@ const STATE_LABEL: Record<CoachSetupStepState, string> = {
   error: "需要处理",
 };
 
-export function CoachSetupFlow({ steps }: { steps: readonly CoachSetupStep[] }) {
+export function CoachSetupFlow({ steps, winRateFallback }: { steps: readonly CoachSetupStep[]; winRateFallback?: { requested: boolean; onChoose: () => void } }) {
   return (
     <section className={styles.flow} aria-labelledby="coach-setup-title">
       <div className={styles.heading}>
@@ -62,6 +62,10 @@ export function CoachSetupFlow({ steps }: { steps: readonly CoachSetupStep[] }) 
           </li>
         ))}
       </ol>
+      {winRateFallback ? <div className={styles.optionalAnalysis}>
+        <p role="status">{winRateFallback.requested ? "正在切换到基础路线…" : "胜率分析仍在准备。可以先开始带看，本次不包含胜率分析。"}</p>
+        <button type="button" className="cs2d-coach-primary" disabled={winRateFallback.requested} onClick={winRateFallback.onChoose}>先用基础路线</button>
+      </div> : null}
       <p className={styles.privacy}><ShieldCheck aria-hidden="true" />Demo 文件和比赛回放只保存在本机</p>
     </section>
   );

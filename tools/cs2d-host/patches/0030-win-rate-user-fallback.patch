@@ -1,0 +1,118 @@
+diff --git a/apps/app/src/viewer/DemoAnalyzerView.vue b/apps/app/src/viewer/DemoAnalyzerView.vue
+--- a/apps/app/src/viewer/DemoAnalyzerView.vue
++++ b/apps/app/src/viewer/DemoAnalyzerView.vue
+@@ -132,6 +132,13 @@
+ let winRateWorker: Worker | null = null
+ let winRateRequestId = 0
+ let cancelWinRateRequest: (() => void) | null = null
++let winRateSkipRequest: { requestId: number; selectedPlayerId: string; skip: () => void } | null = null
++
++function skipWinRate(command: { selectedPlayerId: string; analysisRequestId: number }) {
++  const pending = winRateSkipRequest
++  if (managedSource.value?.mode === 'RESTORE' || !pending || pending.requestId !== command.analysisRequestId || pending.selectedPlayerId !== command.selectedPlayerId) return
++  pending.skip()
++}
+ // Optional model capability policy: effective progress extends this idle window.
+ const WIN_RATE_IDLE_TIMEOUT_MS = 120_000
+ 
+@@ -158,16 +165,21 @@
+       worker.terminate()
+       if (worker === winRateWorker) winRateWorker = null
+       if (cancelWinRateRequest === cancel) cancelWinRateRequest = null
++      if (winRateSkipRequest === skipRequest) winRateSkipRequest = null
+       if (error) reject(error)
+       else resolve(timeline!)
+     }
+     const cancel = () => finish(undefined, Object.assign(new Error('胜率计算已取消。'), { code: 'WIN_RATE_CANCELLED' }))
+     cancelWinRateRequest = cancel
++    const skipRequest = { requestId, selectedPlayerId, skip: () => finish(undefined, Object.assign(new Error('已选择基础路线，本次不包含胜率分析。'), { code: 'WIN_RATE_SKIPPED' })) }
++    winRateSkipRequest = skipRequest
+     const renewIdleDeadline = () => {
+       clearTimeout(timer)
+       timer = setTimeout(() => finish(undefined, Object.assign(new Error('胜率计算长时间没有进展，改用基础教练路线。'), { code: 'WIN_RATE_IDLE_TIMEOUT' })), WIN_RATE_IDLE_TIMEOUT_MS)
+     }
+     renewIdleDeadline()
++    emitPlaybackEvent({ type: 'ANALYSIS_PROGRESS', schemaVersion: 'cs2d-analysis-progress.v1', selectedPlayerId, analysisRequestId: requestId,
++      phase: 'inference', completed: 0, total: replay.rounds.reduce((sum, round) => sum + round.frames.length, 0), detail: '正在运行胜率模型' })
+     worker.onmessage = (event: MessageEvent<WinRateWorkerResponse>) => {
+       const message = event.data
+       if (settled || worker !== winRateWorker || message.requestId !== requestId) return
+@@ -192,7 +204,7 @@
+           maximum[phase] = message.completed
+           renewIdleDeadline()
+         }
+-        emitPlaybackEvent({ type: 'ANALYSIS_PROGRESS', schemaVersion: 'cs2d-analysis-progress.v1', selectedPlayerId,
++        emitPlaybackEvent({ type: 'ANALYSIS_PROGRESS', schemaVersion: 'cs2d-analysis-progress.v1', selectedPlayerId, analysisRequestId: requestId,
+           phase, completed: message.completed, total: message.total, detail: message.detail ?? '' })
+         return
+       }
+@@ -267,15 +279,6 @@
+       const routeId = Array.isArray(route.params.id) ? route.params.id[0] : route.params.id
+       let winProbabilityTimeline: WinProbabilityTimelineV1 | undefined
+       try {
+-        emitPlaybackEvent({
+-          type: 'ANALYSIS_PROGRESS',
+-          schemaVersion: 'cs2d-analysis-progress.v1',
+-          selectedPlayerId: player.steamId,
+-          phase: 'inference',
+-          completed: 0,
+-          total: replay.rounds.reduce((sum, round) => sum + round.frames.length, 0),
+-          detail: '正在运行胜率模型',
+-        })
+         winProbabilityTimeline = await inferWinRate(replay as unknown as Cs2dReplay, player.steamId)
+         if (managedLibraryMode.value && (!isManagedLoadCurrent(selectionGeneration) || managedReadyGeneration !== selectionGeneration)) return
+       } catch (modelError) {
+@@ -1044,6 +1047,7 @@
+   if (hostMode.value) {
+     stopHostSelectionBridge = listenForPlaybackCommands({
+       selectPlayer: (playerId) => { void selectHostPlayer(playerId) },
++      skipWinRate,
+       requestDemoPicker: pick,
+       persistSelectedDemo: (command) => { void persistSelectedDemo(command) },
+       loadManagedDemo: (command) => { void loadManagedDemo(command) },
+diff --git a/apps/app/src/viewer/player/hostBridge.ts b/apps/app/src/viewer/player/hostBridge.ts
+--- a/apps/app/src/viewer/player/hostBridge.ts
++++ b/apps/app/src/viewer/player/hostBridge.ts
+@@ -103,6 +103,7 @@
+ }
+ 
+ export interface AnalysisProgressMessage {
++  analysisRequestId?: number
+   type: 'ANALYSIS_PROGRESS'
+   schemaVersion: 'cs2d-analysis-progress.v1'
+   selectedPlayerId: string
+@@ -180,6 +181,7 @@
+   | { type: 'teachingPlayback'; callId: string; runId: string; cueId: string; generation: number; action: 'pause' | 'resume' | 'cancel' }
+   | { type: 'seekCanonicalTick'; canonicalTick: number }
+   | { type: 'selectPlayer'; playerId: string }
++  | { type: 'skipWinRate'; selectedPlayerId: string; analysisRequestId: number }
+   | { type: 'selectRound'; roundIndex: number }
+   | { type: 'setSpeed'; speed: number }
+   | { type: 'setCamera'; mode: PlaybackCameraMode }
+@@ -350,6 +352,8 @@
+       return Object.keys(payload).length === 2 && isFiniteNumber(payload.canonicalTick)
+     case 'selectPlayer':
+       return hasExactKeys(payload, ['type', 'playerId']) && typeof payload.playerId === 'string' && !!payload.playerId.trim() && payload.playerId.length <= 160
++    case 'skipWinRate':
++      return hasExactKeys(payload, ['type', 'selectedPlayerId', 'analysisRequestId']) && typeof payload.selectedPlayerId === 'string' && !!payload.selectedPlayerId.trim() && payload.selectedPlayerId.length <= 160 && Number.isSafeInteger(payload.analysisRequestId) && (payload.analysisRequestId as number) > 0
+     case 'selectRound':
+       return Object.keys(payload).length === 2 && isFiniteNumber(payload.roundIndex) && Number.isInteger(payload.roundIndex) && payload.roundIndex >= 0
+     case 'setSpeed':
+@@ -429,6 +433,7 @@
+ export function listenForPlaybackCommands(
+   handlers: {
+     selectPlayer?: (playerId: string) => void
++    skipWinRate?: (command: Extract<PlaybackCommand, { type: 'skipWinRate' }>) => void
+     requestDemoPicker?: () => void
+     persistSelectedDemo?: (command: Extract<PlaybackCommand, { type: 'persistSelectedDemo' }>) => void
+     loadManagedDemo?: (command: Extract<PlaybackCommand, { type: 'loadManagedDemo' }>) => void
+@@ -463,6 +468,9 @@
+         break
+       case 'selectPlayer':
+         handlers.selectPlayer?.(command.playerId)
++        break
++      case 'skipWinRate':
++        handlers.skipWinRate?.(command)
+         break
+       case 'selectRound':
+         handlers.selectRound(command.roundIndex)

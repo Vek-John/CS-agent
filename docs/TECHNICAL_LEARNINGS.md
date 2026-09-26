@@ -8,6 +8,14 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：用户跳过可选推理必须绑定当前请求
+
+- 问题：空闲期限只能处理停滞；真实进度持续推进但耗时较长时，用户仍无法主动进入基础带看。直接暴露全局cancel会误伤后继推理，且已有生命周期取消语义会退出选择流程而非生成基础路线。
+- 决策：进度可选携带analysisRequestId，新skipWinRate命令精确绑定当前请求和玩家；用户SKIPPED走既有UNAVAILABLE回退，生命周期CANCELLED仍早退。Host保存当前请求对象身份，按钮claim一次、立即禁用；旧渲染回调不能操作重载后数字ID相同的新请求。旧无身份进度可显示但不暴露按钮。
+- UI取舍：沿既有准备卡新增“先用基础路线”及本次不含胜率的说明，原生button、静态及时反馈和原有reduced样式。独立localhost使用真实组件及请求控制helper验证，不能代替真实Demo/桌面端到端验收。
+- 验证：14新增/66相关tests，两端TS/build，0030尾升级/reuse通过。独立真实控件+helper的IAB键盘点击与去重通过。首次Web TS失败源于可选链比较未收窄current，显式检查后3项受影响测试及TS/build复验通过。[记录](validation/WIN_RATE_USER_FALLBACK.md)。
+- 限制：未做真实模型/Demo整场GUI；源码保留reduced偏好但未改变OS设置验证。不把基础路线可启动声称为模型专业判断改善，不在冻结路线中后台补入晚模型结果。
+
 ## 2026-09-27：可选模型的停滞不能阻断基础路线
 
 - 问题：selectHostPlayer等待inferWinRate，模型Worker不返回时既有catch回退永远不可达。直接terminate旧Worker还会留下未结算Promise。
