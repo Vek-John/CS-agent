@@ -348,18 +348,30 @@ function economyFor(input: Stage3HostAdapterInput): {
   return { ref, economyClass };
 }
 
+const OMITTED_NARRATION_FIELD = "该段讲解无法在工具选择摘要预算内完整保留，已整段省略；不能据此推断原意。";
+
 function narrationField(field: NarrationBundle[keyof Pick<NarrationBundle, "currentSituation" | "playerAction" | "coreIssue" | "betterPlay" | "outcomeImpact">]): Stage3NarrationFieldSummary {
-  return {
-    text: field.text.slice(0, 240),
-    refs: unique(field.refs).slice(0, 8),
-    limitations: unique(field.limitations ?? []).slice(0, 4),
-  };
+  const refs = unique(field.refs);
+  const limitations = unique(field.limitations ?? []);
+  // Text, evidence and qualifications are one statement: a prefix can reverse its meaning.
+  if (field.text.length > 240 || refs.length > 8 || limitations.length > 4 || limitations.some(value => value.length > 160)) {
+    return { text: "", refs: [], limitations: [OMITTED_NARRATION_FIELD] };
+  }
+  return { text: field.text, refs, limitations };
 }
 
 export function buildStage3NarrationSummary(
   narration: NarrationBundle,
   readiness: "READY" | "FALLBACK",
 ): Stage3NarrationSummary {
+  const fields = {
+    currentSituation: narrationField(narration.currentSituation),
+    playerAction: narrationField(narration.playerAction),
+    coreIssue: narrationField(narration.coreIssue),
+    betterPlay: narrationField(narration.betterPlay),
+    outcomeImpact: narrationField(narration.outcomeImpact),
+  };
+  const omittedFields = Object.values(fields).filter(field => field.limitations.includes(OMITTED_NARRATION_FIELD)).length;
   return {
     primaryFocusCode: narration.primaryFocusCode,
     readiness,
@@ -369,14 +381,8 @@ export function buildStage3NarrationSummary(
       ...(narration.coreIssue.limitations ?? []),
       ...(narration.betterPlay.limitations ?? []),
       ...(narration.outcomeImpact.limitations ?? []),
-    ].length),
-    fields: {
-      currentSituation: narrationField(narration.currentSituation),
-      playerAction: narrationField(narration.playerAction),
-      coreIssue: narrationField(narration.coreIssue),
-      betterPlay: narrationField(narration.betterPlay),
-      outcomeImpact: narrationField(narration.outcomeImpact),
-    },
+    ].length + omittedFields),
+    fields,
   };
 }
 

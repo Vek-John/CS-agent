@@ -672,6 +672,8 @@ LLM 只能选择 `capabilityId`；速度、cue 范围、actor/annotation/callout
 
 该用途通过 capability、严格事件、Policy 输入和 TeachingMove 传播；默认 Policy 要求匹配的用途及 ACTION 命名空间，使用 `RECORDED_ACTION_NEEDS_REPLAY` 理由。缺用途的现行判断类别、错用途、缺动作或未完成结果继续 FINISH；旧无用途的合法 focus 沿用既有规则。当前判断类别下地图/轨迹/胜率/经济的新用途尚未开放，需要各自来源与贯通验证。用途元数据不进入 Viewer 参数，不改变单工具预算、路线、暂停、取消或恢复身份门。
 
+Stage3供工具选择使用的讲解摘要，将每字段正文、引用和限定作为整体：在既有正文240字符、8条引用、4条限定且每条160字符预算内完整保留（重复引用/限定去重）；任一超限时清空该字段正文和引用，以明确的整段省略说明代替，并计入原上限8的limitationCount。不截取句子前缀或丢弃尾部限定后仍把剩余文字作为完整陈述。此投影不改用户看到的完整Narration、工具资格或已保存摘要，不扩大原摘要/请求总预算。当前零/单能力路径不调用Provider，旧focus多能力路径可将此摘要交给可选Policy模型。
+
 工具请求使用稳定 `callId = runId + cueId + graphStep + capabilityId` 的确定性派生值。`interrupt` 前不得发生外部副作用；Host 保存 capability registry、拒绝列表外参数、去重同一 callId，执行后用 `Command resume` 返回 `AgentToolResult`。由于恢复会从节点开头重执行，任何节点都必须先读取当前 Playback/Session 事实，不能盲目重复播放。首版不提供网页搜索、Shell、raw Replay 查询、任意 seek、任意坐标、职业案例生成或 Critic/反思 Agent。
 
 ### 6.8 Playback

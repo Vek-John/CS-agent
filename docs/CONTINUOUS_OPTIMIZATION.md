@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：工具选择摘要的完整条件（2026-09-26）
+
+- ID policy-summary-conditions，基线da0f511 clean；root拥有生产/文档，revision_semantics_review默认配置独占新policy-summary-conditions.test.ts，8分钟首例/12分钟上限。先核实合法长Narration→实际Host/Graph Policy输入，不能只看slice宣称错误。
+- 目标/验收：A1真实输入尾部否定/条件丢失红例；A2既有240字符和总预算内整段保留或明确整段省略，不能将半句与原引用当完整；A3短内容、工具资格、取消/恢复及默认确定性行为保持；A4相关tests/TS/build、证据和同分支push。没有复现则闭合假设。
+- 边界/风险：不扩模型预算、不改Narrator讲解正文/持久化/工具权限，不泛化全文摘要重构；明确默认deterministic和可选Provider影响，provider仅mock，不模型/网络/用户DB/Demo/UI/安装。进程由执行者清理，原A5独立。
+- 实际链：合法长fact→deterministicNarration及两处正常语义校验→真实Host/Graph中240字符前缀丢条件；显式旧focus多能力Policy spy也收到截断。2红1绿；默认当前单能力走RULE，未声称默认模型误判。
+- 修复/交付：正文+refs+限定整体超预算则明确整段省略并清refs，短文/240边界完整，原正文不变。最终7新tests及34其他相关tests、TS和production build通过；代理RELEASE，主控追加预算反例并审阅真实diff。[证据](validation/POLICY_SUMMARY_CONDITIONS.md)。无后台资源。
+- 下一项转回默认带看体验：已定位面板“跳过，直接看分析”→skipTeachingReflection与UNKNOWN/SKIPPED投影；有限核实用户不填反思时实际分析/保存/继续下一段是否连贯，不把已有按钮当缺失功能，也不再扩大摘要完整性检查。
+
 ## 已核实：旧位置标注被当前工具资格门挡住（2026-09-26）
 
 - ID annotation-consumption，基线4d25954 clean；主控拥有必要实现/测试/docs，revision_semantics_review默认配置8分钟只读追踪实际Adapter→cue→Stage3/Stage2/诊断，不改文件或启动服务。
