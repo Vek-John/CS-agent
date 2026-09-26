@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：历史后台请求等待上限（2026-09-26）
+
+- 基线f772ba9 clean；主控有限goal独占API/目标tests/docs；原owner已RELEASE。真实list route默认30/max50条摘要，不携带Artifact；markFailed是小PATCH状态DTO，仍直接fetch/json无界。
+- 目标/流程：列表或失败状态请求→fetch/body共用20秒→本地失败结算与best-effort abort→既有刷新释放loading、保留后台保存警告；失败收尾随后可继续尝试一次列表读取，本地Session已独立启动。A1 API两类fetch/body挂起红例；A2真实refresh/settlement接线可结束、晚响应不发布且零自动retry；A3 query/摘要映射/HTTP code和void PATCH语义保持，大detail/AnalysisBundle不套期限；A4相关tests/TS/build，窄独审；A5架构学习证据push。
+- 边界/预检：复用现有requestJsonWithDeadline和小JSON解析，避免新增请求框架；每请求20秒非整链20秒、非服务端取消保证，原owner guard保留。不扩create/revision/detail/删除等未核实请求，不改SQLite/Graph/模型；5分钟红例、8分钟实现、10分钟验证，无用户数据/DB/Demo/服务/安装部署，主控清测试/build，原UI A5仍独立待验。
+
+- 结果：3红→绿，新增8项覆盖两种请求fetch/body、实际后台串联释放loading/保留警告、查询/摘要映射、HTTP code、void PATCH与大detail隔离。相关6文件66tests、TS/production build通过；主控实际diff复核，revision_semantics_review只读窄审无must-fix、RELEASE。[证据](validation/HISTORY_BOOKKEEPING_DEADLINE.md)。API修改仅用途枚举/两入口，0新依赖或UI组件。
+- 后继：真实Host loadMoreReviewHistory仍无request/search/cursor归属复核；首屏新搜索刷新后，旧分页晚响应可能追加旧结果并改cursor/loading。下一轮小复现并接同一明确列表归属，不扩缓存/通用请求框架。后台单请求20秒非整链/服务端保证，原A5独立待验；测试/build退出，commit/push后释放。
+
 ## 已交付：起点收尾不阻挡基础会话激活（2026-09-26）
 
 - 基线5558690 clean；主控有限goal独占Host/route-integration及tests/docs，既有owner已RELEASE。实际证据：成功durabilityCommit包含await列表刷新；失败catch等待markFailed再列表刷新，最后才activateSession。

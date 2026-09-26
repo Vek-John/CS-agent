@@ -2031,3 +2031,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：durabilityCommit仅含真正保存，settlePreparedCoachingStart区分已确认/未确认后调用原激活函数，旁路独立观察收尾错误；保存未结束和旧代际仍拒绝提前激活。首屏刷新按请求/代际发布，后台不清已有警告，主动刷新行为保持。不改Graph/Session门/存储协议。
 - 验证：生产协调函数→真实activatePreparedCoachingSession→Session，3种收尾悬挂均已挂载且只启动一次；保存未决/切代/晚标记/收尾错误与激活异常分类覆盖。独审发现列表失败仍覆盖“保存未确认”，抽出当前refresh-history-page副作用并验证成功/失败保留警告、晚结果与普通手动刷新。最终4文件73tests、TS/production build通过。[证据](validation/PREPARED_START_BOOKKEEPING.md)。
 - 分工/限制：主控全部实现；默认revision_semantics_review只读独审并确认修复，无其他写owner或服务。未测完整Host/浏览器或真实网络；没有用户Demo/DB/密钥/模型/安装部署。后台status/list本身仍无期限，当前仅解除其启动依赖，下一项针对小DTO生命周期收敛。
+
+
+## 2026-09-26：后台历史小请求也要结束本地等待
+
+- 问题：上一轮已让Session不等历史收尾，但list和markFailed仍直接fetch/json；状态请求悬挂会阻止后续列表读取，列表悬挂会留下loading。服务端list只返回分页摘要（默认30/max50），不包含大Artifact，适合已有小请求期限。
+- 决定：API内已有有界JSON保存helper扩为CHECKPOINT/TEACHING/HISTORY三个明确用途，只有list/markFailed新增HISTORY_REQUEST_TIMEOUT与每请求20秒；保留原body/query、错误code与void ACK，detail/大产物不套用，零自动retry。
+- 验证：两类fetch挂起与实际settlement→API→refresh收尾共3红→绿；fetch/body各覆盖非合作abort、晚响应不发布、timer清理。正常摘要/搜索cursor/HTTP错误/PATCH空JSON与大detail隔离保持。最终6文件66tests、TS/production build通过；默认revision_semantics_review只读窄审无must-fix，RELEASE。[证据](validation/HISTORY_BOOKKEEPING_DEADLINE.md)。
+- 限制：fake transport/生产模块验证，不是实际浏览器网络/服务器时限。20秒为单请求；status和随后list各超时可合计40秒，但Session已独立启动；abort不证明服务端取消或未提交。无用户数据/DB/Demo/模型/服务/安装部署。下一项代码线索：首屏刷新有request epoch，但loadMore还会无条件append旧search/cursor结果，先复现搜索变化期间的分页竞态再最小修复。

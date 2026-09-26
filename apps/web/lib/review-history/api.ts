@@ -40,13 +40,15 @@ async function responseJson<T>(response: Response): Promise<T> {
 // Endpoints may materialize existing analysis for validation, so use a conservative local wait policy.
 export const CHECKPOINT_REQUEST_TIMEOUT_MS = 20_000;
 export const TEACHING_SAVE_TIMEOUT_MS = 20_000;
+// Paginated summaries (default 30, max 50) and a small status PATCH, never full artifacts.
+export const HISTORY_REQUEST_TIMEOUT_MS = 20_000;
 // Only per-cue teaching projections and user input. Large analysis/route payloads retain their own lifetime.
 const TEACHING_ARTIFACT_TYPES = new Set(["USER_INTERACTION", "CUE_CASE", "DIAGNOSTIC_RESULT", "TRANSFER_RULE", "LEARNING_THREAD"]);
-async function checkpointJson(fetcher: typeof fetch, endpoint: string, init: RequestInit, teaching = false): Promise<unknown> {
+async function boundedHistoryJson(fetcher: typeof fetch, endpoint: string, init: RequestInit, kind: "CHECKPOINT" | "TEACHING" | "HISTORY" = "CHECKPOINT"): Promise<unknown> {
   const response = await requestJsonWithDeadline(fetcher, endpoint, init, {
-    timeoutMs: teaching ? TEACHING_SAVE_TIMEOUT_MS : CHECKPOINT_REQUEST_TIMEOUT_MS,
-    timeoutError: () => new ReviewHistoryApiError(teaching ? "TEACHING_SAVE_TIMEOUT" : "CHECKPOINT_SAVE_TIMEOUT"),
-    cancelMessage: teaching ? "Teaching save cancelled" : "Checkpoint save cancelled", readErrorBody: true, allowInvalidJson: true,
+    timeoutMs: kind === "HISTORY" ? HISTORY_REQUEST_TIMEOUT_MS : kind === "TEACHING" ? TEACHING_SAVE_TIMEOUT_MS : CHECKPOINT_REQUEST_TIMEOUT_MS,
+    timeoutError: () => new ReviewHistoryApiError(kind === "HISTORY" ? "HISTORY_REQUEST_TIMEOUT" : kind === "TEACHING" ? "TEACHING_SAVE_TIMEOUT" : "CHECKPOINT_SAVE_TIMEOUT"),
+    cancelMessage: kind === "HISTORY" ? "History request cancelled" : kind === "TEACHING" ? "Teaching save cancelled" : "Checkpoint save cancelled", readErrorBody: true, allowInvalidJson: true,
   });
   if (!response.ok) {
     const body = response.payload;
@@ -67,7 +69,7 @@ function query(url: string, values: Record<string, string | undefined>): string 
 export function createReviewHistoryApi(fetcher: typeof fetch = fetch) {
   return {
     async list(search?: string, cursor?: string): Promise<{ items: ReviewHistoryItem[]; nextCursor?: string }> {
-      const page = await responseJson<{ items: ReviewSummary[]; nextCursor: string | null }>(await fetcher(query("/api/review-history", { search, cursor }), { cache: "no-store" }));
+      const page = await boundedHistoryJson(fetcher, query("/api/review-history", { search, cursor }), { cache: "no-store" }, "HISTORY") as { items: ReviewSummary[]; nextCursor: string | null };
       return {
         items: page.items.map((item) => ({
           id: item.reviewId,
@@ -113,7 +115,7 @@ export function createReviewHistoryApi(fetcher: typeof fetch = fetch) {
       await responseJson(await fetcher(`/api/review-history/${encodeURIComponent(reviewId)}`, { method: "PATCH", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify({ title }) }));
     },
     async markFailed(reviewId: string): Promise<void> {
-      await responseJson(await fetcher(`/api/review-history/${encodeURIComponent(reviewId)}`, { method: "PATCH", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify({ status: "FAILED" }) }));
+      await boundedHistoryJson(fetcher, `/api/review-history/${encodeURIComponent(reviewId)}`, { method: "PATCH", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify({ status: "FAILED" }) }, "HISTORY");
     },
     async create(input: { demoId: string; selectedPlayerId: string; selectedPlayerName: string; title: string; mapName?: string }): Promise<{ reviewId: string }> {
       return responseJson(await fetcher("/api/review-history", { method: "POST", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify(input) }));
@@ -146,12 +148,12 @@ export function createReviewHistoryApi(fetcher: typeof fetch = fetch) {
     async appendArtifact(reviewId: string, input: { revisionId: string; artifactType: string; artifactKey: string; artifactRevision?: number; schemaVersion: string; payload: unknown; idempotencyKey: string }): Promise<void> {
       const endpoint = `/api/review-history/${encodeURIComponent(reviewId)}/artifacts`;
       const request = { method: "POST", headers: JSON_HEADERS, cache: "no-store" as const, body: JSON.stringify(input) };
-      if (input.artifactType === "SESSION_RECOVERY") await checkpointJson(fetcher, endpoint, request);
-      else if (TEACHING_ARTIFACT_TYPES.has(input.artifactType)) await checkpointJson(fetcher, endpoint, request, true);
+      if (input.artifactType === "SESSION_RECOVERY") await boundedHistoryJson(fetcher, endpoint, request);
+      else if (TEACHING_ARTIFACT_TYPES.has(input.artifactType)) await boundedHistoryJson(fetcher, endpoint, request, "TEACHING");
       else await responseJson(await fetcher(endpoint, request));
     },
     async commitRuntimeHead(reviewId: string, input: Record<string, unknown>): Promise<{ recoveryArtifactId: string }> {
-      const result = await checkpointJson(fetcher, `/api/review-history/${encodeURIComponent(reviewId)}/runtime-head`, { method: "PUT", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify(input) });
+      const result = await boundedHistoryJson(fetcher, `/api/review-history/${encodeURIComponent(reviewId)}/runtime-head`, { method: "PUT", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify(input) });
       try {
         const recoveryArtifactId = recoveryArtifactIdFromHead(result);
         if (recoveryArtifactId) return { recoveryArtifactId };
