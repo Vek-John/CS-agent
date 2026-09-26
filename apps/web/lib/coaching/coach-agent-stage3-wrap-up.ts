@@ -4,7 +4,8 @@ import type {
   SessionWrapUpBuildInput,
 } from "@cs-coach/coach-agent/client";
 import { assessCandidateTeaching, buildGatedAdviceOptions, verifiedHabitKey } from "@cs-coach/review-planner";
-import type { CandidateSet, NarrationBundle, ReviewPlan } from "@cs-coach/contracts";
+import { CueCaseSchema, REVISED_DIAGNOSIS_SUMMARY_LIMITATION } from "@cs-coach/coach-agent/client";
+import type { CandidateSet, CueCase, NarrationBundle, ReviewPlan } from "@cs-coach/contracts";
 
 /**
  * Projects only completed, presentable cue material into the wrap-up seam.
@@ -15,9 +16,20 @@ export function buildStage3WrapUpInput(
   summary: SessionSummaryInput,
   narrationByCue: Readonly<Record<string, NarrationBundle>>,
   candidateSet?: CandidateSet,
+  diagnoses: readonly CueCase[] = [],
 ): SessionWrapUpBuildInput {
   const presentableCues: Record<string, PresentableSessionWrapUpCue> = {};
   const habitKeys = new Map<string, string>();
+  const revisedCues = new Set<string>();
+  for (const raw of diagnoses) {
+    const parsed = CueCaseSchema.safeParse(raw);
+    if (!parsed.success) continue;
+    const diagnosis = parsed.data;
+    const cue = plan.cues.find(item => item.id === diagnosis.cueId);
+    if (!cue || (diagnosis.candidateId && diagnosis.candidateId !== cue.candidate_id)) continue;
+    if ((diagnosis.verdict?.revision ?? 0) > 0 || diagnosis.attemptBudget.disagreement > 0) revisedCues.add(cue.id);
+  }
+  let omittedRevisedSupport = false;
   // Graph themes list completed support cues; completedCues lists only one
   // representative per theme. Never discover support from the plan/narration map.
   const support = summary.themes.flatMap(theme => theme.cueRefs.map(cueId => ({ cueId, focus: theme.focus })));
@@ -25,6 +37,7 @@ export function buildStage3WrapUpInput(
     const cue = plan.cues.find((candidate) => candidate.id === completed.cueId);
     const narration = narrationByCue[completed.cueId];
     if (!cue || !narration || narration.cueId !== cue.id || narration.candidateId !== cue.candidate_id || narration.primaryFocusCode !== completed.focus) continue;
+    if (revisedCues.has(cue.id)) { omittedRevisedSupport = true; continue; }
     if (cue.primary_focus_code && cue.primary_focus_code !== completed.focus) continue;
     const candidate = candidateSet?.candidates.find((item) => item.candidateId === cue.candidate_id);
     const material = candidateSet?.materials.find((item) => item.candidateId === cue.candidate_id);
@@ -70,8 +83,10 @@ export function buildStage3WrapUpInput(
     return [{ ...theme, cueRefs, adviceRefs, evidenceRefs, roundRefs, occurrence: cueRefs.length }];
   });
   const included = new Set(summary.completedCues.filter(cue => themes.some(theme => theme.focus === cue.focus && theme.cueRefs.includes(cue.cueId))).map(cue => cue.cueId));
+  const limitations = [...new Set([...summary.limitations, ...(omittedRevisedSupport ? [REVISED_DIAGNOSIS_SUMMARY_LIMITATION] : [])])];
+  if (limitations.length > 8) throw new Error("SOURCE_LIMITATIONS_EXCEED_OUTPUT_LIMIT");
   return {
-    summary: { ...summary, themes, completedCues: summary.completedCues.filter((cue) => included.has(cue.cueId)).map((cue) => ({ ...cue, evidenceRefs: cue.evidenceRefs.filter(ref => themes.find(theme => theme.focus === cue.focus)!.evidenceRefs.includes(ref)), adviceRefs: presentableCues[cue.cueId].advice.map((advice) => advice.id) })) },
+    summary: { ...summary, themes, limitations, completedCues: summary.completedCues.filter((cue) => included.has(cue.cueId)).map((cue) => ({ ...cue, evidenceRefs: cue.evidenceRefs.filter(ref => themes.find(theme => theme.focus === cue.focus)!.evidenceRefs.includes(ref)), adviceRefs: presentableCues[cue.cueId].advice.map((advice) => advice.id) })) },
     presentableCues: Object.fromEntries(Object.entries(presentableCues).filter(([id]) => included.has(id))),
   };
 }

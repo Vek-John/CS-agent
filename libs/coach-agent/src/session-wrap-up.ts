@@ -8,6 +8,7 @@ import { z } from "zod";
 export const SESSION_WRAP_UP_SCHEMA_VERSION = "coach-agent-session-wrap-up.v1" as const;
 export const MAX_SESSION_WRAP_UP_THEMES = 3;
 export const MAX_SESSION_WRAP_UP_REQUEST_BYTES = 32 * 1024;
+export const REVISED_DIAGNOSIS_SUMMARY_LIMITATION = "部分教学点已根据你的补充修订，本次未将它们计为确定的重复错误；请以对应教学点的当前结论为准。";
 
 const Id = z.string().min(1).max(160);
 const Ref = z.string().min(1).max(160);
@@ -313,7 +314,7 @@ export function deterministicSessionWrapUpBundle(request: SessionWrapUpRequest):
       },
     };
   });
-  const limitations = request.themes.length === 0 ? ["NO_REPEATED_THEME"] : unique(sourceLimitations);
+  const limitations = request.themes.length === 0 && sourceLimitations.length === 0 ? ["NO_REPEATED_THEME"] : unique(sourceLimitations);
   if (limitations.length > 8) fail("SOURCE_LIMITATIONS_EXCEED_OUTPUT_LIMIT");
   return SessionWrapUpBundleSchema.parse({ schemaVersion: SESSION_WRAP_UP_SCHEMA_VERSION, themes, limitations });
 }

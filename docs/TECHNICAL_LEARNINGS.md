@@ -2047,3 +2047,12 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：以小型HistoryPageRequests只拥有search/cursor/pending/epoch，不拥有缓存或Review数据；首屏/分页共用其请求资格。保留Sidebar160ms防抖，提交query后同步清旧cursor/失效请求，首屏只接当前query，分页同步拒绝pending/旧query/旧cursor。复用已有refreshHistoryPage发布与错误门，Host原去重不变。
 - 验证：5项owner＋真实refresh helper回归覆盖旧成功/错误、新查询effect前、同query刷新、旧cursor和渲染前双击、当前失败可重试；相关5文件49tests、TypeScript/production build通过。主控实际diff及Sidebar防抖接线复核；默认revision_semantics_review只读窄审无must-fix、RELEASE。[证据](validation/HISTORY_QUERY_PAGINATION.md)。
 - 限制：模块/回调而非完整Host/浏览器验收；防抖期间仍属旧已提交查询，不新增立即取消网络或缓存。无用户数据/模型/服务/安装部署。下一项回到教学内容：buildStage3WrapUpInput仅取plan/narration/candidateSet，不收CueCase；需用真实修订诊断的小例核实整场总结是否仍复述已被修订的旧建议，不预设要改职业判断门或调用Jev。
+
+
+## 2026-09-26：总结不能忽略已修订诊断
+
+- 证据：真实diagnoseCue→reviseDiagnosis合成例从INFORMATION/BELIEF_INCORRECT修订为SYNC/INCONCLUSIVE，用户语音只保留USER来源；原wrap-up adapter不接CueCase，仍输出原两例重复主题和冻结建议。生产投影红例已复现并转绿。
+- 决定：Host把Graph与当前页面case并列传入；合法同cue/候选的revision>0或disagreement>0排除原支持，重算剩余次数/回合/引用再走原门。不能把新rule文本伪装成旧advice ID，也不因用户异议就宣称原事实错误。剩余两例可继续；原代表被排除时可保守不输出主题。
+- 呈现/保存：加入人可读说明，空主题也保留来源限制；实际completeAndSaveSessionWrapUp写SESSION_SUMMARY后JSON往返，Panel从保存bundle显示说明，无临时request依赖。旧已保存总结不重算；限制满额明确失败而非截断。
+- 验证：新旧case顺序、确认COMPLETED/JSON、无case旧记录、错cue/candidate、三支持去一、引用/次数/回合、8条边界与SSR。相关7文件122tests、TypeScript、production build通过，包含browser client bundle边界。前期revision_semantics_review只读真实规则例；partial_revision_restore独立终审无must-fix并RELEASE。[证据](validation/REVISED_DIAGNOSIS_WRAP_UP.md)。
+- 限制：不是专业gold或真实Demo质量提升验证；没有改Graph主题计数/Memory、新建议引用schema或旧总结，未挂载整Host/真实浏览器。无模型/用户DB/Memory/密钥/安装部署。后续已核实Memory adapter发USER_CORRECTED_COACH而非抄总结主题，可用同修订例核实消费者是否替代旧判断且不增加机会计数，先小验证，不假设已有纠正链缺失。

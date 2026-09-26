@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：修订诊断与总结资格（2026-09-26）
+
+- 基线0dae213 clean；主控有限goal独占wrap-up adapter/Host/必要总结限制呈现与tests/docs；revision_semantics_review默认配置8分钟只读diagnose/revise，已返回真实内存例并RELEASE，无文件/模型。主控核实Graph complete只从原completedCueSummaries/sessionThemes归纳，Host adapter不接CueCase。
+- 可观察目标：两次原候选重复中一个经用户补充修订，不再作为确定重复错误出现在最终总结；USER补充不当作比赛事实，也不把新rule伪装旧advice ID。流程真实diagnose→revise→当前/Graph两来源case→原总结投影→重算剩余支持与refs→保存/呈现明确限制。A1真实修订+原总结红例；A2revision/attempt识别含确认/JSON恢复，过滤支持而非只换文案；A3未修订/无case旧记录保持，剩余重复可继续、错cue/candidate不误伤，不改Graph/Memory计数或引用门；A4相关tests/TS/build与窄独审；A5架构学习证据push。
+- 风险/范围：现总结只能引用原advice，没有新rule引用契约，本轮仅保守排除已修订支持并说明，不声称新专业判断改善。Graph和Host来源取并集，避免旧来源覆盖新修订；无合格原代表时可整主题不输出，不凭空挑新代表。限制满额沿明确失败路径，不截断旧限制。5分钟小例、15分钟实现、15分钟验证；无真实Demo/模型/DB/安装部署，SSR不冒称浏览器，原A5独立待验。
+
+- 结果：真实diagnose→revise使结论由BELIEF_INCORRECT变INCONCLUSIVE，原adapter仍计两例的红例转绿。当前/Graph case并列输入，确认/JSON后修订仍过滤；剩余两合格支持继续并重算refs/rounds/count，无原合法代表保守省略。说明进保存bundle，空主题也显示；不提升USER为事实或替换旧advice文本。相关7文件122tests、TS/production build通过；partial_revision_restore独立只读终审无must-fix，owner均RELEASE。[证据](validation/REVISED_DIAGNOSIS_WRAP_UP.md)。
+- 边界/后继：仅新总结投影，不改Graph内部主题/Memory或重写旧保存总结，非专业质量gold；合成模块/保存spy/SSR非整Host真实浏览器。已读apps/web/lib/memory/agent-events.ts，修订发USER_CORRECTED_COACH，COMPLETE_SESSION仅闭合元数据；下一项只用同修订例验证消费者纠正/机会计数是否正确，不重复实现现有链或触碰用户记忆。测试/build退出，commit/push后释放，原UI A5独立待验。
+
 ## 已交付：历史分页与搜索归属（2026-09-26）
 
 - 基线fde53ae clean，主控有限goal独占Host/窄请求归属helper/tests/docs；原owner均RELEASE。已核实首屏有epoch，但loadMore不验证search/cursor/request，React loading状态发布前双击也可重复请求。

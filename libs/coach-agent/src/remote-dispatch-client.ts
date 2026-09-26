@@ -82,6 +82,7 @@ export type {
 export { buildTeachingCapabilities } from "./capability-builder";
 export {
   assertValidSessionWrapUpBundle,
+  REVISED_DIAGNOSIS_SUMMARY_LIMITATION,
   buildSessionWrapUpRequest,
   deterministicSessionWrapUpResult,
   SessionWrapUpBundleSchema,

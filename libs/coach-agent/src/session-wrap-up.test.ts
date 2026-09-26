@@ -6,6 +6,14 @@ import {
   type SessionWrapUpBuildInput,
 } from "./session-wrap-up";
 
+it("retains bounded source limitations when no repeated theme is emitted", () => {
+  const limitations = Array.from({ length: 8 }, (_, i) => `需要保留的限定${i}`);
+  const request = buildSessionWrapUpRequest({ summary: { schemaVersion: "coach-agent-session-summary.v1", themes: [], completedCues: [], limitations }, presentableCues: {} });
+  const result = deterministicSessionWrapUpResult(request, "CLOSED_SESSION_PROJECTION");
+  expect(result.bundle.themes).toEqual([]); expect(result.bundle.limitations).toEqual(limitations);
+  expect(deterministicSessionWrapUpResult({ ...request, limitations: [] }, "CLOSED_SESSION_PROJECTION").bundle.limitations).toEqual(["NO_REPEATED_THEME"]);
+});
+
 function theme(focus: string, cueRefs: string[], evidenceRef: string, adviceRef: string, occurrence: number) {
   return {
     focus,

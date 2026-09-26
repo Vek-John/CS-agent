@@ -3138,7 +3138,9 @@ export function Cs2dPlaybackHost({
       onStart: () => { setStage3WrapUpStatus("LOADING"); setStage3WrapUpError(undefined); },
       buildInput: (agentResult) => {
         const summaryInput = agentResult.state.sessionSummaryInput as SessionSummaryInput | null;
-        return summaryInput ? buildStage3WrapUpInput(activePlan, summaryInput, narrationByCue, bundle?.candidate_set) : null;
+        return summaryInput ? buildStage3WrapUpInput(activePlan, summaryInput, narrationByCue, bundle?.candidate_set, [
+          ...Object.values(agentResult.state.cueCases), ...Object.values(teachingCasesRef.current),
+        ]) : null;
       },
       onRequest: setStage3WrapUpRequest,
       onResult: (result) => {

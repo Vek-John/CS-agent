@@ -9,6 +9,15 @@ import { canPublishSessionWrapUp, sessionWrapUpPresentation, SessionWrapUpNotice
 
 const local: SessionWrapUpResult = { status: "DISABLED", bundle: { schemaVersion: "coach-agent-session-wrap-up.v1", themes: [], limitations: [] }, manifest: { status: "DISABLED", provider: "DETERMINISTIC", reason: "CLOSED_SESSION_PROJECTION", limitations: [] } };
 
+it("explains saved revised-cue exclusions even when no repeated theme remains", async () => {
+  const { REVISED_DIAGNOSIS_SUMMARY_LIMITATION } = await import("@cs-coach/coach-agent/client");
+  const restored = JSON.parse(JSON.stringify({ ...local, bundle: { ...local.bundle, limitations: [REVISED_DIAGNOSIS_SUMMARY_LIMITATION] } }));
+  const html = renderRepresentative(restored);
+  expect(html).toContain(REVISED_DIAGNOSIS_SUMMARY_LIMITATION);
+  expect(html).not.toContain("训练建议");
+  expect(renderRepresentative(local)).not.toContain(REVISED_DIAGNOSIS_SUMMARY_LIMITATION);
+});
+
 function representativeFixture() {
   const plan = createFixtureReviewPlan(createSyntheticMirageTimeline());
   plan.cues.forEach(cue => { cue.primary_focus_code = "verified"; });

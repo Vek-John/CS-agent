@@ -1,3 +1,4 @@
+import { REVISED_DIAGNOSIS_SUMMARY_LIMITATION } from "@cs-coach/coach-agent/client";
 import type { CoachAgentResult, SessionWrapUpResult } from "@cs-coach/coach-agent/client";
 import type { ReviewPlan } from "@cs-coach/contracts";
 
@@ -83,6 +84,8 @@ export function SessionWrapUpPanel({ status, result, plan, phase, error, onCompl
         <p>{theme.summary.text}</p><p><b>训练建议：</b>{theme.trainingAdvice.text}</p>
       </article>;
     })}</div> : result && status !== "LOADING" && !error ? <p>本场没有足够重复且条件明确的证据，暂不归纳为习惯。</p> : null}
+    {(result?.bundle.themes.length ?? 0) === 0 && !error && result?.bundle.limitations.includes(REVISED_DIAGNOSIS_SUMMARY_LIMITATION)
+      ? <p>{REVISED_DIAGNOSIS_SUMMARY_LIMITATION}</p> : null}
     {(result?.bundle.themes.length ?? 0) > 0 ? result?.bundle.limitations.map((limitation, index) => <p key={`limitation-${index}`}>{limitation}</p>) : null}
     {phase === "WRAP_UP" ? <button className="cs2d-coach-primary" type="button" onClick={onComplete}>完成本次复盘</button> : null}
   </section>;

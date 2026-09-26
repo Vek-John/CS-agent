@@ -714,9 +714,13 @@ Memory 在桌面与 Web 都默认关闭并要求当前 principal consent。桌�
 
 总结只使用本次用户实际经历或主动跳过确认的讲解内容、问答和当前场习惯聚类。不得把未展示的检测结果突然作为主要结论。总结生成后可成为未来个人记忆的候选输入。
 
-当前整场总结是封闭正文协议：每个主题的 summary 取已完成代表 cue 的 coreIssue，trainingAdvice 取该代表的首条合法建议。refs 和 limitations 可存在合法子集选择，因此不能称所有可接受 bundle 完全唯一。默认 `requestSessionWrapUp` 从本地 `SessionWrapUpBuildInput` 经原 builder 的来源、主题归属和引用检查，生成确定性版本并通过原 closed 校验；无需 HTTP 或 Provider 复制。非空总结标记既有 `DISABLED / DETERMINISTIC / CLOSED_SESSION_PROJECTION`，Host 将其作为正常 READY 呈现。空主题保持 `NO_REPEATED_THEME`。匿名 HTTP 与显式 `requestSessionWrapUpFromProvider` 兼容入口仍保留原 Provider 能力及校验，不将本地输入权威赋予匿名调用方。
+当前整场总结是封闭正文协议：每个主题的 summary 取已完成代表 cue 的 coreIssue，trainingAdvice 取该代表的首条合法建议。refs 和 limitations 可存在合法子集选择，因此不能称所有可接受 bundle 完全唯一。默认 `requestSessionWrapUp` 从本地 `SessionWrapUpBuildInput` 经原 builder 的来源、主题归属和引用检查，生成确定性版本并通过原 closed 校验；无需 HTTP 或 Provider 复制。非空总结标记既有 `DISABLED / DETERMINISTIC / CLOSED_SESSION_PROJECTION`，Host 将其作为正常 READY 呈现。空主题无额外来源限定时保持 `NO_REPEATED_THEME`；已有来源限定仍按原8条上限保存，不因主题为空丢弃。匿名 HTTP 与显式 `requestSessionWrapUpFromProvider` 兼容入口仍保留原 Provider 能力及校验，不将本地输入权威赋予匿名调用方。
 
 Graph `sessionSummaryInput.themes[*].cueRefs` 是实际已完成的主题支持集合，`completedCues` 是每主题一个合法代表，二者不可混用。Host 只在该主题支持集合内复核当前 plan/candidate/material/narration 绑定、DECISION_ERROR、verifiedHabitKey 和合法 advice；至少两条同 habit、无冲突的有效支持才保留主题。仅有 prepared narration、未列入 Graph 支持 refs、缺来源、不同 habit 或 presentationOnly 发生事实不增加习惯证据。过滤后 occurrence/round/evidence refs 重新收窄；传给原 builder 的 completedCues/presentableCues 仍仅为 Graph 选中的有效代表，保持最多三代表与 exact source identity 契约。
+
+默认Host生成新的整场总结时，将完成Graph结果的cueCases与当前页面teachingCases作为并列来源交给buildStage3WrapUpInput，不能用其中的旧版本覆盖另一方的新修订。对schema合法、同cue且candidate匹配（旧缺candidate可按cue绑定）的诊断，verdict.revision>0或disagreement预算已消耗表示该点已修订；即使确认后status变COMPLETED或JSON恢复，标记仍生效。该cue不再支持原冻结建议的重复主题，先移除支持再重算occurrence、roundRefs、evidenceRefs和adviceRefs，原重复条件/verified habit/代表与引用门不放宽。剩余不足两例或没有原合法代表则不输出该主题，不凭空选择新代表或把新TransferRule套进旧advice ID。
+
+排除已修订支持会增加明确的人可读来源限定：部分点因补充修订，本次不计作确定重复错误，具体结论以对应教学点为准。说明随SESSION_SUMMARY bundle保存，即使空主题也可在历史总结呈现；不把USER语音/战术原文当DEMO事实或模型总结证据。无法在八条限制内保留完整限定时走既有SOURCE_LIMITATIONS_EXCEED_OUTPUT_LIMIT降级，不截断其他条件。此投影不改变Graph内部sessionThemes/Memory事件计数，不替换成尚未有引用契约的新诊断建议，也不重新生成或改写旧已保存总结。
 
 确定性正文必须引用实际代表 cueId，不能引用主题数组的另一个首项。顶层、主题以及所用代表 coreIssue/betterPlay 的来源限定去重保留，并在总结面板呈现，不重新表述或静默截断。输出仍最多八条、每条 200 字符；不能完整表示时抛既有类型 `SessionWrapUpValidationError`，reason 为 `SOURCE_LIMITATIONS_EXCEED_OUTPUT_LIMIT`。匿名 Provider 请求在调用前预检并返回原受控 INVALID_REQUEST 路径，不裸抛内部 schema 异常。Host 明确显示总结未生成，保留 WRAP_UP 的完成按钮、COMPLETED 会话和自由回看，不将失败误报为无重复主题或成功总结。
 
