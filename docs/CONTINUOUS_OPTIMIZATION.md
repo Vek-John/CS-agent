@@ -2,6 +2,12 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：Parser启动异常可恢复（2026-09-27）
+
+- ID parser-start-failure，基线5f9dca1 clean；root独占0027/registry/既有cancellation测试/docs，无委派。实际ensureWorker位于局部读取/解压catch之外，构造抛错后parse拒绝且状态仍parsing。目标为启动失败→明确error/正常结算→下次可解析；A1实际composable与managed tail构造异常小例，A2局部catch，A3操作owner清理/不残留Replay或hash/下次正常，A4相关tests/两端TS/build后push。
+- 两个新用例原2红→绿，合计62相关tests通过；两端TS/production build通过，0027首次应用及build复用成功。仅以0027 reverse命中承认它覆盖旧Parser patch上下文。root集中复查构造点/代际检查/finally，10分钟有限任务；小FakeWorker单次抛错，无实际浏览器CSP/内存压力、Demo/DB/模型/安装。日志`.local-data/parser-start-failure`，进程已退出；沿既有错误面板无布局/交互改变。
+- 下一有限目标：inferWinRate.onmessage已有worker归属门，但onerror无该门，旧回调可能将新winRateWorker清null，导致新ready被忽略。用实际inferWinRate的小双Worker交错验证是否会阻断新结果，再仅修必要归属处理；不运行CS-Net/Jev或改专业判断门。
+
 ## 已交付：切换Demo时结算旧解析（2026-09-27）
 
 - ID parser-cancellation，基线8406814 clean；partial_revision_restore默认配置独占0026、上游Parser/Viewer对应patch、registry及必要小测试/stub；root独占docs、最终审查/两端TS/build/commit push。唯一代码写入者复用7f2b，不改其他checkout。目标为换文件时旧read/decompress/parse立即可结算取消，新managed串行tail能继续；完成后的Replay/voice/hash保留，温恢复不被cancel清空。

@@ -10,10 +10,10 @@ const viewer=existsSync(viewerPath)?readFileSync(viewerPath,'utf8'):'';
 const flush=async()=>{for(let i=0;i<25;i++)await Promise.resolve();};
 const result=()=>({type:'result',ok:true,replay:{rounds:[]},voice:{tracks:[]},demoContentHash:'a'.repeat(64),hashLatencyMs:1});
 function deferred(){let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};}
-function harness(autoDecompress=true){
+function harness(autoDecompress=true,parserStartFailures=0){
   const workers=[],unmount=[];
   class FakeWorker{
-    constructor(url){this.parser=url.pathname.endsWith('/demoParser.worker.ts');this.terminate=vi.fn();workers.push(this);}
+    constructor(url){this.parser=url.pathname.endsWith('/demoParser.worker.ts');if(this.parser&&parserStartFailures>0){parserStartFailures--;throw new Error('Worker startup denied');}this.terminate=vi.fn();workers.push(this);}
     postMessage(message){this.message=message;if(!this.parser&&autoDecompress)queueMicrotask(()=>this.onmessage?.({data:{ok:true,buffer:message.buffer,rawSize:9}}));}
   }
   const ref=value=>({value});
@@ -98,6 +98,28 @@ it('does not begin File IO after cancellation in the same call stack',async()=>{
   const h=harness(),arrayBuffer=vi.fn(async()=>new ArrayBuffer(9));
   try{const pending=h.parser.parse({...h.file,arrayBuffer});h.parser.cancel();expect(await pending).toBe(false);await flush();
     expect(arrayBuffer).not.toHaveBeenCalled();expect(h.workers).toHaveLength(0);
+  }finally{await h.cleanup();}
+});
+
+it('settles Parser Worker startup failure as retryable error and releases its operation',async()=>{
+  const h=harness(true,1);
+  try{
+    await expect(h.parser.parse(h.file)).resolves.toBeUndefined();
+    expect(h.parser.status.value).toBe('error');expect(h.parser.error.value).toBe('无法启动 Demo 解析，请重新选择文件后重试。');
+    expect(h.parser.replay.value).toBeNull();expect(h.parser.demoContentHash.value).toBeNull();
+    expect(h.workers).toHaveLength(1);expect(h.workers[0].terminate).toHaveBeenCalledOnce();
+    h.parser.cancel();expect(h.parser.status.value).toBe('error');
+    const next=h.parser.parse(h.file);await flush();h.workers.at(-1).onmessage({data:result()});await next;
+    expect(h.parser.status.value).toBe('done');expect(h.parser.error.value).toBeNull();
+  }finally{await h.cleanup();}
+});
+it('fails the managed load without blocking its next parse after startup failure',async()=>{
+  const h=harness(true,1),source={contentHash:'a'.repeat(64)};
+  try{
+    const first=h.ctx.beginManagedLoad();
+    await expect(h.ctx.parseManagedFile(h.file,source,first.generation)).rejects.toThrow('MANAGED_DEMO_PARSE_FAILED');
+    const second=h.ctx.beginManagedLoad();const next=h.ctx.parseManagedFile(h.file,source,second.generation);await flush();
+    h.workers.at(-1).onmessage({data:result()});await next;expect(h.parser.status.value).toBe('done');
   }finally{await h.cleanup();}
 });
 

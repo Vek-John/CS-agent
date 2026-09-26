@@ -1,0 +1,18 @@
+diff --git a/apps/app/src/viewer/ingest/useDemoParser.ts b/apps/app/src/viewer/ingest/useDemoParser.ts
+--- a/apps/app/src/viewer/ingest/useDemoParser.ts
++++ b/apps/app/src/viewer/ingest/useDemoParser.ts
+@@ -166,7 +166,13 @@
+         return
+       }
+       if (!isCurrent(current)) return false
+-      const w = ensureWorker()
++      let w: Worker
++      try { w = ensureWorker() } catch {
++        if (!isCurrent(current)) return false
++        error.value = '无法启动 Demo 解析，请重新选择文件后重试。'
++        status.value = 'error'
++        return
++      }
+       await new Promise<void>((resolve) => {
+         let settled = false
+         const finish = () => {

@@ -8,6 +8,12 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：Worker尚未创建也要收敛解析状态
+
+- 问题：Parser ensureWorker同步构造异常绕过已有消息onerror和局部catch，遗留parsing；不等同于Worker运行中崩溃。
+- 决策：0027只捕获构造异常，当前操作显示“无法启动 Demo 解析，请重新选择文件后重试。”并按正常错误返回，旧取消仍返回false；原finally清owner，下一次可创建新Worker。
+- 验证：实际composable及managed tail两红→绿，62相关tests、两端TS/build通过，root集中复查，进程退出。日志`.local-data/parser-start-failure`；构造错误由FakeWorker注入，未真实CSP/内存压力或GUI测试，不声称具体环境故障原因。
+
 ## 2026-09-27：取消必须结算调用者，而不只是终止Worker
 
 - 问题：beginManagedLoad只取消传输/胜率Worker，旧parser.parse仍占据managedParseTail；单纯terminate也不会自动resolve其Promise。另一个可达风险是hydrate后旧非managed handleFile从共享refs误存新Replay。
