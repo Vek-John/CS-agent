@@ -2,6 +2,14 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：当前回合时间的有来源追问（2026-09-26）
+
+- ID clock-question，基线42d6b37已push；partial_revision_restore默认模型/推理独占current-cue-resource-source.ts、current-cue-questions.ts及新clock问答测试，必要最小提取原Host clock helper须先同步。root拥有docs/ARCH/最终集成与push，不并发写源码。
+- 目标/流程：完整结果门→当前诊断已有时间measurement→明确“当时回合还剩多久”追问→复述相同可信源约秒。A1真实Adapter/Host/诊断/Session/问答贯通；A2严格核对测量与source，旧/缺/错身份或测量不匹配无数字，C4/假设不混淆；A3恢复/缺本人资源和既有资源/建议/结果门保持；A4相关tests/TS/build/主控关键diff、文档后push。
+- 边界/风险：复用opaque cache、不可只凭label或持久化数字，不新增模型/工具/布局或战术结论，不重新计算C4；emil/apple既有交互保持。5分钟smoke、15分钟有限交付、测试60秒；无Demo/用户DB/服务/浏览器/安装，执行者清理自身进程，A5独立。
+- 结果：明确回合时间问法复述同源已显示约秒；提取原Host clock helper共享，cache独立保存公开clock，缺本人资源仍可用。C4、未知/旧来源和不匹配measurement不输出数字。32新项原2正例红→绿，4文件149tests、TS/build通过；root已读关键diff并复验新增32项。[证据](validation/CURRENT_CUE_CLOCK_QUESTIONS.md)。未真实Demo/浏览器/模型，已释放写入及进程。
+- 下一有限目标：核实当前已显示的道具种类能否用明确追问复述；现有“几颗”不应把种类折成数量，未可信来源保持未知。先实际Adapter小例与当前显示入口，必要才接线，不重试Jev拒判集或锁屏A5。
+
 ## 已核实：公开时钟不依赖本人资源完整（2026-09-26）
 
 - ID clock-without-self，基线78fe948 clean，root独占diagnosis-clock.test.ts与本轮文档。A1真实Adapter缺本人frame但公开clock齐全→实际Host/诊断；A2只修证实的事实丢失，资源/时机判断门不放宽；A3相关tests/TS/build及行动结论push。无代理、Demo/DB/模型/GUI；小测试60秒，20分钟内闭合，root清理进程。

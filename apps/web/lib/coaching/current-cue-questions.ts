@@ -153,16 +153,19 @@ export function answerGroundedCueQuestion(context: CurrentCueQuestionContext, qu
     ["armor", ["当时有多少护甲", "我当时有多少护甲"]],
     ["utility", ["当时有几颗道具", "我当时有几颗道具"]],
     ["ammo", ["弹匣当时还有几发", "当时弹匣还有几发"]],
+    ["clock", ["当时回合还剩多久", "当时回合还剩多少秒", "当时回合剩余时间是多少"]],
   ];
   const resourceKind = resourceQuestions.find(([, questions]) => questions.includes(q))?.[0];
   if (resourceKind) {
     const resource = context.resources[resourceKind];
-    const name = { health: "血量", armor: "护甲", utility: "道具数量", ammo: "决策前最近弹匣记录" }[resourceKind];
+    const name = { health: "血量", armor: "护甲", utility: "道具数量", ammo: "决策前最近弹匣记录", clock: "回合剩余时间" }[resourceKind];
     return resource ? {
-      text: resourceKind === "ammo"
+      text: resourceKind === "clock"
+        ? "这是决策前最近采样的回合剩余时间，存在采样误差，不是 C4 倒计时；不能据此判断等待是否正确或可行。"
+        : resourceKind === "ammo"
         ? "这是决策前最近记录，不能保证决策瞬间的精确余量；采样后的换枪或换弹仍可能未知，备弹未知。不能仅据这个数值判错或建议换弹。"
         : "这个数值已在当前诊断中展示，并与当前可验证的本人资源记录一致；它本身不构成战术建议或新的判断。",
-      items: [resource], source: "当前诊断数值证据与本人资源记录交叉核对",
+      items: [resource], source: resourceKind === "clock" ? "当前诊断数值证据与公开回合时钟记录交叉核对" : "当前诊断数值证据与本人资源记录交叉核对",
     } : {
       text: `目前无法可靠核对${name}：缺少可匹配的已展示数值或合法来源，不能把未知补成0。${resourceKind === "ammo" ? "备弹也未知。" : ""}`,
       items: [], source: "当前资源的来源缺口",
@@ -187,7 +190,7 @@ export function answerGroundedCueQuestion(context: CurrentCueQuestionContext, qu
     text: context.limitations.length ? "当前讲解仍保留以下限制；追问不会消除这些未知条件。" : "当前内容没有逐项列出更多未知条件，这不代表所有条件都已确认。",
     items: context.limitations.map(text => ({ text, refs: [] })), source: context.limitationSource,
   };
-  return boundary("这句问法暂不支持可靠回答。可以问判断依据、已知事实或未知条件，也可以明确问“我当时多少血？”“当时有多少护甲？”“当时有几颗道具？”“弹匣当时还有几发？”。目前不能新增战术建议或回答其他教学点。");
+  return boundary("这句问法暂不支持可靠回答。可以问判断依据、已知事实或未知条件，也可以明确问“当时回合还剩多久？”“我当时多少血？”“当时有多少护甲？”“当时有几颗道具？”“弹匣当时还有几发？”。目前不能新增战术建议或回答其他教学点。");
 }
 
 export function currentCueQuestionState(state: CurrentCueQuestionState | undefined, context: CurrentCueQuestionContext): CurrentCueQuestionState {
