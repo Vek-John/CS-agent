@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：已展示教学点的真实同步确认（2026-09-26）
+
+- ID presented-cue-ack，基线c51a6b0 clean；原委派因额度错误终止且无文件产出，root已核实并自行接手，不重复派发。上一轮源码证据已定位status误判，本轮实际Graph序列验证，不做通用完整性审查。
+- 目标/验收：A1真实手动已展示→返回默认路线，后台段观察缺席时Graph拒绝且cursor不动，Controller不得误confirm/mirror；A2补齐缺段后同event可重试，合法呈现只确认一次；A3reset晚回包无效、丢ACK且Graph已前进仍可据原事件回执确认；A4相关tests/TS/build、证据及push。
+- 风险/边界：不以历史fallbackReasons判定本次拒绝，不改Graph顺序/手动访问/工具门；仅Controller确认与mirror时机，保留64事件回执窗口的保守语义。无网络/模型/Demo/用户库/UI；root独占生产/测试/docs并清进程，原A5独立。
+- 已复现：实际Graph返回COMPLETED但ROUTE_ORDER_MISMATCH、游标3未动，旧Controller错误推进5；reset后旧回包也把新controller游标-1写成5。原3测试2红1绿，修复后新4测试及32Controller测试通过；已加正常重试与丢ACK正向对照。
+- 最终：5个新真实Graph测试及57相关测试、TS和production build通过；确认依据为事件回执+绑定+完整身份+游标，mirror移到确认之后，reset token及同event新promise归属保持。[证据](validation/PRESENTED_CUE_ACK.md)。root独占接手完成，无新子代理/外部请求，测试进程已退出。
+- 下一有限体验目标：本次真实失败来自普通段观察尚未到达而已展示cue先发出；核实该观察能否加入现有串行observer队列自动补齐必要前段，避免用户等另一次触发才恢复。只沿已证明的缺段序列，不扩大Graph协议或重复全量检查；真实UI仍独立待验。
+
 ## 已交付：快速跳过后的诊断连续性（2026-09-26）
 
 - ID skip-lifecycle-continuity，基线3195bb1 clean；root生产/docs，revision_semantics_review默认配置5分钟真实序列预检/8分钟上限，先只读。已核实OBSERVE_PRESENTED_CUE需要Graph已有绑定，不能用它凭空登记刚显示的baseline。

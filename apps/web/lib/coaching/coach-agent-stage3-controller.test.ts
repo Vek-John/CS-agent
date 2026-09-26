@@ -10,6 +10,7 @@ import {
   type Stage3ControllerScheduler,
 } from "./coach-agent-stage3-controller";
 import { stage3StatusView } from "./coach-agent-stage3-status";
+import { fixtureIdentity } from "../../../../libs/coach-agent/src/test-fixtures";
 import type { CoachAgentStage3HostAdapter, Stage3HostAdapterInput, Stage3IdentityInput } from "./coach-agent-stage3-host-adapter";
 
 function input(): Stage3HostAdapterInput {
@@ -78,7 +79,10 @@ function harness(options: {
     createIdentityTakeoverEvent: vi.fn(() => ({ type: "USER_TAKEOVER" } as CoachAgentEvent)),
     createCompleteSessionEvent: vi.fn(() => ({} as CoachAgentEvent)),
     createObserveSegmentEvent: vi.fn(() => ({ type: "OBSERVE_SEGMENT" } as CoachAgentEvent)),
-    createObservePresentedCueEvent: vi.fn(() => ({ type: "OBSERVE_PRESENTED_CUE" } as CoachAgentEvent)),
+    createObservePresentedCueEvent: vi.fn((input, cueId, segmentId, segmentIndex, eventId) => ({
+      version: "coach-agent-event.v2", type: "OBSERVE_PRESENTED_CUE", eventId,
+      identity: { ...fixtureIdentity, runId: input.runId }, cueId, segmentId, segmentIndex, currentSessionPhase: "PLAYING",
+    } as CoachAgentEvent)),
     beginLifecycleEvent: vi.fn((eventId: string) => {
       const current = lifecycle.get(eventId);
       if (current === "CONFIRMED") return "CONFIRMED";
@@ -241,7 +245,12 @@ describe("CoachAgentStage3Controller", () => {
   it("observes a presented default cue without Policy or a teaching command", async () => {
     const h = harness({ dispatch: async (event) => {
       h.dispatched.push(event);
-      return result("COMPLETED");
+      if (event.type !== "OBSERVE_PRESENTED_CUE") throw new Error("unexpected event");
+      const completed = result("COMPLETED");
+      return { ...completed, identity: event.identity, state: { ...completed.state,
+        routeCursor: event.segmentIndex, processedEventIds: [event.eventId],
+        presentedCueBindings: [{ cueId: event.cueId, segmentId: event.segmentId, segmentIndex: event.segmentIndex }],
+      } };
     } });
     h.controller.observePresentedCue({ runId: "run-1" } as unknown as Stage3IdentityInput, "cue-4", "segment-4", 4);
     await flush();

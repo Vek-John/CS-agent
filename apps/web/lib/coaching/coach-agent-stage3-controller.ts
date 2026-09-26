@@ -679,6 +679,7 @@ export class CoachAgentStage3Controller {
   }
 
   observePresentedCue(input: Stage3IdentityInput, cueId: string, segmentId: string, segmentIndex: number): void {
+    const token = this.token;
     const eventId = `stage3-presented-${input.runId}-${segmentIndex}-${cueId}`.replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 160);
     try {
       this.adapter.reserveLifecycleCursor(segmentIndex);
@@ -690,21 +691,32 @@ export class CoachAgentStage3Controller {
       }
       const existing = this.lifecyclePromises.get(eventId);
       if (existing) return;
-      const dispatch = this.dispatchSerial(event).then((result) => {
-        if (!["DORMANT", "USER_TAKEOVER", "WAITING_TOOL"].includes(result.status)) {
+      const dispatch = this.dispatchSerial(event, { notifyAgentResult: false, canDispatch: () => token === this.token }).then(async (result) => {
+        if (token !== this.token) return undefined;
+        // A rejected observation may return an existing COMPLETED state. The event receipt
+        // and its binding prove acceptance; an old fallback reason is not a fresh rejection.
+        if (!["DORMANT", "USER_TAKEOVER", "WAITING_TOOL"].includes(result.status) && result.identity &&
+          Object.entries(event.identity).every(([key, value]) => result.identity[key as keyof typeof event.identity] === value) &&
+          result.state.processedEventIds?.includes(eventId) && result.state.routeCursor >= segmentIndex &&
+          result.state.presentedCueBindings?.some(binding => binding.cueId === cueId && binding.segmentId === segmentId && binding.segmentIndex === segmentIndex) &&
+          result.effects.length === 0 && result.state.pendingToolCall === null) {
           this.adapter.confirmLifecycleEvent(eventId);
           this.adapter.markLifecycleSynced(segmentIndex);
+          try { await this.options.onAgentResult?.(event, result); } catch { /* A mirror failure does not undo accepted route progress. */ }
           return result;
         }
         this.adapter.releaseLifecycleEvent(eventId);
         this.adapter.resetLifecycleQueue();
         return undefined;
       }).catch(() => {
+        if (token !== this.token) return undefined;
         this.adapter.releaseLifecycleEvent(eventId);
         this.adapter.resetLifecycleQueue();
         this.adapter.markLifecycleDegraded();
         return undefined;
-      }).finally(() => this.lifecyclePromises.delete(eventId));
+      }).finally(() => {
+        if (this.lifecyclePromises.get(eventId) === dispatch) this.lifecyclePromises.delete(eventId);
+      });
       this.lifecyclePromises.set(eventId, dispatch);
     } catch {
       this.adapter.releaseLifecycleEvent(eventId);

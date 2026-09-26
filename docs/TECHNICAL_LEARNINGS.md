@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：Graph的COMPLETED不是观察请求的成功回执
+
+- 问题：真实手动回访完成后返回默认路线，缺少中间普通段的观察时，Graph拒绝新观察但返回旧COMPLETED；Controller把游标3误推进5且mirror拒绝结果。reset晚回包还会污染新游标。三项原回归2红1绿。
+- 决策：依据同身份的processedEventIds回执、呈现绑定和不早于目标的cursor确认，再mirror；不根据可能残留的fallbackReason决定成功。拒绝释放请求以便同event重试；reset token与promise所有权隔离旧返回。
+- 验证：5新实际Graph/Controller测试覆盖缺段补齐后重试、正常手动呈现去重、reset晚回包、丢ACK后Graph前进的回执重试，以及新旧同event并存；合计62测试、TS/Web build通过。[证据](validation/PRESENTED_CUE_ACK.md)。
+- 限制：合成路线/内存Graph和模拟传输丢ACK，不是浏览器操作；不扩事件回执保留窗口。子代理额度错误后无产出，root接手完成，未重试代理。下一项沿缺段原因核实观察排队的主动补齐，避免只依赖下一次触发。
+
 ## 2026-09-26：已展示的跳过节点可无工具地补齐Graph路线
 
 - 问题：快速跳过后旧cue未START，下一cue的observer遍历将整轮永久标记degraded；真实Adapter两cue连续同步两次均失败。OBSERVE_PRESENTED_CUE只适用于Graph已有呈现绑定，不能代替首次登记。
