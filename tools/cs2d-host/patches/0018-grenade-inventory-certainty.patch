@@ -1,0 +1,115 @@
+--- a/packages/parser/src/weapons.rs
++++ b/packages/parser/src/weapons.rs
+@@ -141,24 +141,33 @@
+     }
+ }
+ 
+-/// Grenades in the pawn inventory, as short labels (HE, Smoke, Flash, ...).
+-pub(crate) fn grenade_inventory(ctx: &Context, pawn: &Entity) -> Vec<String> {
++/// Complete verified grenade kinds, or unknown if any current inventory slot cannot be trusted.
++/// The vector root is its current length; retained children beyond it are historical tail.
++pub(crate) fn grenade_inventory(ctx: &Context, pawn: &Entity) -> Option<Vec<String>> {
++    // Defensive iteration bound, not a claim about the game's maximum inventory.
++    let count = match pawn.get_property_by_name("m_pWeaponServices.m_hMyWeapons") {
++        Ok(FieldValue::Unsigned32(n)) if *n <= 64 => *n as usize,
++        _ => return None,
++    };
+     let mut out: Vec<String> = Vec::new();
+-    if let Ok(it) = pawn.get_iter("m_pWeaponServices.m_hMyWeapons") {
+-        for h in it.flatten() {
+-            let hv: usize = match h.try_into() {
+-                Ok(v) => v,
+-                Err(_) => continue,
+-            };
+-            if let Ok(w) = ctx.entities().get_by_handle(hv) {
+-                let label = weapon_label(w.class().name());
+-                if GRENADE_INVENTORY_LABELS.contains(&label.as_str()) && !out.contains(&label) {
+-                    out.push(label);
+-                }
+-            }
+-        }
+-    }
+-    out
++    if count == 0 { return Some(out); }
++    let mut slots = pawn.get_iter("m_pWeaponServices.m_hMyWeapons").ok()?;
++    for _ in 0..count {
++        let handle = match slots.next()?? {
++            FieldValue::Unsigned32(h) if *h > 0 && *h < 0xffffff => *h,
++            _ => return None,
++        };
++        let weapon = ctx.entities().get_by_index((handle & 0x3fff) as usize).ok()?;
++        if weapon.index() != (handle & 0x3fff) || (weapon.serial() & 0x3ff) != (handle >> 14) {
++            return None;
++        }
++        let label = weapon_label(weapon.class().name());
++        if label.is_empty() { return None; }
++        if GRENADE_INVENTORY_LABELS.contains(&label.as_str()) && !out.contains(&label) {
++            out.push(label);
++        }
++    }
++    Some(out)
+ }
+ 
+ /// Resolves a pawn active weapon into the short label.
+--- a/packages/parser/src/schema.rs
++++ b/packages/parser/src/schema.rs
+@@ -224,8 +224,11 @@
+     pub(crate) helmet: bool,
+     #[serde(skip_serializing_if = "is_false")]
+     pub(crate) defuser: bool,
+-    #[serde(skip_serializing_if = "Vec::is_empty")]
+-    pub(crate) grenades: Vec<String>,
++    /// Complete grenade kinds when Some, including an explicit empty list.
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub(crate) grenades: Option<Vec<String>>,
++    /// Present even when inventory verification failed and grenades is omitted.
++    pub(crate) grenade_inventory_version: u8,
+ }
+ 
+ // Events. We flatten the types into an enum serialized by `type` (tagged), like
+--- a/packages/parser/src/collector.rs
++++ b/packages/parser/src/collector.rs
+@@ -451,6 +451,7 @@
+                 helmet: prop_bool(pawn, "m_pItemServices.m_bHasHelmet"),
+                 defuser: prop_bool(pawn, "m_pItemServices.m_bHasDefuser"),
+                 grenades: grenade_inventory(ctx, pawn),
++                grenade_inventory_version: 1,
+             });
+         }
+         self.frames.push(RawFrame { tick, players, clock: None, identity_complete });
+--- a/packages/parser/src/assemble.rs
++++ b/packages/parser/src/assemble.rs
+@@ -310,6 +310,7 @@
+                     helmet: p.helmet,
+                     defuser: p.defuser,
+                     grenades: p.grenades.clone(),
++                    grenade_inventory_version: p.grenade_inventory_version,
+                 })
+                 .collect();
+             rounds[idx].frames.push(Frame {
+--- a/packages/parser/src/lib.rs
++++ b/packages/parser/src/lib.rs
+@@ -22,7 +22,7 @@
+ use collector::Collector;
+ 
+ const DEMO_TICK_RATE: f64 = 64.0;
+-const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1.active-weapon-identity.v1";
++const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1.active-weapon-identity.v1.grenade-inventory.v1";
+ 
+ /// Parses the bytes of a `.dem` in a single pass and returns `(Replay JSON, voice
+ /// blob)`. The `Replay` matches `replay-schema 2D`; the blob follows the `CLV2`
+--- a/packages/replay-core/src/schema.ts
++++ b/packages/replay-core/src/schema.ts
+@@ -285,8 +285,11 @@
+   helmet?: boolean
+   /** Has defuse kit, CT only (omitted when false). */
+   defuser?: boolean
+-  /** Grenades in inventory, as short labels (omitted when empty). */
++  /** Complete grenade kinds with version 1; [] means none, omission means unknown.
++   *  Unversioned historical lists do not prove a complete inventory. */
+   grenades?: string[]
++  /** Inventory verification semantics, present even when grenades is unknown. */
++  grenadeInventoryVersion?: 1
+ }
+ 
+ export type GameEventType =

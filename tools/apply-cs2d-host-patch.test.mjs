@@ -185,3 +185,18 @@ it("registers strict packed active weapon identity without widening inventory re
   expect(additions).toContain("frame-identity.v1.active-weapon-identity.v1");
   expect(additions).not.toMatch(/event_pawn_to_packed|primary_weapon|grenade_inventory|m_lifeState/);
 });
+
+it("registers complete current inventory semantics with an explicit sample version", () => {
+  expect(CS2D_PATCH_FILES[17]).toMatch(/0018-grenade-inventory-certainty\.patch$/);
+  const patch = readFileSync(CS2D_PATCH_FILES[17], "utf8");
+  const additions = patch.split("\n").filter(line => line.startsWith("+") && !line.startsWith("+++")).join("\n");
+  expect(additions).toContain("Ok(FieldValue::Unsigned32(n)) if *n <= 64");
+  expect(additions).toContain("if count == 0 { return Some(out); }");
+  expect(additions).toContain("for _ in 0..count");
+  expect(additions).toContain("slots.next()??");
+  expect(additions).toContain("grenades: Option<Vec<String>>");
+  expect(additions).toContain('skip_serializing_if = "Option::is_none"');
+  expect(additions).toContain("grenade_inventory_version: 1");
+  expect(additions).toContain("grenadeInventoryVersion?: 1");
+  expect(additions).not.toMatch(/event_pawn_to_packed|primary_weapon|\.flatten\(\)/);
+});

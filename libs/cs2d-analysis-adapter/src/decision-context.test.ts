@@ -5,7 +5,7 @@ import { assertDecisionSnapshot, buildDecisionSnapshot, buildObservableDecisionC
 import type { Cs2dRound, Cs2dPlayerState } from "./index";
 
 function player(index: number): Cs2dPlayerState {
-  return { steamId: `p${index}`, side: index < 5 ? "T" : "CT", alive: index === 0 || index >= 5, health: index === 0 ? 2 : index < 5 ? 0 : 100, armor: 20, x: index * 100, y: 200, z: 0, yaw: 0, weapon: "ak47", grenades: [], money: 200, equipValue: 2700, helmet: false };
+  return { steamId: `p${index}`, side: index < 5 ? "T" : "CT", alive: index === 0 || index >= 5, health: index === 0 ? 2 : index < 5 ? 0 : 100, armor: 20, x: index * 100, y: 200, z: 0, yaw: 0, weapon: "ak47", grenadeInventoryVersion: 1, grenades: [], money: 200, equipValue: 2700, helmet: false };
 }
 function round(players = Array.from({ length: 10 }, (_, index) => player(index))): Cs2dRound {
   return { number: 16, freezeStartTick: 0, startTick: 64, decidedTick: 800, endTick: 880, postEndTick: 960, scoreT: 8, scoreCt: 7, winner: "CT", frames: [{ tick: 128, t: 2, players }], events: [], grenadePaths: [] };

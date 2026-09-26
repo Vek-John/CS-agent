@@ -1,3 +1,4 @@
+import { verifiedGrenadeKinds } from "./grenade-kinds";
 import { decisionSelfHurtEvents, selfHurtFactText, MAX_SELF_HURT_EVENTS } from "./self-hurt";
 import { readRoundClock, publicRoundClockFact } from "./round-clock";
 import type { DecisionSnapshot, DecisionValue, DecisionCheck, ObservableDecisionContext, ObservableState } from "@cs-coach/contracts";
@@ -23,6 +24,7 @@ export function buildDecisionSnapshot(input: {
   const fresh = Boolean(frame && decisionTick - frame.tick <= Math.ceil(tickRate / 2));
   const all = frame?.players ?? [];
   const selected = all.find((player) => player.steamId === selectedPlayerId);
+  const grenadeKinds = verifiedGrenadeKinds(selected);
   const side = sideOrNull(selected?.side);
   const sourceRefs = frame ? [`state-${round.number}-${frame.tick}`] : [];
   const complete = fresh && input.rosterIds.length === 10 && new Set(input.rosterIds).size === 10 && all.length === 10 && new Set(all.map((player) => player.steamId)).size === 10 && input.rosterIds.every((id) => all.some((player) => player.steamId === id && sideOrNull(player.side) && typeof player.alive === "boolean"));
@@ -37,7 +39,7 @@ export function buildDecisionSnapshot(input: {
   if (!fresh) missingFields.push("fresh_player_state");
   if (!side) missingFields.push("current_side");
   for (const [key, item] of Object.entries({ health: selected?.health, armor: selected?.armor, money: selected?.money, equipmentValue: selected?.equipValue })) if (numberOrNull(item) === null) missingFields.push(key);
-  if (!Array.isArray(selected?.grenades)) missingFields.push("inventory");
+  if (!grenadeKinds) missingFields.push("inventory");
   if (typeof selected?.helmet !== "boolean") missingFields.push("helmet");
   if (typeof selected?.alive !== "boolean") missingFields.push("alive");
   if (!textOrNull(selected?.weapon)) missingFields.push("weapon");
@@ -64,7 +66,7 @@ export function buildDecisionSnapshot(input: {
     bombState = "CARRIED"; carriedBySelectedPlayer = true; bombBoundary = "OBSERVABLE";
   }
   if (bombState === "UNKNOWN") missingFields.push("bomb_state");
-  const flash = fresh && Array.isArray(selected?.grenades) ? selected.grenades.some((name) => /flash/i.test(name)) : null;
+  const flash = fresh && grenadeKinds ? grenadeKinds.includes("Flash") : null;
   const canCompareHealth = complete && numberOrNull(selected?.health) !== null && teammates.every((player) => numberOrNull(player.health) !== null);
   const noHigherHealth = canCompareHealth && !teammates.some((player) => player.health > selected!.health);
   const supportChecks: DecisionCheck[] = [
@@ -80,7 +82,7 @@ export function buildDecisionSnapshot(input: {
   const snapshot: DecisionSnapshot = {
     version: "decision-snapshot.v1", snapshotId, roundNumber: round.number, selectedPlayerId, decisionTick, sampledAtTick: frame?.tick ?? null,
     ...(Array.isArray(round.hurtEvents) ? { selfHurtEvents: decisionSelfHurtEvents(round, selectedPlayerId, decisionTick, tickRate, Boolean(fresh && selected?.alive === true)) } : {}),
-    selectedPlayer: value(fresh && selected ? { side, alive: boolOrNull(selected.alive), health: numberOrNull(selected.health), armor: numberOrNull(selected.armor), helmet: boolOrNull(selected.helmet), weapon: textOrNull(selected.weapon), grenades: Array.isArray(selected.grenades) ? selected.grenades.slice(0, 8).map((name) => textOrNull(name) ?? "未知道具") : null, money: numberOrNull(selected.money), equipmentValue: numberOrNull(selected.equipValue), hasDefuseKit: boolOrNull(selected.defuser), callout: mirageChineseCallout(selected.lastPlaceName) ?? null } : null, "OBSERVABLE", fresh ? [] : ["决策前缺少足够新的玩家状态。"]),
+    selectedPlayer: value(fresh && selected ? { side, alive: boolOrNull(selected.alive), health: numberOrNull(selected.health), armor: numberOrNull(selected.armor), helmet: boolOrNull(selected.helmet), weapon: textOrNull(selected.weapon), grenades: grenadeKinds ?? null, money: numberOrNull(selected.money), equipmentValue: numberOrNull(selected.equipValue), hasDefuseKit: boolOrNull(selected.defuser), callout: mirageChineseCallout(selected.lastPlaceName) ?? null } : null, "OBSERVABLE", fresh ? [] : ["决策前缺少足够新的玩家状态。"]),
     aliveCounts: value(complete && side ? { allies: allies.length, enemies: all.filter((player) => player.side !== side && player.alive === true).length, includesSelectedPlayer: true } : null, "OBSERVABLE"),
     players: all.slice(0, MAX_DECISION_SNAPSHOT_PLAYERS).map((player: Cs2dPlayerState) => ({ playerId: player.steamId, side: sideOrNull(player.side), alive: boolOrNull(player.alive), health: numberOrNull(player.health), boundary: "APPLICABILITY_ONLY" })),
     score: value(numberOrNull(round.scoreT) !== null && numberOrNull(round.scoreCt) !== null ? { t: round.scoreT, ct: round.scoreCt } : null, "OBSERVABLE"),

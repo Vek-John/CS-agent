@@ -31,7 +31,7 @@ impl AmmoCache { fn for_frame(&self, _: u32, _: &str, _: Option<&weapon_ammo::Id
 #[derive(Default)] struct Collector { frames: Vec<RawFrame>, meta: HashMap<String, PlayerMeta>, meta_order: Vec<String>, last_cap: u32, ammo_cache: AmmoCache }
 fn active_weapon_label(_: &Context, pawn: &Entity) -> String { pawn.weapon.into() }
 fn primary_weapon(_: &Context, _: &Entity) -> String { "AK-47".into() }
-fn grenade_inventory(_: &Context, _: &Entity) -> Vec<String> { vec![] }
+fn grenade_inventory(_: &Context, _: &Entity) -> Option<Vec<String>> { Some(vec![]) }
 fn world_coord(pawn: &Entity, _: &str, _: &str) -> f64 { pawn.coordinate }
 fn pawn_yaw(_: &Entity) -> f64 { 0.0 }
 fn round1(value: f64) -> f64 { value }

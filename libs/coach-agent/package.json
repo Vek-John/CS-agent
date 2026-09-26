@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./client": "./src/remote-dispatch-client.ts"
+    "./client": "./src/remote-dispatch-client.ts",
+    "./decision-utilities": "./src/decision-utilities.ts"
   },
   "dependencies": {
     "@langchain/core": "1.2.9",

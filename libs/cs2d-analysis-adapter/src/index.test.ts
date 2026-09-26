@@ -1,3 +1,4 @@
+import { projectDecisionUtilityCount } from "../../coach-agent/src/decision-utilities";
 import type { Cs2dReplay, Cs2dAnalysisBundle } from "./index";
 import { describe, expect, it } from "vitest";
 import {
@@ -34,6 +35,7 @@ function state(steamId: string, tick: number, health: number, x = 100 + tick / 1
     equipValue: 4500,
     armor: 100,
     helmet: true,
+    grenadeInventoryVersion: 1 as const,
     grenades: ["Smoke"]
   };
 }
@@ -218,6 +220,7 @@ describe("cs2d analysis adapter", () => {
     ["cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1", "/hurt-events.v1/shot-identity.v2/ammo-clip.v2/bomb-identity.v1/death-identity.v1"],
     ["cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1", "/hurt-events.v1/shot-identity.v2/ammo-clip.v2/bomb-identity.v1/death-identity.v1/frame-identity.v1"],
     ["cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1.active-weapon-identity.v1", "/hurt-events.v1/shot-identity.v2/ammo-clip.v2/bomb-identity.v1/death-identity.v1/frame-identity.v1/active-weapon-identity.v1"],
+    ["cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1.active-weapon-identity.v1.grenade-inventory.v1", "/hurt-events.v1/shot-identity.v2/ammo-clip.v2/bomb-identity.v1/death-identity.v1/frame-identity.v1/active-weapon-identity.v1/grenade-inventory.v1"],
     ["unknown+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v3", ""]
   ] as const)("preserves independent parser provenance for %s", (generatedBy, suffix) => {
     const bundle = buildCs2dAnalysisBundle({ replay: { ...replayFixture(), generatedBy }, selectedSteamId: "p-t1", demoId: "parser-provenance" });
@@ -266,6 +269,40 @@ describe("cs2d analysis adapter", () => {
       expect(ownKillFacts).toHaveLength(attackerSteamId === "p-t1" ? 1 : 0);
       expect(deserializeCs2dAnalysisBundle(serializeCs2dAnalysisBundle(victim)).match_timeline.match_events).toEqual(victim.match_timeline.match_events);
     }
+  });
+
+  it.each([
+    { name: "legacy partial", version: undefined, kinds: ["Smoke"], flash: "UNVERIFIABLE", count: undefined, known: false },
+    { name: "missing current inventory", version: 1 as const, kinds: undefined, flash: "UNVERIFIABLE", count: undefined, known: false },
+    { name: "known empty", version: 1 as const, kinds: [], flash: "INAPPLICABLE", count: 0, known: true },
+    { name: "known smoke kind", version: 1 as const, kinds: ["Smoke"], flash: "INAPPLICABLE", count: undefined, known: true },
+    { name: "known flash kind", version: 1 as const, kinds: ["Flash"], flash: "APPLICABLE", count: undefined, known: true },
+    { name: "duplicate kind is not physical count", version: 1 as const, kinds: ["Flash", "Flash"], flash: "UNVERIFIABLE", count: undefined, known: false },
+  ])("preserves grenade inventory certainty and count limits: $name", ({ version, kinds, flash, count, known }) => {
+    const source = replayFixture();
+    const replay: Cs2dReplay = { ...source, rounds: source.rounds.map(round => ({ ...round, frames: round.frames.map(frame => ({ ...frame, players: frame.players.map(p => p.steamId === "p-t1" ? { ...p, grenadeInventoryVersion: version, grenades: kinds } : p) })) })) };
+    const bundle = buildCs2dAnalysisBundle({ replay, selectedSteamId: "p-t1", demoId: "inventory-certainty" });
+    const sample = bundle.match_timeline.player_state_tracks?.find(p => p.player_id === "p-t1");
+    expect(sample).toBeDefined();
+    expect(projectDecisionUtilityCount(sample!).utilityCount).toBe(count);
+    for (const material of bundle.candidate_set.materials) {
+      const snapshot = material.decisionSnapshot!;
+      expect(snapshot.selectedPlayer.value?.grenades).toEqual(known ? kinds : null);
+      expect(snapshot.supportChecks.find(check => check.code === "flashAvailable")?.status).toBe(flash);
+    }
+    expect(bundle.candidate_set.materials.length).toBeGreaterThan(0);
+    expect(bundle.review_plan.cues.flatMap(cue => cue.facts).map(fact => fact.text).join(" ")).not.toMatch(/有 \d+ 颗道具/);
+    const restored = deserializeCs2dAnalysisBundle(serializeCs2dAnalysisBundle(bundle));
+    expect(restored.match_timeline.player_state_tracks).toEqual(bundle.match_timeline.player_state_tracks);
+  });
+
+  it("reads a saved 1.10 artifact without reinterpreting its stored inventory", () => {
+    const bundle = buildCs2dAnalysisBundle({ replay: replayFixture(), selectedSteamId: "p-t1", demoId: "legacy-inventory" });
+    const legacy: Cs2dAnalysisBundle = { ...bundle, metadata: { ...bundle.metadata, adapter_version: "cs2d-analysis-adapter/1.10.0" },
+      match_timeline: { ...bundle.match_timeline, player_state_tracks: bundle.match_timeline.player_state_tracks?.map(state => ({ ...state, inventory: [{ item_id: "Flash", item_class: "UTILITY", count: 2 }], missing_fields: state.missing_fields.filter(field => !field.startsWith("inventory")) })) } };
+    const restored = deserializeCs2dAnalysisBundle(serializeCs2dAnalysisBundle(legacy));
+    expect(restored.metadata.adapter_version).toBe("cs2d-analysis-adapter/1.10.0");
+    expect(restored.match_timeline.player_state_tracks?.[0]?.inventory).toEqual([{ item_id: "Flash", item_class: "UTILITY", count: 2 }]);
   });
 
   it("records the pinned structured-input boundary and supports every player selection", () => {
@@ -444,7 +481,7 @@ describe("cs2d analysis adapter", () => {
     expect(bundle.review_plan.cues[0].assessment?.kind).toBe("INSUFFICIENT_EVIDENCE");
     expect(bundle.review_plan.cues[0].advice).toEqual([]);
     expect(bundle.review_plan.cues[0].facts[0].text).toContain("你在连接");
-    expect(bundle.review_plan.cues[0].facts[0].text).toContain("有 2 颗道具");
+    expect(bundle.review_plan.cues[0].facts[0].text).toContain("携带道具种类：Smoke、Flash（颗数未知）");
     expect(bundle.review_plan.cues[0].question).not.toMatch(/被击杀|随后|最终/);
   });
 

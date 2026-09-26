@@ -156,6 +156,15 @@ Parser来源追加frame-identity.v1。合法完整帧保持字段与既有回合
 空串既不能证明持刀，也不能证明空手。assemble整回合刀局判定要求已确认标签为Faca；暖场刀局拆分窗口遇未知名称保守不拆分。Viewer共享isKnifeRound也要求每帧非空且所有已采样武器明确为Faca，不能因空名称或空玩家数组误标0回合、从统计中排除；无任何frames的既有pre-game判断保持独立。该限制不改变respawn全活满血门，不删除含未知武器的玩家身份/生命/资源行。Adapter沿现有规则把空名称投影为unknown，保持其他已验证资源，Parser来源追加active-weapon-identity.v1，旧保存产物不重算。
 
 
+### 2.4.8 完整道具种类与未知库存
+
+`m_hMyWeapons`是动态向量；父Unsigned32表示当前长度，内部children可能保留缩短后的历史尾部。Parser只读取显式长度前N项（N<=64为防护上限，不是游戏携带上限），逐项核对network packed类型/范围/index/低10serial及可识别物品类型。任一当前项不可验证时，整份道具种类列表未知；不把None/无效handle当合法空槽，也不把剩余部分列表当完整。长度0，或完整已验证库存中确无道具时输出明确[]。primary库存主枪路径本轮不迁移。
+
+新PlayerState每行带`grenadeInventoryVersion: 1`；`grenades`是去重的已确认道具种类，省略代表未知、[]代表已确认没有。Adapter只有版本1的完整合法列表才能用于Flash存在/不存在和种类陈述；旧未标记raw Replay数组不追认完整。类型列表不证明物理颗数：非空时Timeline不制造count=1条目，标记inventory.count缺失；未知标记inventory缺失；仅明确空支持utilityCount=0。种类通过DecisionSnapshot进入受限教学上下文，生命/身份/其他资源不受库存未知影响。
+
+Parser追加grenade-inventory.v1，Adapter/Signal 1.11.0、Timeline1.2.0标记新派生语义。既有已保存bundle仍按原产物读取（兼容1.10.0等旧版），不悄悄重算或删除历史结论；重新解析/分析才获得新事实语义。不依据类型数声称携带N颗，不由道具存在直接批准战术建议。
+
+
 ### 2.5 事实、推断、建议分层
 
 - `Fact`：Demo 可直接验证；

@@ -1,3 +1,5 @@
+import { buildCs2dAnalysisBundle } from "@cs-coach/cs2d-analysis-adapter";
+import { fireReplay, self } from "../../../../libs/cs2d-analysis-adapter/src/window-self-fire-fixtures";
 import { describe, expect, it } from "vitest";
 import { createSyntheticMirageTimeline } from "@cs-coach/demo-domain";
 import { createFixtureReviewPlan } from "@cs-coach/review-planner";
@@ -112,6 +114,16 @@ describe("cs2d paused coaching cue view", () => {
     expect(view.problem.text).not.toContain("OBJECTIVE_TIMING");
     expect(view.problem.consequences).toEqual(["你随后完成下包。"]);
     expect(view.improvement.text).toBe("先让队友架住，再开始下包。");
+  });
+
+  it.each([undefined, [], ["Flash"], ["Smoke"]].map(kinds => ({ kinds })))("does not display unknown grenade counts as no utility: $kinds", ({ kinds }) => {
+    const source = fireReplay("DEATH", []);
+    const replay = { ...source, rounds: source.rounds.map(round => ({ ...round, frames: round.frames.map(frame => ({ ...frame, players: frame.players.map(p => ({ ...p, grenadeInventoryVersion: 1 as const, grenades: kinds })) })) })) };
+    const bundle = buildCs2dAnalysisBundle({ replay, selectedSteamId: self, demoId: "inventory-view" });
+    const state = bundle.match_timeline.player_state_tracks?.find(p => p.player_id === self);
+    expect(state).toBeDefined();
+    const view = buildThreeStageCoachingView({ narration: preparedNarration, decisionState: state, outcomeFacts: [] });
+    expect(view.currentState.chips.filter(chip => chip.kind === "utility").map(chip => chip.text)).toEqual(kinds?.length === 0 ? ["无道具"] : []);
   });
 
   it("shows only meaningful win-rate movement and picks the last decision state", () => {

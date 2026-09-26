@@ -2,6 +2,17 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：道具库存完整性（2026-09-26）
+
+- ID grenade-inventory-certainty，基线b99d12e clean；主控Adapter/只读probe/真实消费/docs，partial_revision_restore默认配置生产0018/patch工具，revision_semantics_review默认配置源注入inventory fixture；其他owner均RELEASE。
+- 已证实：get_iter返回只增不减的历史children；真正空Vec此前序列化省略，不能误称[]。partial列表误断言没Flash，去重类型数量被错误叫颗数。首probe72,273pawn全children414,532槽有大量旧/不存在实体；根length后197,474当前槽全部合法、217,058历史尾槽，18,536显式N0。按本地ValueVector源码和demoinfocs一手Issue450核实父length语义。
+- 流程/验收：根strictN<=64→只前N严格packed/可分类→完整Some(kinds)/明确空Some[]/任何未知None，版本1标记；Adapter旧无标记或None保持unknown，已知种类可做presence但非空不冒充颗数，空完整才0。A1真实源shrink/partial红例；A2unknown/empty与类型/颗数分离，保留其他资源；A3历史产物直接读、旧raw不追认完整；A4相关tests/TS/Web和parser/Viewer build，真实一次最终消费比较非库存字段/边界保持，文档push。
+- 风险/所有权：Option/schema+collector/assemble透传，不改primary/整个背包；主控更新旧frame fixture Option stub。5分钟接口/12分钟实现/20分钟验证；两个必要native probe分别单read、单进程，bulk本地，120秒stage/finally清example，不安装/模型/UI/用户DB。未知项不当空slot，合法类型列表不当总颗数；原A5独立。
+
+- 结果：源回归8红/3绿→11绿、旧frame fixture10绿；273相关tests+10教练View tests=283、15patch、native9+vendor33、TS/Web和WASM/Viewer build/TS通过，1既有WebGPU产物测试跳过。Option/version1→明确完整/空/unknown；去重types不冒充颗数。真实最终72,193行中48,315空、23,878非空、0unknown，8,774条旧有道具改当前空；所有非库存字段/9回合边界保持，10人消费通过，0网络。[证据](validation/GRENADE_INVENTORY_CERTAINTY.md)。
+- 接线收尾：独立审查发现View局部计数漏inventory.count，实际Flash/Smoke被说无道具；两红后改纯共享projectDecisionUtilityCount并复验，known[]仍无道具、其他不伪造零。root遵循已读UI技能/Next测试文档，不需要锁屏UI。两代理RELEASE，全部进程/临时目录清理。
+- 后继/限制：数字为重复采样行，非独立错误数；旧保存不重算，需新解析应用修复，无UI/DB/专业质量实测。下一项已证primary_weapon也读动态向量全children，先核实收起主枪的真实源和Viewer消费，再做局部长度/身份修复；不猜物理颗数或重写整装备系统。原A5独立保留。
+
 ## 已交付：活动武器即时身份（2026-09-26）
 
 - ID active-weapon-identity，基线546ac82 clean；partial_revision_restore默认配置独占0017/patch工具/upstream weapons/assemble/lib，revision_semantics_review默认配置独占源注入武器/knife fixture，主控Adapter/真实消费/docs。

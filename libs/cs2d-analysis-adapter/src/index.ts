@@ -1,3 +1,4 @@
+import { verifiedGrenadeKinds } from "./grenade-kinds";
 import { normalizeWeaponAmmo, type Cs2dWeaponAmmo } from "./weapon-ammo";
 import { windowSelfFire } from "./window-self-fire";
 import { selfHurtEvents, selfHurtFactText, MAX_SELF_HURT_EVENTS, type Cs2dHurtEvent } from "./self-hurt";
@@ -76,6 +77,7 @@ export const CS2D_SOURCE = {
 function parserVersion(replay: Cs2dReplay): string {
   const base = `${CS2D_SOURCE.repository}@${CS2D_SOURCE.commit}`;
   const revisions = [
+    ["hurt-events.v1", "shot-identity.v2", "ammo-clip.v2", "bomb-identity.v1", "death-identity.v1", "frame-identity.v1", "active-weapon-identity.v1", "grenade-inventory.v1"],
     ["hurt-events.v1", "shot-identity.v2", "ammo-clip.v2", "bomb-identity.v1", "death-identity.v1", "frame-identity.v1", "active-weapon-identity.v1"],
     ["hurt-events.v1", "shot-identity.v2", "ammo-clip.v2", "bomb-identity.v1", "death-identity.v1", "frame-identity.v1"],
     ["hurt-events.v1", "shot-identity.v2", "ammo-clip.v2", "bomb-identity.v1", "death-identity.v1"],
@@ -88,10 +90,10 @@ function parserVersion(replay: Cs2dReplay): string {
   return known ? `${base}/${known.join("/")}` : base;
 }
 
-export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.10.0" as const;
-export const CS2D_TIMELINE_VERSION = "zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec/timeline/1.1.0" as const;
+export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.11.0" as const;
+export const CS2D_TIMELINE_VERSION = "zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec/timeline/1.2.0" as const;
 export const CS2D_OBSERVATION_VERSION = "cs2d-analysis-adapter/1.7.0/internal-observation" as const;
-export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.8.0/signals" as const;
+export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.11.0/signals" as const;
 export const CS2D_PLANNER_VERSION = "cs2d-analysis-adapter/1.6.0/planner" as const;
 
 /** MVP pacing target: a full match should feel coached, not interrupted. */
@@ -139,6 +141,7 @@ export interface Cs2dPlayerState {
   readonly armor: number;
   readonly helmet?: boolean;
   readonly defuser?: boolean;
+  readonly grenadeInventoryVersion?: 1;
   readonly grenades?: readonly string[];
 }
 
@@ -275,7 +278,7 @@ export interface Cs2dExcludedRound {
 }
 
 export interface Cs2dAnalysisMetadata {
-  readonly adapter_version: typeof CS2D_ADAPTER_VERSION | "cs2d-analysis-adapter/1.9.0" | "cs2d-analysis-adapter/1.8.0" | "cs2d-analysis-adapter/1.7.0" | "cs2d-analysis-adapter/1.6.1" | "cs2d-analysis-adapter/1.6.0" | "cs2d-analysis-adapter/1.5.2" | "cs2d-analysis-adapter/1.5.1" | "cs2d-analysis-adapter/1.5.0" | "cs2d-analysis-adapter/1.4.0";
+  readonly adapter_version: typeof CS2D_ADAPTER_VERSION | "cs2d-analysis-adapter/1.10.0" | "cs2d-analysis-adapter/1.9.0" | "cs2d-analysis-adapter/1.8.0" | "cs2d-analysis-adapter/1.7.0" | "cs2d-analysis-adapter/1.6.1" | "cs2d-analysis-adapter/1.6.0" | "cs2d-analysis-adapter/1.5.2" | "cs2d-analysis-adapter/1.5.1" | "cs2d-analysis-adapter/1.5.0" | "cs2d-analysis-adapter/1.4.0";
   readonly source: Cs2dReplaySourceMetadata;
   readonly input_map: string;
   readonly selected_steam_id: string;
@@ -567,13 +570,12 @@ function normalizeStateSample(
   if (weapon === "UNKNOWN_ITEM") missingFields.push("active_item");
   if (!finiteNumber(state.money)) missingFields.push("money");
   if (!finiteNumber(state.equipValue)) missingFields.push("equipment_value");
-  if (state.grenades === undefined) missingFields.push("inventory");
-
-  const inventory = asArray(state.grenades).filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map((item) => ({
-    item_id: item,
-    item_class: "UTILITY",
-    count: 1
-  }));
+  const grenadeKinds = verifiedGrenadeKinds(state);
+  if (!grenadeKinds) missingFields.push("inventory");
+  else if (grenadeKinds.length > 0) missingFields.push("inventory.count");
+  // The source lists unique kinds, not physical counts. Only a verified empty
+  // list supports count zero; kind presence is carried by DecisionSnapshot.
+  const inventory: PlayerStateSample["inventory"] = [];
   const activeItem = weapon === "UNKNOWN_ITEM"
     ? undefined
     : { item_id: weapon, item_class: classifyItem(weapon), ...(Number.isSafeInteger(state.activeWeaponHandle) && state.activeWeaponHandle! > 0 && state.activeWeaponHandle! < 0xffffff ? { entity_handle: state.activeWeaponHandle } : {}), ...(state.ammoSamplingVersion === 2 ? { ammo_sampling_version: 2 as const } : {}), ...normalizeWeaponAmmo(state.weaponAmmo, weapon, tick, factRef, state.alive, state.ammoSamplingVersion) };
@@ -902,7 +904,8 @@ function stateFactText(state: NormalizedState): string {
         : source.helmet === false
           ? `有 ${armor} 甲、没头`
           : `${armor} 甲、头盔未知`;
-  const utility = source.grenades === undefined ? "道具数量未知" : `有 ${asArray(source.grenades).length} 颗道具`;
+  const kinds = verifiedGrenadeKinds(source);
+  const utility = !kinds ? "道具库存未知" : kinds.length === 0 ? "未携带投掷道具" : `携带道具种类：${kinds.join("、")}（颗数未知）`;
   const economy = finiteNumber(source.money) && finiteNumber(source.equipValue)
     ? `，存款 $${Math.max(0, source.money)}、装备价值 $${Math.max(0, source.equipValue)}`
     : "";
@@ -1090,7 +1093,7 @@ function buildCanonicalGeneratorInput(
         activeItemClass: classifyItem(safeText(state.source.weapon, "UNKNOWN_ITEM")) as CanonicalPlayerContext["activeItemClass"],
         money: state.source.money,
         equipmentValue: state.source.equipValue,
-        utilityCount: state.source.grenades?.length,
+        utilityCount: verifiedGrenadeKinds(state.source)?.length === 0 ? 0 : undefined,
         ...(stateCallout(state) ? { callout: stateCallout(state) } : {})
       } : {}),
       economyClass: economy ?? economyTerm(state)
@@ -1589,7 +1592,7 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
     throw new Error("cs2d win-probability contract is invalid.");
   }
   if (
-    ![CS2D_ADAPTER_VERSION, "cs2d-analysis-adapter/1.9.0", "cs2d-analysis-adapter/1.8.0", "cs2d-analysis-adapter/1.7.0", "cs2d-analysis-adapter/1.6.1", "cs2d-analysis-adapter/1.6.0", "cs2d-analysis-adapter/1.5.2", "cs2d-analysis-adapter/1.5.1", "cs2d-analysis-adapter/1.5.0", "cs2d-analysis-adapter/1.4.0"].includes(bundle.metadata.adapter_version) ||
+    ![CS2D_ADAPTER_VERSION, "cs2d-analysis-adapter/1.10.0", "cs2d-analysis-adapter/1.9.0", "cs2d-analysis-adapter/1.8.0", "cs2d-analysis-adapter/1.7.0", "cs2d-analysis-adapter/1.6.1", "cs2d-analysis-adapter/1.6.0", "cs2d-analysis-adapter/1.5.2", "cs2d-analysis-adapter/1.5.1", "cs2d-analysis-adapter/1.5.0", "cs2d-analysis-adapter/1.4.0"].includes(bundle.metadata.adapter_version) ||
     bundle.metadata.source.repository !== CS2D_SOURCE.repository ||
     bundle.metadata.source.commit !== CS2D_SOURCE.commit ||
     bundle.metadata.renderer_input !== false ||

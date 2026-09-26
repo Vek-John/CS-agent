@@ -1,3 +1,4 @@
+import { projectDecisionUtilityCount } from "@cs-coach/coach-agent/decision-utilities";
 import type {
   ActiveItem,
   CoachCue,
@@ -57,11 +58,6 @@ function containsInternalTaxonomy(value: string): boolean {
   return /\b[A-Z]{2,}(?:_[A-Z0-9]+)+\b/.test(value) || /回到决策时的事实和动作/.test(value);
 }
 
-function utilityCount(state: PlayerStateSample): number | undefined {
-  if (state.missing_fields.includes("inventory")) return undefined;
-  return state.inventory.reduce((total, item) => total + Math.max(0, item.count), 0);
-}
-
 /** Finds the last real state at the decision boundary without interpolating facts. */
 export function playerStateAtOrBefore(
   states: readonly PlayerStateSample[],
@@ -100,7 +96,7 @@ export function buildThreeStageCoachingView(input: {
     });
     const activeIsC4 = Boolean(state.active_item && (state.active_item.item_class.toUpperCase() === "BOMB" || /(?:^|_)c4$/.test(state.active_item.item_id)));
     if (state.active_item) chips.push({ kind: activeIsC4 ? "objective" : "weapon", text: activeIsC4 ? "C4" : state.active_item.item_id, item: state.active_item });
-    const grenades = utilityCount(state);
+    const { utilityCount: grenades } = projectDecisionUtilityCount(state);
     if (grenades !== undefined) chips.push({ kind: "utility", text: grenades > 0 ? `${grenades} 颗道具` : "无道具" });
     if (state.carries_c4 && !activeIsC4) chips.push({ kind: "objective", text: "携带 C4", item: { item_id: "weapon_c4", item_class: "BOMB" } });
     if (state.money !== undefined) chips.push({ kind: "money", text: `$${Math.max(0, state.money).toLocaleString("en-US")}` });

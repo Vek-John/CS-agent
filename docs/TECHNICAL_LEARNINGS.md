@@ -8,6 +8,14 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：库存向量历史尾部造成真实“幽灵道具”
+
+- 问题：get_iter是历史children，不等于当前向量；partial列表又被当完整，去重类型数被称颗数。旧空Vec省略本来是unknown，不能误判旧协议已表达真实零。
+- 依据/决策：本地ValueVector父Unsigned32/FieldState只扩容，加demoinfocs一手Issue450长度语义；真实72,273pawn有217,058历史尾槽，前N197,474槽全部有效。0018只读明确N前缀且全部验证，否则None；明确空Some[]，每行version1。旧raw数组无version保持unknown，旧保存产物直接恢复。
+- 消费：类型支持presence，不支持物理颗数；Timeline非空inventory.count未知、未知inventory缺失、完整空才0。Adapter/Signal1.11与Timeline1.2记录变化。独立审查发现View局部计数漏缺失前缀而说“无道具”，真实Adapter→View两红后复用纯数量投影，避免Graph进入UI。
+- 验证：库存源8红→11绿、原frame10绿；283相关tests/15patch tests、native9+vendor33、TS/Web及WASM/Viewer build/TS通过，1既有WebGPU产物缺失跳过。最终真实72,193行中8,774条旧有道具变当前空；只有库存字段变，全部其他帧字段与9回合边界保持，10人消费通过，0模型/网络。两native调查+一次WASM。[证据](validation/GRENADE_INVENTORY_CERTAINTY.md)。
+- 限制/后继：数字是重复采样行而非玩家/错误事件数，无画面真值或专业判决收益证明；非空颗数继续未知，旧历史需重新解析才获新事实。primary_weapon同样读全children，下一项沿已证长度语义核实收起主枪，未扩整个装备系统。代理/进程清理，原A5独立。
+
 ## 2026-09-26：未知活动武器不能变成刀局证据
 
 - 问题：active名称仍index-only解析，弹药却已校验serial；拒绝坏label后原Parser/Viewer又把空串当无枪/刀局，会错误改编号或排除统计。
