@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：跳过反思不应等待后台保存与Graph
+
+- 问题：原Host先await互动保存、生命周期同步、Graph提交才显示已准备的基础讲解；“直接看分析”仍会等待多个后台阶段。源码顺序确认，延迟依赖测试验证新实际helper无需这些依赖完成即可记录SKIPPED并继续。
+- 决策：同步本地FALLBACK与一次Session事件，后台只保存一次最终case；UI的epoch/cue与持久化history所有权分开检查。晚Graph只校准同cue SKIPPED，不重复记录、不覆盖完成状态；保存后再检查才mirror。submit认领epoch前移且skip释放旧busy，防同cue旧回答覆盖更新的跳过意图。
+- 验证：9项新真实Session/Graph/HistoryController与deferred回归、105相关测试及TS/Web build通过；真实Graph预算耗尽返回旧ANSWERED case也不能覆盖本地skip。[证据](validation/SKIP_REFLECTION_FLOW.md)。
+- 限制：未实际浏览器点击，不声称远端已保存或同步。快速继续后Graph可能落后并沿现有local fallback继续；下一项只核实该连续性路径的最小可行修复，不阻塞本轮用户体验。无真实模型/Demo/用户库，临时进程已回收。
+
 ## 2026-09-26：工具选择摘要不能留下缺条件的句子前缀
 
 - 问题：合法长canonical fact的确定性讲解通过完整语义校验，但Host截240字符后仍保留原refs；尾部条件丢失。真实Graph状态与旧focus多能力Policy spy均复现；当前默认单能力走RULE、不会调用Provider，不能夸大为默认模型误判。

@@ -135,6 +135,7 @@ import { buildCurrentCueQuestionContext, currentCueQuestionState, updateCurrentC
 import { CurrentCueQuestionsPanel } from "./current-cue-questions-panel";
 import { CurrentCueResourceCache } from "../../lib/coaching/current-cue-resource-source";
 import { TeachingDiagnosisPanel } from "./teaching-diagnosis-panel";
+import { skipReflectionToBaseline } from "../../lib/coaching/skip-reflection-flow";
 import {
   baselineCueCase,
   buildTeachingDiagnosisInput,
@@ -2445,6 +2446,12 @@ export function Cs2dPlaybackHost({
   }, []);
 
   const submitTeachingReflection = useCallback(async (reflection: UserReflection) => {
+    // Claim intent before saving: a later skip must invalidate this submission, even on the same cue.
+    const requestGeneration = generationRef.current;
+    if (!isTeachingDiagnosisRequestLive(reflection.cueId, requestGeneration, diagnosisRequestEpochRef.current)) return;
+    const requestEpoch = ++diagnosisRequestEpochRef.current;
+    const requestIsLive = () => isTeachingDiagnosisRequestLive(reflection.cueId, requestGeneration, requestEpoch);
+    if (!requestIsLive()) return;
     let interactionDurable = true;
     const history = historyPersistenceControllerRef.current;
     if (history) {
@@ -2460,6 +2467,7 @@ export function Cs2dPlaybackHost({
         setHistoryError("用户反思未能保存；上一个恢复点仍然有效。");
       }
     }
+    if (!requestIsLive()) return;
     const context = diagnosisContext();
     if (!context) {
       const currentCue = liveCueRef.current ?? cue;
@@ -2485,10 +2493,6 @@ export function Cs2dPlaybackHost({
         : current);
       return;
     }
-    const requestEpoch = ++diagnosisRequestEpochRef.current;
-    const requestGeneration = generationRef.current;
-    const requestCueId = context.cue.id;
-    const requestIsLive = () => isTeachingDiagnosisRequestLive(requestCueId, requestGeneration, requestEpoch);
     if (!requestIsLive()) return;
     setDiagnosticBusyCueId(reflection.cueId);
     setDiagnosticError(undefined);
@@ -2567,88 +2571,81 @@ export function Cs2dPlaybackHost({
     const liveSession = liveSessionRef.current;
     if (!currentCue || !liveSession || liveSession.current_cue_id !== currentCue.id || liveSession.phase !== "PAUSED_FOR_COACHING" ||
       liveSession.outcome_completion?.cueId !== currentCue.id || liveSession.outcome_completion.status !== "COMPLETE") return;
+    if (teachingCasesRef.current[currentCue.id]?.reflection?.response === "SKIPPED") return;
     const reflection = reflectionForSkip(currentCue.id);
     const requestEpoch = ++diagnosisRequestEpochRef.current;
     const requestGeneration = generationRef.current;
     const requestIsLive = () => isTeachingDiagnosisRequestLive(currentCue.id, requestGeneration, requestEpoch);
-    let interactionDurable = true;
+    if (!requestIsLive()) return;
+    const baseline = baselineCueCase(currentCue, "用户跳过思路补充；保留基础讲解，不推定用户意图。");
+    const skippedCase: CueCase = { ...baseline, reflection, attemptBudget: { ...baseline.attemptBudget, reflection: 1 } };
     const history = historyPersistenceControllerRef.current;
-    if (history) {
-      try {
-        await history.artifact(
-          "USER_INTERACTION",
-          reflection.reflectionId ?? `reflection-skip-${currentCue.id}`,
-          { kind: "REFLECTION_SKIPPED", reflection },
-          "user-reflection.v1",
-        );
-      } catch {
-        interactionDurable = false;
-        setHistoryError("跳过选择未能保存；上一个恢复点仍然有效。");
-      }
-    }
-    if (!requestIsLive()) return;
-    let skippedCase: CueCase = {
-      ...baselineCueCase(currentCue, "用户跳过 Reflection Gate；使用 Baseline Narration。"),
-      reflection,
-    };
-    let agentUnavailable = false;
-    let agentResult: { readonly event: CoachAgentEvent; readonly result: CoachAgentResult } | undefined;
-    const context = diagnosisContext();
-    if (context && stage3IdentityContext && routeState && replay?.demoContentHash) {
-      try {
-        await synchronizeTeachingDiagnosis(context);
-        if (!requestIsLive()) return;
-        const identity = buildStage3Identity(stage3IdentityContext);
-        const event = SubmitReflectionEventSchema.parse(buildTeachingDiagnosisSubmissionEvent(
-          context,
-          reflection,
-          {
-            eventType: "SUBMIT_REFLECTION",
-            eventId: `diagnosis-skip-${currentCue.id}-${crypto.randomUUID()}`,
-            identity,
-          },
-        ));
-        const result = await dispatchCoachAgentEvent(event);
-        if (!requestIsLive()) return;
-        const graphCase = result.state.cueCases?.[currentCue.id];
-        if (graphCase) skippedCase = graphCase;
-        agentResult = { event, result };
-      } catch {
-        agentUnavailable = true;
-        if (requestIsLive()) setDiagnosticError("暂时未能同步跳过操作，已在本地保存。");
-      }
-    }
-    if (!requestIsLive()) return;
-    setTeachingCases((current) => ({ ...current, [currentCue.id]: skippedCase }));
+    const historyGeneration = history?.ownershipGeneration;
+    const ownsHistory = () => historyPersistenceControllerRef.current === history && history?.ownershipGeneration === historyGeneration;
     const active = planRef.current ?? activePlan;
-    setSession((current) => active && current
-      ? reduceCoachingSession(active, current, { type: "RECORD_TEACHING_CASE", cueCase: skippedCase, reflection })
-      : current);
-    if (!agentUnavailable) setDiagnosticError(undefined);
-    const durability = await persistTeachingBeforeRuntimeHead({
-      interactionDurable,
-      persistDiagnosis: async () => {
-        const persistence = historyPersistenceControllerRef.current;
-        if (!persistence) return true;
+    const context = diagnosisContext();
+    const durability = await skipReflectionToBaseline({
+      baseline: skippedCase,
+      isCurrent: requestIsLive,
+      ownsHistory,
+      publishLocal: (localCase) => {
+        // Claim the click synchronously, before React renders or persistence yields.
+        teachingCasesRef.current = { ...teachingCasesRef.current, [currentCue.id]: localCase };
+        setTeachingCases((current) => ({ ...current, [currentCue.id]: localCase }));
+        setDiagnosticError(undefined);
+        setDiagnosticBusyCueId(undefined);
+        setSession((current) => active && current
+          ? reduceCoachingSession(active, current, { type: "RECORD_TEACHING_CASE", cueCase: localCase, reflection })
+          : current);
+      },
+      reconcile: (graphCase) => {
+        // The user's skip event was recorded once above; only reconcile its case.
+        setTeachingCases((current) => current[currentCue.id]?.status === "COMPLETED" ? current : { ...current, [currentCue.id]: graphCase });
+        setSession((current) => !current || current.cue_cases?.[currentCue.id]?.status === "COMPLETED" ? current
+          : { ...current, cue_cases: { ...current.cue_cases, [currentCue.id]: graphCase } });
+      },
+      persistInteraction: async () => {
+        if (!history) return true;
         try {
-          await persistence.artifact(
-            "CUE_CASE",
-            currentCue.id,
-            skippedCase,
-            "cue-case.v1",
-            (skippedCase.verdict?.revision ?? 0) + 1,
-          );
+          await history.artifact("USER_INTERACTION", reflection.reflectionId ?? `reflection-skip-${currentCue.id}`,
+            { kind: "REFLECTION_SKIPPED", reflection }, "user-reflection.v1");
           return true;
         } catch {
-          setHistoryError("跳过记录未能保存；上一个恢复点仍然有效。");
+          if (ownsHistory()) setHistoryError("跳过选择未能保存；上一个恢复点仍然有效。");
           return false;
         }
       },
-      ...(agentResult && requestIsLive()
-        ? { mirror: () => mirrorAgentResult(agentResult.event, agentResult.result) }
-        : {}),
+      synchronize: async () => {
+        if (!context || !stage3IdentityContext || !routeState || !replay?.demoContentHash) return undefined;
+        try {
+          await synchronizeTeachingDiagnosis(context);
+          if (!requestIsLive()) return undefined;
+          const identity = buildStage3Identity(stage3IdentityContext);
+          const event = SubmitReflectionEventSchema.parse(buildTeachingDiagnosisSubmissionEvent(context, reflection, {
+            eventType: "SUBMIT_REFLECTION", eventId: `diagnosis-skip-${currentCue.id}-${crypto.randomUUID()}`, identity,
+          }));
+          const result = await dispatchCoachAgentEvent(event);
+          if (!requestIsLive()) return undefined;
+          const graphCase = result.state.cueCases?.[currentCue.id];
+          if (!graphCase) return undefined;
+          return { cueCase: graphCase, mirror: () => mirrorAgentResult(event, result) };
+        } catch {
+          if (requestIsLive()) setDiagnosticError("暂时未能同步跳过操作，已显示基础讲解。");
+          return undefined;
+        }
+      },
+      persistCase: async (finalCase) => {
+        if (!history) return true;
+        try {
+          await history.artifact("CUE_CASE", currentCue.id, finalCase, "cue-case.v1", (finalCase.verdict?.revision ?? 0) + 1);
+          return true;
+        } catch {
+          if (ownsHistory()) setHistoryError("跳过记录未能保存；上一个恢复点仍然有效。");
+          return false;
+        }
+      },
     });
-    if (durability === "MIRROR_FAILED") {
+    if (durability === "MIRROR_FAILED" && requestIsLive()) {
       setHistoryError("跳过选择已记录，但新的恢复点未能提交；上一个恢复点仍然有效。");
     }
   }, [activePlan, buildStage3Identity, cue, diagnosisContext, isTeachingDiagnosisRequestLive, mirrorAgentResult, replay?.demoContentHash, routeState, stage3IdentityContext, synchronizeTeachingDiagnosis]);

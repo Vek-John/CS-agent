@@ -678,6 +678,8 @@ Stage3供工具选择使用的讲解摘要，将每字段正文、引用和限�
 
 ### 6.8 Playback
 
+默认反思面板的“跳过，直接看分析”先同步发布已准备的FALLBACK讲解、记录一次SKIPPED并消耗一次reflection预算，显示和继续不依赖后台保存或Graph响应。后台捕获原history对象与ownershipGeneration，沿互动→最终一次CUE_CASE→可选runtime head顺序保存；换cue后仍可在原所有权内保存该选择，但不再启动旧Graph、更新新UI或mirror。Graph仅返回同cue的SKIPPED/FALLBACK才可校准case，不重复追加Session用户事件，不覆盖已COMPLETED状态；case保存结束后再次验证epoch/cue/history才可mirror。提交反思的epoch在首次保存await前认领，后点跳过会使旧提交失效。立即呈现不代表已持久化，失败沿已有提示和旧恢复点处理；旧cue未同步Graph时仍可能进入既有本地fallback，不伪造远端连续状态。
+
 基础讲解与完整教学诊断均可在本次处理完成后“再看一遍”，包括ManualCueVisit。REPLAY_OUTCOME可携带target:{sessionId,cueId,visitId?}：默认旧无target调用兼容且仍须global revealed；manual必须携带匹配当前session/cue/非空visit_id的target，PAUSED且本次gate的cue/outcomeEnd/completedAt完整匹配，不依赖global已看过标记。动作不接受任意播放tick，范围由frozen cue派生；重播沿原guided指令从决策前置上下文播至outcome end，回同visit/cue/decision，保留已完成gate、default cursor与原case/thread/问答key。诊断仍须保存反思/完整结果，无未提交异议（含收起后的草稿）及工具/诊断忙碌才显示/允许入口。重播不提交反思、重跑诊断/Provider、呈现/消费cue或新增LearningThread，不开放新Stage3工具。
 
 Host在任何transport reset或操作记录前调用Session共享资格函数，并以暂停状态对象去重尚未发布的重复点击，reducer再复核。UI捕获渲染时transport epoch，实时入口拒绝旧epoch（含自由seek已开始但取消manual尚在React队列中）；epoch不进入领域动作。默认重播沿原clearUserTakeover；manual只reset transport、通知播放状态并使旧seek失效，保留接管态与返回/取消控制，避免重启默认observer。新的visit使用manual-UUID，避免长session/cue拼接截尾吞掉序号；同visit重播不创建新visit。USER_INTERACTION/user-interaction.v1保留，target严格校验字段并绑定outer session/cue；旧无target记录继续可读。manual幂等key由既有stable identity token方法覆盖完整session/cue/visit生成有界标识，不用截尾丢visit；双击零额外记录，同visit之后的明确重播仍可执行并复用同一逻辑记录。

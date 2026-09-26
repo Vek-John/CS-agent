@@ -2,6 +2,16 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：跳过反思后的立即讲解（2026-09-26）
+
+- ID skip-reflection-flow，基线136c101 clean；root拥有必要Host/辅助函数/测试/docs，revision_semantics_review默认配置5分钟只读预检异步消费（8分钟上限）。已读emil/apple，复用原FALLBACK三段讲解，不新增动画或布局。
+- 实际线索：skipTeachingReflection在显示已准备的基础讲解前，依次等待互动保存、Graph同步与提交；按钮无busy，已存在SKIPPED/UNKNOWN和下一段的领域行为，缺口可能是本地显示被后台等待阻挡。
+- 目标/验收：A1真实入口延迟依赖的小复现；A2跳过立即展示基础讲解且保留SKIPPED；A3原interaction→case→runtime head顺序和失败提示保持，切cue/接管后晚返回不覆盖；A4相关tests/TS/build、证据和push。只修实际等待路径，不改判断质量门或重复造Graph状态机。
+- 风险/资源：先模块小例，无真实模型/Demo/用户DB/UI/服务；旧请求不得覆盖新cue，不能因乐观显示冒称已保存，不能在未保存互动时提交新head。新helper若需要必须由Host实际消费，测试不复刻另一条流程；root清理所有测试进程，原A5独立。
+- 实际改动：Host使用skipReflectionToBaseline先发布/Session记一次skip，同步ref挡重复；后台用捕获history保存一次最终case，切cue后拒绝旧Graph发布和head。submit首次await前认领epoch，skip清理旧busy；拒绝Graph预算耗尽后返回的既有ANSWERED case。未改判断、工具或保存协议。
+- 证据：9个新deferred/真实Session/HistoryController/Graph小例及105其他相关测试、TS与production build通过。证明等待互动或Graph时已可继续、错误不提交head、换owner不写新review、正常v1一次和真实ANSWERED→SKIP竞态。[记录](validation/SKIP_REFLECTION_FLOW.md)。默认代理窄审已RELEASE，主控读diff并处理三项实际竞态。
+- 精确限制/后继：未挂载完整React/真实浏览器，UI A5仍独立。立即继续可能令旧cue未同步Graph，后续走既有local fallback；下一有限任务据此核实跨cue生命周期跟进是否能在不等待、不回退游标的条件下保留连续诊断，先小真实Controller序列验证，不伪造远端成功。
+
 ## 已交付：工具选择摘要的完整条件（2026-09-26）
 
 - ID policy-summary-conditions，基线da0f511 clean；root拥有生产/文档，revision_semantics_review默认配置独占新policy-summary-conditions.test.ts，8分钟首例/12分钟上限。先核实合法长Narration→实际Host/Graph Policy输入，不能只看slice宣称错误。
