@@ -2,6 +2,12 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：异议修订后的当前追问（2026-09-26）
+
+- 基线538275f已push/clean；主控有限goal，独占current-cue-questions.ts/对应tests及docs。原API子任务认证失败未重启；本轮小改动主控执行，不并发写入。模板沿用，emil/Apple技能用于保持明确反馈与现有交互，不加新布局动画。
+- A1实际diagnose→revise(DISAGREED)→真实Session记录→问答gate复现；A2仅已完成修订且完整身份链/当前结果完成门允许原问法；A3旧key拒绝、当前默认/manual可用，busy/不完整/伪修订仍拒，零副作用；A4相关tests/TS/build；A5文档commit/push。无schema/producer/Graph/Memory/Session改动，无UI/Demo/模型/DB，5分钟红例/5分钟实现/10分钟检查，主控清理测试build。
+- 实际default/manual两红→绿，2行资格改动，4文件173tests、TypeScript及Web production build通过。主控集中diff复核，无新代理；[证据](validation/REVISED_CUE_QUESTIONS.md)。所有测试/build退出，commit/push后释放本轮写入；SSR非真实UI。下一轮先核对同一修订产物经过完整Recovery恢复后的追问资格与零重新诊断，只跑小范围实际链，若已正确则不制造产品修改。
+
 ## 已交付：合法长异议修订（2026-09-26）
 
 - 基线7a32699 clean；原任务01a0daba-7e7c-7fd2-a199-fc23c43bd643启动认证401、未产生改动。2026-09-26主控核实systemError/真实clean后接管写入，不重复启动同失败路径。主控有限goal：保留两段合法USER原文与来源，修复内部拼接和限制追加的实际失败，相关tests/TS/build后commit/push。

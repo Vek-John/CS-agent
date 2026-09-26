@@ -77,10 +77,11 @@ export function buildCurrentCueQuestionContext(input: CurrentCueQuestionInput): 
     const c = parsed.data;
     const r = c.diagnosticResult;
     if (c.cueId !== cue.id || (c.candidateId !== undefined && c.candidateId !== cue.candidate_id)
-      || !["VERDICT_READY", "AWAITING_CONFIRMATION", "COMPLETED"].includes(c.status)
+      || !["VERDICT_READY", "AWAITING_CONFIRMATION", "COMPLETED", "DISAGREED"].includes(c.status)
       || c.reflection?.cueId !== cue.id || c.hinge?.cueId !== cue.id || !r || r.cueId !== cue.id
       || r.hingeId !== c.hinge.hingeId || !c.verdict || c.verdict.hingeId !== c.hinge.hingeId
       || c.verdict.diagnosticResultId !== r.resultId || !c.transferRule) return;
+    if (c.status === "DISAGREED" && (c.verdict.revision < 1 || c.attemptBudget.disagreement !== 1)) return;
     basisRefs = r.evidenceRefs;
     limitations = [...c.hinge.limitations, ...r.limitations, ...c.verdict.limitations];
     // The reflection surface displays these first three decision facts. Do not widen that surface here.

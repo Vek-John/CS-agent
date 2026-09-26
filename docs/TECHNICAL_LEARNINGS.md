@@ -1965,3 +1965,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 独审：默认revision_semantics_review只读发现旧selectedGoal压过新“保枪”、旧TACTICAL_CONTEXT误把资源补充当战术的两项语义问题；各加红例修复，新问题类型只从本次原文确定。再查无must-fix；主控负责全部写入和验证。
 - 验证：两段500字、末尾否定、两源origin/旧类型保留、12条限制及新增提示、一次预算和稳定身份；真实runtime→异议不再fallback且重复事件/第二次异议不重跑Policy；实际append validator→内存restore→stored validator保留新旧来源。相关7文件168tests、TypeScript通过，生产build结果见本轮[验证](validation/LONG_DIAGNOSIS_DISAGREEMENT.md)。
 - 限制：分类/hinge仍沿既有规则，未证明自然语言理解或专业判断质量提升。previousReflection为新代码向后读兼容，不保证旧客户端可读新字段；旧已保存合并文本不会还原成两条。SSR/内存不等于真实UI/DB。原子任务因认证401未执行，主控接管后不重复同路径；无真实Demo、模型、服务、用户DB/Memory/密钥或安装部署操作。
+
+
+## 2026-09-26：异议后的完整诊断仍应可追问
+
+- 问题：真实reviseTeachingDiagnosis返回DISAGREED，Panel仍展示完整诊断，但当前追问仅接受VERDICT_READY/AWAITING_CONFIRMATION/COMPLETED，默认和manual完成修订后都丢入口。
+- 决定：只扩现有gate到完整DISAGREED；额外要求revision>=1和disagreement=1，原cue/hinge/result/verdict归属、busy、当前完整结果门均保留。没有新诊断、模型、命令或历史写入。
+- 验证：真实diagnose→revise→Session RECORD→当前context/Panel两红→绿；旧key拒绝、来源更新、当前建议包含修订内容，问答前后input不变。未完成门/busy/未修订版本或未消耗异议资格拒绝。4文件173tests、TS通过，生产build见[证据](validation/REVISED_CUE_QUESTIONS.md)。
+- 限制：仅已有有限问法/本页状态，不新增一般问答或修订历史回填。采用emil/Apple技能维持现有控制，不改布局/动效/reduced设置。SSR和模块回调不是浏览器/桌面实测；无Demo/模型/用户DB或服务，原UI A5独立保留。

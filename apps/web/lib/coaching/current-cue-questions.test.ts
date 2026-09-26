@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createSyntheticMirageTimeline } from "@cs-coach/demo-domain";
 import { createFixtureReviewPlan } from "@cs-coach/review-planner";
 import { answerCurrentCueQuestion, createCoachingSession, reduceCoachingSession } from "@cs-coach/session";
-import { diagnoseTeachingCue } from "@cs-coach/coach-agent/client";
+import { diagnoseTeachingCue, reviseTeachingDiagnosis } from "@cs-coach/coach-agent/client";
 import type { Fact } from "@cs-coach/contracts";
 import { CurrentCueQuestionsPanel } from "../../components/playback/current-cue-questions-panel";
 import { TeachingDiagnosisPanel } from "../../components/playback/teaching-diagnosis-panel";
@@ -35,6 +35,39 @@ function fixture(limitations: string[] = []) {
   const input: CurrentCueQuestionInput = { plan, session, generation: 1, diagnosticsEnabled: true, cueCase: output.cueCase, busy: false, takenOver: false };
   return { input, plan, cue, output, session };
 }
+
+it.each([false, true])("keeps grounded questions available after a complete real revision, manual=%s", manual => {
+  const { input, plan, cue, output } = fixture();
+  if (manual) {
+    input.takenOver = true;
+    input.session = reduceCoachingSession(plan, input.session!, { type: "BEGIN_MANUAL_CUE_VISIT", cueId: cue.id, visitId: "revision-visit" });
+    input.session = reduceCoachingSession(plan, input.session, { type: "TICK", tick: cue.outcome_end_tick });
+  }
+  const oldContext = buildCurrentCueQuestionContext(input)!;
+  const oldState = updateCurrentCueQuestions(undefined, oldContext.key, oldContext, { type: "ASK", question: CURRENT_CUE_ADVICE_QUESTION });
+  const revised = reviseTeachingDiagnosis({ previous: output,
+    input: { cueId: cue.id, candidateId: cue.candidate_id, reflection: output.cueCase.reflection!,
+      decisionFacts: cue.facts.filter(f => f.availability === "DECISION"), playerActionFacts: [], outcomeFacts: [] },
+    disagreement: { cueId: cue.id, selectedGoal: "GET_INFO", rawText: "我当时听到了脚步，想确认信息。", source: "USER", response: "ANSWERED", limitations: [] },
+  });
+  input.cueCase = revised.cueCase;
+  input.session = reduceCoachingSession(plan, input.session!, { type: "RECORD_TEACHING_CASE", cueCase: revised.cueCase, learningThread: revised.learningThread });
+  expect(input.cueCase.status).toBe("DISAGREED");
+  const before = structuredClone(input);
+  const context = buildCurrentCueQuestionContext(input);
+  expect(context).toBeDefined();
+  expect(context!.key).not.toBe(oldContext.key);
+  expect(updateCurrentCueQuestions(oldState, oldContext.key, context, { type: "ASK", question: CURRENT_CUE_ADVICE_QUESTION })).toBe(oldState);
+  const state = updateCurrentCueQuestions(oldState, context!.key, context, { type: "ASK", question: CURRENT_CUE_ADVICE_QUESTION });
+  expect(state!.turns).toHaveLength(1);
+  expect(state!.turns[0].answer.items.some(item => item.text.includes(revised.cueCase.transferRule!.do))).toBe(true);
+  expect(renderToStaticMarkup(createElement(CurrentCueQuestionsPanel, { state: state!, canRepeatAdvice: Boolean(context!.advice), onDraft() {}, onAsk() {} }))).toContain(CURRENT_CUE_ADVICE_QUESTION);
+  expect(input).toEqual(before);
+  expect(buildCurrentCueQuestionContext({ ...input, busy: true })).toBeUndefined();
+  expect(buildCurrentCueQuestionContext({ ...input, session: { ...input.session!, outcome_completion: undefined } })).toBeUndefined();
+  expect(buildCurrentCueQuestionContext({ ...input, cueCase: { ...input.cueCase!, verdict: { ...input.cueCase!.verdict!, revision: 0 } } })).toBeUndefined();
+  expect(buildCurrentCueQuestionContext({ ...input, cueCase: { ...input.cueCase!, attemptBudget: { ...input.cueCase!.attemptBudget, disagreement: 0 } } })).toBeUndefined();
+});
 
 it("repeats the real diagnosis's already displayed advice with every saturated limitation", () => {
   const { input, cue, output } = fixture(Array.from({ length: 10 }, (_, i) => `现场条件 ${i + 1} 尚未核实。`));
