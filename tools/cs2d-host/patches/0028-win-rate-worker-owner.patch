@@ -1,0 +1,11 @@
+diff --git a/apps/app/src/viewer/DemoAnalyzerView.vue b/apps/app/src/viewer/DemoAnalyzerView.vue
+--- a/apps/app/src/viewer/DemoAnalyzerView.vue
++++ b/apps/app/src/viewer/DemoAnalyzerView.vue
+@@ -176,6 +176,7 @@
+       }
+     }
+     worker.onerror = (error) => {
++      if (worker !== winRateWorker) return
+       worker.terminate()
+       winRateWorker = null
+       reject(new Error(error.message || '胜率模型 Worker 失败'))

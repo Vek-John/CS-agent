@@ -8,6 +8,12 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：Worker错误也需要归属门
+
+- 问题：inferWinRate消息已有worker/requestId过滤，但onerror直接清winRateWorker。小交错中A的迟到error清掉B引用，B的ready随即被旧message gate丢弃，分析无法完成。
+- 决策：0028让onerror首先检查捕获worker仍为当前实例；旧错误无副作用，当前错误仍terminate/清引用/reject，保持基础回退逻辑和后继新推理。
+- 验证：2红→绿，4新增/52相关tests、两端TS/build通过，root集中复查。日志`.local-data/win-rate-worker-owner`。实际函数配手动FakeWorker事件，没有真实浏览器/模型试验，不扩展旧Promise取消或模型算法。
+
 ## 2026-09-27：Worker尚未创建也要收敛解析状态
 
 - 问题：Parser ensureWorker同步构造异常绕过已有消息onerror和局部catch，遗留parsing；不等同于Worker运行中崩溃。

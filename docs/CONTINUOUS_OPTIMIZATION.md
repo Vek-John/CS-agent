@@ -2,6 +2,12 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：旧胜率Worker错误不干扰新分析（2026-09-27）
+
+- ID win-rate-worker-owner，基线9b9eabd clean；root独占0028/registry/实际inferWinRate测试/docs，无委派。A1旧A错误晚于B启动的小双Worker交错，A2与onmessage一致先核实Worker归属，A3当前error/后继成功/进度/旧message保持，A4相关tests/两端TS/build与集中复查后push。只修onerror清空新引用导致新ready被丢弃，不改模型/特征/Provider/教学门，也不扩展旧Promise取消协议。
+- 两个旧回调用例（A尚未完成/A已完成）原2红→绿，新增4/总52相关tests通过，两端TS/production build通过。本地patched实际函数+FakeWorker，不调用CS-Net/Jev/真实Demo/网络/GUI；10分钟有限阶段、root清理FakeWorker handler和构建进程，日志`.local-data/win-rate-worker-owner`。真实浏览器晚error时序未测，不声称取消整个旧inference Promise。
+- 下一有限目标：默认inferWinRate等待Worker结果，runtime模型fetch和session.run主要只有signal检查；先核实完整链路已有等待预算/用户回退入口，再用挂起的控制小例验证基础带看是否会无限等可选胜率数据。不能把API20秒机械套在大模型下载或整场推理，不重跑专业判断集合。
+
 ## 已交付：Parser启动异常可恢复（2026-09-27）
 
 - ID parser-start-failure，基线5f9dca1 clean；root独占0027/registry/既有cancellation测试/docs，无委派。实际ensureWorker位于局部读取/解压catch之外，构造抛错后parse拒绝且状态仍parsing。目标为启动失败→明确error/正常结算→下次可解析；A1实际composable与managed tail构造异常小例，A2局部catch，A3操作owner清理/不残留Replay或hash/下次正常，A4相关tests/两端TS/build后push。
