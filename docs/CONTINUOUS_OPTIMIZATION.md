@@ -2,6 +2,15 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：动作回放完成反馈（2026-09-27）
+
+- ID viewer-action-completion-feedback，基线ccd4a3c clean；root独占0031/registry/docs和验证/push，前执行者均RELEASE，无委派。既有实际IAB截图证实ACK成功、返回decision暂停后banner仍“正在回到决策点”；只在既有RETURNING且已到decision的完成分支改为“已回到决策点”。沿已启用emil/apple反馈语义，不改布局/动画/暂停/终点/ACK条件。
+- A1受控0030→0031应用/复用；A2已有真实Viewer小harness一次完成后显示新文案且ACK1/回decision暂停；A3相关测试/两端TS/build与集中diff复查后push。低影响文案不新增镜像测试，不改PRD/架构契约；单root browser/server owner，60秒小片段上限，无模型/真实Demo/用户库/安装，结束关闭tab/server。
+
+
+- 交付：IAB实际连续回放完成后新文案“已回到决策点”可见；1次SUCCEEDED/CUE_PLAYED、合成128处暂停、errors=[]。0031仅一行文案，registry受控尾应用及build复用通过；20相关tests、两端TS/production build通过，集中diff无其他产品行为改动，tab/server/build进程退出。日志.local-data/viewer-action-completion-feedback。
+- 下一有限目标（real-route-default-policy）：暂停/完成小场景证据已充分，停止扩大这组UI矩阵。回到真实数据消费：在既有授权Demo的一次有界解析中，仅汇总当前实际Adapter自然cue的可用工具与默认策略选择，解释选择/FINISH的事实门；不调用模型/Jev、不重跑整场GUI或完整性审查。先查既有可复用解析证据，必要才用单进程/120秒/内存上限生成小摘要，原始Replay留数据owner，引用门不降低。
+
 ## 已交付：真实动作工具暂停与恢复（2026-09-27）
 
 - ID viewer-action-interruption，基线ca82c56 clean；root独占既有viewer-action-smoke脚本/docs及全部服务/浏览器/checks/push，无新委派，前owner已RELEASE。沿已读emil/apple使用原生验收按钮，不改产品界面或Viewer代码。

@@ -1,0 +1,12 @@
+diff --git a/apps/app/src/viewer/player/ViewerStage.vue b/apps/app/src/viewer/player/ViewerStage.vue
+--- a/apps/app/src/viewer/player/ViewerStage.vue
++++ b/apps/app/src/viewer/player/ViewerStage.vue
+@@ -362,7 +362,7 @@
+       }
+       if (slow.phase === 'RETURNING' && tick <= args.decisionCanonicalTick + 1) {
+         hostSlowReplay.value = null
+-        hostTeachingBanner.value = '正在回到决策点'
++        hostTeachingBanner.value = '已回到决策点'
+         emitTeachingAck(slow.command, 'SUCCEEDED', 'CUE_PLAYED', true)
+         return
+       }
