@@ -1,0 +1,25 @@
+{
+  "source": "root-observed CUA IAB DOM and screenshots",
+  "synthetic": true,
+  "modelRun": false,
+  "realDemoRun": false,
+  "ready": true,
+  "posted": 1,
+  "ackCount": 1,
+  "ackStatus": "SUCCEEDED",
+  "ackCode": "CUE_PLAYED",
+  "completed": true,
+  "lastTick": 128,
+  "minPlayingTick": 64,
+  "maxPlayingTick": 255,
+  "playing": false,
+  "speed": 1,
+  "returnedToDecisionAndPaused": true,
+  "errors": [],
+  "canvasPixels": {
+    "width": 2496,
+    "height": 1280
+  },
+  "visual": "Mirage radar, two synthetic players, HUD and return banner observed",
+  "cleanup": "Both attempt tabs closed; loopback4321 server exited"
+}

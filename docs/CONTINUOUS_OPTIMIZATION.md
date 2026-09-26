@@ -2,6 +2,19 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：真实Viewer动作播放小验收（2026-09-27）
+
+- ID basic-route-viewer-action，基线bd83113 clean，7f2b实际checkout；partial_revision_restore默认配置独占独立harness脚本/小fixture素材，root独占docs、浏览器与服务生命周期/最终验证/push。前执行者已RELEASE；不改Viewer产品代码或旧patch，发现问题按证据再分配。
+- 目标：合成小Replay→实际Vue ViewerStage/useReplay/ViewerMap mounted→父iframe严格命令→真实REPLAY_CUE_SLOW自然时钟到outcome→回decision暂停→恰好一次真实CUE_PLAYED ACK；页面只显示有界计数与合成时钟，不向工具/Node搬Replay。
+- A1先browser/render smoke，A2再单次合法工具命令及实际画面/ACK，A3所有服务/tab/临时资源退出，相关checks后push。合成时间不冒充真实Demo tick；这不是大Demo或原A5。优先复用现有入口，没有可用小harness才新增；不安装/下载模型，不读写用户库。
+- 风险预检：Vite/Vue alias/静态地图、iframe parentOrigin/source验证、RAF是否运行；限小fixture/约10秒片段、60秒浏览器阶段，单root controller，不叠CDP/Playwright绕行。同一基础设施两次失败简化。server仅loopback和明确目录范围，独立测试origin，不传comments id；执行者只准备不launch，root负责启动与CtrlC/关闭tab。
+- 新环境证据：root IAB隐藏独立loopback预检WebGL2可用，原生RAF由7帧自然到60帧；预检tab和4320服务已关闭。尚不等同真实Viewer组件或native桌面A5通过。
+
+
+- 交付：可重放静态harness直接编译真实ViewerStage/useReplay/ViewerMap；第二次IAB实测地图、两人、HUD正常，canvas2496×1280稳定，errors=[]，一次命令→一次SUCCEEDED/CUE_PLAYED→返回合成128并暂停，观察播放64→255。无Parser/模型/用户Demo/数据库；父命令固定，不把此与上一轮Graph测试相加为整场端到端。[记录](validation/BASIC_ROUTE_VIEWER_ACTION.md)。
+- 首次ACK成功但地图白屏不计渲染通过；root关闭异常巨画布后，定位Tailwind未收集ignored上游源码。仅修harness显式@source及root高度，挂载前验证utility生效，避免再建失控画布；产品代码未改。独立小构建、合同校验、19相关tests、两端TS/build通过，root源码/静态服务范围复查，执行者RELEASE，全部tab/server/build进程退出。
+- 下一有限目标（viewer-action-interruption）：复用本轮已通过的真实Viewer小页，核实同一动作工具暂停后时钟确实停住、恢复从原位置继续，并保持一次完成ACK；只增加必要控制与有界观察，不重新验证大Demo/模型/整场。已有source/helper与Host集成暂停测试仍复用，本项仅补实际浏览器时钟与工具身份的交界。
+
 ## 已交付：基础路线默认工具继续闭环（2026-09-27）
 
 - ID basic-route-default-tool，基线32f1b25 clean，真实7f2b工作树；partial_revision_restore默认配置独占新增集成测试（必要测试helper），root独占docs和最终复查/两端TS/build/push。上轮执行者已RELEASE。产品代码发现问题先按证据协调所有权，不预设需要改动。

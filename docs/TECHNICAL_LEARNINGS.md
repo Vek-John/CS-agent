@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：真实播放ACK与可见渲染要分开验收
+
+- 决策：使用小合成Replay、真实ViewerStage/useReplay/ViewerMap/bridge和父iframe；root唯一控制browser/server，运行前先做RAF/能力smoke。构建静态产物与白名单资源，不运行全repo dev server或加载大Demo。
+- 失败与修正：首尝试ACK成功但画布白屏/尺寸反馈膨胀；实际CSS缺absolute/inset-0/h-full等。Tailwind独立构建未扫描被忽略的upstream源码，显式@source与根容器高度修正后加mount前CSS门，不改产品渲染器。
+- 证据：第二次真实地图/人物/HUD可见，canvas2496×1280稳定，errors=[]；64→255观察进度，1次CUE_PLAYED成功后返回合成128并暂停。实际终点事件可被Vue合批，不能因父页少一tick就伪造终点或认定没播放。[记录](validation/BASIC_ROUTE_VIEWER_ACTION.md)。
+- 限制：固定合法父命令和合成Replay，不是完整Next/Graph/SQLite或真实Demo端到端，不替代native A5。无模型/安装，所有临时tab/server退出。
+
 ## 2026-09-27：基础路线要验自然输入到工具结果的衔接
 
 - 证据边界：已有current-focus-tools证明编译fixture→默认Graph→命令绑定，旧stage3-integration证明手工cue与显式policy的ACK流程；整场consumeGuidedRoute强制无工具。不能把三者直接称为实际Adapter无胜率路线的工具完成闭环。
