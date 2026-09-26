@@ -1,0 +1,15 @@
+diff --git a/apps/app/src/viewer/DemoAnalyzerView.vue b/apps/app/src/viewer/DemoAnalyzerView.vue
+--- a/apps/app/src/viewer/DemoAnalyzerView.vue
++++ b/apps/app/src/viewer/DemoAnalyzerView.vue
+@@ -1015,7 +1015,10 @@
+ }
+ 
+ function onInput(e: Event) {
+-  void onFiles((e.target as HTMLInputElement).files)
++  const el = e.target as HTMLInputElement
++  void onFiles(el.files)
++  // Allow re-picking the same Demo after a failed or cancelled import.
++  el.value = ''
+ }
+ 
+ function onImportInput(e: Event) {

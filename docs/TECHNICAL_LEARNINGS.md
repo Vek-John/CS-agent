@@ -8,6 +8,12 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：文件重选与File所有权
+
+- 问题：Viewer主Demo入口保留input值；授权失败后选择同文件可能不再发change。另一个.cs2dv入口已有清值处理。
+- 决策：0020补丁在同步调用onFiles之后清值；onFiles先捕获File并保存到pendingManagedImport，清空文件列表不删除该引用。不加自动重试或文件复制；受控checkout支持增量升级并拒绝不适用的补丁。
+- 验证：实际函数隔离探针覆盖引用保留、重选新请求/代际、旧代际取消及空选择无请求；22相关tests、Web/Viewer TS/build通过。[记录](validation/DEMO_PICKER_RESELECTION.md)。探针最初使用当前TypeScript包的旧JS编译API失败，改用现有Node stripTypeScriptTypes后通过，未安装工具。系统文件选择器及真实传输未实测。
+
 ## 2026-09-27：授权等待与Demo传输生命周期分开
 
 - 问题/决策：导入前的小IMPORT授权API原来无请求期限，Host因此可能始终等token。它只签发内存授权、默认60秒TTL，改用既有HISTORY20秒fetch+body期限，不碰文件流/解析或自动重试。

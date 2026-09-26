@@ -2,6 +2,13 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：同一Demo可重新选择（2026-09-27）
+
+- ID demo-picker-reselection，基线42222ca clean；root独占0020 Viewer补丁、patch registry/docs，无委派。目标：授权失败后再次选择原Demo能重发请求；流程为主文件入口→选择→同步保留File→清空input值→后续可再次选择。复用现有.cs2dv入口的清值方式，不改协议、自动重试、拖放、解析或教学边界。
+- A1实际onInput/onFiles小探针验证旧值残留；A2新入口清值后保留同一File、新request/generation并取消旧代际，空选择不发请求；A3补丁支持原受控checkout升级及重复复用；A4相关tests、Web/Viewer TS和production build后commit/push。风险为过早清值丢File，已验证onFiles在任何await前捕获；只用小metadata对象，不读Demo字节，无DB/网络/GUI。root负责全部短进程，15分钟有限阶段，无新安装。
+- 结果：本地实际函数探针通过，22相关tests、两端TS/build通过，补丁首次升级和再次复用成功；所有进程退出。现有emil/apple交互规则保持，无样式/动画变化。[验证记录](validation/DEMO_PICKER_RESELECTION.md)。没有真实系统文件选择器验收，不关闭原A5。
+- 下一有限目标：真实Host的DEMO_IMPORT_REQUESTED分支会更新progress但没有清historyError；核实失败后重选时旧错误是否与新导入并列、以及成功路径何时消除。先检查实际显示/既有测试，只有存在可观察问题才修，不重复授权期限或同文件入口验证。
+
 ## 已交付：导入前授权请求等待上限（2026-09-27）
 
 - ID import-capability-deadline，基线44f1354 clean，root独占API/小测试/docs，无委派。已核实POST仅≤16KiB元数据、issueImportCapability同步签发内存令牌、默认60秒TTL，无Demo读取或模型；原API plain fetch/body可挂住Host发persistSelectedDemo之前。

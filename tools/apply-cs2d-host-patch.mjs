@@ -28,6 +28,7 @@ export const CS2D_PATCH_FILES = Object.freeze([
   resolve(root, 'tools/cs2d-host/patches/0017-active-weapon-identity.patch'),
   resolve(root, 'tools/cs2d-host/patches/0018-grenade-inventory-certainty.patch'),
   resolve(root, 'tools/cs2d-host/patches/0019-primary-inventory-identity.patch'),
+  resolve(root, 'tools/cs2d-host/patches/0020-demo-picker-reselection.patch'),
 ])
 
 export const CS2D_REUSE_DECISIONS = Object.freeze({
@@ -450,7 +451,7 @@ function inspectPatchedCheckout(upstream) {
   // generated model assets make older reverse checks intentionally inexact).
   // Only the explicitly supported tail upgrades can advance that checkout,
   // and only when each applies cleanly on top of all other validated markers.
-  // Fixed positions correspond to 0006 through 0019; appending a patch must not retarget an older upgrade.
+  // Fixed positions correspond to 0006 through 0020; appending a patch must not retarget an older upgrade.
   const managedLibraryPatch = CS2D_PATCH_FILES[5]
   const pendingManagedLibraryPatch = !reverseStates[5] && Boolean(managedLibraryPatch) &&
     run('git', ['apply', '--check', managedLibraryPatch], {
@@ -505,6 +506,10 @@ function inspectPatchedCheckout(upstream) {
   const primaryInventoryPatch = CS2D_PATCH_FILES[18]
   const pendingPrimaryInventoryPatch = !reverseStates[18] && (pendingGrenadeInventoryPatch ||
     run('git', ['apply', '--check', primaryInventoryPatch], { cwd: upstream, capture: true, allowFailure: true }).status === 0)
+  const demoPickerPatch = CS2D_PATCH_FILES[19]
+  const pendingDemoPickerPatch = !reverseStates[19] &&
+    run('git', ['apply', '--check', demoPickerPatch], { cwd: upstream, capture: true, allowFailure: true }).status === 0
+  if (paths.length > 0 && !reverseStates[19] && !pendingDemoPickerPatch) throw new Error('Demo picker patch is neither exactly applied nor cleanly applicable')
   // Later identity markers intentionally supersede earlier generatedBy lines.
   if (paths.length > 0 && !reverseStates[18] && !pendingPrimaryInventoryPatch) throw new Error('Primary inventory patch is neither exactly applied nor cleanly applicable')
   if (paths.length > 0 && !reverseStates[17] && !pendingGrenadeInventoryPatch && !reverseStates[18]) throw new Error('Grenade inventory patch is neither exactly applied nor cleanly applicable')
@@ -524,7 +529,7 @@ function inspectPatchedCheckout(upstream) {
     patchesExactlyApplied,
     markerErrors: errors,
   })
-  return { decision, head, paths, diffCheck: check, patchesExactlyApplied, markerErrors: errors, pendingManagedLibraryPatch, pendingShotActorPatch, pendingTeachingPlaybackPatch, pendingRoundClockPatch, pendingHurtEventsPatch, pendingShotIdentityPatch, pendingAmmoPatch, pendingAmmoCachePatch, pendingBombIdentityPatch, pendingDeathIdentityPatch, pendingFrameIdentityPatch, pendingActiveWeaponIdentityPatch, pendingGrenadeInventoryPatch, pendingPrimaryInventoryPatch }
+  return { decision, head, paths, diffCheck: check, patchesExactlyApplied, markerErrors: errors, pendingManagedLibraryPatch, pendingShotActorPatch, pendingTeachingPlaybackPatch, pendingRoundClockPatch, pendingHurtEventsPatch, pendingShotIdentityPatch, pendingAmmoPatch, pendingAmmoCachePatch, pendingBombIdentityPatch, pendingDeathIdentityPatch, pendingFrameIdentityPatch, pendingActiveWeaponIdentityPatch, pendingGrenadeInventoryPatch, pendingPrimaryInventoryPatch, pendingDemoPickerPatch }
 }
 
 function applyPatches(upstream) {
@@ -589,6 +594,7 @@ async function main(argv = process.argv.slice(2)) {
       ...(inspection.pendingActiveWeaponIdentityPatch ? [CS2D_PATCH_FILES[16]] : []),
       ...(inspection.pendingGrenadeInventoryPatch ? [CS2D_PATCH_FILES[17]] : []),
       ...(inspection.pendingPrimaryInventoryPatch ? [CS2D_PATCH_FILES[18]] : []),
+      ...(inspection.pendingDemoPickerPatch ? [CS2D_PATCH_FILES[19]] : []),
     ]
     for (const patch of pendingPatches) {
       if (!patch) throw new Error('pending patch missing from controlled stack')
