@@ -710,6 +710,8 @@ CANDIDATE → OBSERVED → REPEATED → IMPROVING → STABLE → RESOLVED
 
 Agent MemoryBrief的activeThreads.transferRule与memories.transferRule保留来源limitations完整数组及字符串（Memory域已约束最多12条、每条240字），不为压缩单独截掉限定。仍遵守既有800个估算token与Wire字节门，原整条记录/线程裁减后仍超限时返回EMPTY，不留下该被清空记录的advice副本。不确定诊断跨两Demo成为EMERGING只表示生命周期可召回，verdict INCONCLUSIVE、claim UNVERIFIABLE和规则限定不因聚合而提升为已证实。此处不改变promotion策略，也不为旧advice副本补造不存在的limitations。规则及record.advice的when/do/unless均完整传递域内已验证文本，不按字段任意截字；尾部否定或例外条件属于同一建议，不得裁掉。长字段造成超预算时仍沿用整条裁减/整份EMPTY，不提高800预算，不让独立advice绕过此门；summary/content等其他既有摘要字段不由本条契约改写。
 
+Agent Brief的corrections.content完整传递Memory域已经接受的文本，不再截为220字；USER来源和revision仍保留，身份字段仍剥离。现有预算可按条舍弃第二条纠正或在最终EMPTY清空整组，但不得留下半条纠正；对话异议的500字门与Memory管理纠正1200字门保持，存储内容不迁移。此保证是传递语义完整性，不表示诊断已理解纠正。
+
 当前默认确定性Coach消费纠正的边界：服务端Brief将纠正投影为有界content/source=USER/revision，已DISPUTED旧聚合不再作为active memory。START_CUE/START_MANUAL_CUE_VISIT取得授权后的Brief；Graph只根据corrections是否非空给可验证诊断REINFORCE提示，Policy只调整既有合法慢回放/地图工具偏好。纠正原文没有进入诊断事实/语义判决输入，UNVERIFIABLE仍优先DEFER；不能把这条接线描述为已理解或证实历史纠正。撤回授权后，下一合法开始事件显式清除先前Brief并回到原教学选择，不据此承诺抹去已经展示或保存在历史产物的文本。
 
 Memory 在桌面与 Web 都默认关闭并要求当前 principal consent。桌面授权与记录由 SQLite 管理，并在已由 sidecar session-cookie 保护的单用户 loopback 边界使用稳定非 secret principal；Keychain 不承担桌面用户身份，只保存 Provider secret。Web 云记忆还要求服务端 `MEMORY_ENABLED=true`，由服务端生成 opaque principal cookie并维护内部 `userId`。Web 清 cookie 不恢复主体，正式账号留后续边界。记忆管理面必须支持查看来源/置信度/限制、授权、导出、纠正、删除和删除全部。

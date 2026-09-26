@@ -221,7 +221,7 @@ export function buildAgentMemoryBrief(input: UserMemoryBrief): Record<string, un
     activeThreads: eligibleThreads.slice(0, MAX_BRIEF_THREADS).map(compactThread),
     memories: eligibleMemories.slice(0, MAX_BRIEF_MEMORIES).map(compactRecord),
     corrections: input.corrections.filter((correction) => !deletedMemoryIds.has(correction.memoryId)).slice(0, MAX_BRIEF_CORRECTIONS).map((correction) => ({
-      content: short(correction.content, 220) ?? "",
+      content: correction.content,
       source: "USER",
       revision: correction.revision,
     })),

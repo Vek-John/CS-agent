@@ -1406,3 +1406,25 @@ it("drops over-budget conditional text together with its advice copies", async (
     expect(approximateMemoryBriefTokens(projected)).toBeLessThanOrEqual(800);
   }
 });
+
+
+it("keeps each recalled correction whole when the context budget drops another correction", () => {
+  const contents = ["最新纠正", "较早纠正"].map(prefix => `${prefix}${"补充".repeat(590)}最终结论并不是这样。`);
+  const source = MemoryBriefSchema.parse({ schemaVersion: "memory-brief.v1", generatedAt: "2026-09-26T00:00:00.000Z",
+    activeThreads: [], memories: [], limitations: [], source: "STRUCTURED",
+    corrections: contents.map((content, index) => ({ correctionId: `long-correction-${index}`, memoryId: `memory-${index}`,
+      content, source: "USER", revision: 2 - index, createdAt: `2026-09-26T00:00:0${2 - index}.000Z`, refs: [] })),
+  });
+  const projected = buildAgentMemoryBrief(source);
+  expect(projected.corrections).toEqual([{ content: contents[0], source: "USER", revision: 2 }]);
+  expect(approximateMemoryBriefTokens(projected)).toBeLessThanOrEqual(800);
+  const long = "条件".repeat(390);
+  const crowded = MemoryBriefSchema.parse({ ...source, activeThreads: [{ ...makeThread(), scope: "CROSS_DEMO",
+    transferRule: { ...makeThread().transferRule, when: long, do: long, unless: long } }] });
+  const fallback = buildAgentMemoryBrief(crowded);
+  expect(fallback.source).toBe("EMPTY");
+  expect(fallback.corrections).toEqual([]);
+  expect(fallback.activeThreads).toEqual([]);
+  expect(JSON.stringify(fallback)).not.toContain("最新纠正");
+  expect(approximateMemoryBriefTokens(fallback)).toBeLessThanOrEqual(800);
+});

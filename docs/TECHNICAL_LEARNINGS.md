@@ -2136,3 +2136,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：六处投影直接保留已由Memory域校验的完整字段，optional unless仍可缺省；复用原预算整条裁减/EMPTY，不增加上限，不让独立advice保留残句。
 - 验证：3种字段×有规则/独立advice覆盖record/thread/副本完整文本；合法长三字段同时超额后memories/threads清空且条件文本无残留。4文件67tests、TypeScript/production build通过；主控集中真实diff复核。[证据](validation/COMPLETE_CONDITIONAL_ADVICE.md)。
 - 限制/后继：仅规则和建议字段，其他摘要字段仍按原截短；既有advice协议缺limitations无法重建。长规则更可能安全EMPTY，无用户DB或模型。下一项针对用户纠正content220字截短检查末尾否定，先小例而非扩大文本完整性审计。
+
+
+## 2026-09-26：长纠正的末尾否定不能消失
+
+- 实证：合法≤500字用户异议先叙述原记忆，220字后明确“其实没有语音，也不是固定战术”；真实diagnose/revise→producer→临时SQLite→Brief→实际POST→Graph丢掉否定，1红例复现。
+- 决定：corrections.content直接传递Memory域接受的完整内容，保留USER/revision与身份剥离，不改500/1200字来源门或800预算。预算按条舍弃，绝不发半条纠正。
+- 验证：原目标纠正/重试/机会计数/consent链保持；两条近1200字合法纠正超额只留第一条完整文本，长规则拥挤仍按原EMPTY全清。4文件69tests、TypeScript/production build通过，主控集中复核单行生产变化。[证据](validation/COMPLETE_USER_CORRECTION.md)。
+- 限制/后继：传递完整不等于教练语义理解；未重写旧Graph/用户Memory。拥挤例证明一条超长低优先级thread会连能单独放下的纠正一起清掉，下一项可改按整条低优先级内容释放预算，优先保留完整纠正，不抬预算或截句。

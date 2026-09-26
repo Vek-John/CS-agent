@@ -231,8 +231,11 @@ it.each([false, true])("corrects the original SQLite judgment after a changed hi
     const original = diagnoseTeachingCue(diagnosisInput);
     expect(original.cueCase.verdict?.type).toBe("INCONCLUSIVE");
     expect(original.cueCase.hinge?.kind).toBe("INFORMATION");
+    const correctionText = "我当时以为队友语音叫我先拉出去执行固定战术。" + "这是对当时记忆的补充说明。".repeat(20) + "但我后来想清楚了：其实没有语音，也不是固定战术。";
+    expect(correctionText.length).toBeGreaterThan(220);
+    expect(correctionText.length).toBeLessThanOrEqual(500);
     const disagreement = CoachAgentEventSchema.parse({ ...event, type: "SUBMIT_DISAGREEMENT", eventId: "changed-hinge-disagreement",
-      reflection: { ...event.reflection, reflectionId: "stable-hinge-correction", rawText: "队友语音叫我先拉出去执行固定战术。" },
+      reflection: { ...event.reflection, reflectionId: "stable-hinge-correction", rawText: correctionText },
     }) as Extract<CoachAgentEvent, { type: "SUBMIT_DISAGREEMENT" }>;
     const revised = reviseTeachingDiagnosis({ previous: original, input: diagnosisInput, disagreement: disagreement.reflection });
     expect(revised.cueCase.verdict).toMatchObject({ type: "INCONCLUSIVE", revision: 1 });

@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：长用户纠正完整传递（2026-09-26）
+
+- ID complete-user-correction，基线4bffdb5 clean；主控拥有brief.ts、history-idempotency.integration.test.ts、memory.test.ts/docs，所有旧owner RELEASE。
+- 流程：220字后含否定的合法≤500字异议→真实diagnose/revise/producer→临时SQLite→getBrief→真实POST→Graph。A1实际截断红例；A2完整USER原文、revision和原目标不变，未知仍未知；A3超预算整条放弃/EMPTY而非截字、删除授权门保持；A4相关tests/TS/build及证据push。不扩语义判断或token门。
+- 风险/阶段：调度预算仍可能舍掉整条次要纠正，不能承诺永远全部召回；Memory管理纠正可长于对话500上限。5分钟小链、8分钟实现、15分钟验证；复用已有SQLite finally/after拦截，无用户DB/服务/模型，主控清进程，锁屏A5独立待验。
+
+- 结果：真实SQLite→POST→Graph红例证明220字截断丢掉末尾“其实没有语音，也不是固定战术”；单行改为完整content后通过，原目标/幂等/consent链保持。两条域内近1200字纠正超预算时只留完整第一条，拥挤长规则触发EMPTY全清而非半句。4文件69tests、TS/build通过，主控集中复核，无新并写owner。[证据](validation/COMPLETE_USER_CORRECTION.md)。
+- 限制/后继：默认教练仍只用纠正存在性选模式，未实现语义采纳，旧已保存Graph不重写。本轮拥挤fixture也给出下一项真实机会：最新完整纠正单独能放入800预算，但一条超长thread会让整份EMPTY，连纠正一起丢；下轮优先评估先剔除低优先级整条线程/记录以保留完整纠正，保持身份/授权与总预算，不截字。无用户DB/服务/模型，测试/build退出，push后释放；原UI A5独立待验。
+
 ## 已交付：长条件建议完整传递（2026-09-26）
 
 - ID complete-conditional-advice，基线123c305 clean；主控拥有brief.ts/memory.test.ts/docs，现有owner RELEASE。实际helper分别对rule和advice的when/do/unless截字，尾部“不要执行”可丢失。
