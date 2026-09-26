@@ -17,6 +17,7 @@ import type {
   Annotation,
   CandidateMaterial,
   CoachCue,
+  CueCase,
   CoachingRouteState,
   NarrationBundle,
   OutcomeCompletionState,
@@ -522,6 +523,18 @@ export function buildStage3StartCue(input: Stage3HostAdapterInput): Stage3Prepar
     ...(input.resumeFromTakeover ? { resumeFromTakeover: true } : {}),
   });
   return { event: event as Extract<CoachAgentEvent, { type: "START_CUE" }>, capabilities, narrationSummary: summary };
+}
+
+/** Captures a displayed default baseline; it cannot grant a visual tool or a diagnosis. */
+export function buildPresentedBaselineStart(input: Stage3HostAdapterInput, cueCase: CueCase): Extract<CoachAgentEvent, { type: "START_CUE" }> | undefined {
+  if (!currentEvidenceBound(input) || cueCase.cueId !== input.cue.id || cueCase.candidateId !== input.cue.candidate_id ||
+    cueCase.status !== "FALLBACK" || !cueCase.baselineNarrationAvailable || cueCase.reflection?.cueId !== input.cue.id || cueCase.reflection.response !== "SKIPPED") return undefined;
+  try {
+    const { event } = buildStage3StartCue(input);
+    return CoachAgentEventSchema.parse({ ...event, capabilities: [],
+      eventId: event.eventId.replace(/^stage3-start/, "stage3-baseline").slice(0, 160),
+    }) as Extract<CoachAgentEvent, { type: "START_CUE" }>;
+  } catch { return undefined; }
 }
 
 export function stage3EligibleCueIds(plan: ReviewPlan, routeState: CoachingRouteState): readonly string[] {

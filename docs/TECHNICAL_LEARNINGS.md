@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：已展示的跳过节点可无工具地补齐Graph路线
+
+- 问题：快速跳过后旧cue未START，下一cue的observer遍历将整轮永久标记degraded；真实Adapter两cue连续同步两次均失败。OBSERVE_PRESENTED_CUE只适用于Graph已有呈现绑定，不能代替首次登记。
+- 决策：默认skip实际发布时留下严格验证的内存凭据；后续同identity串行补发既有零capability START，准确确认cursor/cue/完成字段/无effects后继续。保持下一cue registry、不mirror旧START、不重新记录用户事件；最后cue到总结同样flush，reset失效。
+- 验证：14新tests经真实Adapter/Controller/Graph，下一cue正常反思确实产生诊断case，全skip也得到两个completedCueSummaries并COMPLETE；无凭据、错误身份/gate/cursor、并发和reset均有反例。109相关tests、TS/Web build通过。[证据](validation/SKIP_LIFECYCLE_CONTINUITY.md)。
+- 限制/后继：非真实浏览器，凭据不持久化、不解决旧历史缺证据；只有补记实际成功才确认。Graph对迟到旧请求可返回现有COMPLETED而不前进，下一项核实现有observePresentedCue的仅status确认是否在真实路径误认成功，不扩大协议或泛化审计。代理及probe已释放。
+
 ## 2026-09-26：跳过反思不应等待后台保存与Graph
 
 - 问题：原Host先await互动保存、生命周期同步、Graph提交才显示已准备的基础讲解；“直接看分析”仍会等待多个后台阶段。源码顺序确认，延迟依赖测试验证新实际helper无需这些依赖完成即可记录SKIPPED并继续。

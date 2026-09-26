@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：快速跳过后的诊断连续性（2026-09-26）
+
+- ID skip-lifecycle-continuity，基线3195bb1 clean；root生产/docs，revision_semantics_review默认配置5分钟真实序列预检/8分钟上限，先只读。已核实OBSERVE_PRESENTED_CUE需要Graph已有绑定，不能用它凭空登记刚显示的baseline。
+- 目标/验收：A1实际Controller+Graph两cue复现；A2只为当前结果已完成、已显示且身份/冻结路线验证过的baseline保存本地凭据，后续按序使用现有无capability START_CUE补记，不阻挡基础显示；A3错误身份/未完成/重置/失败不假确认、不执行工具或mirror旧head；A4实际下一诊断可用，相关tests/TS/build后push。
+- 风险/范围：旧Graph未注册cue会让queueObserversUntil永久degraded；不得通过改Graph顺序门解决。仅有限运行期凭据及串行消费，保护已有恢复/手动访问边界，不新增模型/协议/安装。无Demo/用户库/网络/UI；root清理测试进程，原A5独立，缺证据的历史保持已有fallback。
+- 实际修复：默认skip发布时注册完整验证过的纯START事件；后续observer按序补记capabilities=[]，严格核对返回游标/完成身份后才同步，不动下一cue registry、不mirror旧START。整轮observer串行，最后cue直接总结也先补记；reset清缓存与旧token。
+- 验证：真实Adapter两cue原先连续两次同步失败；14新tests含下一cue实际反思诊断、全部skip最终COMPLETE、并发顺序、错身份/结果门/reset/错cursor和零工具/旧head。109相关tests、TS和production build通过。[证据](validation/SKIP_LIFECYCLE_CONTINUITY.md)。代理RELEASE，probe清理，主控读真实diff与输出。
+- 限制/后继：未真实UI/网络，运行期凭据不为旧历史造证据。此次实测表明Graph可能用现有COMPLETED返回拒绝的旧请求；现有observePresentedCue只判status，下一项只用真实默认/手动已展示路径核实是否会误确认游标，不预设漏洞或重做完整性审查。原A5独立。
+
 ## 已交付：跳过反思后的立即讲解（2026-09-26）
 
 - ID skip-reflection-flow，基线136c101 clean；root拥有必要Host/辅助函数/测试/docs，revision_semantics_review默认配置5分钟只读预检异步消费（8分钟上限）。已读emil/apple，复用原FALLBACK三段讲解，不新增动画或布局。

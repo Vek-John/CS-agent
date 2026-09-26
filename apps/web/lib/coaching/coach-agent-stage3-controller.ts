@@ -6,12 +6,15 @@ import {
   type CoachAgentResult,
 } from "@cs-coach/coach-agent/client";
 import type {
+  CueCase,
   PlaybackCommand,
   TeachingToolCommandArgs,
   TeachingToolAckEvent,
 } from "@cs-coach/contracts";
 import {
   CoachAgentStage3HostAdapter,
+  buildPresentedBaselineStart,
+  buildStage3Identity,
   STAGE3_ACK_TIMEOUT_MS,
   type Stage3HostAdapterInput,
   type Stage3IdentityInput,
@@ -162,6 +165,8 @@ export class CoachAgentStage3Controller {
   private takeoverPromise: Promise<boolean> | undefined;
   private pendingResumeSequence: number | undefined;
   private lifecycleTail: Promise<void> = Promise.resolve();
+  private observerTail: Promise<void> = Promise.resolve();
+  private readonly presentedBaselines = new Map<number, Extract<CoachAgentEvent, { type: "START_CUE" }>>();
   private readonly lifecyclePromises = new Map<string, Promise<CoachAgentResult | undefined>>();
   private timeoutHandle: unknown;
   private timeoutEpoch = 0;
@@ -197,8 +202,9 @@ export class CoachAgentStage3Controller {
     return token === this.token && this.options.isLive(input) && this.adapter.isCurrent(input.generation);
   }
 
-  private dispatchSerial(event: CoachAgentEvent, options: { notifyAgentResult?: boolean; validateResult?: (result: CoachAgentResult) => void } = {}): Promise<CoachAgentResult> {
+  private dispatchSerial(event: CoachAgentEvent, options: { notifyAgentResult?: boolean; validateResult?: (result: CoachAgentResult) => void; canDispatch?: () => boolean } = {}): Promise<CoachAgentResult> {
     const next = this.lifecycleTail.then(async () => {
+      if (options.canDispatch && !options.canDispatch()) throw new Error("STALE_LIFECYCLE_OPERATION");
       const result = await this.options.dispatch(event);
       options.validateResult?.(result);
       try {
@@ -269,11 +275,34 @@ export class CoachAgentStage3Controller {
     return promise;
   }
 
-  private async queueObserversUntil(
+  /** Called only when the Host actually publishes the skipped cue's baseline. No I/O. */
+  recordPresentedBaseline(input: Stage3HostAdapterInput, cueCase: CueCase): boolean {
+    if (!this.options.isLive(input)) return false;
+    const event = buildPresentedBaselineStart(input, cueCase);
+    if (!event || event.routeSegmentIndex === undefined) return false;
+    this.presentedBaselines.set(event.routeSegmentIndex, event);
+    return true;
+  }
+
+  private queueObserversUntil(
     input: Stage3IdentityInput,
     targetIndex: number,
     includeTarget: boolean,
     phase: "PLAYING" | "SKIPPING" | "PAUSED_FOR_COACHING" | "REVEALING",
+  ): Promise<boolean> {
+    const token = this.token;
+    const work = this.observerTail.then(() => token === this.token
+      ? this.dispatchObserversUntil(input, targetIndex, includeTarget, phase, token) : false);
+    this.observerTail = work.then(() => undefined, () => undefined);
+    return work;
+  }
+
+  private async dispatchObserversUntil(
+    input: Stage3IdentityInput,
+    targetIndex: number,
+    includeTarget: boolean,
+    phase: "PLAYING" | "SKIPPING" | "PAUSED_FOR_COACHING" | "REVEALING",
+    token: number,
   ): Promise<boolean> {
     if (this.adapter.lifecycleDegraded) return false;
     const last = Math.max(this.adapter.lifecycleCursor, this.adapter.lifecycleQueueCursor);
@@ -288,6 +317,26 @@ export class CoachAgentStage3Controller {
       }
       const mode = this.observationMode(segment);
       if (!mode) {
+        const baseline = this.presentedBaselines.get(index);
+        const identity = baseline ? buildStage3Identity(input) : undefined;
+        if (baseline && identity && segment.cue_ids.includes(baseline.cueId) && baseline.segmentId === segment.id &&
+          Object.entries(identity).every(([key, value]) => baseline.identity[key as keyof typeof identity] === value)) {
+          try {
+            const result = await this.dispatchSerial(baseline, { notifyAgentResult: false, canDispatch: () => token === this.token });
+            if (token !== this.token) return false;
+            if (!isTerminal(result) || result.state.routeCursor !== index || result.state.activeCueId !== baseline.cueId ||
+              result.state.activeSegmentId !== segment.id || result.state.outcomeGateStatus !== "COMPLETE" ||
+              !result.state.completedCueIds.includes(baseline.cueId) || result.effects.length > 0 || result.state.pendingToolCall !== null ||
+              !Object.entries(identity).every(([key, value]) => result.identity[key as keyof typeof identity] === value)) throw new Error("BASELINE_NOT_CONFIRMED");
+            this.adapter.markLifecycleSynced(index);
+            continue;
+          } catch {
+            if (token !== this.token) return false;
+            this.adapter.markLifecycleDegraded();
+            this.adapter.resetLifecycleQueue();
+            return false;
+          }
+        }
         // A preceding cue must have advanced the cursor through its START_CUE;
         // silently skipping it would make the next routeSegmentIndex invalid.
         if (segment.cue_ids.length > 0) this.adapter.markLifecycleDegraded();
@@ -297,12 +346,14 @@ export class CoachAgentStage3Controller {
       try {
         const event = this.adapter.createObserveSegmentEvent(input, segment.id, index, mode, mode === "SKIP" || mode === "FREEZE" ? "SKIPPING" : phase, eventId);
         const result = await this.dispatchLifecycle(event, eventId);
+        if (token !== this.token) return false;
         if (this.adapter.lifecycleEventStatus(eventId) !== "CONFIRMED" && !result) {
           this.adapter.markLifecycleDegraded();
           this.adapter.resetLifecycleQueue();
           return false;
         }
       } catch {
+        if (token !== this.token) return false;
         this.adapter.releaseLifecycleEvent(eventId);
         this.adapter.markLifecycleDegraded();
         this.adapter.resetLifecycleQueue();
@@ -823,6 +874,15 @@ export class CoachAgentStage3Controller {
     };
     try {
       onPending?.();
+      const identity = this.presentedBaselines.size > 0 ? buildStage3Identity(input) : undefined;
+      const hasBaseline = identity && [...this.presentedBaselines.values()].some(event =>
+        Object.entries(identity).every(([key, value]) => event.identity[key as keyof typeof identity] === value));
+      if (hasBaseline && !await this.queueObserversUntil(input, input.plan.segments.length - 1, true, "PLAYING")) {
+        if (token !== this.token) return discardCancelled();
+        this.adapter.releaseLifecycleEvent(eventId);
+        return { status: "FAILED" };
+      }
+      if (token !== this.token) return discardCancelled();
       const event = this.adapter.createCompleteSessionEvent(input, eventId);
       const result = await this.dispatchSerial(event, { notifyAgentResult: false });
       if (token !== this.token) return discardCancelled();
@@ -917,6 +977,8 @@ export class CoachAgentStage3Controller {
     this.takeoverPromise = undefined;
     this.pendingResumeSequence = undefined;
     this.lifecycleTail = Promise.resolve();
+    this.observerTail = Promise.resolve();
+    this.presentedBaselines.clear();
     this.lifecyclePromises.clear();
     this.setState({ status: "IDLE" });
   }

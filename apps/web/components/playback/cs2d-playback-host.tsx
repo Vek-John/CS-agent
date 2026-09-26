@@ -2426,7 +2426,7 @@ export function Cs2dPlaybackHost({
     };
   }, [activePlan, bundle, cue, selected?.playerId]);
 
-  const synchronizeTeachingDiagnosis = useCallback(async (context: TeachingDiagnosisHostContext) => {
+  const teachingStage3Input = useCallback((context: TeachingDiagnosisHostContext): Stage3HostAdapterInput => {
     const liveSession = liveSessionRef.current;
     const route = routeStateRef.current;
     const identity = recoveryIdentityRef.current;
@@ -2434,16 +2434,21 @@ export function Cs2dPlaybackHost({
     const replay = replayRef.current;
     const narration = narrationByCueRef.current[context.cue.id];
     if (!liveSession?.outcome_completion || !route || !identity || !analysis || !replay?.demoContentHash || !narration || !recoveryHandshakeReadyRef.current) throw new Error("Diagnosis lifecycle is not ready.");
-    const result = await stage3ControllerRef.current?.synchronizeDiagnosis({
+    return {
       plan: context.plan, routeState: route, cue: context.cue, narration,
       outcomeGate: liveSession.outcome_completion, currentSessionPhase: "PAUSED_FOR_COACHING",
       analysis: { demo_id: analysis.demo_id, selected_steam_id: analysis.selected_steam_id, metadata: analysis.metadata },
       demoContentHash: replay.demoContentHash, selectedPlayerId: context.selectedPlayerId,
       sessionId: identity.sessionId, runId: identity.runId, generation: generationRef.current, tickRate: replay.tickRate,
       evidence: { candidate: analysis.candidate_set.candidates.find((candidate) => candidate.candidateId === context.cue.candidate_id), material: context.material },
-    }, liveSession.manual_cue_visit?.visit_id);
-    if (!result) throw new Error("Diagnosis lifecycle changed or was rejected.");
+    };
   }, []);
+
+  const synchronizeTeachingDiagnosis = useCallback(async (context: TeachingDiagnosisHostContext) => {
+    const input = teachingStage3Input(context);
+    const result = await stage3ControllerRef.current?.synchronizeDiagnosis(input, liveSessionRef.current?.manual_cue_visit?.visit_id);
+    if (!result) throw new Error("Diagnosis lifecycle changed or was rejected.");
+  }, [teachingStage3Input]);
 
   const submitTeachingReflection = useCallback(async (reflection: UserReflection) => {
     // Claim intent before saving: a later skip must invalidate this submission, even on the same cue.
@@ -2594,6 +2599,10 @@ export function Cs2dPlaybackHost({
         setTeachingCases((current) => ({ ...current, [currentCue.id]: localCase }));
         setDiagnosticError(undefined);
         setDiagnosticBusyCueId(undefined);
+        if (context && !liveSession.manual_cue_visit && !historyPlaybackOnlyRef.current) {
+          try { stage3ControllerRef.current?.recordPresentedBaseline(teachingStage3Input(context), localCase); }
+          catch { /* Missing identity/route proof keeps the existing local fallback. */ }
+        }
         setSession((current) => active && current
           ? reduceCoachingSession(active, current, { type: "RECORD_TEACHING_CASE", cueCase: localCase, reflection })
           : current);
@@ -2648,7 +2657,7 @@ export function Cs2dPlaybackHost({
     if (durability === "MIRROR_FAILED" && requestIsLive()) {
       setHistoryError("跳过选择已记录，但新的恢复点未能提交；上一个恢复点仍然有效。");
     }
-  }, [activePlan, buildStage3Identity, cue, diagnosisContext, isTeachingDiagnosisRequestLive, mirrorAgentResult, replay?.demoContentHash, routeState, stage3IdentityContext, synchronizeTeachingDiagnosis]);
+  }, [activePlan, buildStage3Identity, cue, diagnosisContext, isTeachingDiagnosisRequestLive, mirrorAgentResult, replay?.demoContentHash, routeState, stage3IdentityContext, synchronizeTeachingDiagnosis, teachingStage3Input]);
 
   const replayControlEpoch = transportRef.current.epoch;
   const replayCurrentOutcome = useCallback((target: OutcomeReplayTarget, requireDiagnosis: boolean, expectedEpoch: number) => {
