@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：跨Demo聚合后的不确定性保留（2026-09-26）
+
+- ID uncertain-recall，基线83bcb39 clean，主控独占uncertain-recall.integration.test.ts及必要brief/docs，小链先验证，无同文件并写。
+- 流程：两份独立合成Demo身份→真实资源/信息diagnose→本地producer→MemoryService/InMemory adapter→Agent Brief schema。A1单份CANDIDATE/两份EMERGING实际路径；A2verdict INCONCLUSIVE、USER UNVERIFIABLE和条件建议保留，主体身份不外泄；A3撤回consent空召回；A4相关tests/TS/build及证据push。仅真丢失才改生产，不把EMERGING等同专业判断正确。
+- 风险/边界：producer逻辑key需相同而Demo身份不同；不得直接伪造聚合结果。5分钟小例、10分钟局部实现（必要时）、15分钟验证；纯内存无用户DB/服务/模型，主控清进程；不新增完整性审计或旧数据迁移，锁屏A5独立待验。
+
+- 结果：真实资源/信息两条链均CANDIDATE→EMERGING且verdict/claim未知保持，未改promotion；但Agent compactTransferRule丢整个来源limitations，两个正确指向该数组的红例复现。共享投影增加完整limitations，activeThreads和memories同时保留；12×240字合法大限制触发原EMPTY预算降级，记录/线程/标记advice全清，未提高800预算。4文件63tests、TS/build通过，补非空线程断言后2tests复验，独立只读方案审查无冲突并RELEASE。[证据](validation/UNCERTAIN_MEMORY_RECALL.md)。
+- 限制/后继：纯内存生产链，不是SQLite/真实UI/模型质量；没有旧数据重写，record.advice旧协议本身无limitations。本轮只保证存活transferRule的限定完整。已核实同helper仍对when/do/unless各截140/180/140字，可能切掉尾部否定条件；下一项先构造合法长规则验证语义丢失，再考虑整条保留或整条放弃，连同advice副本一并明确，不扩大上下文预算。所有测试/build退出，push后释放，原A5独立待验。
+
 ## 已交付：条件测量与用户原话验证分离（2026-09-26）
 
 - ID condition-claim-separation，基线f39355b clean，主控独占diagnosis.ts/tests/docs；现有owner RELEASE。目标是保留真实资源/人数测量与条件状态，但不把整体SUPPORTED/PARTIAL/CONTRADICTED复制给任意USER信念及refs。

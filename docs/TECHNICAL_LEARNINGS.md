@@ -2120,3 +2120,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：只取消条件状态/引用向自由文本命题的自动传播；相关非GOAL为UNVERIFIABLE，未涉及保持UNTESTED，GOAL保持自述含义。数值、diagnostic/hinge状态和refs保留，独立的零队友配合条件仍CONTRADICTED；不把未知改成支持用户。
 - 验证：新生成claims为空引用，初次/修订均重建所以无旧verified refs混入；旧覆盖缺口回归改为condition PARTIAL与原refs保持、USER未知。7文件218tests、TypeScript和production build通过，独立只读实际diff复核无must-fix并RELEASE。[证据](validation/CONDITION_CLAIM_SEPARATION.md)。
 - 限制/后继：没有逐条语义核验，旧产物不重算，无用户DB或模型。下一项仅检查不确定的学习记录经两Demo聚合、Brief压缩后是否仍明确未知，不预设EMERGING状态本身就是错误。
+
+
+## 2026-09-26：跨Demo召回不能丢掉条件建议的限定
+
+- 实证：两种真实INCONCLUSIVE诊断分别经producer→MemoryService/InMemory→两Demo EMERGING→Agent Wire，verdict与USER verification没有被晋级为已证实；无须修改生命周期策略。真正缺口在compactTransferRule：来源limitations含“条件化建议、不代表已确定归因”，投影却完全不输出，2红例定位。
+- 决定：共享规则投影复制完整已由域限制的limitations，作用于activeThreads和memories；不截句、不挑前几条、不增加800预算。原预算降级仍可清空整个Brief。
+- 验证：两个正常链保留规则限定、INCONCLUSIVE、UNVERIFIABLE及confidence，主体ID不外泄，撤回授权空召回；12条各240字合法限制超预算后threads/memories全空，advice标记不残留、Wire合法、估算≤800。4文件63tests、TS/production build；补非空thread断言后目标2tests复验。只读方案审查确认schema/身份门和预算路径。[证据](validation/UNCERTAIN_MEMORY_RECALL.md)。
+- 限制：内存adapter，无用户DB/模型/真实Demo/UI；record.advice无独立limitations，不重建旧数据。现when/do/unless任意截字仍有尾部条件丢失风险，下一项以合法长句小验证处理，不借此扩预算。

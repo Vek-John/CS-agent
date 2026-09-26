@@ -95,6 +95,9 @@ function compactTransferRule(rule: LearningThread["transferRule"] | MemoryRecord
     ...(short(rule.do, 180) ? { do: short(rule.do, 180) } : {}),
     ...(short(rule.unless, 140) ? { unless: short(rule.unless, 140) } : {}),
     confidence: rule.confidence,
+    // Qualifiers travel with the rule. If they exceed the shared context
+    // budget, use the existing whole-brief fallback rather than clip them.
+    limitations: [...rule.limitations],
   };
 }
 

@@ -708,6 +708,8 @@ CANDIDATE → OBSERVED → REPEATED → IMPROVING → STABLE → RESOLVED
 
 `MemoryBrief` 是结构化优先、可选语义补充的只读投影，最多包含 2 个 active threads、3 条 memories 和 2 条 corrections。它只影响教学模式、候选优先级和习惯复查，不改变当前 Demo facts、canonical tick、Outcome Gate、ReviewPlan 顺序或 Session 状态机。桌面 SQLite 与 Web PostgreSQL 分别是各自运行形态内唯一的长期记忆真相；exact cosine/pgvector 都只能作为可重建派生索引。
 
+Agent MemoryBrief的activeThreads.transferRule与memories.transferRule保留来源limitations完整数组及字符串（Memory域已约束最多12条、每条240字），不为压缩单独截掉限定。仍遵守既有800个估算token与Wire字节门，原整条记录/线程裁减后仍超限时返回EMPTY，不留下该被清空记录的advice副本。不确定诊断跨两Demo成为EMERGING只表示生命周期可召回，verdict INCONCLUSIVE、claim UNVERIFIABLE和规则限定不因聚合而提升为已证实。此处不改变promotion策略，也不为旧advice副本补造不存在的limitations；when/do/unless的既有截短另受当前投影逻辑约束。
+
 当前默认确定性Coach消费纠正的边界：服务端Brief将纠正投影为有界content/source=USER/revision，已DISPUTED旧聚合不再作为active memory。START_CUE/START_MANUAL_CUE_VISIT取得授权后的Brief；Graph只根据corrections是否非空给可验证诊断REINFORCE提示，Policy只调整既有合法慢回放/地图工具偏好。纠正原文没有进入诊断事实/语义判决输入，UNVERIFIABLE仍优先DEFER；不能把这条接线描述为已理解或证实历史纠正。撤回授权后，下一合法开始事件显式清除先前Brief并回到原教学选择，不据此承诺抹去已经展示或保存在历史产物的文本。
 
 Memory 在桌面与 Web 都默认关闭并要求当前 principal consent。桌面授权与记录由 SQLite 管理，并在已由 sidecar session-cookie 保护的单用户 loopback 边界使用稳定非 secret principal；Keychain 不承担桌面用户身份，只保存 Provider secret。Web 云记忆还要求服务端 `MEMORY_ENABLED=true`，由服务端生成 opaque principal cookie并维护内部 `userId`。Web 清 cookie 不恢复主体，正式账号留后续边界。记忆管理面必须支持查看来源/置信度/限制、授权、导出、纠正、删除和删除全部。
