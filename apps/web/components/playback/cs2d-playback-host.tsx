@@ -119,8 +119,8 @@ import {
 } from "../../lib/coaching/cs2d-coaching-view";
 import { CoachingStatusList } from "./coaching-status-list";
 import { loadLocalGameAssetCatalog } from "../../lib/assets/local-game-asset-catalog";
-import { completeStage3SessionWrapUp } from "../../lib/coaching/session-wrap-up-completion";
-import { completedReviewTargets, isSessionWrapUpIdentityCurrent, sessionWrapUpPresentation, SessionWrapUpPanel } from "../../lib/coaching/session-wrap-up-presentation";
+import { completeStage3SessionWrapUp, createSessionWrapUpGuard } from "../../lib/coaching/session-wrap-up-completion";
+import { completedReviewTargets, sessionWrapUpPresentation, SessionWrapUpPanel } from "../../lib/coaching/session-wrap-up-presentation";
 import { buildStage3WrapUpInput } from "../../lib/coaching/coach-agent-stage3-wrap-up";
 import {
   CoachAgentHostAdapter,
@@ -3113,15 +3113,11 @@ export function Cs2dPlaybackHost({
     const controller = stage3ControllerRef.current;
     if (!stage3Mode || !activePlan || !controller || stage3WrapUpGenerationRef.current === generation) return;
     const persistence = historyPersistenceControllerRef.current;
-    const reviewId = persistence?.reviewId;
-    const revisionId = persistence?.revisionId;
-    const openEpoch = historyOpenEpochRef.current;
-    const isCurrent = () => generation === generationRef.current && !userTookOverRef.current
-      && isSessionWrapUpIdentityCurrent({ identity }, liveSessionRef.current, stage3IdentityRef.current?.runId)
-      && (liveSessionRef.current?.phase === "WRAP_UP" || liveSessionRef.current?.phase === "COMPLETED")
-      && historyOpenEpochRef.current === openEpoch
-      && historyPersistenceControllerRef.current === persistence
-      && persistence?.reviewId === reviewId && persistence?.revisionId === revisionId;
+    const isCurrent = createSessionWrapUpGuard(identity, generation, () => ({
+      generation: generationRef.current,
+      session: liveSessionRef.current, runId: stage3IdentityRef.current?.runId,
+      historyEpoch: historyOpenEpochRef.current, persistence: historyPersistenceControllerRef.current,
+    }));
     await completeStage3SessionWrapUp({
       controller, identity, isCurrent, persistence,
       claim: () => {
@@ -3148,7 +3144,7 @@ export function Cs2dPlaybackHost({
   }, [activePlan, bundle?.candidate_set, narrationByCue, stage3Mode]);
 
   useEffect(() => {
-    if (historyPlaybackOnlyRef.current || !stage3Mode || !stage3IdentityContext || !session || userTookOverRef.current) return;
+    if (historyPlaybackOnlyRef.current || !stage3Mode || !stage3IdentityContext || !session) return;
     if (session.phase !== "WRAP_UP" && session.phase !== "COMPLETED") return;
     void requestStage3WrapUp(stage3IdentityContext, generationRef.current);
   }, [requestStage3WrapUp, session, stage3IdentityContext, stage3Mode]);

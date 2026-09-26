@@ -2,6 +2,16 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：总结生成与自由回看的生命周期分离（2026-09-26）
+
+- ID wrap-up-takeover，基线35d37ee clean；root独占完成seam/Host/回归/docs。当前Host将userTookOver作为总结归属条件，普通时间轴自由seek可能丢在途结果且Controller去重阻止再产出。
+- A1抽取实际Host归属判定并用deferred Controller完成/总结返回复现；A2同会话终结自由seek保留生成与一次保存，generation/session/run/history epoch/persistence/review/revision变化仍拒；A3完成状态释放临时run保持兼容，错误正常收敛、不重复请求；A4相关tests/TS/build/证据push。
+- 风险：仅终结总结的控制权与归属分离，不放宽活动cue/工具取消或引用门；readonly独立窄审按需，root文件owner。无Demo/SQLite/模型/浏览器/服务，mock外部延迟不冒称真实Graph或网络；测试60秒，20分钟有限交付，清理自己进程，A5独立。
+
+- 结果：原predicate在真实Controller完成等待期间seek后onResult=0；新实际Host guard只移除takeover，保留所有owner与terminal条件，完成effect同样允许自由查看。13新回归＋47相关tests、TS/build通过，partial_revision_restore默认只读RELEASE，无must-fix。[记录](validation/WRAP_UP_TAKEOVER.md)。
+- 资源/限制：首fixture空routeHash导致等待失败，第二次后改为单例阶段检查+真实Adapter路线，未放宽产品门；最终进程退出。Graph响应/保存是fixture/spy，不冒称真实Graph服务/SQLite/完整UI；Graph checkpoint镜像原规则未改变。
+- 下一有限目标：SESSION_SUMMARY保存失败目前只有historyError，已有RuntimeHeadRetry不覆盖该artifact。核实并实现对同owner已生成结果的明确重试，验证零重新生成/Graph调用与切历史拒旧写；不从单一UI等待扩大项目阻塞。
+
 ## 已交付：结束页已完成片段回看（2026-09-26）
 
 - ID wrap-up-revisit，基线3813709 clean；root拥有Panel/Host小接线/测试/文档。真实NO_REPEATED_THEME只显示不归纳提示；现有时间轴可seek、Session禁止终结后ManualCueVisit，不重新启动教学。

@@ -4,7 +4,7 @@ import {
 } from "@cs-coach/coach-agent/client";
 import type { HistoryPersistenceController } from "../review-history/history-persistence-controller";
 import { requestSessionWrapUp } from "./deepseek-wrap-up";
-import { sessionWrapUpFailureReasonMessage, type SessionWrapUpFailureReason } from "./session-wrap-up-presentation";
+import { isSessionWrapUpIdentityCurrent, sessionWrapUpFailureReasonMessage, type SessionWrapUpFailureReason } from "./session-wrap-up-presentation";
 
 function failedSummary(reason: SessionWrapUpFailureReason): SessionWrapUpResult {
   return SessionWrapUpResultSchema.parse({
@@ -12,6 +12,30 @@ function failedSummary(reason: SessionWrapUpFailureReason): SessionWrapUpResult 
     bundle: { schemaVersion: "coach-agent-session-wrap-up.v1", themes: [], limitations: [sessionWrapUpFailureReasonMessage(reason)] },
     manifest: { status: "FALLBACK", provider: "DETERMINISTIC", reason, limitations: [reason] },
   });
+}
+
+interface SessionWrapUpOwner {
+  generation: number;
+  session: Pick<import("@cs-coach/contracts").CoachingSessionState, "id" | "phase"> | undefined;
+  runId: string | undefined;
+  historyEpoch: number;
+  persistence: Pick<HistoryPersistenceController, "reviewId" | "revisionId"> | null | undefined;
+}
+
+/** Capture the live Host's result owner before asynchronous completion starts. */
+export function createSessionWrapUpGuard(identity: { sessionId: string; runId: string }, generation: number,
+  read: () => SessionWrapUpOwner): () => boolean {
+  const captured = read();
+  const persistence = captured.persistence, reviewId = persistence?.reviewId, revisionId = persistence?.revisionId;
+  return () => {
+    const current = read();
+    // Playback takeover does not change ownership of a finished session summary.
+    return generation === current.generation
+      && isSessionWrapUpIdentityCurrent({ identity }, current.session, current.runId)
+      && (current.session?.phase === "WRAP_UP" || current.session?.phase === "COMPLETED")
+      && current.historyEpoch === captured.historyEpoch && current.persistence === persistence
+      && persistence?.reviewId === reviewId && persistence?.revisionId === revisionId;
+  };
 }
 
 /** Host completion seam: persist every terminal result, never regenerate on restore. */

@@ -275,7 +275,7 @@ Host先通过既有本人/当前回合/生命/新鲜度与snapshot门，再独�
 
 当前实现把这些规则收敛在 `SessionRecoveryRuntime`、`libs/session` capture/rehydrate seam 与 Host Recovery Adapter：本地分析的 `demo_id` 由 Demo content hash 稳定派生，新会话另行生成并保留随机 `recoveryId/sessionId/runId`；`POSTED` 以一次稳定边界更新原子写入 waiting checkpoint，`RESULTED/RESUMED` 分别写回结构化结果与完成 checkpoint。checkpoint 只有与当前 frozen cue/phase/route cursor 精确匹配时才可绑定 boundary；前一 cue 的活动 checkpoint 不能复用到下一 cue 或 `WRAP_UP`，`WRAP_UP` 只接受同 route cursor 的完成态 session checkpoint。记录仅保留当前 cue 与后两个 narration 摘要；恢复后由 narration-only 队列补齐后续 cue，绝不重新调用 Director/PlanCompiler。
 
-结束页可为冻结plan中同时已presented且consumed的cue提供自由回看入口，目标由其segment起点派生，沿现有pause→seek用户接管流程，不创建ManualCueVisit或修改终结Session。回看期间保留总结，终结状态不再向Graph发送takeover/resume；整理总结或播放器尚未就绪时该入口禁用。Host回调绑定session/generation/history open epoch，不能跨历史打开复用。此入口只用于重看已完成片段，不把片段列表当重复习惯、再次诊断或新播放完成证据。
+结束页可为冻结plan中同时已presented且consumed的cue提供自由回看入口，目标由其segment起点派生，沿现有pause→seek用户接管流程，不创建ManualCueVisit或修改终结Session。回看期间保留总结，终结状态不再向Graph发送takeover/resume；整理总结或播放器尚未就绪时该入口禁用。Host回调绑定session/generation/history open epoch，不能跨历史打开复用。此入口只用于重看已完成片段，不把片段列表当重复习惯、再次诊断或新播放完成证据。 终结会话的总结归属与播放接管分离：普通时间轴seek不能取消同owner在途总结的生成/保存；接收结果仍须匹配session/run、generation、history open epoch、persistence对象及review/revision，并处于WRAP_UP/COMPLETED。COMPLETED正常释放临时run时沿既有兼容规则接收；非终结cue/工具取消和Graph checkpoint镜像规则不因此放宽。
 
 ### 2.14 默认顺序路线与用户点播 cue
 

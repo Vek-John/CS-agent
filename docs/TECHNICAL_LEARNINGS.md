@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：播放接管不等于终结总结失去归属
+
+- 问题：普通时间轴在COMPLETE_SESSION等待期间接管，原Host的!userTookOver门丢弃同会话总结；Controller已完成去重使再请求也没有结果。真实Controller deferred单例得到onResult=0红例。
+- 决策：Host使用可测的owner捕获闭包，移除终结总结的takeover约束；仍逐await校验terminal/session/run/generation/history epoch/persistence对象/review/revision。默认结束入口也不因自由查看跳过。活动cue、工具和Graph checkpoint镜像规则保持。
+- 验证：13新项及47相关tests、TS/build通过；自由seek后仅一次总结/保存，8类owner变化仍拒，正常COMPLETED释放run与晚保存错误正确收敛。独立窄审无must-fix。[证据](validation/WRAP_UP_TAKEOVER.md)。
+- 限制/后继：Graph与保存返回为受控fixture/spy，不是真实Viewer/SQLite/网络。现有总结保存失败无专属重试，仅RuntimeHeadRetry；下一项先确认该失败恢复入口，复用已生成结果而非重生成。
+
 ## 2026-09-26：没有重复主题也应能回看已完成处理
 
 - 问题：真实NO_REPEATED_THEME结束页只有保守提示，用户需自己拖时间轴定位已讲解段；终结Session不允许ManualCueVisit，因此不能直接重启旧教学流程。
