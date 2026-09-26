@@ -1357,3 +1357,52 @@ describe("Memory Domain", () => {
     expect(projected.preferences).toEqual({ explanationDepth: "DEEP" });
   });
 });
+
+
+describe("complete conditional advice in Agent briefs", () => {
+  it.each(["when", "do", "unless"] as const)("preserves the late qualification in %s for rules and standalone advice", async field => {
+    const service = makeService(new InMemoryMemoryRepository());
+    await service.ingestEvent(userId, makeEvent(makeProposal("1"), "1"));
+    const saved = await service.ingestEvent(userId, makeEvent(makeProposal("2"), "2"));
+    expect(saved.record?.active).toBe(true);
+    const text = `${"逐项确认现场条件。".repeat(21)}但如果上述条件不成立，不要执行。`;
+    const rule = { ...makeThread().transferRule, [field]: text };
+    for (const withRule of [true, false]) {
+      const source = MemoryBriefSchema.parse(buildUserMemoryBrief({ records: [{ ...saved.record!,
+        content: undefined, summary: undefined, claims: [], inferences: [], verdict: undefined,
+        thread: undefined, transferRule: withRule ? rule : undefined,
+        advice: [{ id: "advice-long", when: rule.when, do: rule.do, unless: rule.unless, confidence: rule.confidence, refs: [] }],
+      }], threads: withRule ? [{ ...makeThread(), scope: "CROSS_DEMO", transferRule: rule }] : [] }));
+      const projected = buildAgentMemoryBrief(source);
+      const records = projected.memories as { transferRule?: Record<string, unknown>; advice: Record<string, unknown>[] }[];
+      expect(records).toHaveLength(1);
+      expect(records[0].advice[0][field]).toBe(text);
+      if (withRule) {
+        expect(records[0].transferRule?.[field]).toBe(text);
+        expect((projected.activeThreads as { transferRule: Record<string, unknown> }[])[0].transferRule[field]).toBe(text);
+      }
+      expect(approximateMemoryBriefTokens(projected)).toBeLessThanOrEqual(800);
+    }
+  });
+});
+
+
+it("drops over-budget conditional text together with its advice copies", async () => {
+  const service = makeService(new InMemoryMemoryRepository());
+  await service.ingestEvent(userId, makeEvent(makeProposal("1"), "1"));
+  const saved = await service.ingestEvent(userId, makeEvent(makeProposal("2"), "2"));
+  const text = "条件".repeat(390) + "条件不成立就禁止执行。";
+  const rule = { ...makeThread().transferRule, when: text, do: text, unless: text };
+  for (const withRule of [true, false]) {
+    const source = MemoryBriefSchema.parse(buildUserMemoryBrief({ records: [{ ...saved.record!,
+      thread: undefined, transferRule: withRule ? rule : undefined,
+      advice: [{ id: "long-conditional-advice", when: text, do: text, unless: text, confidence: 0.3, refs: [] }],
+    }], threads: withRule ? [{ ...makeThread(), scope: "CROSS_DEMO", transferRule: rule }] : [] }));
+    const projected = buildAgentMemoryBrief(source);
+    expect(projected.source).toBe("EMPTY");
+    expect(projected.memories).toEqual([]);
+    expect(projected.activeThreads).toEqual([]);
+    expect(JSON.stringify(projected)).not.toContain("条件");
+    expect(approximateMemoryBriefTokens(projected)).toBeLessThanOrEqual(800);
+  }
+});

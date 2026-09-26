@@ -708,7 +708,7 @@ CANDIDATE → OBSERVED → REPEATED → IMPROVING → STABLE → RESOLVED
 
 `MemoryBrief` 是结构化优先、可选语义补充的只读投影，最多包含 2 个 active threads、3 条 memories 和 2 条 corrections。它只影响教学模式、候选优先级和习惯复查，不改变当前 Demo facts、canonical tick、Outcome Gate、ReviewPlan 顺序或 Session 状态机。桌面 SQLite 与 Web PostgreSQL 分别是各自运行形态内唯一的长期记忆真相；exact cosine/pgvector 都只能作为可重建派生索引。
 
-Agent MemoryBrief的activeThreads.transferRule与memories.transferRule保留来源limitations完整数组及字符串（Memory域已约束最多12条、每条240字），不为压缩单独截掉限定。仍遵守既有800个估算token与Wire字节门，原整条记录/线程裁减后仍超限时返回EMPTY，不留下该被清空记录的advice副本。不确定诊断跨两Demo成为EMERGING只表示生命周期可召回，verdict INCONCLUSIVE、claim UNVERIFIABLE和规则限定不因聚合而提升为已证实。此处不改变promotion策略，也不为旧advice副本补造不存在的limitations；when/do/unless的既有截短另受当前投影逻辑约束。
+Agent MemoryBrief的activeThreads.transferRule与memories.transferRule保留来源limitations完整数组及字符串（Memory域已约束最多12条、每条240字），不为压缩单独截掉限定。仍遵守既有800个估算token与Wire字节门，原整条记录/线程裁减后仍超限时返回EMPTY，不留下该被清空记录的advice副本。不确定诊断跨两Demo成为EMERGING只表示生命周期可召回，verdict INCONCLUSIVE、claim UNVERIFIABLE和规则限定不因聚合而提升为已证实。此处不改变promotion策略，也不为旧advice副本补造不存在的limitations。规则及record.advice的when/do/unless均完整传递域内已验证文本，不按字段任意截字；尾部否定或例外条件属于同一建议，不得裁掉。长字段造成超预算时仍沿用整条裁减/整份EMPTY，不提高800预算，不让独立advice绕过此门；summary/content等其他既有摘要字段不由本条契约改写。
 
 当前默认确定性Coach消费纠正的边界：服务端Brief将纠正投影为有界content/source=USER/revision，已DISPUTED旧聚合不再作为active memory。START_CUE/START_MANUAL_CUE_VISIT取得授权后的Brief；Graph只根据corrections是否非空给可验证诊断REINFORCE提示，Policy只调整既有合法慢回放/地图工具偏好。纠正原文没有进入诊断事实/语义判决输入，UNVERIFIABLE仍优先DEFER；不能把这条接线描述为已理解或证实历史纠正。撤回授权后，下一合法开始事件显式清除先前Brief并回到原教学选择，不据此承诺抹去已经展示或保存在历史产物的文本。
 

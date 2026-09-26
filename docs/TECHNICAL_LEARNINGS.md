@@ -2128,3 +2128,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：共享规则投影复制完整已由域限制的limitations，作用于activeThreads和memories；不截句、不挑前几条、不增加800预算。原预算降级仍可清空整个Brief。
 - 验证：两个正常链保留规则限定、INCONCLUSIVE、UNVERIFIABLE及confidence，主体ID不外泄，撤回授权空召回；12条各240字合法限制超预算后threads/memories全空，advice标记不残留、Wire合法、估算≤800。4文件63tests、TS/production build；补非空thread断言后目标2tests复验。只读方案审查确认schema/身份门和预算路径。[证据](validation/UNCERTAIN_MEMORY_RECALL.md)。
 - 限制：内存adapter，无用户DB/模型/真实Demo/UI；record.advice无独立limitations，不重建旧数据。现when/do/unless任意截字仍有尾部条件丢失风险，下一项以合法长句小验证处理，不借此扩预算。
+
+
+## 2026-09-26：条件建议必须把尾部例外一起传递
+
+- 实证：合法when/do/unless末尾“条件不成立，不要执行”经Agent规则或advice投影被按120–180字截掉，3红例复现；仅保留limitations不足以保护字段自身的例外条件。
+- 决定：六处投影直接保留已由Memory域校验的完整字段，optional unless仍可缺省；复用原预算整条裁减/EMPTY，不增加上限，不让独立advice保留残句。
+- 验证：3种字段×有规则/独立advice覆盖record/thread/副本完整文本；合法长三字段同时超额后memories/threads清空且条件文本无残留。4文件67tests、TypeScript/production build通过；主控集中真实diff复核。[证据](validation/COMPLETE_CONDITIONAL_ADVICE.md)。
+- 限制/后继：仅规则和建议字段，其他摘要字段仍按原截短；既有advice协议缺limitations无法重建。长规则更可能安全EMPTY，无用户DB或模型。下一项针对用户纠正content220字截短检查末尾否定，先小例而非扩大文本完整性审计。

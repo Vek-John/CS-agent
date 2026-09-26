@@ -91,9 +91,9 @@ function short(value: unknown, max = 180): string | undefined {
 function compactTransferRule(rule: LearningThread["transferRule"] | MemoryRecord["transferRule"]): Record<string, unknown> | undefined {
   if (!rule) return undefined;
   return {
-    ...(short(rule.when, 140) ? { when: short(rule.when, 140) } : {}),
-    ...(short(rule.do, 180) ? { do: short(rule.do, 180) } : {}),
-    ...(short(rule.unless, 140) ? { unless: short(rule.unless, 140) } : {}),
+    when: rule.when,
+    do: rule.do,
+    ...(rule.unless !== undefined ? { unless: rule.unless } : {}),
     confidence: rule.confidence,
     // Qualifiers travel with the rule. If they exceed the shared context
     // budget, use the existing whole-brief fallback rather than clip them.
@@ -161,9 +161,9 @@ function compactRecord(record: MemoryRecord): Record<string, unknown> {
       confidence: inference.confidence,
     })),
     advice: record.advice.slice(0, 3).map((advice) => ({
-      ...(short(advice.when, 120) ? { when: short(advice.when, 120) } : {}),
-      ...(short(advice.do, 160) ? { do: short(advice.do, 160) } : {}),
-      ...(short(advice.unless, 120) ? { unless: short(advice.unless, 120) } : {}),
+      when: advice.when,
+      do: advice.do,
+      ...(advice.unless !== undefined ? { unless: advice.unless } : {}),
       confidence: advice.confidence,
     })),
   };

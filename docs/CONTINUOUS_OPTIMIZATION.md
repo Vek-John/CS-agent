@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：长条件建议完整传递（2026-09-26）
+
+- ID complete-conditional-advice，基线123c305 clean；主控拥有brief.ts/memory.test.ts/docs，现有owner RELEASE。实际helper分别对rule和advice的when/do/unless截字，尾部“不要执行”可丢失。
+- 流程：合法Memory域规则/独立advice→Agent投影→完整条件字段或原预算安全EMPTY。A1when/do/unless尾部否定红例覆盖record/thread与独立advice；A2三字段原文整体保留，不只改unless；A3总800预算不增加，超限不留残缺建议，身份门保持；A4相关tests/TS/build及窄审，文档commit/push。
+- 边界/风险：保留长字段可能更常触发原EMPTY，不能以增预算或丢条件换成功；不用文本摘要猜语义，不改promotion/数据库/旧记录。5分钟红例、8分钟实现、15分钟验证；内存夹具无用户DB/模型/服务，主控清进程，原锁屏A5独立待验。
+
+- 结果：when/do/unless三个红例均确实截掉末尾“不成立就不要执行”；现在record/thread规则和独立advice完整保留三个字段。合法近800字字段组合超预算后连同advice全清；4文件67tests、TS/production build通过。主控集中复核六处字段替换，未改其他摘要/身份/生命周期，无新增并发owner。[证据](validation/COMPLETE_CONDITIONAL_ADVICE.md)。
+- 限制/后继：长规则可能更常EMPTY，默认短规则正常；历史advice无limitations无法凭空补齐，其他summary/claim截短未泛化修改。下一项明确线索是同Brief的correction.content仍截220字，用户异议原文可500字；用末尾否定的小例核实，优先保留整条纠正或整条放弃，不扩大token门。无用户DB/服务/模型，测试/build退出，push后释放，原UI A5独立待验。
+
 ## 已交付：跨Demo聚合后的不确定性保留（2026-09-26）
 
 - ID uncertain-recall，基线83bcb39 clean，主控独占uncertain-recall.integration.test.ts及必要brief/docs，小链先验证，无同文件并写。
