@@ -1,6 +1,6 @@
 import { REVISED_DIAGNOSIS_SUMMARY_LIMITATION } from "@cs-coach/coach-agent/client";
 import type { CoachAgentResult, SessionWrapUpResult } from "@cs-coach/coach-agent/client";
-import type { ReviewPlan } from "@cs-coach/contracts";
+import type { CoachingSessionState, ReviewPlan } from "@cs-coach/contracts";
 
 export function canPublishSessionWrapUp(result: CoachAgentResult, generation: number, currentGeneration: number, runId: string, takenOver: boolean): boolean {
   return generation === currentGeneration && !takenOver && result.identity.runId === runId
@@ -67,12 +67,29 @@ function representativeRoundLabels(theme: SessionWrapUpResult["bundle"]["themes"
   return [...rounds].map(round => `第 ${round} 回合`);
 }
 
-export function SessionWrapUpPanel({ status, result, plan, phase, error, onComplete }: {
+/** End-of-session navigation only; never creates a new teaching visit. */
+export function completedReviewTargets(plan?: ReviewPlan, session?: CoachingSessionState) {
+  if (!plan || plan.status !== "COMPLETE" || session?.review_plan_id !== plan.id ||
+    !["WRAP_UP", "COMPLETED"].includes(session.phase)) return [];
+  const consumed = new Set(session.consumed_cue_ids), presented = new Set(session.presented_cue_ids);
+  return plan.cues.flatMap(cue => {
+    if (!consumed.has(cue.id) || !presented.has(cue.id)) return [];
+    const segment = plan.segments.find(item => item.id === cue.segment_id && item.cue_ids.includes(cue.id));
+    if (!segment || !Number.isSafeInteger(segment.round_number) || segment.round_number <= 0 ||
+      !Number.isSafeInteger(segment.start_tick) || segment.start_tick < 0) return [];
+    return [{ cueId: cue.id, round: segment.round_number, tick: segment.start_tick }];
+  });
+}
+
+export function SessionWrapUpPanel({ status, result, plan, phase, error, onComplete, session, onReviewCue, playbackAvailable = false }: {
   status: string; result?: SessionWrapUpResult;
   request?: import("@cs-coach/coach-agent/client").SessionWrapUpRequest;
   plan?: import("@cs-coach/contracts").ReviewPlan;
   phase: string; error?: string; onComplete: () => void;
+  session?: CoachingSessionState; onReviewCue?: (cueId: string) => void; playbackAvailable?: boolean;
 }) {
+  const targets = completedReviewTargets(plan, session);
+  const summaryPending = status === "LOADING" || status === "IDLE";
   return <section className="cs2d-coach-summary" aria-live="polite">
     <small>本场复盘总结</small>
     {status === "LOADING" ? <p>正在整理已完成且可呈现的讲解点。</p> : null}
@@ -87,6 +104,14 @@ export function SessionWrapUpPanel({ status, result, plan, phase, error, onCompl
     {(result?.bundle.themes.length ?? 0) === 0 && !error && result?.bundle.limitations.includes(REVISED_DIAGNOSIS_SUMMARY_LIMITATION)
       ? <p>{REVISED_DIAGNOSIS_SUMMARY_LIMITATION}</p> : null}
     {(result?.bundle.themes.length ?? 0) > 0 ? result?.bundle.limitations.map((limitation, index) => <p key={`limitation-${index}`}>{limitation}</p>) : null}
+    {targets.length > 0 && onReviewCue ? <div>
+      <p>已看完 {targets.length} 个讲解片段。可以选一段回看，先回忆当时想达成什么，再对照完整处理。</p>
+      <p>{summaryPending ? "正在整理总结，完成后可选择片段回看。" : playbackAvailable ? "点击后暂停在片段开头，按播放继续观看。" : "回放准备好后可回看；已保存的总结不受影响。"}</p>
+      <div className="cs2d-coach-result-actions cs2d-coach-review-links" aria-label="回看已完成片段">
+        {targets.map((target, index) => <button key={target.cueId} type="button" disabled={!playbackAvailable || summaryPending}
+          onClick={() => onReviewCue(target.cueId)}>回看第 {target.round} 回合 · 片段 {index + 1}</button>)}
+      </div>
+    </div> : null}
     {phase === "WRAP_UP" ? <button className="cs2d-coach-primary" type="button" onClick={onComplete}>完成本次复盘</button> : null}
   </section>;
 }

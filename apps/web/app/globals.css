@@ -2433,6 +2433,8 @@ button:disabled {
 }
 .cs2d-coach-primary { width: 100%; border-color: rgba(100,170,255,0.58); background: linear-gradient(180deg, #1689f5, #0873d9); color: #fff; box-shadow: inset 0 0.0625rem rgba(255,255,255,0.22), 0 0.55rem 1.2rem rgba(10,132,255,0.16); }
 .cs2d-coach-result-actions { display: grid; grid-template-columns: 1fr 1.2fr; gap: 0.38rem; }
+.cs2d-coach-review-links { grid-template-columns: minmax(0, 1fr); }
+.cs2d-coach-review-links button { white-space: normal; overflow-wrap: anywhere; }
 .cs2d-coach-result-actions .cs2d-coach-primary { width: auto; }
 .cs2d-coach-summary { border-color: rgba(48,209,88,0.25); background: linear-gradient(145deg, rgba(48,209,88,0.085), rgba(255,255,255,0.025) 58%); }
 .cs2d-coach-summary > small { color: #8ce9a2; }

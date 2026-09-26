@@ -275,6 +275,8 @@ Host先通过既有本人/当前回合/生命/新鲜度与snapshot门，再独�
 
 当前实现把这些规则收敛在 `SessionRecoveryRuntime`、`libs/session` capture/rehydrate seam 与 Host Recovery Adapter：本地分析的 `demo_id` 由 Demo content hash 稳定派生，新会话另行生成并保留随机 `recoveryId/sessionId/runId`；`POSTED` 以一次稳定边界更新原子写入 waiting checkpoint，`RESULTED/RESUMED` 分别写回结构化结果与完成 checkpoint。checkpoint 只有与当前 frozen cue/phase/route cursor 精确匹配时才可绑定 boundary；前一 cue 的活动 checkpoint 不能复用到下一 cue 或 `WRAP_UP`，`WRAP_UP` 只接受同 route cursor 的完成态 session checkpoint。记录仅保留当前 cue 与后两个 narration 摘要；恢复后由 narration-only 队列补齐后续 cue，绝不重新调用 Director/PlanCompiler。
 
+结束页可为冻结plan中同时已presented且consumed的cue提供自由回看入口，目标由其segment起点派生，沿现有pause→seek用户接管流程，不创建ManualCueVisit或修改终结Session。回看期间保留总结，终结状态不再向Graph发送takeover/resume；整理总结或播放器尚未就绪时该入口禁用。Host回调绑定session/generation/history open epoch，不能跨历史打开复用。此入口只用于重看已完成片段，不把片段列表当重复习惯、再次诊断或新播放完成证据。
+
 ### 2.14 默认顺序路线与用户点播 cue
 
 默认带看与用户点播是两种不同的会话意图。`DefaultRouteCursor` 只表示冻结 `ReviewPlan` 按 segment 顺序推进的进度；用户自由 seek、切换回合或发起 `ManualCueVisit` 都不能修改它。`ManualCueVisit` 是一个带稳定 visit ID 的临时讲解过程，只能引用 frozen cue ID；Host 从当前播放头和 frozen plan 选择最近 cue，`CoachingSession` 再从 plan 推导合法 pre-roll、outcome window、decision point 与 Gate，调用方不能提供任意播放 tick。

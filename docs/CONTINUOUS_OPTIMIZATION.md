@@ -2,6 +2,16 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：结束页已完成片段回看（2026-09-26）
+
+- ID wrap-up-revisit，基线3813709 clean；root拥有Panel/Host小接线/测试/文档。真实NO_REPEATED_THEME只显示不归纳提示；现有时间轴可seek、Session禁止终结后ManualCueVisit，不重新启动教学。
+- A1仅当前冻结plan中已presented且consumed的cue成为回看目标；A2结束页显示回合入口，复用现有pause→seek到segment开头，COMPLETED/WRAP_UP进度与摘要不变；A3回看期间保留结束页、准备中禁用，不新开Graph/讲解/工具；A4相关tests/TS/build/证据push。
+- 已应用emil/apple技能，原样式/键盘button/减少动效透明度规则复用，无新动画。root先小模块/SSR与实际Session控制测试，UI不重试锁屏路径；不假称浏览器验收。20分钟有限实现/60秒测试，零Demo/用户DB/模型/服务/安装；必要窄审只读，清理本任务进程。保留原主题证据门，不从skip制造判断。
+
+- 交付：结束页同plan已presented/consumed回合按钮，暂停定位到segment开头；终结自由查看保留总结，不重新进入Graph/ManualCueVisit。IDLE/LOADING/未就绪禁用，回调绑定session/generation/open epoch；原“讲解最近点”终结时禁用，返回文案对齐。
+- 验收：5新项＋67相关tests、TS/build通过；原生Button SSR/真实Session/HostPlaybackControl及JSON恢复验证，未声称真实浏览器/Viewer。partial_revision_restore默认只读窄审指出并已修LOADING/旧回调风险，root读diff；无Demo/用户库/服务进程。[记录](validation/WRAP_UP_REVISIT.md)。
+- 下一有限任务：现有普通时间轴仍可在总结LOADING期间takeover，当前总结接收条件可能丢弃同owner迟到结果。用deferred实际completeStage3SessionWrapUp流程核实并只修已确认问题，优先保持完成和摘要保存；不再重复存储测试、不降低教学门，A5独立。
+
 ## 已交付：历史保存的重复校验等待（2026-09-26）
 
 - ID artifact-save-latency，基线ee29f4b clean；root独占profile/必要校验窄修/docs。目标从上轮17次保存3.927秒中定位load/validation/write占比，仅对已证明的重复工作优化。

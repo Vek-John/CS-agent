@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：没有重复主题也应能回看已完成处理
+
+- 问题：真实NO_REPEATED_THEME结束页只有保守提示，用户需自己拖时间轴定位已讲解段；终结Session不允许ManualCueVisit，因此不能直接重启旧教学流程。
+- 决策：增加同plan且presented/consumed片段按钮，复用自由pause→seek，不更改Session完成进度/生成新判断；终结回看仍显示总结，不向已完成Graph发送takeover/resume。新入口在IDLE/LOADING、资料未就绪时禁用，回调绑定原session/generation/history epoch。
+- 验证：5新项及67相关测试、TS/build通过；真实Panel回调+Session/HostPlaybackControl发送暂停再定位，SSR/重载表示保持。独立窄审定位并处理在途总结和旧回调风险。[记录](validation/WRAP_UP_REVISIT.md)。
+- 限制/行动：未完整浏览器/Viewer验收；回看是导航而非再诊断。普通时间轴的LOADING接管仍有潜在旧问题，下一项做deferred流程核实，不用本次按钮禁用冒称覆盖所有入口。
+
 ## 2026-09-26：完整产物保存无需在同请求重复领域校验
 
 - 问题/测量：真实17项保存4.094秒；分段透传计时显示领域校验2.918秒，读/解压725ms，写116ms。实际validateCollection与validateStoredReviewArtifacts重复反序列化/验证同一Analysis并比较同一Candidate。

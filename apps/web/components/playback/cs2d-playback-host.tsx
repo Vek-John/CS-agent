@@ -120,7 +120,7 @@ import {
 import { CoachingStatusList } from "./coaching-status-list";
 import { loadLocalGameAssetCatalog } from "../../lib/assets/local-game-asset-catalog";
 import { completeStage3SessionWrapUp } from "../../lib/coaching/session-wrap-up-completion";
-import { isSessionWrapUpIdentityCurrent, sessionWrapUpPresentation, SessionWrapUpPanel } from "../../lib/coaching/session-wrap-up-presentation";
+import { completedReviewTargets, isSessionWrapUpIdentityCurrent, sessionWrapUpPresentation, SessionWrapUpPanel } from "../../lib/coaching/session-wrap-up-presentation";
 import { buildStage3WrapUpInput } from "../../lib/coaching/coach-agent-stage3-wrap-up";
 import {
   CoachAgentHostAdapter,
@@ -1066,9 +1066,10 @@ export function Cs2dPlaybackHost({
     // Adaptive diagnosis has no visual Agent effect to cancel.  Sending the
     // legacy Stage3 takeover event here would move the diagnosis checkpoint to
     // USER_TAKEOVER and block the next Reflection submission.
-    if (!diagnosticsEnabled && stage3InputRef.current) {
+    const finished = ["WRAP_UP", "COMPLETED"].includes(liveSessionRef.current?.phase ?? "");
+    if (!finished && !diagnosticsEnabled && stage3InputRef.current) {
       void stage3ControllerRef.current?.takeover(stage3InputRef.current, reason, generationRef.current);
-    } else if (!diagnosticsEnabled && stage3IdentityRef.current) {
+    } else if (!finished && !diagnosticsEnabled && stage3IdentityRef.current) {
       void stage3ControllerRef.current?.takeoverIdentity(stage3IdentityRef.current, reason, generationRef.current);
     }
     if (stage2Status === "STARTING" || stage2Status === "FOCUSING" || stage2Status === "RESUMING") {
@@ -1097,7 +1098,7 @@ export function Cs2dPlaybackHost({
         : current);
     }
     const defaultInput = stage3Mode ? stage3DefaultInputRef.current : undefined;
-    if (defaultInput && !diagnosticsEnabled) {
+    if (defaultInput && !diagnosticsEnabled && !["WRAP_UP", "COMPLETED"].includes(liveSessionRef.current?.phase ?? "")) {
       const resumed = await stage3ControllerRef.current?.resumeAfterTakeover(defaultInput);
       if (!resumed) return;
     }
@@ -1121,6 +1122,17 @@ export function Cs2dPlaybackHost({
       canonicalTick: clampCanonicalTick(canonicalTick, tickMin, tickMax)
     });
   }, [issueUserCommand, tickMax, tickMin]);
+
+  const completedReviewSessionId = session?.id;
+  const completedReviewGeneration = generationRef.current;
+  const completedReviewOpenEpoch = historyOpenEpochRef.current;
+  const reviewCompletedCue = useCallback((cueId: string) => {
+    if (liveSessionRef.current?.id !== completedReviewSessionId || generationRef.current !== completedReviewGeneration ||
+      historyOpenEpochRef.current !== completedReviewOpenEpoch) return;
+    if (!replayRef.current || historyLoading || recoveryLandingRef.current || stage3WrapUpStatus === "LOADING" || stage3WrapUpStatus === "IDLE") return;
+    const target = completedReviewTargets(planRef.current, liveSessionRef.current).find(item => item.cueId === cueId);
+    if (target) seekFromTimeline(target.tick);
+  }, [completedReviewSessionId, completedReviewGeneration, completedReviewOpenEpoch, historyLoading, seekFromTimeline, stage3WrapUpStatus]);
 
   const seekBySeconds = useCallback((seconds: number) => {
     if (!replay) return;
@@ -3296,8 +3308,8 @@ export function Cs2dPlaybackHost({
                 {nearestManualCue ? <small>{nearestManualReadiness === "PENDING" ? "这个教练点还在准备" : nearestManualCue.cue.title}</small> : null}
               </div>
               <div className="cs2d-coach-takeover-actions">
-                <button type="button" onClick={resumeGuidedRoute}><CornerUpLeft size={14} aria-hidden="true" />回到默认顺序</button>
-                <button type="button" disabled={!canBeginManualCueVisit(nearestManualReadiness, Boolean(nearestManualCue), Boolean(session.manual_cue_visit))} onClick={beginNearestManualVisit}><MessageSquareText size={14} aria-hidden="true" />讲解最近教练点</button>
+                <button type="button" onClick={resumeGuidedRoute}><CornerUpLeft size={14} aria-hidden="true" />{["WRAP_UP", "COMPLETED"].includes(session.phase) ? "结束自由回看" : "回到默认顺序"}</button>
+                <button type="button" disabled={["WRAP_UP", "COMPLETED"].includes(session.phase) || !canBeginManualCueVisit(nearestManualReadiness, Boolean(nearestManualCue), Boolean(session.manual_cue_visit))} onClick={beginNearestManualVisit}><MessageSquareText size={14} aria-hidden="true" />讲解最近教练点</button>
               </div>
             </div>
           ) : null}
@@ -3455,9 +3467,10 @@ export function Cs2dPlaybackHost({
             </section>
           ) : null}
 
-          {session && !userTookOver && stage3Mode && ["WRAP_UP", "COMPLETED"].includes(session.phase) ? (
+          {session && stage3Mode && ["WRAP_UP", "COMPLETED"].includes(session.phase) ? (
             <SessionWrapUpPanel status={stage3WrapUpStatus} result={stage3WrapUpResult} request={stage3WrapUpRequest}
-              plan={activePlan} phase={session.phase} error={stage3WrapUpError}
+              plan={activePlan} phase={session.phase} error={stage3WrapUpError} session={session}
+              onReviewCue={reviewCompletedCue} playbackAvailable={Boolean(replay) && !historyLoading && !recoveryLandingRef.current}
               onComplete={() => transition({ type: "COMPLETE_SESSION" })} />
           ) : null}
 
