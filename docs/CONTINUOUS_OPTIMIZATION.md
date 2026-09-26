@@ -2,6 +2,14 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已验证：真实Demo温恢复成本（2026-09-27）
+
+- ID managed-replay-cost，基线4aa4555 clean；root独占新benchmark/docs，partial_revision_restore默认只读3分钟方法复查。目标为已授权test_demo.dem做有界初次解析/重复解析/温恢复对照；A1既有12项Viewer小例及新CLI smoke，A2单child真实WASM+Viewer函数，仅返回摘要，A3注明读取/哈希、首次初始化、内存和省略成本，A4相关tests/TS/build与提交push。无产品行为改动。
+- 风险/资源：输入≤128MiB、Node JS heap上限3GiB（不是总RSS硬上限）、父进程120秒强制终止，WASM同步不靠自身timer。原60,601,900字节Demo只读，raw/Replay不离开子进程；无模型/DB/浏览器/服务，root管理父子与日志，不委派昂贵执行。一个身份预读暖OS缓存并单独计时；三测阶段每次仍新读文件。首轮误与build并行，弃其时间结论；构建全部退出后仅重测一次正式三阶段，不继续刷样本。
+- 结果：Node v22.17.0，9回合/10玩家；初次7427ms，禁用复用资格后的重复Parser7168ms，warm63ms且Parser0/READ1/SHA1。累计峰值RSS约1011MiB，不能声称内存下降、冷磁盘或桌面端倍数提速；本地文件响应代替HTTP，voice解码/Worker拷贝/真实舞台ACK不计。28相关tests、TS/build、CLI语法/smoke通过，正式进程exit0。[完整记录](validation/MANAGED_REPLAY_COST.md)。
+- 只读方法审查发现Replay引用断言失败时可能经AssertionError打印对象，已改为布尔断言+固定错误码；最终CLI smoke复验，无需再读真实Demo。其余结论/限制通过，执行者RELEASE。
+- 下一有限目标：依据本轮内存摘要和useDemoParser长驻Worker源码，先核实Parser完成后仍保留的WASM/原始数据所有权与释放机会；只有小验证证实有收益再更改生命周期，保留页面Replay和温恢复。不把本次单进程峰值当作浏览器内存泄漏，也不重跑整场教学/A5。
+
 ## 已交付：当前已解析Demo的RESTORE复用（2026-09-27）
 
 - ID managed-replay-reuse，基线f45c59e clean；root独占0021/registry/实际Viewer函数集成测试/docs。目标为导入已解析→打开同Demo保存复盘时免重复Parser；A1检查实际cache并计数，A2只复用当前ready代际且demoId/bytes/hash相同的Replay，A3保持fresh READ、完整内容校验、冷路径及旧代际拒绝，A4相关tests/两端TS/build和独立窄审后push。

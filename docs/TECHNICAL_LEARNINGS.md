@@ -8,6 +8,12 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：温恢复的真实计算成本与测量范围
+
+- 决策：用父进程120秒约束的单Node child执行当前Viewer函数+真实WASM，raw/Replay留child，只输出摘要。首次身份预读和WASM init独立计时；明确禁用ready资格构造同命令重复解析基线，避免只拿首次编译成本比较。
+- 证据：60,601,900字节原Demo，初次7427ms、重复7168ms、warm63ms；重复阶段WASM6959.94ms、JSON133.82ms，而warm仍完整READ+SHA。41测试的函数计数结论获得真实WASM成本支持。[记录](validation/MANAGED_REPLAY_COST.md)。本轮28相关tests/TS/build、smoke/语法均通过。
+- 限制/学习：首次试跑与build并发污染，弃用并在build退出后重测一次；只有一份样本，不提供统计倍数。累计峰值约1011MiB，不能用warm RSS下降推断释放、或用初测上升推断泄漏。HTTP/跨Worker克隆/voice/舞台都未计入，OS缓存已暖，不能把此结果当桌面端SLA。
+
 ## 2026-09-27：温恢复保留文件信任门、复用Parser结果
 
 - 问题：当前managed导入解析完后，历史RESTORE仍完整读取并第二次调用useDemoParser.parse，后者清Replay并重新Worker解析，没有自动缓存命中。
