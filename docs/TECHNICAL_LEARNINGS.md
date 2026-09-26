@@ -8,6 +8,12 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：准备好的会话仍可能卡在小记录创建
+
+- 问题：起点durabilityCommit先等beginRevision，后者可能先等reviewPromise；create与startRevision原来都无fetch/body期限，导致已准备的会话不能到达“保存未确认仍继续”的既有分支。
+- 决策：两个≤16KiB元数据POST复用HISTORY20秒共同期限；不改bulk，不新重试或回滚。服务端仅检查当前行并插入UUID记录，客户端超时不代表服务端撤销。
+- 验证/限制：11新增、70相关tests、TypeScript和production build通过；实际API→Controller→起点结算和Session激活的小transport测试，见[记录](validation/STARTUP_RECORD_DEADLINE.md)，不冒称真实服务器/SQLite/UI验证。后继核实异步起点保存中读取live narration map是否重复保存后续cue，先小复现再修。
+
 ## 2026-09-26：基础时间卡也应显式标明采样近似
 
 - 问题/决策：诊断与追问已标最近采样约秒，基础局面卡仍显示无近似限定的“回合剩余N秒”。统一为“最近采样：回合剩余约N秒”，不改变数据或计算，也不外推当前HUD。

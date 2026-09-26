@@ -40,7 +40,7 @@ async function responseJson<T>(response: Response): Promise<T> {
 // Endpoints may materialize existing analysis for validation, so use a conservative local wait policy.
 export const CHECKPOINT_REQUEST_TIMEOUT_MS = 20_000;
 export const TEACHING_SAVE_TIMEOUT_MS = 20_000;
-// Paginated summaries (default 30, max 50) and a small status PATCH, never full artifacts.
+// Paginated summaries and small review/revision metadata mutations, never full artifacts.
 export const HISTORY_REQUEST_TIMEOUT_MS = 20_000;
 // Small teaching projections, completed summaries and user input. Large analysis/route payloads retain their own lifetime.
 const TEACHING_ARTIFACT_TYPES = new Set(["USER_INTERACTION", "CUE_CASE", "DIAGNOSTIC_RESULT", "TRANSFER_RULE", "LEARNING_THREAD", "SESSION_SUMMARY"]);
@@ -118,7 +118,7 @@ export function createReviewHistoryApi(fetcher: typeof fetch = fetch) {
       await boundedHistoryJson(fetcher, `/api/review-history/${encodeURIComponent(reviewId)}`, { method: "PATCH", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify({ status: "FAILED" }) }, "HISTORY");
     },
     async create(input: { demoId: string; selectedPlayerId: string; selectedPlayerName: string; title: string; mapName?: string }): Promise<{ reviewId: string }> {
-      return responseJson(await fetcher("/api/review-history", { method: "POST", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify(input) }));
+      return await boundedHistoryJson(fetcher, "/api/review-history", { method: "POST", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify(input) }, "HISTORY") as { reviewId: string };
     },
     async startRevision(reviewId: string, input: {
       mode: "REANALYZE" | "SELECT_PLAYER";
@@ -129,7 +129,7 @@ export function createReviewHistoryApi(fetcher: typeof fetch = fetch) {
       promptVersion: string;
       modelMetadata: Record<string, unknown>;
     }): Promise<{ revisionId: string }> {
-      return responseJson(await fetcher(`/api/review-history/${encodeURIComponent(reviewId)}/revisions`, { method: "POST", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify(input) }));
+      return await boundedHistoryJson(fetcher, `/api/review-history/${encodeURIComponent(reviewId)}/revisions`, { method: "POST", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify(input) }, "HISTORY") as { revisionId: string };
     },
     async removeReview(reviewId: string): Promise<void> {
       await responseJson(await fetcher(`/api/review-history/${encodeURIComponent(reviewId)}`, { method: "DELETE", cache: "no-store" }));

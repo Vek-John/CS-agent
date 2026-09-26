@@ -2,6 +2,14 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：准备阶段小控制记录的等待上限（2026-09-26）
+
+- ID startup-record-deadline，基线4ebc175 clean；root独占API/新小集成测试/docs，partial_revision_restore默认只读5分钟定位服务端和生命周期，已释放。既有assessment/Narrator/first2及sidebar等待已处理，不重复优化；新缺口为create Review与startRevision两个plain fetch/body，前者的reviewPromise也是beginRevision前置。
+- A1实际API→HistoryPersistenceController→settlePreparedCoachingStart小挂起复现；A2两项小元数据请求复用HISTORY20秒fetch+body期限；A3未确认保存可继续本地Session，迟到结果不赋旧ID/不提交head、不自动重试，保留HTTP/JSON语义及新owner门；A4相关tests/TS/build/窄审和push。root15分钟，测试60秒；零用户库/Demo/模型/GUI，进程清理，不给bulk上传加同一期限。
+- 服务端revision为≤16KiB元数据+SQLite PREPARING插入，无解析/模型；每次UUID，无幂等键，期限不等于服务端撤销，绝不自动再创建。另一具体后继：起点record捕获后，Host保存循环再读取live narration map，可能把后来生成的cue纳入阻塞并与后台再保存重复；本轮不并改。
+- 交付：create及startRevision复用HISTORY20秒fetch/body期限，沿原未确认保存继续Session；11新增/70相关tests、TypeScript与production build通过。默认代理独占新测试，root读日志/diff及统一检查，已释放源码/进程。[记录](validation/STARTUP_RECORD_DEADLINE.md)。合成计划真实API/Controller/Session，transport及Recovery保存stub，非真实服务器/浏览器/用户库。
+- 下一有限目标：用前两cue就绪、deferred beginRevision、随后两cue到达的小序列，核实live narration map是否让首屏等待额外保存并造成重复请求；若证实仅按起点record已捕获讲解保存，后续沿原后台队列，不改head要求或先行宣称已保存。
+
 ## 已交付：基础时间卡标明采样近似（2026-09-26）
 
 - ID clock-chip-qualification，基线49594e1已push；root独占View一行文案及docs，无委派。实际基础卡写“回合剩余N秒”，没有体现既有Parser时钟契约的最近采样/约秒；改为“最近采样：回合剩余约N秒”。
