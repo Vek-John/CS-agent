@@ -557,7 +557,7 @@ describe("teaching diagnosis trust and evidence boundaries", () => {
     expect(revised.cueCase.hinge?.kind).toBe("INFORMATION");
     expect(revised.cueCase.selectedCapabilityId).toBe("VERIFY_INFORMATION_ASSUMPTION");
     expect(revised.cueCase.verdict?.type).toBe("INCONCLUSIVE");
-    expect(revised.cueCase.diagnosticResult?.explanation).toMatch(/可能改变判断.*无法验证.*若.*成立.*合理解释/);
+    expect(revised.cueCase.diagnosticResult?.explanation).toMatch(/缺少可验证的对应关系.*不能.*认定判断有误/);
     expect(revised.cueCase.claims.find((claim) => claim.type === "TACTICAL_CONTEXT")).toBeUndefined();
     expect(revised.cueCase.claims.find((claim) => claim.type === "ENEMY_BELIEF")).toMatchObject({
       source: "USER",
@@ -728,5 +728,29 @@ describe("goal-only text is not an independent condition claim", () => {
       disagreement: reflection({ selectedGoal: undefined, rawText: "不是拿信息，是保枪" }) });
     expect(retained.cueCase.claims.find(claim => claim.type === "ENEMY_BELIEF")?.content).toContain("看到敌人在前面");
     expect(retained.cueCase.hinge?.kind).toBe("INFORMATION");
+  });
+});
+
+
+describe("information evidence needs a claim-bound contradiction", () => {
+  it.each([
+    ["我也没有看到敌人", "决策时没有看到敌人。"],
+    ["我想拿信息", "决策时没有看到敌人。"],
+    ["我听到了脚步", "决策时没有看到敌人。"],
+    ["我看到敌人在B点", "A点的敌人不存在。"],
+    ["我看到敌人在前面", "队友的另一条报点信息不准确。"],
+    ["我看到敌人在前面", "决策时没有看到敌人。"],
+  ])("does not convict an unbound user belief: %s / %s", (rawText, text) => {
+    const fact = { ...decisionFact("limited-information-fact"), text };
+    const output = diagnoseCue(input({ reflection: reflection({ selectedGoal: "GET_INFO", rawText }), decisionFacts: [fact] }));
+    expect(output.cueCase.hinge?.kind).toBe("INFORMATION");
+    expect(output.cueCase.diagnosticResult?.status).toBe("UNVERIFIABLE");
+    expect(output.cueCase.verdict?.type).toBe("INCONCLUSIVE");
+    expect(output.cueCase.diagnosticResult?.evidenceRefs).toContain(fact.id);
+    expect(output.cueCase.claims.every(claim => claim.verification !== "CONTRADICTED")).toBe(true);
+    expect(output.cueCase.claims.every(claim => claim.contradictingRefs.length === 0)).toBe(true);
+    expect(output.cueCase.transferRule?.do).not.toContain("你描述的声音");
+    expect(output.cueCase.reflection?.rawText).toBe(rawText);
+    expect(output.cueCase.diagnosticResult?.explanation).toContain("对应关系");
   });
 });

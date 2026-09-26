@@ -2104,3 +2104,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：有限完整目标分句只从分类context移除，原文不变；独立窗口/位置/能力/执行描述保留。TRADE限制为focus/GOAL/真正队友上下文，EXECUTE_PLAN直接走SYNC。不能只删裸词，否则残留“给队友”仍是伪信念，也会吞掉“补枪窗口”的真实陈述。
 - 复核：旧自动TACTICAL_CONTEXT加上独立时间描述仍会恢复伪背景；增加omittedGoal标记，目标被剥离后必须有实际战术词才构造战术claim。保留旧独立敌情来源，并用真实Runtime验证一次修订。7文件132tests、TypeScript/production build通过，独立只读审查发现的问题由主控修复并回归。[证据](validation/GOAL_CONTEXT_SEPARATION.md)。
 - 限制/后继：没有模型、用户DB或专业gold；不重新解读旧保存产物，不保证任意文本理解。已发现下一条需实证的执行器规则：仅凭fact文本“未看到敌人”就判用户信息主张矛盾，尚未对照其真实claim。下轮小例检验肯定/否定/无主张的区别，而非继续扩同义词表。
+
+
+## 2026-09-26：负向事实文字不是用户主张的反证
+
+- 证据：信息executor忽略claims，只要fact.text包含“没看到敌人/敌人不存在/报点不准确”就CONTRADICTED。用户自己说未看到、仅想拿信息、听到脚步、另一地点或别人的报点共6例均被错误定罪，实际红例复现。
+- 决定：当前契约没有命题/主体/时空绑定，不再增加regex补丁，删除该定罪分支；保留引用，返回UNVERIFIABLE/INCONCLUSIVE和具体待核的信息来源/对象/时点。视觉/一般信息不再被写成“你描述的声音”。保留枚举及历史读取，不宣称用户已被证明正确。
+- 验证：6红转绿，USER原文保持、contradictingRefs为空；原Memory与总结fixture改为信息→同步仍有规则变化，不再依赖错误BELIEF_INCORRECT前提。9文件179tests、TypeScript/production build通过，独立只读实际diff复核无must-fix并RELEASE。[证据](validation/INFORMATION_CONTRADICTION_BOUNDARY.md)。
+- 限制：新信息诊断不能输出已证实/已反驳，直至有可靠对应证据；没有改历史或运行模型/真实Demo/用户DB。后继同类真实线索是updateClaimVerification把资源预算状态直接套给任意RESOURCE_BELIEF，需要用不同用户原话与同资源测量核实，而不是反复跑旧拒判集合。

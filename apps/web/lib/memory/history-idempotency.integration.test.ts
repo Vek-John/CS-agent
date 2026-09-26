@@ -229,7 +229,8 @@ it.each([false, true])("corrects the original SQLite judgment after a changed hi
     }) as Extract<CoachAgentEvent, { type: "SUBMIT_REFLECTION" }>;
     const diagnosisInput = { ...event.input, reflection: event.reflection } as Parameters<typeof diagnoseTeachingCue>[0];
     const original = diagnoseTeachingCue(diagnosisInput);
-    expect(original.cueCase.verdict?.type).toBe("BELIEF_INCORRECT");
+    expect(original.cueCase.verdict?.type).toBe("INCONCLUSIVE");
+    expect(original.cueCase.hinge?.kind).toBe("INFORMATION");
     const disagreement = CoachAgentEventSchema.parse({ ...event, type: "SUBMIT_DISAGREEMENT", eventId: "changed-hinge-disagreement",
       reflection: { ...event.reflection, reflectionId: "stable-hinge-correction", rawText: "队友语音叫我先拉出去执行固定战术。" },
     }) as Extract<CoachAgentEvent, { type: "SUBMIT_DISAGREEMENT" }>;

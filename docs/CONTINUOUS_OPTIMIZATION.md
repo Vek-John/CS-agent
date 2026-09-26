@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：信息反证必须对应用户主张（2026-09-26）
+
+- ID information-contradiction-boundary，基线313a8d1 clean；主控拥有diagnosis.ts/tests、相关两fixture断言/docs；revision_semantics_review默认配置8分钟只读输入契约，无并写。
+- 目标/流程：负向decisionFact→真实信息诊断→无绑定具体主张/主体/时点的反证不能标CONTRADICTED/BELIEF_INCORRECT；事实仍可引用，返回准确未知边界。A1相同否定/无主张/听觉/不同地点/其他报点红例；A2不再通过regex定罪、不编新proof协议；A3修订/Memory旧目标与总结过滤仍工作，保存旧产物不重算；A4相关tests/TS/build与窄审；文档commit/push。
+- 风险：只加更多否定词会继续误判实体/时点；若现schema没有可靠反证绑定，保守禁用该定罪分支，不能改成认定用户正确。不扩大模型/拒判实验，不放松引用门。5分钟小例、10分钟实现、15分钟验证；无用户DB/服务/模型，主控清进程，原UI A5独立待验。
+
+- 结果：6个实际红例转绿，删除文本定罪helper及分支，保留事实refs、UNVERIFIABLE/INCONCLUSIVE与具体待核条件；不把视觉输入默认转述为声音。两处旧fixture不再要求错误定罪，但仍验证信息→同步的规则身份变化、Memory原对象和总结过滤。9文件179tests、TypeScript/production build通过；独审实际diff无must-fix，RELEASE。[证据](validation/INFORMATION_CONTRADICTION_BOUNDARY.md)。
+- 限制/后继：当前信息诊断尚无可用的主张绑定反证，因此不能做肯定或否定判断；不是认定用户正确，旧保存结果仍可读且不重算。下一项已定位updateClaimVerification会把风险资源诊断整体SUPPORTED/PARTIALLY_SUPPORTED赋给任意RESOURCE_BELIEF并加入支持refs；用“我没甲”配100甲等真实小例核实，避免测量资源预算被当作验证任意原话。无用户DB/模型/服务/安装部署，测试/build退出，push后释放；UI A5独立待验。
+
 ## 已交付：纯目标与独立条件陈述分离（2026-09-26）
 
 - ID goal-context-separation；基线b0ea734 clean，主控拥有teaching-diagnosis.ts/tests/docs；revision_semantics_review默认配置8分钟只读风险/终审，无并写。

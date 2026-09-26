@@ -586,16 +586,6 @@ function resourceMeasurements(input: TeachingDiagnosisInput, snapshot = resource
   return measurements;
 }
 
-function explicitInformationContradiction(input: TeachingDiagnosisInput): string[] {
-  return input.decisionFacts
-    .filter((fact) => fact.availability === "DECISION" && fact.observed_by_player)
-    .filter((fact) => {
-      const text = fact.text.replace(/\s+/g, "");
-      return /(?:信息|报点|情报).*(?:错误|不成立|不准确|不对)|(?:敌人|目标).*(?:不在|不存在|并不存在)|(?:没有|未|没(?:有)?)(?:发现|看到)(?:敌人|目标)/.test(text);
-    })
-    .map((fact) => fact.id);
-}
-
 /** Deterministic evidence executor. It only consumes fields already present in the input. */
 export function executeDiagnostic(
   capability: DiagnosticCapability,
@@ -623,20 +613,9 @@ export function executeDiagnostic(
     });
   }
   if (capability.kind === "VERIFY_INFORMATION_ASSUMPTION") {
-    const contradictionRefs = explicitInformationContradiction(input);
-    if (contradictionRefs.length > 0) {
-      return DiagnosticResultSchema.parse({
-        resultId: `diagnostic-${input.cueId}-${capability.kind.toLowerCase()}`,
-        capabilityId: capability.id,
-        cueId: input.cueId,
-        hingeId: hinge.hingeId,
-        status: "CONTRADICTED",
-        evidenceRefs: unique([...contradictionRefs, ...refs]).slice(0, 64),
-        measurements: [],
-        explanation: "Demo 的决策事实明确否定了这条敌人/信息假设；这不是把用户描述升级成事实，而是用可观察 Demo 事实标记该主张不成立。",
-        limitations: unique([...commonLimitations, "仅对 Demo 明确记录的矛盾信息作出判断；玩家是否实际听到或理解信息仍无法验证。"]),
-      });
-    }
+    // Fact text has no structured binding to the user's proposition, subject
+    // or observation time. Absence of a sighting cannot refute an arbitrary
+    // belief (or a hearing claim); keep the evidence without asserting error.
     return DiagnosticResultSchema.parse({
       resultId: `diagnostic-${input.cueId}-${capability.kind.toLowerCase()}`,
       capabilityId: capability.id,
@@ -645,8 +624,8 @@ export function executeDiagnostic(
       status: "UNVERIFIABLE",
       evidenceRefs: refs,
       measurements: [],
-      explanation: "你补充的听觉或脚步信息可能改变判断；但 Demo 无法验证你当时是否实际听到、理解并据此行动。若这条信息成立，这次行为可以被合理解释为基于信息判断的选择；在验证前不能把它当作 Demo 事实。",
-      limitations: unique([...commonLimitations, "Demo 无法验证玩家实际听到或理解的声音信息。", "若该信息成立，当前行为需要按信息判断条件重新解释。"]),
+      explanation: "当前事实与用户具体信息主张之间缺少可验证的对应关系，尚不能据此认定判断有误。没有看到敌人不等于敌人不存在，也不能否定听觉信息；还需核对信息指向的对象、位置、时点和来源。",
+      limitations: unique([...commonLimitations, "当前信息事实没有绑定到待验证的具体用户主张。", "是否实际感知、理解并依据信息行动仍需核实。"]),
     });
   }
   if (capability.kind === "VERIFY_EXPOSURE_ASSUMPTION") {
@@ -822,7 +801,7 @@ export function synthesizeCoachVerdict(
     : syncUnverifiable
     ? "你补充的信息可能改变判断；Demo 无法验证这条语音、固定战术或听觉信息。若它成立，这次行为可以被合理解释为团队同步/执行条件问题，而不是直接归因于个人决策错误。"
     : informationUnverifiable
-      ? "你补充的信息可能改变判断；Demo 无法验证你是否实际听到或理解了这条声音信息。若它成立，这次行为可以被合理解释为基于信息判断的选择，但当前不能把它当作 Demo 事实。"
+      ? "当前材料不足以核对你当时的信息判断，不能仅凭未看到敌人或某条信息的负向描述认定你判断有误。你的补充仍作为用户陈述保留，尚未被验证为比赛事实。"
     : type === "GOAL_AND_ACTION_ALIGNED"
     ? "目标与这次行动方向一致；如果结果不理想，目前更像执行层问题。"
     : type === "GOAL_VALID_CONDITION_FAILED"
@@ -863,7 +842,7 @@ export function createTransferRule(input: TeachingDiagnosisInput, hinge: HingeCo
     : isSync
     ? "这条补充信息可能改变判断；还需要确认当时队友是否能及时参与同一次交火。"
     : isInformation
-      ? "你描述的声音可能是判断依据；还需确认它来自哪里、发生多久，以及你当时如何理解。"
+      ? "先核对当时使用的信息来源、指向的对象与位置、发生时点，以及它是否仍然有效；确认后再评估这次选择。"
     : isTiming
       ? "先确认剩余时间、撤退窗口和等待的替代方案；当前没有可靠时机比较证据时，不把结果倒推成时机判断。"
     : isTrade
@@ -880,7 +859,7 @@ export function createTransferRule(input: TeachingDiagnosisInput, hinge: HingeCo
     when,
     do: qualifyDo ? `${doText}${conditionalQualification}` : doText,
     ...(result.status === "UNVERIFIABLE"
-      ? { unless: isSync ? "Demo 无法验证这条语音、战术或听觉信息；若它成立，你的行为可以被合理解释，但当前结论保持条件化。" : isInformation ? "Demo 无法验证你是否实际听到或理解这条声音信息；若它成立，你的行为可以被合理解释，但当前结论保持条件化。" : isTiming ? "Demo 无法可靠比较这次时机与替代选项；当前结论保持条件化。" : "如果存在 Demo 无法验证的语音或固定战术，先把它当作额外条件，而不是默认事实。" }
+      ? { unless: isSync ? "Demo 无法验证这条语音、战术或听觉信息；若它成立，你的行为可以被合理解释，但当前结论保持条件化。" : isInformation ? "信息尚未与当前主张建立可验证的对应关系时，保持条件化判断；不要把未见敌人等同于无人或信息有误。" : isTiming ? "Demo 无法可靠比较这次时机与替代选项；当前结论保持条件化。" : "如果存在 Demo 无法验证的语音或固定战术，先把它当作额外条件，而不是默认事实。" }
       : {}),
     refs,
     confidence: Math.max(0.2, Math.min(0.9, verdict.confidence)),

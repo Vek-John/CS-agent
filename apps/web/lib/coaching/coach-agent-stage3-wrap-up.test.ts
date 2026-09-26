@@ -105,7 +105,8 @@ async function revisedFixture(third = false) {
   };
   const original = diagnoseCue(input);
   const revised = reviseDiagnosis({ previous: original, input, disagreement: { ...input.reflection, rawText: "队友语音叫我先拉出去执行固定战术。" } });
-  expect(original.cueCase.verdict?.type).toBe("BELIEF_INCORRECT");
+  expect(original.cueCase.verdict?.type).toBe("INCONCLUSIVE");
+  expect(original.cueCase.hinge?.kind).toBe("INFORMATION");
   expect(revised.cueCase.verdict).toMatchObject({ type: "INCONCLUSIVE", revision: 1 });
   expect(revised.cueCase.transferRule?.do).not.toBe(original.cueCase.transferRule?.do);
   expect(revised.cueCase.claims.every(claim => claim.source === "USER")).toBe(true);
