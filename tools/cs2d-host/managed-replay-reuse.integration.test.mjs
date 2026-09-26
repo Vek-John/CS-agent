@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 // no browser, user Demo, real parser Worker or disk library is used.
 const path = resolve(process.env.CS2D_UPSTREAM_DIR || '.local-data/upstream/cs2d', 'apps/app/src/viewer/DemoAnalyzerView.vue');
 const source = existsSync(path) ? readFileSync(path, 'utf8') : '';
-const names = ['beginManagedLoad', 'isManagedLoadCurrent', 'assertManagedLoadCurrent', 'parseManagedFile', 'managedReplayReady', 'persistSelectedDemo', 'loadManagedDemo'];
+const names = ['cancelWinRate', 'beginManagedLoad', 'isManagedLoadCurrent', 'assertManagedLoadCurrent', 'parseManagedFile', 'managedReplayReady', 'persistSelectedDemo', 'loadManagedDemo'];
 const functions = names.map(name => source.match(new RegExp(`(?:async )?function ${name}\\([\\s\\S]*?\\n}(?=\\n)`))?.[0]).filter(Boolean).join('\n');
 const bytes = new Uint8Array([80, 66, 68, 69, 77, 83, 50, 0, 1]);
 const digest = async body => Array.from(new Uint8Array(await webcrypto.subtle.digest('SHA-256', await body.arrayBuffer())), b => b.toString(16).padStart(2, '0')).join('');
@@ -20,7 +20,7 @@ async function harness() {
   const result = { demoId: 'demo', contentHash: hash, originalFilename: 'match.dem', byteSize: body.size, deduplicated: true };
   const command = { ...result, requestId: 'restore', capabilityToken: 'fresh-read', mode: 'RESTORE' };
   const events=[]; const stages=[];
-  const ctx = { managedLibraryMode:{value:true}, managedSource:{value:null}, pendingManagedImport:{value:null}, managedLoadGeneration:0, managedReadyGeneration:-1, managedLoadAbort:null, managedParseTail:Promise.resolve(), winRateWorker:null, hostSelectedPlayerId:{value:null}, hostStageReady:{value:false}, routeLoading:{value:false}, parser, File, performance, crypto:webcrypto, AbortController,
+  const ctx = { managedLibraryMode:{value:true}, managedSource:{value:null}, pendingManagedImport:{value:null}, managedLoadGeneration:0, managedReadyGeneration:-1, managedLoadAbort:null, managedParseTail:Promise.resolve(), winRateWorker:null,cancelWinRateRequest:null, hostSelectedPlayerId:{value:null}, hostStageReady:{value:false}, routeLoading:{value:false}, parser, File, performance, crypto:webcrypto, AbortController,
     uploadManagedDemo:vi.fn(async()=>result), finalizeManagedDemo:vi.fn(async()=>{}), emitPlaybackEvent:e=>events.push(e), replayReadyMessage:r=>({type:'REPLAY_READY',source:r.managedSource}),
     fetch:vi.fn(async()=>new Response(body,{headers:{'content-type':'application/octet-stream','content-length':String(body.size)}})),
     nextTick:vi.fn(async()=>{stages.push(ctx.hostSelectedPlayerId.value);}) };

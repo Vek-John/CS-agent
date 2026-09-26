@@ -2,6 +2,18 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：可选胜率停滞不阻断基础带看（2026-09-27）
+
+- ID win-rate-idle-fallback，基线358329d clean；partial_revision_restore默认配置独占0029/Viewer生命周期/registry及source测试，root独占apps/web新增无胜率启动验证、docs、最终独立审查/两端TS/build/commit push。核实inferWinRate及模型fetch/create/run无结果期限，Host只展示progress；既有catch已能生成基础bundle，但Worker无消息时不可达。
+- 决策：120秒没有可观察有效进展才终止可选胜率并沿现有基础回退；严格增加的有限下载字节/推理样本分别续期，ready进度归推理。重复/倒退/无效计数及telemetry不续期，持续进展的整场推理没有总时长硬限制。120秒是保守运行策略而非测得模型SLA，不套用API20秒。
+- A1实际infer/selectHostPlayer挂起小例；A2单次完成/独立timer/捕获Worker清理，切文件/新infer/unmount取消并结算旧Promise；A3取消/旧代际不发旧unavailable或构建旧bundle，成功/error/postMessage失败均清理，迟到不污染；A4真实无胜率Adapter仍UNAVAILABLE且基础路线可START、相关tests/两端TS/build后push。root该补充小例已通过，最初误用timeline顶层samples/points字段属于测试编写错误，读取真实schema后改验rounds/swings，不改产品迁就测试。
+- 风险/资源：每请求独立进度最大值/owner，不能因持续无效消息永久续期，也不能让旧timer杀新Worker；raw仍在原Viewer/Worker边界。纯小Replay/FakeWorker/FakeTimer、零真实模型/Demo/DB/网络/GUI/安装；5分钟红/接口检查，15分钟有限实现，每测试60秒，同基础设施两失败简化；执行者清理测试timer/handler，root负责构建。沿现有emil/apple反馈，无新增布局/动画。
+
+
+- 集成复查补充：现有WebGPU普通失败会在同一requestId内转WASM，计数从零重新开始；仅首次匹配现有WEBGPU_FAILURE telemetry时重置两个最大值，消息本身不续期，后续实际WASM进展才续期。TIMEOUT/ABORTED和重复telemetry不重置。
+- 验证完成：实际选择入口挂起红→绿，新增20项source生命周期与1项真实Adapter/Session无胜率启动验证，共66相关tests通过；两端TypeScript与production build通过。0028→0029隔离升级、重复reuse、实际Viewer文本重现通过，root独立阅读关键diff与模型progress/fallback实现。执行者RELEASE，测试计时器/Worker及临时checkout清理，构建进程退出。详见[验证记录](validation/WIN_RATE_IDLE_FALLBACK.md)。
+- 下一有限目标（win-rate-user-fallback）：持续有进展的模型仍可能让用户等待较久；沿本轮可结算取消接口，核实现有Host/Viewer bridge是否能提供“先用基础路线”的主动选择。先验证用户选择→终止当前可选推理→只生成一次无胜率路线→迟到消息不改已冻结路线，再决定最小接线；不等待A5、不重复真实大Demo全量检查，不改专业判断门。
+
 ## 已交付：旧胜率Worker错误不干扰新分析（2026-09-27）
 
 - ID win-rate-worker-owner，基线9b9eabd clean；root独占0028/registry/实际inferWinRate测试/docs，无委派。A1旧A错误晚于B启动的小双Worker交错，A2与onmessage一致先核实Worker归属，A3当前error/后继成功/进度/旧message保持，A4相关tests/两端TS/build与集中复查后push。只修onerror清空新引用导致新ready被丢弃，不改模型/特征/Provider/教学门，也不扩展旧Promise取消协议。

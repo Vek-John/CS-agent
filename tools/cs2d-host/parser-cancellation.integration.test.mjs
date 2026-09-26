@@ -19,8 +19,8 @@ function harness(autoDecompress=true,parserStartFailures=0){
   const ref=value=>({value});
   const make=new Function('ref','shallowRef','onUnmounted','Worker',stripTypeScriptTypes(source.replace(/^import .*$/gm,'')).replaceAll('import.meta.url',JSON.stringify('file:///viewer/ingest/useDemoParser.ts')).replaceAll('export ','')+'\nreturn useDemoParser();');
   const parser=make(ref,ref,fn=>unmount.push(fn),FakeWorker);
-  const ctx={parser,AbortController,managedLoadGeneration:0,managedReadyGeneration:-1,managedLoadAbort:null,managedParseTail:Promise.resolve(),managedSource:{value:null},winRateWorker:null,hostSelectedPlayerId:{value:null},hostStageReady:{value:false}};
-  const names=['beginManagedLoad','isManagedLoadCurrent','assertManagedLoadCurrent','parseManagedFile'];
+  const ctx={parser,AbortController,managedLoadGeneration:0,managedReadyGeneration:-1,managedLoadAbort:null,managedParseTail:Promise.resolve(),managedSource:{value:null},winRateWorker:null,cancelWinRateRequest:null,hostSelectedPlayerId:{value:null},hostStageReady:{value:false}};
+  const names=['cancelWinRate', 'beginManagedLoad','isManagedLoadCurrent','assertManagedLoadCurrent','parseManagedFile'];
   const fns=names.map(name=>viewer.match(new RegExp(`(?:async )?function ${name}\\([\\s\\S]*?\\n}(?=\\n)`))?.[0]).join('\n');
   runInNewContext(stripTypeScriptTypes(fns),ctx);
   const file={name:'small.dem',size:9,arrayBuffer:async()=>new Uint8Array(9).buffer};

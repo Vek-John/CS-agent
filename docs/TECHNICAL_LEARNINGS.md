@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：可选模型的停滞不能阻断基础路线
+
+- 问题：selectHostPlayer等待inferWinRate，模型Worker不返回时既有catch回退永远不可达。直接terminate旧Worker还会留下未结算Promise。
+- 决策：0029以120秒有效进展空闲窗口收敛停滞；真实下载/样本递增可续期，重复/倒退/无效计数和telemetry不续期。捕获Worker、单次finish、取消错误码统一清理并避免旧分析回退。现有GPU失败转WASM重启计数，首次普通失败telemetry只重置计数域，后续真实进展续期。
+- 验证：实际infer/select函数挂起红→绿；20项source回归和真实Adapter→序列化→Planner→Session启动1项新增，66相关tests通过，两端TS/build通过，0028→0029升级/reuse成功。独立复查修正了跨provider计数域问题。[记录](validation/WIN_RATE_IDLE_FALLBACK.md)。
+- 限制：FakeWorker/fake timer与合成事件，不是浏览器或真实模型耗时测量；120秒未作设备校准，长时间无进度的正常编译也可能回退。后台节流/主线程阻塞可推迟timer，不能承诺精确墙钟期限；持续进展仍可能长等待，下一项评估主动转基础路线。无胜率不等于专业判断质量改善。
+
 ## 2026-09-27：Worker错误也需要归属门
 
 - 问题：inferWinRate消息已有worker/requestId过滤，但onerror直接清winRateWorker。小交错中A的迟到error清掉B引用，B的ready随即被旧message gate丢弃，分析无法完成。

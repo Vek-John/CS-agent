@@ -2,16 +2,19 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { stripTypeScriptTypes } from 'node:module';
 import { runInNewContext } from 'node:vm';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 const path=resolve(process.env.CS2D_UPSTREAM_DIR||'.local-data/upstream/cs2d','apps/app/src/viewer/DemoAnalyzerView.vue');
 const source=existsSync(path)?readFileSync(path,'utf8'):'';
+afterEach(()=>{vi.clearAllTimers();vi.useRealTimers();});
 function harness(){
+  vi.useFakeTimers();
   const workers=[],events=[];
   class FakeWorker{constructor(){this.terminate=vi.fn();workers.push(this);}postMessage(value){this.request=value;}}
-  const ctx={Worker:FakeWorker,URL,Error,route:{query:{}},winRateWorker:null,winRateRequestId:0,CS_NET_DEFAULT_PROVIDER:'wasm-int8',CS_NET_DEFAULT_BATCH_SIZE:16,emitPlaybackEvent:e=>events.push(e),console:{info:()=>{}}};
+  const ctx={Worker:FakeWorker,URL,Error,route:{query:{}},winRateWorker:null,winRateRequestId:0,cancelWinRateRequest:null,WIN_RATE_IDLE_TIMEOUT_MS:120000,setTimeout,clearTimeout,CS_NET_DEFAULT_PROVIDER:'wasm-int8',CS_NET_DEFAULT_BATCH_SIZE:16,emitPlaybackEvent:e=>events.push(e),console:{info:()=>{}}};
+  const cancel=source.match(/function cancelWinRate\([\s\S]*?\n}(?=\n)/)?.[0]??'';
   const fn=source.match(/function inferWinRate\([\s\S]*?\n}(?=\n)/)[0].replaceAll('import.meta.url',JSON.stringify('file:///viewer/DemoAnalyzerView.vue'));
-  runInNewContext(stripTypeScriptTypes(fn),ctx);
-  return {ctx,workers,events,start(){return ctx.inferWinRate({rounds:[]},'player').then(value=>({value}),error=>({error:error.message}));},cleanup(){for(const w of workers){w.onmessage=null;w.onerror=null;w.terminate();}}};
+  runInNewContext(stripTypeScriptTypes(cancel+'\n'+fn),ctx);
+  return {ctx,workers,events,start(){return ctx.inferWinRate({rounds:[]},'player').then(value=>({value}),error=>({error:error.message}));},cleanup(){ctx.cancelWinRate?.();for(const w of workers){w.onmessage=null;w.onerror=null;w.terminate();}}};
 }
 function ready(worker){worker.onmessage({data:{type:'ready',requestId:worker.request.requestId,timeline:{marker:'current'}}});}
 describe.skipIf(!source)('actual win-rate Worker error ownership',()=>{

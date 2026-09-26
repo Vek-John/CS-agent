@@ -1,0 +1,153 @@
+diff --git a/apps/app/src/viewer/DemoAnalyzerView.vue b/apps/app/src/viewer/DemoAnalyzerView.vue
+--- a/apps/app/src/viewer/DemoAnalyzerView.vue
++++ b/apps/app/src/viewer/DemoAnalyzerView.vue
+@@ -76,8 +76,7 @@
+   managedReadyGeneration = -1
+   managedLoadAbort?.abort()
+   managedLoadAbort = new AbortController()
+-  winRateWorker?.terminate()
+-  winRateWorker = null
++  cancelWinRate()
+   hostSelectedPlayerId.value = null
+   hostStageReady.value = false
+   return { generation: managedLoadGeneration, signal: managedLoadAbort.signal }
+@@ -132,54 +131,81 @@
+ 
+ let winRateWorker: Worker | null = null
+ let winRateRequestId = 0
++let cancelWinRateRequest: (() => void) | null = null
++// Optional model capability policy: effective progress extends this idle window.
++const WIN_RATE_IDLE_TIMEOUT_MS = 120_000
++
++function cancelWinRate() {
++  cancelWinRateRequest?.()
++}
+ 
+ function inferWinRate(replay: Cs2dReplay, selectedPlayerId: string): Promise<WinProbabilityTimelineV1> {
+-  winRateWorker?.terminate()
++  cancelWinRate()
+   const requestId = ++winRateRequestId
+-  winRateWorker = new Worker(new URL('./analysis/csNetWinRate.worker.ts', import.meta.url), { type: 'module' })
++  const worker = new Worker(new URL('./analysis/csNetWinRate.worker.ts', import.meta.url), { type: 'module' })
++  winRateWorker = worker
+   return new Promise((resolve, reject) => {
+-    const worker = winRateWorker!
++    let settled = false
++    let timer: ReturnType<typeof setTimeout> | undefined
++    const maximum = { downloading: 0, inference: 0 }
++    let fallbackObserved = false
++    const finish = (timeline?: WinProbabilityTimelineV1, error?: Error) => {
++      if (settled) return
++      settled = true
++      clearTimeout(timer)
++      worker.onmessage = null
++      worker.onerror = null
++      worker.terminate()
++      if (worker === winRateWorker) winRateWorker = null
++      if (cancelWinRateRequest === cancel) cancelWinRateRequest = null
++      if (error) reject(error)
++      else resolve(timeline!)
++    }
++    const cancel = () => finish(undefined, Object.assign(new Error('胜率计算已取消。'), { code: 'WIN_RATE_CANCELLED' }))
++    cancelWinRateRequest = cancel
++    const renewIdleDeadline = () => {
++      clearTimeout(timer)
++      timer = setTimeout(() => finish(undefined, Object.assign(new Error('胜率计算长时间没有进展，改用基础教练路线。'), { code: 'WIN_RATE_IDLE_TIMEOUT' })), WIN_RATE_IDLE_TIMEOUT_MS)
++    }
++    renewIdleDeadline()
+     worker.onmessage = (event: MessageEvent<WinRateWorkerResponse>) => {
+       const message = event.data
+-      if (worker !== winRateWorker || message.requestId !== requestId) return
++      if (settled || worker !== winRateWorker || message.requestId !== requestId) return
+       if (message.type === 'telemetry') {
+-        // Keep the complete structured record in the iframe console for local
+-        // validation; it never crosses the bridge as raw Replay/model input.
++        // The existing one-time WebGPU failure switches to a fresh WASM counter domain.
++        // Telemetry alone never extends the deadline; actual fallback progress must follow.
++        const telemetry = message.telemetry
++        if (!fallbackObserved && telemetry.schemaVersion === 'cs-net-webgpu-telemetry.v1' &&
++          telemetry.providerActual === 'unavailable' && typeof telemetry.fallbackReason === 'string' &&
++          telemetry.fallbackReason.startsWith('WEBGPU_FAILURE:')) {
++          fallbackObserved = true
++          maximum.downloading = 0
++          maximum.inference = 0
++        }
+         console.info('[cs-net] runtime telemetry', message.telemetry)
+-        emitPlaybackEvent({
+-          type: 'ANALYSIS_TELEMETRY',
+-          schemaVersion: 'cs2d-analysis-telemetry.v1',
+-          selectedPlayerId,
+-          telemetry: message.telemetry as never,
+-        })
++        emitPlaybackEvent({ type: 'ANALYSIS_TELEMETRY', schemaVersion: 'cs2d-analysis-telemetry.v1', selectedPlayerId, telemetry: message.telemetry as never })
+         return
+       }
+       if (message.type === 'progress') {
+-        emitPlaybackEvent({
+-          type: 'ANALYSIS_PROGRESS',
+-          schemaVersion: 'cs2d-analysis-progress.v1',
+-          selectedPlayerId,
+-          phase: message.phase === 'ready' ? 'inference' : message.phase,
+-          completed: message.completed,
+-          total: message.total,
+-          detail: message.detail ?? '',
+-        })
++        const phase = message.phase === 'ready' ? 'inference' : message.phase
++        if ((phase === 'downloading' || phase === 'inference') && Number.isFinite(message.completed) && message.completed > maximum[phase]) {
++          maximum[phase] = message.completed
++          renewIdleDeadline()
++        }
++        emitPlaybackEvent({ type: 'ANALYSIS_PROGRESS', schemaVersion: 'cs2d-analysis-progress.v1', selectedPlayerId,
++          phase, completed: message.completed, total: message.total, detail: message.detail ?? '' })
+         return
+       }
+-      worker.terminate()
+-      winRateWorker = null
+-      if (message.type === 'ready') resolve(message.timeline)
++      if (message.type === 'ready') finish(message.timeline)
+       else {
+         const error = new Error(message.message)
+         if (message.code) Object.assign(error, { code: message.code })
+-        reject(error)
++        finish(undefined, error)
+       }
+     }
+     worker.onerror = (error) => {
+-      if (worker !== winRateWorker) return
+-      worker.terminate()
+-      winRateWorker = null
+-      reject(new Error(error.message || '胜率模型 Worker 失败'))
++      if (settled || worker !== winRateWorker) return
++      finish(undefined, new Error(error.message || '胜率模型 Worker 失败'))
+     }
+     const threadQuery = typeof route.query.csThreads === 'string' ? route.query.csThreads : undefined
+     const threads: RuntimeThreadRequest | undefined = threadQuery === '1' || threadQuery === '2' || threadQuery === '4' ? Number(threadQuery) as RuntimeThreadRequest : undefined
+@@ -187,7 +213,8 @@
+     const providerQuery = route.query.csProvider
+     const provider = providerQuery === 'wasm-int8' || providerQuery === 'wasm-fp32' || providerQuery === 'webgpu-fp16' ? providerQuery : CS_NET_DEFAULT_PROVIDER
+     const batchSize = batchQuery ?? CS_NET_DEFAULT_BATCH_SIZE
+-    worker.postMessage({ requestId, replay, selectedPlayerId, provider, batchSize, ...(threads ? { threads } : {}) })
++    try { worker.postMessage({ requestId, replay, selectedPlayerId, provider, batchSize, ...(threads ? { threads } : {}) }) }
++    catch (error) { finish(undefined, error instanceof Error ? error : new Error(String(error))) }
+   })
+ }
+ 
+@@ -252,6 +279,8 @@
+         winProbabilityTimeline = await inferWinRate(replay as unknown as Cs2dReplay, player.steamId)
+         if (managedLibraryMode.value && (!isManagedLoadCurrent(selectionGeneration) || managedReadyGeneration !== selectionGeneration)) return
+       } catch (modelError) {
++        if ((modelError instanceof Error && (modelError as Error & { code?: string }).code === 'WIN_RATE_CANCELLED') ||
++          (managedLibraryMode.value && (!isManagedLoadCurrent(selectionGeneration) || managedReadyGeneration !== selectionGeneration))) return
+         emitPlaybackEvent({
+           type: 'ANALYSIS_PROGRESS',
+           schemaVersion: 'cs2d-analysis-progress.v1',
+@@ -1053,8 +1082,7 @@
+   managedLoadAbort = null
+   stopHostSelectionBridge?.()
+   stopExtensionBridge?.()
+-  winRateWorker?.terminate()
+-  winRateWorker = null
++  cancelWinRate()
+ })
+ 
+ function onDrop(e: DragEvent) {

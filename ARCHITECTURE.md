@@ -491,6 +491,9 @@ Viewer的VALIDATE确认小POST对fetch与响应JSON使用共同20秒期限，不
 Parser Worker最终成功/失败消息或error处理完成后终止对应实例，以解除常驻WASM资源；进度消息不终止。完成门先失效旧回调，清理只作用于捕获的Worker，不能影响后继请求。已交接到页面的Replay、voice与hash继续供播放/恢复使用；下一次冷解析重建Worker，同页温恢复不依赖该Worker存活。
 切换managed Demo先推进加载代际并取消当前解析操作，使原parse调用结算、串行tail可以继续；取消必须覆盖读取/解压/Parser等待，而非只terminate Worker。每次parse拥有独立取消身份，迟到回调不得更新后继状态；已开始的File读取可继续底层IO，但不能再被消费。cancel/reset/hydrate/unmount均结束pending操作，完成后的Replay/voice/hash不被单独cancel清除。取消返回false供非managed导入停止旧保存/导航，成功与显示错误维持原void结算；managed继续原代际/hash/READY检查。
 
+
+可选胜率推理不能因Worker停滞无限阻断基础带看。当前Viewer采用120秒可观察进展空闲窗口：有限且严格增加的下载字节/推理样本分别续期，持续进展不受总时长硬限；无进展则结算失败并沿既有无胜率基础路线，timeline明确UNAVAILABLE，不伪造概率或胜率下降信号。现有WebGPU普通失败转WASM时，仅首次对应失败telemetry重置进度计数域，本身不续期。每次推理独占Worker与timer；成功、失败、取消均一次结算和清理，新推理/换managed Demo/unmount取消旧等待，旧回调不能污染后继任务，取消本身不发布旧分析回退。120秒是运行策略，不是模型性能承诺；RESTORE仍不启动模型。
+
 当前 Adapter 仍可用确定性规则生成兼容的候选 ReviewPlan，作为 Director 尚未完全接入时的回退；目标流程必须通过 SceneIndex、Teaching Director 和 PlanCompiler 生成正式 ReviewPlan。两条路径共享同一 Replay、canonical tick、Observation 和校验器。
 
 Host 只保留一套教练控制和一条整场时间轴；用户可自由接管，恢复时由 SessionOrchestrator 根据当前播放位置回到最近可讲 cue。具体布局、颜色、镜头倍率和端口属于实现记录，不是长期契约。

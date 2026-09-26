@@ -27,7 +27,7 @@ async function benchmark(input) {
   const smoke = input === '--smoke';
   const upstream = resolve(process.env.CS2D_UPSTREAM_DIR || '.local-data/upstream/cs2d');
   const viewer = readFileSync(resolve(upstream, 'apps/app/src/viewer/DemoAnalyzerView.vue'), 'utf8');
-  const names = ['beginManagedLoad', 'isManagedLoadCurrent', 'assertManagedLoadCurrent', 'parseManagedFile', 'managedReplayReady', 'loadManagedDemo'];
+  const names = ['cancelWinRate', 'beginManagedLoad', 'isManagedLoadCurrent', 'assertManagedLoadCurrent', 'parseManagedFile', 'managedReplayReady', 'loadManagedDemo'];
   const functions = names.map(name => {
     const fn = viewer.match(new RegExp(`(?:async )?function ${name}\\([\\s\\S]*?\\n}(?=\\n)`))?.[0];
     assert(fn, `Missing Viewer function: ${name}`); return fn;
@@ -70,7 +70,7 @@ async function benchmark(input) {
       parser.demoContentHash.value = digest; parser.hashLatencyMs.value = hashDone-readDone; parser.status.value='done';
     } };
   const events = [];
-  const ctx = { managedLibraryMode: { value: true }, managedSource: { value: null }, pendingManagedImport: { value: null }, managedLoadGeneration: 0, managedReadyGeneration: -1, managedLoadAbort: null, managedParseTail: Promise.resolve(), winRateWorker: null, hostSelectedPlayerId: { value: null }, hostStageReady: { value: false }, routeLoading: { value: false }, parser, File, performance, AbortController,
+  const ctx = { managedLibraryMode: { value: true }, managedSource: { value: null }, pendingManagedImport: { value: null }, managedLoadGeneration: 0, managedReadyGeneration: -1, managedLoadAbort: null, managedParseTail: Promise.resolve(), winRateWorker: null, cancelWinRateRequest: null, hostSelectedPlayerId: { value: null }, hostStageReady: { value: false }, routeLoading: { value: false }, parser, File, performance, AbortController,
     crypto: { subtle: { digest: (...args) => { counters.digest++; return webcrypto.subtle.digest(...args); } } },
     emitPlaybackEvent: event => events.push(event), replayReadyMessage: value => ({ type: 'REPLAY_READY', requestId: value.managedSource.requestId }),
     async nextTick() { counters.flush++; },
