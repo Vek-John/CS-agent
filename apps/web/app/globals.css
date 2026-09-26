@@ -2763,3 +2763,6 @@ button:disabled {
   .cs2d-coach-takeover,
   .cs2d-coach-takeover button { border-color: rgba(255,255,255,0.72); }
 }
+
+.cs2d-review-questions { margin: 0.5rem 0 0; padding-left: 1.2rem; color: var(--text-secondary); font-size: 0.72rem; line-height: 1.6; }
+.cs2d-review-questions li + li { margin-top: 0.35rem; }

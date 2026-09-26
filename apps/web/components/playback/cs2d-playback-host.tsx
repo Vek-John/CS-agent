@@ -3423,6 +3423,10 @@ export function Cs2dPlaybackHost({
                     <strong>可行的处理与待确认条件</strong>
                   </div>
                   <p>{threeStageCoaching.improvement.text}</p>
+                  {threeStageCoaching.improvement.reviewQuestions.length > 0 ? <div>
+                    <small>回看时先核实 · 这些是待确认的问题</small>
+                    <ul className="cs2d-review-questions">{threeStageCoaching.improvement.reviewQuestions.map(question => <li key={question}>{question}</li>)}</ul>
+                  </div> : null}
                 </section>
               </div>
               {stage2Mode && stage2Cue?.id === cue.id ? (

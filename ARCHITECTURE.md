@@ -277,6 +277,8 @@ Host先通过既有本人/当前回合/生命/新鲜度与snapshot门，再独�
 
 结束页可为冻结plan中同时已presented且consumed的cue提供自由回看入口，目标由其segment起点派生，沿现有pause→seek用户接管流程，不创建ManualCueVisit或修改终结Session。回看期间保留总结，终结状态不再向Graph发送takeover/resume；整理总结或播放器尚未就绪时该入口禁用。Host回调绑定session/generation/history open epoch，不能跨历史打开复用。此入口只用于重看已完成片段，不把片段列表当重复习惯、再次诊断或新播放完成证据。 终结会话的总结归属与播放接管分离：普通时间轴seek不能取消同owner在途总结的生成/保存；接收结果仍须匹配session/run、generation、history open epoch、persistence对象及review/revision，并处于WRAP_UP/COMPLETED。COMPLETED正常释放临时run时沿既有兼容规则接收；非终结cue/工具取消和Graph checkpoint镜像规则不因此放宽。 总结artifact保存失败时，完成seam只在内存保留一份生成结果快照及原owner重试句柄；卡内显式重试沿原SESSION_SUMMARY key/revision/幂等键写入，不重新调用Graph或总结生成。并发重试合并、成功后不再发送；session/run/generation/history epoch/persistence对象及ownershipGeneration/review/revision均须仍匹配。再次失败保留相同快照，历史切换清理句柄；已发出的旧请求可能完成原历史写入，但不向新owner发布成功。重试不代表RuntimeHead也已确认，不承诺刷新后恢复未保存内容。
 
+基础三段讲解对INSUFFICIENT_EVIDENCE且同决策Snapshot可显示最多三个“回看时先核实”问题。只映射已知的未确认条件code；已确认/不可行/OUTCOME条件不作为未知问题，闪光用途问题还须本人OBSERVABLE库存确认有闪光。问句与原建议正文分开，不进入Narration、Advice、判断、Memory或主题统计；不显示原始reason/字段名，不改变证据门。缺失/错决策/未来采样Snapshot不产生此投影。
+
 ### 2.14 默认顺序路线与用户点播 cue
 
 Graph首次COMPLETE_SESSION将routeCursor推进到最后已观察段之后并进入WRAP_UP；已完成会话由Runtime去重，不重复推进。Session在COMPLETED时也可捕获同一WRAP_UP末端，但必须保持准确末索引、末tick、无当前cue和合法进度。

@@ -2,6 +2,16 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：不确定性讲解的具体回看问题（2026-09-26）
+
+- ID uncertainty-review-questions，基线ed1dc29 clean；root独占展示投影/Host小接线/测试/docs。当前betterPlay无可验证方案时固定泛化提示，而当前Snapshot已区分tradeWindow/目标等待/道具用途/替代位置缺项。
+- A1当前Adapter→Narration→三段投影的小fixture验证具体缺项；A2仅INSUFFICIENT_EVIDENCE且同决策Snapshot生成最多3个静态回看问题，不引用隐藏玩家/结果或原始reason，不进入建议/判断/记忆；A3已确认/不可行条件不当作未知，缺/旧Snapshot兼容，Narration和门保持；A4相关tests/TS/build、窄审/证据push。
+- 应用既有emil/apple规则，沿当前可行处理区分开标记“回看时先核实”，原生列表无新动画。只基于项目已具备条件做问句，不新增战术事实，暂无需外部研究。root20分钟有限任务，测试60秒；零Demo/DB/模型/GUI/安装，bulk无外传，进程清理，A5独立。
+
+- 交付：基础三段卡独立显示最多3个具体回看问题；只用同决策Snapshot的已知UNVERIFIABLE条件，排除已确认/不可行/OUTCOME，闪光问题有本人OBSERVABLE库存前提。不改Narration/Advice/判决/Memory，不输出原始reason。
+- 验收：5新增Adapter→Narration→View测试，81项不同相关tests、TS/build通过，root集中复查，无新代理/后台进程/用户数据/模型请求。[记录](validation/UNCERTAINTY_REVIEW_QUESTIONS.md)。非浏览器/真实Demo教学质量验收，A5独立。
+- 下一有限目标：自适应UNKNOWN诊断走独立hinge/transferRule卡，先核实具体缺条件说明是否足够、与本轮fallback问句一致；已有充分解释则不制造重复UI。按真实可达缺口选择一项教学内容提升，不反复Jev拒判试验。
+
 ## 已交付：整场完成恢复点的延迟收敛（2026-09-26）
 
 - 结果：真实Graph完成cursor原为末段index，已推进到末端WRAP_UP；COMPLETED可合法捕获边界。终结mirror允许同owner自由回看，Host等mirror专属ACK再清理；summary/transport不毁终结retry，ACK后takeover清理已接通。

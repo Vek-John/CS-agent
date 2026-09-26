@@ -9,7 +9,7 @@ import type {
   TrustedDecisionSemantics,
   PlayerStateSample
 } from "@cs-coach/contracts";
-import { observableSituation, playerFacingLimitation } from "./decision-presentation";
+import { observableSituation, playerFacingLimitation, uncertaintyReviewQuestions } from "./decision-presentation";
 import { canPresentOutcome } from "@cs-coach/session";
 
 export interface CoachingCueView {
@@ -43,6 +43,7 @@ export interface ThreeStageCoachingView {
   };
   improvement: {
     text: string;
+    reviewQuestions: readonly string[];
   };
 }
 
@@ -177,7 +178,7 @@ export function buildThreeStageCoachingView(input: {
       text: problemText || "现有证据不足以评价这个选择。",
       consequences: [...new Set(consequences.filter(Boolean))]
     },
-    improvement: { text: compactText(input.narration.betterPlay.text) }
+    improvement: { text: compactText(input.narration.betterPlay.text), reviewQuestions: uncertaintyReviewQuestions(input.semantics, input.decisionTick) }
   };
 }
 

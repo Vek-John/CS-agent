@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：不确定性可以转为具体复盘问题，而不增加判断
+
+- 问题：默认无可执行建议时文案笼统，但Snapshot已区分补枪/等待/道具用途/替代位置缺项。
+- 决策：基础三段卡新增独立静态问句投影，最多3条、同决策Snapshot、只读UNVERIFIABLE已知code；已确认/不可行/结果条件排除，库存确认为本人可观察闪光才问用途。原判断/建议/Narration/Memory保持。
+- 验证：5新测试真实Adapter链证明advice仍空、hasEvaluableDecision=false且Narration校验通过；JSON恢复、错时间、缺快照、隐藏库存/原始reason/已知空库存均覆盖。81项不同相关测试、TS/build通过。[证据](validation/UNCERTAINTY_REVIEW_QUESTIONS.md)。
+- 限制/后继：只改善fallback基础讲解方向，不是更高判决准确性或真实UI验证；下一项核实自适应UNKNOWN诊断的缺条件解释是否已足够具体，避免重复模块/文案。
+
 ## 2026-09-26：完成标志不等于终结恢复点已经确认
 
 - 问题：真实模块序列发现COMPLETED不能捕获WRAP_UP、takeover拒绝mirror，Graph完成cursor仍为末段索引；Host可能先删恢复身份。
