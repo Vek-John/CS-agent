@@ -2056,3 +2056,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 呈现/保存：加入人可读说明，空主题也保留来源限制；实际completeAndSaveSessionWrapUp写SESSION_SUMMARY后JSON往返，Panel从保存bundle显示说明，无临时request依赖。旧已保存总结不重算；限制满额明确失败而非截断。
 - 验证：新旧case顺序、确认COMPLETED/JSON、无case旧记录、错cue/candidate、三支持去一、引用/次数/回合、8条边界与SSR。相关7文件122tests、TypeScript、production build通过，包含browser client bundle边界。前期revision_semantics_review只读真实规则例；partial_revision_restore独立终审无must-fix并RELEASE。[证据](validation/REVISED_DIAGNOSIS_WRAP_UP.md)。
 - 限制：不是专业gold或真实Demo质量提升验证；没有改Graph主题计数/Memory、新建议引用schema或旧总结，未挂载整Host/真实浏览器。无模型/用户DB/Memory/密钥/安装部署。后续已核实Memory adapter发USER_CORRECTED_COACH而非抄总结主题，可用同修订例核实消费者是否替代旧判断且不增加机会计数，先小验证，不假设已有纠正链缺失。
+
+
+## 2026-09-26：异议纠正必须绑定原记忆和被接受的输入
+
+- 问题：localhost producer先解析非法CREATE/USER_CORRECTED_COACH组合而失败；修复原子构造后，修订会改变hinge/diagnosis/rule及logicalKey，不能用新key找旧聚合。受控移除旧目标绑定的隔离SQLite红例分别证实目标缺失拒绝和新key有独立记录时错对象风险，不推断旧用户数据已被误改。
+- 决定：一次修订保存有界previousLearningThread及acceptedDisagreement。原thread导出目标，实际接受的异议提供文案/ID；同身份、同cue/thread及规范化内容匹配才发CORRECT。Graph拒绝第二次异议或复用旧eventId返回旧case时，不得采纳新文字/候选/事实。用户纠正形成DISPUTED，仍不是Demo事实或专业正确性证明。
+- 验证：真实diagnose/revise→producer→MemoryService→临时SQLite，原记录revision增加、旧revision保留、独立新key记录不变、重复事件无计数/机会增量。真实Runtime第二异议拒绝和同ID换文案不产生新纠正，JSON恢复及旧快照缺失保守拒发。8文件161tests、TypeScript、production build通过；独审发现输入来源问题并复审关闭。[证据](validation/REVISED_DIAGNOSIS_MEMORY_TARGET.md)。
+- 限制：旧修订缺快照仍可读但不自动纠正/回填；无用户数据库、HTTP/UI、模型/真实Demo验收，不承诺旧客户端识别新增字段。Memory schema/消费者策略不变。下一项检查已有DISPUTED→Brief独立通道的实际教练消费，不假定要新建召回能力。

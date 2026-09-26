@@ -107,9 +107,12 @@ describe("teaching diagnosis trust and evidence boundaries", () => {
     const revised = reviseDiagnosis({ previous, input: original, disagreement });
     expect(revised.cueCase.status).toBe("DISAGREED");
     expect(revised.cueCase.previousReflection?.rawText).toBe(original.reflection.rawText);
+    expect(revised.cueCase.previousLearningThread).toEqual(previous.learningThread);
+    expect(revised.cueCase.acceptedDisagreement?.rawText).toBe(disagreement.rawText);
     expect(revised.cueCase.reflection?.rawText).toBe(disagreement.rawText);
     expect(CueCaseSchema.parse(JSON.parse(JSON.stringify(revised.cueCase)))).toEqual(revised.cueCase);
     expect(CueCaseSchema.parse(previous.cueCase).previousReflection).toBeUndefined();
+    expect(CueCaseSchema.parse(previous.cueCase).previousLearningThread).toBeUndefined();
     expect(revised.cueCase.caseId).toBe(previous.cueCase.caseId);
     expect(revised.learningThread.threadId).toBe(previous.learningThread.threadId);
     expect(reviseDiagnosis({ previous: revised, input: original, disagreement })).toEqual(revised);

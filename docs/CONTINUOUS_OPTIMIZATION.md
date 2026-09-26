@@ -2,6 +2,16 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：记忆纠正绑定修订前目标（2026-09-26）
+
+- 基线afab505 clean；主控有限goal拥有contracts/diagnosis/Memory producer及相关unit/docs；partial_revision_restore默认配置先只读消费者，随后独占history-idempotency.integration.test.ts隔离SQLite回归。其余owner RELEASE，无同文件并写。
+- 证据：旧producer先解析CREATE/USER_CORRECTED_COACH非法组合，实际先被schema阻断。原子构造修复后，受控去掉旧目标绑定的小实库红例证明潜在目标错误：logicalKey含hinge/diagnosis/rule全文，信息误判→语音SYNC改变key，新目标缺失则拒绝，若新key已有独立记录则会纠正错对象。不能声称旧用户数据库已发生错误纠正。既有correctMemory receipt可复用。
+- 流程：一次合法revision时保留原有界LearningThread快照→producer验证同thread/同cue→用旧logicalKey定位旧Memory→既有CORRECT将原记录DISPUTED，重试不增加机会/修订。A1真实diagnose/revise→producer→SQLite旧实现红例；A2新key已有另一记录也只纠正旧目标；A3重复幂等/计数/consent和缺少旧快照不猜目标；A4相关tests/TS/build及独立窄审；A5架构学习证据push。
+- 数据/边界：CueCase可选previousLearningThread使用现有ThreadSchema边界，旧case新代码可读，但旧已修订无快照不能自动纠正/回填；不重构逻辑key、不改Memory schema/DB迁移/用户记忆、隐私/consent/删除门。原输入strict不接受客户端塞历史快照。5分钟接口、12分钟实现/小实库、15分钟验证，隔离tmp库owner关闭清理，无模型/真实Demo/服务/部署安装；不能把DISPUTED说成新观点已证实。
+
+- 结果：保存previousLearningThread与acceptedDisagreement；合法原子CORRECT定位旧聚合，纠正文案/ID绑定Graph真正接受的异议。独审发现拒绝第二次异议仍返回旧case，已补请求身份/规范化内容匹配与新provenance隔离，并用真实Runtime拒绝/同eventId换文案回归。隔离SQLite两目标场景、幂等/旧revision/机会计数通过；8文件161tests、TypeScript、production build通过。partial_revision_restore只写集成测试、revision_semantics_review只读复审无遗留must-fix，均RELEASE。[证据](validation/REVISED_DIAGNOSIS_MEMORY_TARGET.md)。
+- 限制/后继：没有真实HTTP/UI或用户Memory迁移，没有提高专业判断正确率。缺少旧快照的旧修订保守不发纠正。已读MemoryService.getBrief有独立DISPUTED纠正查询（limit4），不是缺失能力；下一项仅核实此次真实纠正→Brief→教练消费的有界接线与consent撤回，发现实际缺口才改，不重做Memory完整性审计。测试/build退出，提交push后释放本轮文件；锁屏A5单独待验。
+
 ## 已交付：修订诊断与总结资格（2026-09-26）
 
 - 基线0dae213 clean；主控有限goal独占wrap-up adapter/Host/必要总结限制呈现与tests/docs；revision_semantics_review默认配置8分钟只读diagnose/revise，已返回真实内存例并RELEASE，无文件/模型。主控核实Graph complete只从原completedCueSummaries/sessionThemes归纳，Host adapter不接CueCase。

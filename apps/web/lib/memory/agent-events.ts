@@ -8,7 +8,8 @@ import {
   type MemoryProposal,
 } from "@cs-coach/memory";
 import type { CoachAgentEvent, CoachAgentResult } from "@cs-coach/coach-agent";
-import type { CueCase } from "@cs-coach/contracts";
+import { LearningThreadSchema, parseUserReflection } from "@cs-coach/coach-agent/client";
+import type { CueCase, LearningThread, UserReflection } from "@cs-coach/contracts";
 import type { ClaimMemoryOpportunityInput } from "@cs-coach/review-library";
 
 const PRODUCER_VERSION = "local-coach-agent-memory.v1";
@@ -31,8 +32,9 @@ function behaviorOpportunitySourceRefId(
   event: Extract<CoachAgentEvent, { type: "SUBMIT_REFLECTION" | "SUBMIT_DISAGREEMENT" }>,
   cueCase: CueCase,
   refs: readonly BehaviorSourceRef[],
+  includeEventInput = true,
 ): string {
-  const input = event.input as unknown as DiagnosisInputProvenance;
+  const input = includeEventInput ? event.input as unknown as DiagnosisInputProvenance : {};
   const candidateId = bounded(cueCase.candidateId ?? input.candidateId ?? input.material?.candidateId, 160);
   const evidenceParts = stableEvidenceSourceParts(refs);
   const sourceParts = candidateId
@@ -218,19 +220,41 @@ export function buildLocalAgentMemoryEvents(
   const cueCase = result.state.cueCases?.[event.cueId] as CueCase | undefined;
   const learningThread = result.state.learningThreads?.find((thread) => thread.evidenceCueIds.includes(event.cueId)) ?? result.state.learningThreads?.at(-1);
   if (!cueCase || !learningThread || !["AWAITING_CONFIRMATION", "COMPLETED", "DISAGREED"].includes(cueCase.status) || !cueCase.verdict || !cueCase.diagnosticResult) return [];
+  let correctionThread: LearningThread | undefined;
+  let acceptedDisagreement: UserReflection | undefined;
+  if (event.type === "SUBMIT_DISAGREEMENT") {
+    const prior = LearningThreadSchema.safeParse(cueCase.previousLearningThread);
+    if (!prior.success || cueCase.cueId !== event.cueId || prior.data.scope !== "SESSION"
+      || prior.data.threadId !== learningThread.threadId || !prior.data.evidenceCueIds.includes(event.cueId)
+      || !learningThread.evidenceCueIds.includes(event.cueId) || cueCase.attemptBudget.disagreement !== 1
+      || (cueCase.verdict.revision ?? 0) < 1) return [];
+    if (!Object.entries(event.identity).every(([key, value]) => result.identity[key as keyof typeof result.identity] === value)
+      || cueCase.acceptedDisagreement?.cueId !== event.cueId) return [];
+    try {
+      const accepted = parseUserReflection(cueCase.acceptedDisagreement);
+      const submitted = parseUserReflection(event.reflection);
+      const fields = ["cueId", "reflectionId", "rawText", "selectedGoal", "questionType", "response", "source"] as const;
+      if (fields.some(field => accepted[field] !== submitted[field])
+        || JSON.stringify(accepted.limitations) !== JSON.stringify(submitted.limitations)) return [];
+      acceptedDisagreement = accepted;
+    } catch { return []; }
+    correctionThread = prior.data;
+  }
   const identity = result.identity;
-  const sourceRefs = provenanceRefs(event, cueCase);
+  // A replayed/rejected envelope is not authority for new provenance. Corrections
+  // use only the accepted case and its pre-revision teaching snapshot.
+  const sourceRefs = correctionThread ? [] : provenanceRefs(event, cueCase);
   const built = buildMemoryProposal({
     userId,
     sessionId: identity.sessionId,
     demoContentHash: identity.demoContentHash,
     cueCase,
-    learningThread,
+    learningThread: correctionThread ?? learningThread,
     outcomeGateStatus: event.outcomeGateStatus,
     provenanceRefs: sourceRefs,
     producerVersion: PRODUCER_VERSION,
   });
-  const sourceRefId = behaviorOpportunitySourceRefId(event, cueCase, built.origin.typedSourceRefs);
+  const sourceRefId = behaviorOpportunitySourceRefId(event, cueCase, built.origin.typedSourceRefs, !correctionThread);
   const base = MemoryProposalSchema.parse({
     ...built,
     origin: {
@@ -266,24 +290,21 @@ export function buildLocalAgentMemoryEvents(
     effect: "DIAGNOSIS",
     evidenceRevision: revision,
   });
-  let proposal = MemoryProposalSchema.parse({
+  const proposal = MemoryProposalSchema.parse({
     ...base,
     proposalId: `proposal-${stableMemoryToken(`${diagnosisEvidenceKey}|${eventType}`)}`,
     eventType,
     idempotencyKey: `memory-idem-${stableMemoryToken(`${diagnosisEvidenceKey}|${eventType}`)}`,
-  }) as unknown as MemoryProposal;
-  if (event.type === "SUBMIT_DISAGREEMENT") {
-    proposal = MemoryProposalSchema.parse({
-      ...proposal,
+    ...(event.type === "SUBMIT_DISAGREEMENT" ? {
       operation: "CORRECT",
       targetMemoryId: `memory-${stableMemoryToken(base.logicalKey)}`,
       correction: {
-        correctionId: event.reflection.reflectionId ?? `correction-${stableMemoryToken(`${identity.sessionId}|${event.cueId}|${revision}`)}`,
-        content: bounded(event.reflection.rawText) || "用户不同意当前教练判断。",
+        correctionId: acceptedDisagreement!.reflectionId!,
+        content: bounded(acceptedDisagreement!.rawText) || "用户不同意当前教练判断。",
         source: "USER",
       },
-    }) as unknown as MemoryProposal;
-  }
+    } : {}),
+  }) as unknown as MemoryProposal;
   const primary = eventForProposal(proposal, eventType, userId, identity.sessionId, identity.demoContentHash);
   const events: MemoryEvent[] = [primary];
   if (event.type === "SUBMIT_REFLECTION" && learningThread.evidenceCueIds.some((cueId) => cueId !== event.cueId)) {

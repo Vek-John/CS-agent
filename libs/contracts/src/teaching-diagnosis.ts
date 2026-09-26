@@ -260,6 +260,10 @@ export interface CueCase {
   reflection?: UserReflection;
   /** Original USER reflection retained separately after the one allowed revision. */
   previousReflection?: UserReflection;
+  /** Bounded pre-revision teaching identity; corrections must target the original rule. */
+  previousLearningThread?: LearningThread;
+  /** Exact normalized disagreement accepted for this revision, before effective-input merging. */
+  acceptedDisagreement?: UserReflection;
   claims: readonly UserClaim[];
   hinge?: HingeCondition;
   capabilities: readonly DiagnosticCapability[];

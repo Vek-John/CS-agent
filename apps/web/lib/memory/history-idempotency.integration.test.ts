@@ -7,10 +7,11 @@ import {
   CoachAgentEventSchema,
   CoachAgentIdentitySchema,
   diagnoseTeachingCue,
+  reviseTeachingDiagnosis,
   type CoachAgentEvent,
   type CoachAgentResult,
 } from "@cs-coach/coach-agent";
-import { MemoryService } from "@cs-coach/memory";
+import { MemoryService, stableMemoryLogicalKey } from "@cs-coach/memory";
 import {
   SqliteDatabaseOwner,
   SqliteMemoryRepository,
@@ -194,4 +195,74 @@ describe("Review history Memory idempotency", () => {
     expect(record.demoContentHashes).toEqual([DEMO_HASH]);
     await owner.close();
   });
+});
+
+
+it.each([false, true])("corrects the original SQLite judgment after a changed hinge without touching a new-key record (%s)", async seedNewKey => {
+  const root = await mkdtemp(join(tmpdir(), "cs-agent-revised-memory-"));
+  cleanup.push(root);
+  const owner = new SqliteDatabaseOwner({ path: join(root, "cs-agent.sqlite3") });
+  try {
+    const library = new DesktopReviewLibrary({ owner, dataRoot: root });
+    await library.initialize();
+    const repository = new SqliteMemoryRepository({ owner });
+    const service = new MemoryService({ repository, authorizationStore: repository, memoryEnabled: true });
+    const userId = "principal-revised-memory";
+    await service.setAuthorization(userId, { userId, memoryEnabled: true, consent: "GRANTED" });
+    const base = reflectionEvent("changed-hinge");
+    const event = CoachAgentEventSchema.parse({ ...base,
+      input: { ...base.input, decisionFacts: [{ id: "fact-no-visible-enemy", text: "决策时没有看到敌人。", availability: "DECISION", available_at_tick: 64, source: "DEMO", observed_by_player: true }] },
+      reflection: { ...base.reflection, selectedGoal: undefined, rawText: "我看到敌人在前面，想拿信息。" },
+    }) as Extract<CoachAgentEvent, { type: "SUBMIT_REFLECTION" }>;
+    const diagnosisInput = { ...event.input, reflection: event.reflection } as Parameters<typeof diagnoseTeachingCue>[0];
+    const original = diagnoseTeachingCue(diagnosisInput);
+    expect(original.cueCase.verdict?.type).toBe("BELIEF_INCORRECT");
+    const disagreement = CoachAgentEventSchema.parse({ ...event, type: "SUBMIT_DISAGREEMENT", eventId: "changed-hinge-disagreement",
+      reflection: { ...event.reflection, reflectionId: "stable-hinge-correction", rawText: "队友语音叫我先拉出去执行固定战术。" },
+    }) as Extract<CoachAgentEvent, { type: "SUBMIT_DISAGREEMENT" }>;
+    const revised = reviseTeachingDiagnosis({ previous: original, input: diagnosisInput, disagreement: disagreement.reflection });
+    expect(revised.cueCase.verdict).toMatchObject({ type: "INCONCLUSIVE", revision: 1 });
+    expect(revised.learningThread.hingeCode).not.toBe(original.learningThread.hingeCode);
+    expect(stableMemoryLogicalKey(revised.learningThread)).not.toBe(stableMemoryLogicalKey(original.learningThread));
+    const result = (output: typeof original) => ({ identity: event.identity, state: {
+      cueCases: { [event.cueId]: output.cueCase }, learningThreads: [output.learningThread],
+    } }) as unknown as CoachAgentResult;
+    const originalEvent = buildLocalAgentMemoryEvents(event, result(original), userId)[0]!;
+    const originalClaim = desktopBehaviorOpportunityClaim(originalEvent, identity.selectedPlayerId, identity.routeHash)!;
+    expect(await library.claimMemoryOpportunity(originalClaim)).toMatchObject({ claimed: true });
+    const initial = await service.ingestEvent(userId, originalEvent);
+    expect(initial.accepted).toBe(true); expect(initial.record).toBeDefined();
+    const originalRecord = initial.record!;
+    let independentRecord: typeof originalRecord | undefined;
+    if (seedNewKey) {
+      // Synthetic independent aggregate: seed the revised semantic key through a
+      // normal observation event, solely to prove the correction cannot target it.
+      const independentOutput = { ...revised, learningThread: { ...revised.learningThread, threadId: "independent-new-key-thread" } };
+      const independentEvent = buildLocalAgentMemoryEvents(event, result(independentOutput), userId)[0]!;
+      const independent = await service.ingestEvent(userId, independentEvent);
+      expect(independent.accepted, JSON.stringify({ error: independent.errorCode, reason: independent.decision.reason })).toBe(true); independentRecord = independent.record!;
+      expect(independentRecord.memoryId).not.toBe(originalRecord.memoryId);
+      expect(independentRecord.logicalKey).toBe(stableMemoryLogicalKey(revised.learningThread));
+    }
+    const opportunityCounts = () => owner.db.prepare("SELECT (SELECT COUNT(*) FROM memory_opportunity_claims) claims,(SELECT COUNT(*) FROM memory_opportunity_evidence) evidence").get();
+    const beforeOpportunities = opportunityCounts();
+    const correction = buildLocalAgentMemoryEvents(disagreement, result(revised), userId)[0]!;
+    expect(correction).toBeDefined();
+    expect(desktopBehaviorOpportunityClaim(correction, identity.selectedPlayerId, identity.routeHash)).toBeUndefined();
+    const corrected = await service.ingestEvent(userId, correction);
+    // Source target, not revised hinge/key, chooses the original aggregate.
+    expect(corrected.accepted).toBe(true);
+    expect(corrected.record).toMatchObject({ memoryId: originalRecord.memoryId, logicalKey: originalRecord.logicalKey,
+      revision: originalRecord.revision + 1, status: "DISPUTED", content: disagreement.reflection.rawText,
+      occurrenceCount: originalRecord.occurrenceCount,
+      successfulApplicationCount: originalRecord.successfulApplicationCount,
+      conflictingApplicationCount: originalRecord.conflictingApplicationCount });
+    const repeated = await service.ingestEvent(userId, correction);
+    expect(repeated.record).toEqual(corrected.record);
+    expect(repeated.record?.corrections).toHaveLength(1);
+    expect(opportunityCounts()).toEqual(beforeOpportunities);
+    expect(opportunityCounts()).toEqual({ claims: 1, evidence: 1 });
+    expect(await repository.getRecordVersion(userId, originalRecord.memoryId, originalRecord.revision)).toEqual(originalRecord);
+    if (independentRecord) expect(await repository.getRecordVersion(userId, independentRecord.memoryId)).toEqual(independentRecord);
+  } finally { await owner.close(); }
 });

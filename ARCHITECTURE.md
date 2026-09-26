@@ -1530,6 +1530,10 @@ Memory Brief 的 structured recall 优先于语义召回，最多返回 2 个 ac
 
 `CueCase` 的可选 `previousReflection` 保留异议前的 USER 反思；`reflection` 是本次有效补充（只改目标而未给新原文时沿用原文）。两者分别沿用 UserReflection 的500字与12条限制，不拼成一个超长 rawText，不修改 Demo 事实。旧记录缺少 previousReflection 仍可按 cue-case.v1 读取；旧版本程序不保证认识新可选字段，不能据此承诺降级客户端兼容。
 
+CueCase还可保存previousLearningThread（修订前的有界SESSION教学身份）和acceptedDisagreement（有效输入合并前、实际接受的规范化USER异议），分别沿用ThreadSchema和UserReflection边界。localhost Memory producer以旧thread推导原logicalKey/targetMemoryId，并一次构造合法CORRECT/USER_CORRECTED_COACH；不能先解析CREATE/USER_CORRECTED_COACH的非法中间态。纠正文案和ID取acceptedDisagreement，要求请求身份及规范化异议逐字段匹配保存结果；Graph拒绝的新异议不能借返回的旧case写入新纠正，重投的新候选/事实也不能改变纠正来源。消费者仍执行目标存在、授权、删除门和幂等receipt；原聚合新增不可变DISPUTED revision，发生次数、应用次数及机会计数不增加，USER观点不因此成为已证实事实。
+
+旧记录缺少这些可选字段仍可读取，但缺少原thread或已接受异议的旧修订不得自动猜测纠正目标或回填；不修复既有用户Memory，不承诺旧客户端识别新字段。快照属于教学产物/Graph；Memory仍只接受既有有界proposal，不复制CueCase、Demo事实或ObservableState。
+
 修订分别生成两段用户陈述，按类型采用新陈述、保留本次未提及的旧类型，并保留各自 originReflectionId。目标优先级为新显式选项、新原文的既有目标识别、旧目标；新原文不继承旧问题类型以伪造新 claim。这是有界关键词分类，不是对自然语言隐含撤回、否定或矛盾的完整理解。
 
 一次异议预算和 case/thread 身份保持。增加修订提示不得挤掉满12条来源限制；无空位时将必要提示放入现有800字 verdict 说明，完整结果仍过 schema。TransferRule 和 LearningThread 同步修订后的低置信度。恢复只读取保存结果，不重新计算；不增加模型或长期记忆执行次数。
