@@ -1,0 +1,365 @@
+{
+  "method": "One sequential before/after real-Demo run with the same test instrumentation; not a percentile benchmark.",
+  "before": {
+    "status": "PASSED",
+    "source": "REAL_DEMO",
+    "demoBytes": 60601900,
+    "demoReads": 1,
+    "parsePasses": 1,
+    "parseMs": 7489,
+    "parserRevision": "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1.active-weapon-identity.v1.grenade-inventory.v1.primary-weapon.v1",
+    "analysisBytes": 5881159,
+    "analysisStorage": "GZIP_FILE",
+    "candidateStorage": "GZIP_FILE",
+    "artifactCount": 17,
+    "artifacts": [
+      {
+        "kind": "ANALYSIS_BUNDLE",
+        "requestBytes": 5881444,
+        "elapsedMs": 176,
+        "loadMs": 1,
+        "validationMs": 66,
+        "writeMs": 64
+      },
+      {
+        "kind": "CANDIDATE_SET",
+        "requestBytes": 1729563,
+        "elapsedMs": 163,
+        "loadMs": 32,
+        "validationMs": 91,
+        "writeMs": 26
+      },
+      {
+        "kind": "REVIEW_PLAN",
+        "requestBytes": 97021,
+        "elapsedMs": 241,
+        "loadMs": 43,
+        "validationMs": 183,
+        "writeMs": 13
+      },
+      {
+        "kind": "NARRATION_BUNDLE",
+        "requestBytes": 2241,
+        "elapsedMs": 220,
+        "loadMs": 41,
+        "validationMs": 177,
+        "writeMs": 1
+      },
+      {
+        "kind": "NARRATION_BUNDLE",
+        "requestBytes": 2442,
+        "elapsedMs": 241,
+        "loadMs": 43,
+        "validationMs": 198,
+        "writeMs": 1
+      },
+      {
+        "kind": "NARRATION_BUNDLE",
+        "requestBytes": 2467,
+        "elapsedMs": 289,
+        "loadMs": 70,
+        "validationMs": 218,
+        "writeMs": 1
+      },
+      {
+        "kind": "NARRATION_BUNDLE",
+        "requestBytes": 2353,
+        "elapsedMs": 218,
+        "loadMs": 41,
+        "validationMs": 176,
+        "writeMs": 1
+      },
+      {
+        "kind": "USER_INTERACTION",
+        "requestBytes": 436,
+        "elapsedMs": 223,
+        "loadMs": 43,
+        "validationMs": 179,
+        "writeMs": 1
+      },
+      {
+        "kind": "CUE_CASE",
+        "requestBytes": 757,
+        "elapsedMs": 218,
+        "loadMs": 41,
+        "validationMs": 176,
+        "writeMs": 0
+      },
+      {
+        "kind": "USER_INTERACTION",
+        "requestBytes": 436,
+        "elapsedMs": 234,
+        "loadMs": 40,
+        "validationMs": 193,
+        "writeMs": 1
+      },
+      {
+        "kind": "CUE_CASE",
+        "requestBytes": 777,
+        "elapsedMs": 232,
+        "loadMs": 40,
+        "validationMs": 191,
+        "writeMs": 1
+      },
+      {
+        "kind": "USER_INTERACTION",
+        "requestBytes": 436,
+        "elapsedMs": 224,
+        "loadMs": 40,
+        "validationMs": 183,
+        "writeMs": 1
+      },
+      {
+        "kind": "CUE_CASE",
+        "requestBytes": 777,
+        "elapsedMs": 272,
+        "loadMs": 93,
+        "validationMs": 178,
+        "writeMs": 1
+      },
+      {
+        "kind": "USER_INTERACTION",
+        "requestBytes": 436,
+        "elapsedMs": 215,
+        "loadMs": 39,
+        "validationMs": 175,
+        "writeMs": 1
+      },
+      {
+        "kind": "CUE_CASE",
+        "requestBytes": 758,
+        "elapsedMs": 217,
+        "loadMs": 39,
+        "validationMs": 177,
+        "writeMs": 1
+      },
+      {
+        "kind": "SESSION_SUMMARY",
+        "requestBytes": 500,
+        "elapsedMs": 216,
+        "loadMs": 39,
+        "validationMs": 176,
+        "writeMs": 0
+      },
+      {
+        "kind": "SESSION_RECOVERY",
+        "requestBytes": 98584,
+        "elapsedMs": 225,
+        "loadMs": 40,
+        "validationMs": 181,
+        "writeMs": 2
+      }
+    ],
+    "saveMs": 4094,
+    "reopenMs": 216,
+    "totalMs": 12317,
+    "lifecycle": {
+      "mode": "ALL_SKIP",
+      "rounds": 9,
+      "segments": 33,
+      "candidates": 44,
+      "cues": 4,
+      "skips": 4,
+      "diagnoses": 0,
+      "storedCases": 4,
+      "graphEvents": 34,
+      "graphCompletedCues": 4,
+      "summaryWrites": 1,
+      "summaryStatus": "DISABLED",
+      "summaryReason": "NO_REPEATED_THEME",
+      "themes": 0,
+      "sessionStatus": "COMPLETED",
+      "syntheticPlaybackNotifications": 24,
+      "toolPosts": 0,
+      "elapsedMs": 235
+    },
+    "restoredPhase": "WRAP_UP",
+    "restoredReviewStatus": "COMPLETED",
+    "newAnalysis": 0,
+    "newNarration": 0,
+    "networkCalls": 0,
+    "viewerRequests": 0,
+    "limitation": "Actual HTTP route handlers run in-process, not a listening server. Harness-driven Session ticks; no Viewer/UI or CS-Net inference. SQLite graph checkpoint persisted and terminal head validated; no graph reconnect dispatch."
+  },
+  "after": {
+    "status": "PASSED",
+    "source": "REAL_DEMO",
+    "demoBytes": 60601900,
+    "demoReads": 1,
+    "parsePasses": 1,
+    "parseMs": 7491,
+    "parserRevision": "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1.active-weapon-identity.v1.grenade-inventory.v1.primary-weapon.v1",
+    "analysisBytes": 5881159,
+    "analysisStorage": "GZIP_FILE",
+    "candidateStorage": "GZIP_FILE",
+    "artifactCount": 17,
+    "artifacts": [
+      {
+        "kind": "ANALYSIS_BUNDLE",
+        "requestBytes": 5881444,
+        "elapsedMs": 176,
+        "loadMs": 0,
+        "validationMs": 66,
+        "writeMs": 65
+      },
+      {
+        "kind": "CANDIDATE_SET",
+        "requestBytes": 1729563,
+        "elapsedMs": 169,
+        "loadMs": 33,
+        "validationMs": 96,
+        "writeMs": 27
+      },
+      {
+        "kind": "REVIEW_PLAN",
+        "requestBytes": 97021,
+        "elapsedMs": 143,
+        "loadMs": 44,
+        "validationMs": 91,
+        "writeMs": 7
+      },
+      {
+        "kind": "NARRATION_BUNDLE",
+        "requestBytes": 2241,
+        "elapsedMs": 137,
+        "loadMs": 41,
+        "validationMs": 95,
+        "writeMs": 1
+      },
+      {
+        "kind": "NARRATION_BUNDLE",
+        "requestBytes": 2442,
+        "elapsedMs": 144,
+        "loadMs": 43,
+        "validationMs": 99,
+        "writeMs": 1
+      },
+      {
+        "kind": "NARRATION_BUNDLE",
+        "requestBytes": 2467,
+        "elapsedMs": 180,
+        "loadMs": 43,
+        "validationMs": 136,
+        "writeMs": 1
+      },
+      {
+        "kind": "NARRATION_BUNDLE",
+        "requestBytes": 2353,
+        "elapsedMs": 133,
+        "loadMs": 41,
+        "validationMs": 90,
+        "writeMs": 1
+      },
+      {
+        "kind": "USER_INTERACTION",
+        "requestBytes": 436,
+        "elapsedMs": 133,
+        "loadMs": 42,
+        "validationMs": 90,
+        "writeMs": 1
+      },
+      {
+        "kind": "CUE_CASE",
+        "requestBytes": 757,
+        "elapsedMs": 132,
+        "loadMs": 40,
+        "validationMs": 92,
+        "writeMs": 0
+      },
+      {
+        "kind": "USER_INTERACTION",
+        "requestBytes": 436,
+        "elapsedMs": 131,
+        "loadMs": 39,
+        "validationMs": 90,
+        "writeMs": 1
+      },
+      {
+        "kind": "CUE_CASE",
+        "requestBytes": 777,
+        "elapsedMs": 131,
+        "loadMs": 39,
+        "validationMs": 91,
+        "writeMs": 1
+      },
+      {
+        "kind": "USER_INTERACTION",
+        "requestBytes": 436,
+        "elapsedMs": 132,
+        "loadMs": 39,
+        "validationMs": 92,
+        "writeMs": 1
+      },
+      {
+        "kind": "CUE_CASE",
+        "requestBytes": 777,
+        "elapsedMs": 137,
+        "loadMs": 40,
+        "validationMs": 95,
+        "writeMs": 2
+      },
+      {
+        "kind": "USER_INTERACTION",
+        "requestBytes": 436,
+        "elapsedMs": 140,
+        "loadMs": 44,
+        "validationMs": 95,
+        "writeMs": 1
+      },
+      {
+        "kind": "CUE_CASE",
+        "requestBytes": 758,
+        "elapsedMs": 175,
+        "loadMs": 45,
+        "validationMs": 129,
+        "writeMs": 1
+      },
+      {
+        "kind": "SESSION_SUMMARY",
+        "requestBytes": 500,
+        "elapsedMs": 132,
+        "loadMs": 39,
+        "validationMs": 92,
+        "writeMs": 1
+      },
+      {
+        "kind": "SESSION_RECOVERY",
+        "requestBytes": 98584,
+        "elapsedMs": 136,
+        "loadMs": 39,
+        "validationMs": 93,
+        "writeMs": 2
+      }
+    ],
+    "saveMs": 2642,
+    "reopenMs": 219,
+    "totalMs": 10865,
+    "lifecycle": {
+      "mode": "ALL_SKIP",
+      "rounds": 9,
+      "segments": 33,
+      "candidates": 44,
+      "cues": 4,
+      "skips": 4,
+      "diagnoses": 0,
+      "storedCases": 4,
+      "graphEvents": 34,
+      "graphCompletedCues": 4,
+      "summaryWrites": 1,
+      "summaryStatus": "DISABLED",
+      "summaryReason": "NO_REPEATED_THEME",
+      "themes": 0,
+      "sessionStatus": "COMPLETED",
+      "syntheticPlaybackNotifications": 24,
+      "toolPosts": 0,
+      "elapsedMs": 231
+    },
+    "restoredPhase": "WRAP_UP",
+    "restoredReviewStatus": "COMPLETED",
+    "newAnalysis": 0,
+    "newNarration": 0,
+    "networkCalls": 0,
+    "viewerRequests": 0,
+    "limitation": "Actual HTTP route handlers run in-process, not a listening server. Harness-driven Session ticks; no Viewer/UI or CS-Net inference. SQLite graph checkpoint persisted and terminal head validated; no graph reconnect dispatch."
+  }
+}

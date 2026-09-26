@@ -8,6 +8,7 @@ import { completeAndSaveSessionWrapUp } from "../coaching/session-wrap-up-comple
 import { sessionWrapUpPresentation, SessionWrapUpPanel } from "../coaching/session-wrap-up-presentation";
 import { HistoryPersistenceController } from "./history-persistence-controller";
 import { describe, expect, it, vi } from "vitest";
+import * as analysisAdapter from "@cs-coach/cs2d-analysis-adapter";
 import { buildCs2dAnalysisBundle, type Cs2dReplay } from "@cs-coach/cs2d-analysis-adapter";
 import type { CommitRuntimeHeadInput, JsonValue, LoadedReview, ReviewArtifact } from "@cs-coach/review-library";
 import { createCoachingSession } from "@cs-coach/session";
@@ -473,5 +474,58 @@ describe("Host summary save → validated artifact → history restore → actua
       expect(appendArtifact).toHaveBeenCalledTimes(writesBeforeRestore);
       expect(fetcher).not.toHaveBeenCalled();
     } finally { vi.unstubAllGlobals(); }
+  });
+});
+
+
+describe("single-pass artifact validation", () => {
+  const appendInput = (artifact: ReviewArtifact) => ({ reviewRevisionId: artifact.reviewRevisionId,
+    artifactType: artifact.artifactType, artifactKey: artifact.artifactKey, artifactRevision: artifact.artifactRevision,
+    schemaVersion: artifact.schemaVersion, payload: artifact.payload!, idempotencyKey: "validation-probe" });
+
+  it("keeps bootstrap identity/candidate checks before a full plan exists", () => {
+    const { loaded } = fixture();
+    const analysis = loaded.artifacts.find(item => item.artifactType === "ANALYSIS_BUNDLE")!;
+    const candidate = loaded.artifacts.find(item => item.artifactType === "CANDIDATE_SET")!;
+    const narration = loaded.artifacts.find(item => item.artifactType === "NARRATION_BUNDLE")!;
+    const empty = { ...loaded, artifacts: [] };
+    expect(() => validateReviewArtifactAppend(empty, appendInput(analysis))).not.toThrow();
+    expect(() => validateReviewArtifactAppend({ ...empty, demo: { ...empty.demo, contentHash: "0".repeat(64) } }, appendInput(analysis))).toThrow();
+    const boot = { ...loaded, artifacts: [analysis] };
+    expect(() => validateReviewArtifactAppend(boot, appendInput(candidate))).not.toThrow();
+    expect(() => validateReviewArtifactAppend(boot, { ...appendInput(candidate), payload: {} })).toThrow(/CandidateSet/u);
+    expect(() => validateReviewArtifactAppend({ ...boot, artifacts: [analysis, candidate] }, appendInput(narration))).toThrow(/ReviewPlan/u);
+  });
+
+  it.each(["analysis", "player", "hash", "candidate", "missingCandidate", "schema"])("still rejects %s drift on every complete-collection request", kind => {
+    const { loaded } = fixture();
+    const narration = loaded.artifacts.find(item => item.artifactType === "NARRATION_BUNDLE")!;
+    const broken = { ...structuredClone(loaded) };
+    if (kind === "player") broken.review = { ...broken.review, selectedPlayerId: "other" };
+    if (kind === "hash") broken.demo = { ...broken.demo, contentHash: "0".repeat(64) };
+    broken.artifacts = broken.artifacts.flatMap(item => {
+      if (kind === "missingCandidate" && item.artifactType === "CANDIDATE_SET") return [];
+      if (kind === "candidate" && item.artifactType === "CANDIDATE_SET") return [{ ...item, payload: {} }];
+      if (item.artifactType === "ANALYSIS_BUNDLE") {
+        if (kind === "analysis") return [{ ...item, payload: {} }];
+        if (kind === "schema") return [{ ...item, schemaVersion: "unknown" }];
+      }
+      return [item];
+    });
+    expect(() => validateReviewArtifactAppend(broken, appendInput(narration))).toThrow();
+  });
+
+  it("validates the complete AnalysisBundle once per append and once per head, without caching", () => {
+    const { loaded, head } = fixture();
+    const narration = loaded.artifacts.find(item => item.artifactType === "NARRATION_BUNDLE")!;
+    const deserialize = vi.spyOn(analysisAdapter, "deserializeCs2dAnalysisBundle");
+    try {
+      validateReviewArtifactAppend(loaded, appendInput(narration));
+      expect(deserialize).toHaveBeenCalledTimes(1);
+      validateReviewArtifactAppend(loaded, appendInput(narration));
+      expect(deserialize).toHaveBeenCalledTimes(2);
+      validateReadyRevisionArtifacts(loaded, head);
+      expect(deserialize).toHaveBeenCalledTimes(3);
+    } finally { deserialize.mockRestore(); }
   });
 });

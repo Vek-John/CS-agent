@@ -2,6 +2,16 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：历史保存的重复校验等待（2026-09-26）
+
+- ID artifact-save-latency，基线ee29f4b clean；root独占profile/必要校验窄修/docs。目标从上轮17次保存3.927秒中定位load/validation/write占比，仅对已证明的重复工作优化。
+- A1已有隔离SQLite测试加入每请求分段计时，小smoke后授权60.6MB样本单解析测量；A2若主因是同请求两次Analysis/Candidate校验，去重但每请求仍读当前revision并做完整领域验证，不跨请求缓存；A3非法分析/候选/身份/早期缺计划行为保持，关闭重开保持；A4相关tests/TS/build、前后匿名计时和push。
+- 预检/边界：bulk仅测试进程，不读用户SQLite/模型/桌面，不安装部署。每真实run外部150秒/内部120秒，先smoke，两次基础设施失败简化；root拥有临时库finally清理。不更改Graph/引用门，不扩大无意义完整性审查。原A5独立，允许同样本必要前后各一次解析以测真实效益，区别于重复质量评估。
+
+- 结果：真实前后17次保存4094→2642ms（-35.5%），校验2918→1632ms，读725→651ms，写116→114ms。完整集合去掉同请求二次Analysis/Candidate校验；bootstrap与所有引用/身份门保持，不跨请求缓存。[证据](validation/ARTIFACT_SAVE_LATENCY.md)。
+- 验收/清理：新增8回归、56相关tests及opt-in真实API/SQLite重开通过、TS/build通过；partial_revision_restore默认配置两次窄只读审查RELEASE。实际进程与临时库清理，无用户数据/部署；计时是单次对照，不外推p95。
+- 下一有限目标转回教学交付：真实全跳过结束摘要为NO_REPEATED_THEME，现有SessionWrapUpPanel仅显示不归纳习惯提示。先核实用户在这个状态能否直接回看已完成教学点，以及能否从现有证据给出明确下一步；不降低重复主题门、不凭skip编造习惯，不重复测同存储链。原A5继续独立。
+
 ## 已交付：真实结束产物的隔离SQLite恢复（2026-09-26）
 
 - ID real-history-reopen，基线184ee6f clean；root独占opt-in集成测试/必要窄修/docs。先读既有inventory恢复链与真实API；不重复造存储层或绕过HTTP body门。

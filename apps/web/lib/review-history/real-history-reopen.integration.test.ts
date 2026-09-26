@@ -18,6 +18,7 @@ import { PUT } from "../../app/api/review-history/[id]/runtime-head/route";
 import { DESKTOP_APP_ORIGIN_HEADER } from "../desktop/request-origin";
 import { buildInitialCoachingRouteState, createReviewPreparationOrchestrator } from "../coaching/cs2d-route-integration";
 import { buildSessionRecoveryRecord, createRecoverySessionIdentity, createRecoveryReviewPreparationDependencies, normalizeRecoveryAnalysis, restoreRecoveryArtifacts, validateStoredReviewArtifacts } from "../recovery/cs2d-session-recovery";
+import * as artifactValidation from "./artifact-validation";
 import { HistoryRestoreController, type ReviewHistoryDetail } from "./history-restore-controller";
 
 const ORIGIN = "http://127.0.0.1:43123";
@@ -75,14 +76,27 @@ async function reopenCompletedRoute(real: boolean) {
     const revision = await library.startRevision({ reviewId: review.reviewId, analysisVersion: analysis.metadata.adapter_version, graphVersion: "coach-agent-graph.v3", promptVersion: plan.generation_manifest.prompt_version,
       modelMetadata: {}, routeId: plan.id, routeHash: routeState.routeFingerprint });
     const context = { params: Promise.resolve({ id: review.reviewId }) };
-    const artifacts: { kind: string; requestBytes: number; elapsedMs: number }[] = [];
+    const artifacts: { kind: string; requestBytes: number; elapsedMs: number; loadMs: number; validationMs: number; writeMs: number }[] = [];
+    let loadMs = 0, validationMs = 0, writeMs = 0;
+    const load = library.loadReview.bind(library), write = library.appendArtifact.bind(library);
+    const validate = artifactValidation.validateReviewArtifactAppend;
+    vi.spyOn(library, "loadReview").mockImplementation(async (...args) => {
+      const began = performance.now(); try { return await load(...args); } finally { loadMs += performance.now() - began; }
+    });
+    vi.spyOn(library, "appendArtifact").mockImplementation(async (...args) => {
+      const began = performance.now(); try { return await write(...args); } finally { writeMs += performance.now() - began; }
+    });
+    vi.spyOn(artifactValidation, "validateReviewArtifactAppend").mockImplementation((...args) => {
+      const began = performance.now(); try { return validate(...args); } finally { validationMs += performance.now() - began; }
+    });
     const append = async (artifactType: AppendArtifactInput["artifactType"], artifactKey: string, schemaVersion: string, payload: unknown) => {
       const body = JSON.stringify({ revisionId: revision.reviewRevisionId, artifactType, artifactKey, artifactRevision: 1, schemaVersion, payload, idempotencyKey: `${artifactType}:${artifactKey}` });
+      loadMs = 0; validationMs = 0; writeMs = 0;
       const began = performance.now();
       const response = await POST(new Request(`${ORIGIN}/api/review-history/${review.reviewId}/artifacts`, { method: "POST", headers, body }), context);
       const result = await response.json();
       expect(response.status, `${artifactType}: ${result.code ?? "saved"}; bytes=${Buffer.byteLength(body)}`).toBe(201);
-      artifacts.push({ kind: artifactType, requestBytes: Buffer.byteLength(body), elapsedMs: Math.round(performance.now() - began) });
+      artifacts.push({ kind: artifactType, requestBytes: Buffer.byteLength(body), elapsedMs: Math.round(performance.now() - began), loadMs: Math.round(loadMs), validationMs: Math.round(validationMs), writeMs: Math.round(writeMs) });
     };
     const saveStarted = performance.now();
     await append("ANALYSIS_BUNDLE", analysis.demo_id, "cs2d-analysis-bundle.v1", JSON.parse(analysisJson));

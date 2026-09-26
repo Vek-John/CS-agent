@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：完整产物保存无需在同请求重复领域校验
+
+- 问题/测量：真实17项保存4.094秒；分段透传计时显示领域校验2.918秒，读/解压725ms，写116ms。实际validateCollection与validateStoredReviewArtifacts重复反序列化/验证同一Analysis并比较同一Candidate。
+- 决策：已有完整集合时直接进入共享validator；bootstrap无Candidate/Plan时保留原门。没有跨请求缓存或trusted标记，每请求仍读当前revision和全领域验证，不改变引用/未来信息/写入并发语义。
+- 验证：同样本前后保存降到2.642秒（35.5%），校验1.632秒；真实17产物、4skip、结束摘要和SQLite重开保持，零生成。8新回归、56相关tests、opt-in真实验收、TS/build通过，独立只读RELEASE。[证据](validation/ARTIFACT_SAVE_LATENCY.md)。
+- 限制/下一项：单次前后计时不是p95或冷启动承诺；无UI/服务器/Graph重连验证。下一轮回到NO_REPEATED_THEME时的结束体验与已完成片段回看，不继续堆存储审计或任意缓存。
+
 ## 2026-09-26：真实规模暴露版本链与候选证据保存门不匹配
 
 - 问题：真实60.6MB Demo结束产物首次写库时，恢复schema拒绝完整Parser版本链（>160）；修复后1.73MB独立CandidateSet又被256KiB小JSON门拒绝。小库存fixture未覆盖这两个实际规模边界。

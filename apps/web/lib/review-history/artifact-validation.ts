@@ -148,25 +148,25 @@ function validateCollection(input: {
   if (!analysisArtifact?.payload) {
     throw new Error("AnalysisBundle must be appended before dependent artifacts.");
   }
-  const analysis = deserializeCs2dAnalysisBundle(JSON.stringify(analysisArtifact.payload));
-  if (
-    analysis.selected_steam_id !== input.loaded.review.selectedPlayerId ||
-    analysis.metadata.demo_content_hash?.toLowerCase() !== input.loaded.demo.contentHash.toLowerCase()
-  ) throw new Error("AnalysisBundle identity does not match Review.");
-
   const candidateArtifact = latestByKind(input.artifacts, "CANDIDATE_SET");
-  if (candidateArtifact?.payload && stableJson(candidateArtifact.payload) !== stableJson(analysis.candidate_set)) {
-    throw new Error("CandidateSet does not match AnalysisBundle.");
-  }
-  if (!candidateArtifact?.payload) {
-    if (input.requireCritical || input.appendType !== "ANALYSIS_BUNDLE") {
-      throw new Error("CandidateSet must be appended after AnalysisBundle.");
-    }
-    return;
-  }
-
   const planArtifact = latestByKind(input.artifacts, "REVIEW_PLAN");
-  if (!planArtifact?.payload) {
+  if (!candidateArtifact?.payload || !planArtifact?.payload) {
+    // Bootstrap has no complete collection yet. Once the plan exists, the
+    // shared stored-artifact validator below performs these checks exactly once.
+    const analysis = deserializeCs2dAnalysisBundle(JSON.stringify(analysisArtifact.payload));
+    if (
+      analysis.selected_steam_id !== input.loaded.review.selectedPlayerId ||
+      analysis.metadata.demo_content_hash?.toLowerCase() !== input.loaded.demo.contentHash.toLowerCase()
+    ) throw new Error("AnalysisBundle identity does not match Review.");
+    if (candidateArtifact?.payload && stableJson(candidateArtifact.payload) !== stableJson(analysis.candidate_set)) {
+      throw new Error("CandidateSet does not match AnalysisBundle.");
+    }
+    if (!candidateArtifact?.payload) {
+      if (input.requireCritical || input.appendType !== "ANALYSIS_BUNDLE") {
+        throw new Error("CandidateSet must be appended after AnalysisBundle.");
+      }
+      return;
+    }
     if (
       input.requireCritical ||
       (input.appendType !== "ANALYSIS_BUNDLE" && input.appendType !== "CANDIDATE_SET")
@@ -180,7 +180,7 @@ function validateCollection(input: {
   const learningThreads = Object.values(latestByKey(input.artifacts, "LEARNING_THREAD"));
   const summary = latestByKind(input.artifacts, "SESSION_SUMMARY")?.payload ?? null;
   const validated = validateStoredReviewArtifacts({
-    analysis,
+    analysis: analysisArtifact.payload,
     candidateSet: candidateArtifact?.payload,
     plan: planArtifact.payload,
     narrationByCue,
