@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：先测几何缺字段，再决定是否改协议
+
+- 问题：world_coord缺cell/offset时默认值可生成有限伪坐标，Adapter仅finite检查；直接删player又会伤害respawn/名单/资源，不是安全的局部修复。
+- 决策：先读真实字段并查消费链，不做无触发证据的跨层改造。必要时保留身份/非几何字段、独立位置可用性并约束Viewer插值与移动提名，不能按-16384或零值猜unknown。
+- 验证：vendor+locked/offline native probe单读60.6MB，0.776秒；72,273 tick_start pawn、73death、7plant、1,590fire样本六字段缺失/错类型/非有限均0。1项Rust分类回归、26相关tests、TS/build通过；无生产Parser/Viewer变更。[证据](validation/GEOMETRY_FIELD_EVIDENCE.md)。
+- 限制/行动：仅一份Demo及抽样/目标事件，不证明通用完整性或坐标真值；本轮不改生产几何协议。下一独立问题来自玩家采样network packed handle仍index-only查找，先做实体复用小验证，不把字段完整等同身份绑定正确。代理RELEASE、临时example/进程清理，原A5独立。
+
 ## 2026-09-26：击杀身份不能复用tick开始缓存
 
 - 问题：death三方身份仍用index/cache，victim位置独立按index取值；同tick重绑或实体复用会错归属。RawEvent/schema/Viewer依赖非空victim，不能直接改为null。

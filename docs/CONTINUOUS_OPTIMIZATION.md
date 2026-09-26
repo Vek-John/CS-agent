@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：几何字段完整性证据（2026-09-26）
+
+- ID geometry-field-evidence，基线fe1941a clean；主控独占geometry-fields诊断probe/真实读取/docs，revision_semantics_review默认配置只读消费链8分钟预检，其他owner RELEASE。
+- 流程：实际cell/offset属性→区分missing/wrongtype/nonfinite/合法zero→tick_start stride8和death/plant/fire事件当前pawn统计→据证据决定下一修复。A1查实际默认值与Adapter/Viewer消费；A2小分类测试再单60.6MB native probe、1024tick smoke后同parser继续；A3只返回统计不泄露ID/坐标、保持unknown；A4相关tests/TS/build、行动结论与push。未证真实发生前不泛化生产几何协议。
+- 风险/清理：vendor+locked+offline已有工具链，单编译/运行120秒，唯一controller finally移除临时example；bulk单进程，无安装/模型/UI/用户DB。几何缺失不能等同玩家死亡/缺身份，合法零不能当unknown；必须核实插值/旧数据兼容。原A5独立待验。
+
+- 结果/决定：1项Rust分类测试、26相关tests、TS/build通过；native单读60.6MB 0.776秒，72,273pawn/73death/7plant/1,590fire六字段缺失/错类型/非有限均0，0事件pawn解析失败。没有实际缺口证据，不改跨层生产几何协议；若未来有缺口必须保留非几何名单/资源并门控插值，不能删整player。[证据](validation/GEOMETRY_FIELD_EVIDENCE.md)。
+- 交接：只读代理默认配置已RELEASE，唯一controller finally清example，全部进程退出，无模型/用户DB/安装/UI。下一独立目标为collector玩家采样network packed句柄仍走index-only lookup，先源注入生命周期验证是否误采替代pawn状态，再定局部校验；不复用native转换，不重复同样本几何probe。原A5独立待验。
+
 ## 已交付：player_death即时身份（2026-09-26）
 
 - ID death-identity，基线e7fba6b已push且启动干净；总goal已创建。主控整合/文档，子代理`/root/revision_semantics_review`默认配置独占只读链路预检，8分钟期限；无生产并写。
