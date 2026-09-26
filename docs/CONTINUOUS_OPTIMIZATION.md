@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：已展示节点前的普通段自动补齐（2026-09-26）
+
+- ID presented-cue-order，基线d4b724e clean；root独占Controller/测试/docs，无新委派。上一轮真实手动回访序列已经证明缺段导致拒绝，本轮消除对外部再次触发的依赖。
+- 目标/验收：A1缺普通段时首次observePresentedCue自动按序补齐并被Graph接受；A2与正在等待的observer及后续观察共用串行队列，不提前预约跳过未确认段；A3失败仍不确认、同event可重试、reset与重复保持，未展示教学段不可伪造跳过；A4相关tests/TS/build后commit/push。
+- 边界/风险：复用dispatchObserversUntil和回执规则，不改Graph协议、不新增工具/模型/网络重试。只为匹配冻结plan的cue/segment索引工作，原缺证据教学段保持保守失败。真实Graph小例，8分钟实现/验收目标，无Demo/用户库/UI/服务/安装，root清理进程；原A5独立。
+- 实际结果：首尝试缺普通段1红5绿→新路径一次成功；目标不再提前预约，共用observerTail保证普通段→已展示cue→后续段顺序，reset补齐期间无旧mirror。保留本地丢账时含教学段不自动补齐、原事件回执重试，修正初版过度补齐造成的reset重试回归。
+- 验证：presented-cue-ack现9项（本轮新增4）及其他57项，合计66tests；TS及production build通过。[记录](validation/PRESENTED_CUE_ORDER.md)。root独占，未重试额度失败的代理，所有进程退出，无用户数据写入。
+- 下一项转向真实数据消费：用已有授权小Demo，在同一拥有数据的进程内验证当前Parser→Adapter→完整默认路线/跳过→Graph结束与总结，输出小统计，不重做哈希/字段完整性审计，不启动锁屏UI，不把该验证冒充浏览器验收。
+
 ## 已交付：已展示教学点的真实同步确认（2026-09-26）
 
 - ID presented-cue-ack，基线c51a6b0 clean；原委派因额度错误终止且无文件产出，root已核实并自行接手，不重复派发。上一轮源码证据已定位status误判，本轮实际Graph序列验证，不做通用完整性审查。

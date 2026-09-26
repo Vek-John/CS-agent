@@ -39,19 +39,20 @@ async function fixture() {
   const eventId = `stage3-presented-${input.runId}-${nextIndex}-${next.id}`.replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 160);
   const send = () => controller.observePresentedCue(input, next.id, next.segment_id, nextIndex);
   const settle = () => vi.waitFor(() => expect(adapter.lifecycleEventStatus(eventId)).not.toBe("PENDING"));
-  const fillGap = async () => { for (let index = firstIndex + 1; index < nextIndex; index++) await observe(index); };
+  const fillGap = async () => { for (let index = firstIndex + 1; index < nextIndex; index++) await observe(index); adapter.markLifecycleSynced(nextIndex - 1); };
   return { input, runtime, adapter, controller, dispatch, replies, mirror, post, eventId, firstIndex, nextIndex, send, settle, fillGap };
 }
 
 it("does not confirm or mirror a real route-order rejection, and allows the same observation to retry after the missing segment arrives", async () => {
   const f = await fixture();
   try {
-    // The manual cue is genuinely presented, but background default-route observation is behind.
+    // An inconsistent local ledger cannot turn a real Graph rejection into success.
+    f.adapter.markLifecycleSynced(f.nextIndex - 1);
     f.send(); await f.settle();
     expect(f.replies[0].status).toBe("COMPLETED");
     expect(f.replies[0].state.fallbackReasons).toContain("ROUTE_ORDER_MISMATCH");
     expect(f.replies[0].state.routeCursor).toBe(f.firstIndex);
-    expect(f.adapter.lifecycleCursor).toBe(f.firstIndex);
+    expect(f.adapter.lifecycleCursor).toBe(f.nextIndex - 1);
     expect(f.adapter.lifecycleEventStatus(f.eventId)).toBe("NONE");
     expect(f.mirror).not.toHaveBeenCalled();
     await f.fillGap();
@@ -133,4 +134,68 @@ it("keeps a new same-event request pending when the pre-reset request settles", 
     expect(f.adapter.lifecycleEventStatus(f.eventId)).toBe("CONFIRMED");
     expect(f.mirror).toHaveBeenCalledOnce();
   } finally { releaseOld(); releaseNew(); f.controller.dispose(); }
+});
+
+
+it("automatically observes the missing ordinary segment before the already presented cue on the first attempt", async () => {
+  const f = await fixture();
+  try {
+    f.send(); await f.settle();
+    expect(f.adapter.lifecycleEventStatus(f.eventId)).toBe("CONFIRMED");
+    expect(f.dispatch.mock.calls.map(([event]) => event.type)).toEqual(["OBSERVE_SEGMENT", "OBSERVE_PRESENTED_CUE"]);
+    expect(f.replies.at(-1)?.state.routeCursor).toBe(f.nextIndex);
+    expect(f.replies.at(-1)?.state.fallbackReasons).not.toContain("ROUTE_ORDER_MISMATCH");
+    expect(f.post).not.toHaveBeenCalled();
+  } finally { f.controller.dispose(); }
+});
+
+it("serializes a pending ordinary observation, the presented cue, and a following observation", async () => {
+  const f = await fixture();
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  try {
+    const gapIndex = f.nextIndex - 1, afterIndex = f.nextIndex + 1;
+    expect(f.input.plan.segments[afterIndex].cue_ids).toEqual([]);
+    f.dispatch.mockImplementation(async event => {
+      if (event.type === "OBSERVE_SEGMENT" && event.segmentIndex === gapIndex) await gate;
+      const result = await f.runtime.dispatch(event); f.replies.push(result); return result;
+    });
+    f.controller.observeSegment(f.input, f.input.plan.segments[gapIndex].id, gapIndex, "BRIEF", "PLAYING");
+    await vi.waitFor(() => expect(f.dispatch).toHaveBeenCalledOnce());
+    f.send(); f.send();
+    f.controller.observeSegment(f.input, f.input.plan.segments[afterIndex].id, afterIndex, "BRIEF", "PLAYING");
+    await Promise.resolve(); expect(f.dispatch).toHaveBeenCalledOnce();
+    release(); await vi.waitFor(() => expect(f.replies).toHaveLength(3));
+    expect(f.dispatch.mock.calls.map(([event]) => event.type)).toEqual(["OBSERVE_SEGMENT", "OBSERVE_PRESENTED_CUE", "OBSERVE_SEGMENT"]);
+    expect(f.adapter.lifecycleEventStatus(f.eventId)).toBe("CONFIRMED");
+    expect(f.replies.at(-1)?.state.routeCursor).toBe(afterIndex);
+    expect(f.adapter.lifecycleDegraded).toBe(false);
+    expect(f.post).not.toHaveBeenCalled();
+  } finally { release(); f.controller.dispose(); }
+});
+
+it("does not mirror or send the presented cue after reset during ordinary-gap completion", async () => {
+  const f = await fixture();
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  try {
+    f.dispatch.mockImplementation(async event => { const result = await f.runtime.dispatch(event); await gate; f.replies.push(result); return result; });
+    f.send(); await vi.waitFor(() => expect(f.dispatch).toHaveBeenCalledOnce());
+    expect(f.dispatch.mock.calls[0][0].type).toBe("OBSERVE_SEGMENT");
+    f.controller.reset(); release();
+    await vi.waitFor(() => expect(f.replies).toHaveLength(1));
+    await Promise.resolve(); await Promise.resolve();
+    expect(f.dispatch).toHaveBeenCalledOnce(); expect(f.mirror).not.toHaveBeenCalled();
+    expect(f.adapter.lifecycleCursor).toBe(-1);
+  } finally { release(); f.controller.dispose(); }
+});
+
+it("does not generate gap observations for a target outside the frozen route", async () => {
+  const f = await fixture();
+  try {
+    const next = f.input.plan.cues[1];
+    f.controller.observePresentedCue(f.input, next.id, "wrong-segment", f.nextIndex);
+    f.controller.observePresentedCue({ ...f.input, routeState: { ...f.input.routeState, routeFrozen: false } }, next.id, next.segment_id, f.nextIndex);
+    await Promise.resolve(); expect(f.dispatch).not.toHaveBeenCalled();
+  } finally { f.controller.dispose(); }
 });

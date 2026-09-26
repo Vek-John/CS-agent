@@ -253,24 +253,28 @@ export class CoachAgentStage3Controller {
   }
 
   private dispatchLifecycle(event: CoachAgentEvent, eventId: string): Promise<CoachAgentResult | undefined> {
+    const token = this.token;
     const existing = this.lifecyclePromises.get(eventId);
     if (existing) return existing;
     const status = this.adapter.beginLifecycleEvent(eventId);
     if (status === "CONFIRMED") return Promise.resolve(undefined);
-    const promise = this.dispatchSerial(event)
-      .then((result) => {
+    const promise = this.dispatchSerial(event, { notifyAgentResult: false, canDispatch: () => token === this.token })
+      .then(async (result) => {
+        if (token !== this.token) return undefined;
         if (result.status === "DORMANT" || result.status === "USER_TAKEOVER" || result.status === "WAITING_TOOL") {
           this.adapter.releaseLifecycleEvent(eventId);
           return undefined;
         }
         this.adapter.confirmLifecycleEvent(eventId);
+        try { await this.options.onAgentResult?.(event, result); } catch { /* Local observation survives a mirror failure. */ }
         return result;
       })
       .catch(() => {
+        if (token !== this.token) return undefined;
         this.adapter.releaseLifecycleEvent(eventId);
         return undefined;
       })
-      .finally(() => this.lifecyclePromises.delete(eventId));
+      .finally(() => { if (this.lifecyclePromises.get(eventId) === promise) this.lifecyclePromises.delete(eventId); });
     this.lifecyclePromises.set(eventId, promise);
     return promise;
   }
@@ -679,10 +683,12 @@ export class CoachAgentStage3Controller {
   }
 
   observePresentedCue(input: Stage3IdentityInput, cueId: string, segmentId: string, segmentIndex: number): void {
+    const segment = input.plan.segments[segmentIndex];
+    if (input.plan.status !== "COMPLETE" || !input.routeState.routeFrozen || segment?.id !== segmentId ||
+      !segment.cue_ids.includes(cueId) || !input.plan.cues.some(cue => cue.id === cueId && cue.segment_id === segmentId)) return;
     const token = this.token;
     const eventId = `stage3-presented-${input.runId}-${segmentIndex}-${cueId}`.replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 160);
     try {
-      this.adapter.reserveLifecycleCursor(segmentIndex);
       const event = this.adapter.createObservePresentedCueEvent(input, cueId, segmentId, segmentIndex, eventId);
       const claim = this.adapter.beginLifecycleEvent(eventId);
       if (claim === "CONFIRMED") {
@@ -691,7 +697,25 @@ export class CoachAgentStage3Controller {
       }
       const existing = this.lifecyclePromises.get(eventId);
       if (existing) return;
-      const dispatch = this.dispatchSerial(event, { notifyAgentResult: false, canDispatch: () => token === this.token }).then(async (result) => {
+      const dispatch = this.observerTail.then(async () => {
+        if (token !== this.token) return undefined;
+        // Include this observation in the same queue as ordinary segments. Reserving the
+        // target first would conceal the very gap that needs to be filled.
+        const gap = input.plan.segments.slice(Math.max(0, this.adapter.lifecycleCursor + 1), segmentIndex);
+        // With a lost local ledger, do not invent presentation of earlier teaching cues.
+        // Send the observation itself so Graph can acknowledge a retained receipt or reject it.
+        const ordinaryGap = gap.length > 0 && gap.every(item => this.observationMode(item) !== undefined);
+        if (ordinaryGap &&
+          !await this.dispatchObserversUntil(input, segmentIndex, false, "PLAYING", token)) {
+          if (token === this.token) {
+            this.adapter.releaseLifecycleEvent(eventId);
+            this.adapter.resetLifecycleQueue();
+          }
+          return undefined;
+        }
+        if (token !== this.token) return undefined;
+        this.adapter.reserveLifecycleCursor(segmentIndex);
+        const result = await this.dispatchSerial(event, { notifyAgentResult: false, canDispatch: () => token === this.token });
         if (token !== this.token) return undefined;
         // A rejected observation may return an existing COMPLETED state. The event receipt
         // and its binding prove acceptance; an old fallback reason is not a fresh rejection.
@@ -717,6 +741,7 @@ export class CoachAgentStage3Controller {
       }).finally(() => {
         if (this.lifecyclePromises.get(eventId) === dispatch) this.lifecyclePromises.delete(eventId);
       });
+      this.observerTail = dispatch.then(() => undefined, () => undefined);
       this.lifecyclePromises.set(eventId, dispatch);
     } catch {
       this.adapter.releaseLifecycleEvent(eventId);

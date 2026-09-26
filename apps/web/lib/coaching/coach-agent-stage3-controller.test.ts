@@ -21,6 +21,13 @@ function input(): Stage3HostAdapterInput {
   } as unknown as Stage3HostAdapterInput;
 }
 
+function presentedInput(): Stage3IdentityInput {
+  return { runId: "run-1", routeState: { routeFrozen: true }, plan: { status: "COMPLETE",
+    cues: [{ id: "cue-4", segment_id: "segment-4" }],
+    segments: Array.from({ length: 5 }, (_, index) => ({ id: `segment-${index}`, mode: "BRIEF", cue_ids: index === 4 ? ["cue-4"] : [] })),
+  } } as unknown as Stage3IdentityInput;
+}
+
 function result(status: CoachAgentResult["status"], effects: unknown[] = []): CoachAgentResult {
   return {
     status,
@@ -252,7 +259,8 @@ describe("CoachAgentStage3Controller", () => {
         presentedCueBindings: [{ cueId: event.cueId, segmentId: event.segmentId, segmentIndex: event.segmentIndex }],
       } };
     } });
-    h.controller.observePresentedCue({ runId: "run-1" } as unknown as Stage3IdentityInput, "cue-4", "segment-4", 4);
+    Object.assign(h.adapter, { lifecycleCursor: 3, lifecycleQueueCursor: 3 });
+    h.controller.observePresentedCue(presentedInput(), "cue-4", "segment-4", 4);
     await flush();
     await flush();
     expect(h.dispatched.map((event) => event.type)).toEqual(["OBSERVE_PRESENTED_CUE"]);
@@ -263,7 +271,8 @@ describe("CoachAgentStage3Controller", () => {
 
   it("degrades presented-cue bookkeeping only on a real dispatch failure", async () => {
     const network = harness({ dispatch: async () => { throw new Error("network down"); } });
-    network.controller.observePresentedCue({ runId: "run-1" } as unknown as Stage3IdentityInput, "cue-4", "segment-4", 4);
+    Object.assign(network.adapter, { lifecycleCursor: 3, lifecycleQueueCursor: 3 });
+    network.controller.observePresentedCue(presentedInput(), "cue-4", "segment-4", 4);
     await flush();
     expect(network.adapter.releaseLifecycleEvent).toHaveBeenCalled();
     expect(network.adapter.resetLifecycleQueue).toHaveBeenCalled();
@@ -273,7 +282,8 @@ describe("CoachAgentStage3Controller", () => {
       dormant.dispatched.push(event);
       return result("DORMANT");
     } });
-    dormant.controller.observePresentedCue({ runId: "run-1" } as unknown as Stage3IdentityInput, "cue-4", "segment-4", 4);
+    Object.assign(dormant.adapter, { lifecycleCursor: 3, lifecycleQueueCursor: 3 });
+    dormant.controller.observePresentedCue(presentedInput(), "cue-4", "segment-4", 4);
     await flush();
     expect(dormant.adapter.resetLifecycleQueue).toHaveBeenCalled();
     expect(dormant.adapter.markLifecycleDegraded).not.toHaveBeenCalled();
