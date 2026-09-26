@@ -13,6 +13,7 @@ import {
   type AgentToolResult,
   type CueCase,
   type CoachAgentEvent,
+  type CoachAgentResult,
   type HostToolLedgerSummary,
   type LearningThread,
   type PreparedNarrationArtifact,
@@ -624,4 +625,30 @@ export function restoreCheckpointTeachingCase(
     type: "RECORD_TEACHING_CASE", cueCase,
     ...(learningThread?.evidenceCueIds.includes(cueCase.cueId) ? { learningThread } : {}),
   });
+}
+
+
+/** Preserve independently saved teaching when the exact confirmed checkpoint is older. */
+export function assertRecoveryTeachingProgress(
+  plan: ReviewPlan,
+  record: SessionRecoveryRecord,
+  savedCases: Readonly<Record<string, CueCase>>,
+  agent: CoachAgentResult,
+): void {
+  if (record.boundary.kind !== "CUE_PAUSED" || agent.restored !== "MATCHED" || agent.status === "DORMANT") return;
+  const cueId = record.boundary.cueId;
+  const cue = plan.cues.find(item => item.id === cueId);
+  if (!cue) return;
+  const saved = CueCaseSchema.safeParse(savedCases[cue.id]);
+  const recovered = CueCaseSchema.safeParse(agent.state.cueCases[cue.id]);
+  if (!saved.success || !recovered.success) return;
+  const matches = (c: CueCase) => c.cueId === cue.id && (c.candidateId === undefined || c.candidateId === cue.candidate_id);
+  if (!matches(saved.data) || !matches(recovered.data)) return;
+  const savedProgress = saved.data.attemptBudget, recoveredProgress = recovered.data.attemptBudget;
+  const ahead = (saved.data.verdict?.revision ?? 0) > (recovered.data.verdict?.revision ?? 0)
+    || savedProgress.reflection > recoveredProgress.reflection
+    || savedProgress.diagnostic > recoveredProgress.diagnostic
+    || savedProgress.disagreement > recoveredProgress.disagreement
+    || savedProgress.alternateDiagnostic > recoveredProgress.alternateDiagnostic;
+  if (ahead) throw new Error("已保存的补充比恢复点中的诊断更新，暂未完成教练同步。已保存内容保留，基础回放仍可继续。");
 }

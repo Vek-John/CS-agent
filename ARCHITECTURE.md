@@ -1433,6 +1433,10 @@ IMPORT、Artifact 发布与删除都有独立 job 表。Demo 写入顺序是“�
 
 禁止保存 raw Demo、File/ArrayBuffer、Replay、frames、完整 AnalysisBundle、地图纹理、模型权重、Prompt、chain-of-thought、API Key 或任意浏览器外可执行工具参数。IndexedDB 不可用时，当前标签页继续回放并明确提示刷新后不可恢复。
 
+历史恢复仍以 RuntimeHead 精确引用的 Recovery/checkpoint 为准。对当前 `CUE_PAUSED` 点，若已验证且同cue/候选的独立保存 `CueCase` 在 verdict revision 或 attempt budget 上领先于 checkpoint 中的合法 case，Host 在重连结果镜像和界面合并之前拒绝接受该旧教学状态。现有保存内容继续显示、既有异议次数保留；进入明确的 DEGRADED 教练同步状态，基础回放可继续，不自动改用 latest Graph 或提交新 head。Controller 的可选同步恢复验收在镜像异常吞并边界之前运行；owner epoch/generation/runtime/recoveryId变化时不接受迟到结果。
+
+这是一条当前cue的单调进度保护，不保证跨cue、缺失case、同revision内容差异或单纯COMPLETED确认状态的全快照一致性。Graph重连本身仍可能写自己的checkpoint；新head未确认时不能宣称恢复了最新教练状态，也不自动清洗或重写已有产物。
+
 ### 10.7 LongTermMemory 保留与删除
 
 accepted memory 的保留由用户删除、principal retention policy 和 consent 管理；candidate、失败 proposal、retry 和 dead-letter 必须有界保留并可清理。删除必须在当前 Memory Adapter 的单一事务内为所有 current record 写入不可变 tombstone，并通过用户级 deletion marker 阻断未物化的迟到事件；旧 event/outbox、重试和向量命中不得复活记录。撤回 consent 立即阻断教学 recall/proposal/write/embedding/outbox；用户可从独立管理面发起仅按 opaque ID 的隐私删除；重新 opt-in 不复活已删除 revision。`MemoryWritePolicy`、跨 Demo 晋级、consent、revision、tombstone 和 late-event 防复活规则在 SQLite/PostgreSQL Adapter 间完全相同。

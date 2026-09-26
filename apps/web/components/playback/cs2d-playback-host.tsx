@@ -94,6 +94,7 @@ import {
   mergePersistedToolResults,
   restoreRecoveryArtifacts,
   restoreCheckpointTeachingCase,
+  assertRecoveryTeachingProgress,
   shouldReconnectRecoveryAgent,
   shouldPersistToolTransitionToRecovery,
   isPreAgentRouteStartRecovery,
@@ -1330,7 +1331,9 @@ export function Cs2dPlaybackHost({
     const runtime = recoveryRuntimeRef.current;
     if (!runtime) return;
     const openEpoch = historyOpenEpochRef.current;
-    const isCurrent = () => historyOpenEpochRef.current === openEpoch;
+    const generation = generationRef.current;
+    const isCurrent = () => historyOpenEpochRef.current === openEpoch && generationRef.current === generation
+      && recoveryRuntimeRef.current === runtime && recoveryRecordRef.current?.recoveryId === landing.record.recoveryId;
     try {
       let currentRecord = recoveryRecordRef.current ?? landing.record;
       let restoredSession = landing.staged.session;
@@ -1351,7 +1354,11 @@ export function Cs2dPlaybackHost({
       }
       if (shouldReconnectRecoveryAgent(currentRecord)) {
         const reconnect = buildReconnectReplayEvent(currentRecord);
-        const agent = await stage3ControllerRef.current!.reconnect(reconnect);
+        const savedTeachingCases = teachingCasesRef.current;
+        const agent = await stage3ControllerRef.current!.reconnect(reconnect, (result) => {
+          if (!isCurrent()) throw new Error("Recovery request was superseded.");
+          assertRecoveryTeachingProgress(landing.staged.plan, currentRecord, savedTeachingCases, result);
+        });
         if (!isCurrent()) return;
         if (agent.status === "DORMANT" || agent.restored !== "MATCHED") throw new Error("Agent checkpoint 与恢复记录不匹配。");
         const recoveredCase = restoredSession.current_cue_id ? agent.state.cueCases[restoredSession.current_cue_id] : undefined;

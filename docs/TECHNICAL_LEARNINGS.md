@@ -1981,3 +1981,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定/结果：补一条真实Controller/Host event builder→Runtime诊断与修订→Recovery捕获/JSON恢复→新Runtime重连→restoreCheckpointTeachingCase→当前追问的集成回归。正常路径本来正确，未做产品修复。
 - 验证：两段近500字USER原文、DISAGREED与门/游标/进度保留；恢复只发RECONNECT，诊断/修订spies、Policy、工具post为0，长期Memory适配器无事件；重复重连checkpoint不变。相关3文件91tests、TS通过，build及命令见[证据](validation/REVISED_DIAGNOSIS_RECOVERY.md)。
 - 限制：MemorySaver仅测试进程共享，不冒称真实SQLite/IndexedDB耐久或桌面刷新验收，未装载完整Host/iframe。fixture构造的三处问题不算产品red。没有真实Demo/模型/DB、依赖安装或服务；下一项仅小范围核实诊断产物已保存但head失败的恢复选择，不预设bug。
+
+
+## 2026-09-26：旧恢复点不能静默覆盖独立保存的新补充
+
+- 问题：教学artifact先保存、RuntimeHead后提交，后者失败时两份来源合法却不同步。真实Runtime C0→C1与内存保存/历史恢复链证明，Host合并旧checkpoint后revision/异议次数1/1变0/0；原数据未删，问题是展示和操作预算回退。
+- 决定：不改精确checkpoint契约、不直接用latest Graph。对当前CUE_PAUSED的合法同cue/候选case，比对revision/尝试预算；保存端领先则在Controller镜像之前拒绝接受，走Host既有DEGRADED，保留新展示、异议次数和原head。验收回调必须在镜像错误吞并catch之外，不能事后才发现回退。
+- 验证：partial_revision_restore默认配置复现红例后释放；主控接管实现。6文件129tests、TS/production build通过，强化Panel显示/按钮断言后目标2tests/TS通过；独立只读终审无must-fix。[证据](validation/PARTIAL_TEACHING_RECOVERY.md)。
+- 限制：Graph dispatch自身仍可能写checkpoint；该门不是跨cue/同版本内容的完整一致性校验，也不是自动修复未提交head。无真实SQLite/UI/Demo/模型或用户数据操作，普通恢复与基础回放保持；后续先核实未激活Recovery artifact能否按现有提交契约安全重试，不猜最新checkpoint。

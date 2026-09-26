@@ -2,6 +2,14 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：部分提交时禁止教学内容回退（2026-09-26）
+
+- 基线c5b6aa4 clean；主控有限goal拥有产品/docs，partial_revision_restore默认配置独占一个recovery测试，真实C0→C1及历史保存/旧head→重连复现后RELEASE。其测试明确内存append和head失败注入，不冒称完整SQLite/UI。
+- A1新产物revision/attempt1在旧checkpoint恢复后回0，原数据没被删除但显示/操作预算回退；A2保持精确恢复点，若当前已保存教学进度领先则在结果接受/镜像之前拒绝本次恢复，保存内容继续可读且报告冲突；不直接采用latest Graph、不倒扣预算或混合新case与旧Graph；A3正常/相等/旧产物/其他cue与所有权保持；A4相关tests/TS/build，独立窄审；A5架构/学习/证据与push。
+- 重点风险：Controller默认吞镜像错误，判定必须在该catch之前；不能先更新head再检测、不能凭COMPLETED确认状态就判冲突。生产范围为reconnect可选同步验收、Host已验证产物快照与窄进度比较，不改Graph/SQLite/schema。8分钟红例、20分钟修复、15分钟验证；无Demo/UI/网络模型/用户DB/服务，主控清理测试build。原锁屏A5与app子任务认证失败不重试。
+- 已完成：真实红例转绿，验收回调在镜像之前拒绝进度回退；当前已保存新case/thread保持，Panel不重开异议，原head/产物不变。正常/旧保存/纯确认状态不误阻。6文件129tests、TS/Web build通过；追加Panel断言后2目标tests/TS通过。partial_revision_restore只读终审无must-fix，所有权/进程RELEASE，主控集中diff复核。[证据](validation/PARTIAL_TEACHING_RECOVERY.md)。
+- 边界与衔接：本轮只拒绝不一致的教练同步，不自动恢复最新状态；Graph可写自身checkpoint，缺失case/跨cue/同revision差异未扩。下一项先核实已经保存但未激活的Recovery artifact是否可按既有提交契约安全重试，若无明确资格不猜latest Graph；原数据/基础播放保留。测试/build退出，commit/push后本轮释放。
+
 ## 已交付：修订诊断经Recovery重连后的追问（2026-09-26）
 
 - 基线22b4f5a clean；主控有限goal，独占recovery集成测试/必要窄修复/docs。核实原子任务仍401失败无写入，不重启或重复派发；其余本轮owner均RELEASE。

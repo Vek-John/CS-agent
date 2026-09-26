@@ -197,9 +197,10 @@ export class CoachAgentStage3Controller {
     return token === this.token && this.options.isLive(input) && this.adapter.isCurrent(input.generation);
   }
 
-  private dispatchSerial(event: CoachAgentEvent, options: { notifyAgentResult?: boolean } = {}): Promise<CoachAgentResult> {
+  private dispatchSerial(event: CoachAgentEvent, options: { notifyAgentResult?: boolean; validateResult?: (result: CoachAgentResult) => void } = {}): Promise<CoachAgentResult> {
     const next = this.lifecycleTail.then(async () => {
       const result = await this.options.dispatch(event);
+      options.validateResult?.(result);
       try {
         if (options.notifyAgentResult !== false) await this.options.onAgentResult?.(event, result);
       } catch {
@@ -877,9 +878,10 @@ export class CoachAgentStage3Controller {
   }
 
   /** Recovery uses the same serialized dispatch/result seam as live cues. */
-  reconnect(event: Extract<CoachAgentEvent, { type: "RECONNECT_REPLAY" }>): Promise<CoachAgentResult> {
+  reconnect(event: Extract<CoachAgentEvent, { type: "RECONNECT_REPLAY" }>, validateResult?: (result: CoachAgentResult) => void): Promise<CoachAgentResult> {
     this.bridgeLost();
-    return this.dispatchSerial(event);
+    // Recovery acceptance must precede optional checkpoint mirroring; unlike a mirror error, rejection is authoritative.
+    return this.dispatchSerial(event, { validateResult });
   }
 
   /** Adopt the already-reconciled paused cue without dispatching START_CUE again. */

@@ -23,6 +23,7 @@ import {
   createRecoverySessionIdentity,
   normalizeRecoveryAnalysis,
   restoreRecoveryArtifacts,
+  assertRecoveryTeachingProgress,
   isPreAgentRouteStartRecovery,
   mergePersistedToolResults,
   shouldReconnectRecoveryAgent,
@@ -683,10 +684,11 @@ it("reconnects a revised diagnosis checkpoint into the recovered paused Session 
     const revisionCalls = vi.spyOn(producer, "reviseTeachingDiagnosis");
     const runtimeB = createCoachAgentRuntime({ checkpointer: saver, policy });
     const dispatch = vi.fn((event: Parameters<typeof runtimeB.dispatch>[0]) => runtimeB.dispatch(event));
-    const resumed = new CoachAgentStage3Controller({ dispatch, post, bridgeAvailable: () => true, isLive: () => true });
+    const mirror = vi.fn();
+    const resumed = new CoachAgentStage3Controller({ dispatch, post, bridgeAvailable: () => true, isLive: () => true, onAgentResult: mirror });
     try {
       const reconnect = buildReconnectReplayEvent(record);
-      const agent = await resumed.reconnect(reconnect);
+      const agent = await resumed.reconnect(reconnect, result => assertRecoveryTeachingProgress(restored.plan, record, { [cue.id]: savedCase }, result));
       expect(agent.restored).toBe("MATCHED");
       expect(agent.state.cueCases[cue.id]).toEqual(savedCase);
       const landed = restoreCheckpointTeachingCase(restored.plan, restored.session, agent.state.cueCases[cue.id], agent.state.learningThreads[0]);
@@ -708,8 +710,151 @@ it("reconnects a revised diagnosis checkpoint into the recovered paused Session 
       expect(duplicate.state.cueCases[cue.id]).toEqual(savedCase);
       expect(duplicate.checkpoint.checkpointId).toBe(agent.checkpoint.checkpointId);
       expect(dispatch.mock.calls.map(([event]) => event.type)).toEqual(["RECONNECT_REPLAY", "RECONNECT_REPLAY"]);
+      expect(mirror).toHaveBeenCalledTimes(2);
       expect(diagnosisCalls).not.toHaveBeenCalled(); expect(revisionCalls).not.toHaveBeenCalled();
       expect(policy.calls).toHaveLength(0); expect(post).not.toHaveBeenCalled();
     } finally { resumed.dispose(); diagnosisCalls.mockRestore(); revisionCalls.mockRestore(); }
+  } finally { controller.dispose(); }
+});
+
+it("keeps saved revised teaching visible when its RuntimeHead commit fails before history reconnect", async () => {
+  const { createMemoryTestCheckpointSaver } = await import("../../../../libs/coach-agent/src/test-fixtures");
+  const { createCoachAgentRuntime, FakePolicyAdapter } = await import("@cs-coach/coach-agent");
+  const { reduceCoachingSession } = await import("@cs-coach/session");
+  const { CoachAgentStage3Controller } = await import("../coaching/coach-agent-stage3-controller");
+  const { buildStage3Identity } = await import("../coaching/coach-agent-stage3-host-adapter");
+  const { buildTeachingDiagnosisSubmissionEvent } = await import("../coaching/teaching-diagnosis-host");
+  const { buildCheckpointedRecoveryRecord, restoreCheckpointTeachingCase } = await import("./cs2d-session-recovery");
+  const { persistTeachingBeforeRuntimeHead } = await import("../playback/cs2d-playback-host");
+  const { restoreHistoryControlPlane } = await import("../review-history/history-restore-controller");
+  const { HistoryPersistenceController } = await import("../review-history/history-persistence-controller");
+  const input = fixture(), plan = input.analysis.review_plan, cue = plan.cues[0];
+  let session = reduceCoachingSession(plan, input.session, { type: "START" });
+  for (let step = 0; step < plan.segments.length + 2 && session.phase !== "PAUSED_FOR_COACHING"; step++) {
+    session = session.phase === "SKIPPING" ? reduceCoachingSession(plan, session, { type: "ADVANCE_SEGMENT" })
+      : reduceCoachingSession(plan, session, { type: "TICK", tick: Math.max(plan.segments[session.current_segment_index].end_tick, cue.outcome_end_tick) });
+  }
+  expect(session.current_cue_id).toBe(cue.id);
+  const saver = createMemoryTestCheckpointSaver(), policy = new FakePolicyAdapter({ failure: new Error("no visual Policy during recovery") });
+  const runtime = createCoachAgentRuntime({ checkpointer: saver, policy });
+  const post = vi.fn();
+  const controller = new CoachAgentStage3Controller({ dispatch: event => runtime.dispatch(event), post, bridgeAvailable: () => true, isLive: () => true });
+  const hostInput = { plan, routeState: input.routeState, cue, narration: input.narrationByCue[cue.id],
+    outcomeGate: session.outcome_completion!, currentSessionPhase: "PAUSED_FOR_COACHING" as const,
+    analysis: input.analysis, demoContentHash: HASH, selectedPlayerId: "dog", sessionId: input.identity.sessionId,
+    runId: input.identity.runId, generation: 1, tickRate: input.analysis.match_timeline.tick_rate,
+    evidence: { candidate: input.analysis.candidate_set.candidates.find(c => c.candidateId === cue.candidate_id),
+      material: input.analysis.candidate_set.materials.find(m => m.candidateId === cue.candidate_id) },
+  } satisfies Parameters<InstanceType<typeof CoachAgentStage3Controller>["synchronizeDiagnosis"]>[0];
+  const context = { plan, cue, timeline: input.analysis.match_timeline, selectedPlayerId: "dog",
+    material: input.analysis.candidate_set.materials.find(m => m.candidateId === cue.candidate_id) };
+  try {
+    expect(await controller.synchronizeDiagnosis(hostInput)).toBeDefined();
+    const identity = buildStage3Identity(hostInput);
+    const firstText = "原思路：没有看到敌人。";
+    const secondText = "新补充：听到了脚步但不确定来源。";
+    const reflection = { cueId: cue.id, rawText: firstText, selectedGoal: "OTHER" as const, source: "USER" as const, response: "ANSWERED" as const, limitations: [] };
+    const first = await runtime.dispatch(buildTeachingDiagnosisSubmissionEvent(context, reflection, { eventType: "SUBMIT_REFLECTION", eventId: "partial-reflection", identity }));
+    const firstCase = first.state.cueCases[cue.id];
+    expect(firstCase.verdict?.revision).toBe(0);
+    expect(firstCase.attemptBudget.disagreement).toBe(0);
+    session = restoreCheckpointTeachingCase(plan, session, firstCase, first.state.learningThreads[0]);
+    const record = SessionRecoveryRecordSchema.parse(buildCheckpointedRecoveryRecord({ ...input, plan, session, boundaryKind: "CUE_PAUSED", demoContentHash: HASH,
+      selectedPlayerId: "dog", agentCheckpointId: first.checkpoint.checkpointId }, {
+      checkpointId: first.checkpoint.checkpointId, activeCueId: first.state.activeCueId,
+      currentSessionPhase: first.state.currentSessionPhase, routeCursor: first.state.routeCursor, sessionStatus: first.state.sessionStatus,
+    }));
+    const artifacts: import("../review-history/history-restore-controller").StoredArtifact[] = [
+      { kind: "ANALYSIS_BUNDLE", key: "analysis", payload: input.analysis },
+      { kind: "CANDIDATE_SET", key: "candidates", payload: input.analysis.candidate_set },
+      { kind: "REVIEW_PLAN", key: "plan", payload: plan },
+      ...Object.entries(input.narrationByCue).map(([key, payload]) => ({ kind: "NARRATION_BUNDLE" as const, key, payload })),
+      { kind: "CUE_CASE", key: cue.id, revision: 1, payload: structuredClone(firstCase) },
+      { kind: "LEARNING_THREAD", key: first.state.learningThreads[0].threadId, revision: 5, payload: structuredClone(first.state.learningThreads[0]) },
+      { id: "confirmed-recovery", kind: "SESSION_RECOVERY", key: record.boundary.boundaryId, revision: 1, payload: record },
+    ];
+    const oldHead = { recoveryArtifactId: "confirmed-recovery", recoveryArtifactKey: record.boundary.boundaryId, recoveryArtifactRevision: 1,
+      sessionId: record.sessionId, runId: record.runId, demoContentHash: record.demoContentHash, selectedPlayerId: record.selectedPlayerId,
+      routeId: record.routeId, routeHash: record.routeHash, checkpointId: record.agentCheckpointId,
+      recoveryBoundary: record.boundary.kind, defaultRouteCursor: record.boundary.segmentIndex,
+      completedCueCount: record.cueProgress.completedCueIds.length, totalCueCount: plan.cues.length, currentCueId: cue.id };
+    const commitRuntimeHead = vi.fn(async () => { throw new Error("simulated head commit failure"); });
+    const persistence = new HistoryPersistenceController({
+      createReview: async () => ({ reviewId: "review-partial" }), startRevision: async () => ({ revisionId: "revision-partial" }),
+      appendArtifact: async (_reviewId, artifact) => { artifacts.push({ id: `saved-${artifacts.length}`, kind: artifact.artifactType as import("../review-history/history-restore-controller").StoredArtifact["kind"],
+        key: artifact.artifactKey, revision: artifact.artifactRevision, payload: structuredClone(artifact.payload) }); },
+      commitRuntimeHead, markFailed: async () => {},
+    });
+    persistence.adopt("review-partial", "revision-partial", "demo-managed");
+    const revised = await runtime.dispatch(buildTeachingDiagnosisSubmissionEvent(context, { ...reflection, rawText: secondText }, { eventType: "SUBMIT_DISAGREEMENT", eventId: "partial-disagreement", identity }));
+    const revisedCase = revised.state.cueCases[cue.id], revisedThread = revised.state.learningThreads[0];
+    expect(revisedCase.verdict?.revision).toBe(1);
+    expect(revisedCase.attemptBudget.disagreement).toBe(1);
+    const durability = await persistTeachingBeforeRuntimeHead({ interactionDurable: true,
+      persistDiagnosis: async () => {
+        await persistence.artifact("CUE_CASE", cue.id, revisedCase, "cue-case.v1", 2);
+        await persistence.artifact("DIAGNOSTIC_RESULT", revisedCase.diagnosticResult!.resultId, revisedCase.diagnosticResult, "diagnostic-result.v1");
+        await persistence.artifact("TRANSFER_RULE", revisedCase.transferRule!.ruleId, revisedCase.transferRule, "transfer-rule.v1", 2);
+        await persistence.artifact("LEARNING_THREAD", revisedThread.threadId, revisedThread, "learning-thread.v1", revisedThread.evidenceCueIds.length * 4 + 2);
+        return true;
+      },
+      // The teaching write succeeds; the exact old Recovery/head stays authoritative.
+      mirror: () => persistence.stableHead({ checkpointId: revised.checkpoint.checkpointId }),
+    });
+    expect(durability).toBe("MIRROR_FAILED"); expect(commitRuntimeHead).toHaveBeenCalledOnce();
+    const savedArtifacts = structuredClone(artifacts);
+    const control = restoreHistoryControlPlane({ review: { id: "review-partial", demoId: "demo-managed", title: "partial save", status: "IN_PROGRESS", selectedPlayerId: "dog" },
+      revision: { id: "revision-partial", status: "READY", artifactContractVersion: 2, routeId: record.routeId, routeHash: record.routeHash },
+      artifacts, runtimeHead: oldHead });
+    expect(control.missingArtifacts).toEqual([]);
+    expect(control.cueCases[cue.id]).toEqual(revisedCase);
+    expect(control.learningThreads).toEqual([revisedThread]);
+    expect(control.recoverySnapshot).toEqual(record);
+    const validated = validateStoredReviewArtifacts({ analysis: control.analysis, candidateSet: control.candidateSet, plan: control.plan,
+      narrationByCue: control.narrationByCue, cueCases: control.cueCases, learningThreads: control.learningThreads, summary: control.summary,
+      selectedPlayerId: "dog", demoContentHash: HASH, routeId: record.routeId, routeHash: record.routeHash });
+    // Confirmation status alone is not a newer diagnosis; older/equal saved projections do not block recovery.
+    expect(() => assertRecoveryTeachingProgress(plan, record, { [cue.id]: { ...firstCase, status: "COMPLETED" } }, { ...first, restored: "MATCHED" })).not.toThrow();
+    expect(() => assertRecoveryTeachingProgress(plan, record, { [cue.id]: firstCase }, { ...revised, restored: "MATCHED" })).not.toThrow();
+    expect(() => assertRecoveryTeachingProgress(plan, record, {}, { ...first, restored: "MATCHED" })).not.toThrow();
+    expect(() => assertRecoveryTeachingProgress(plan, record, { [cue.id]: { ...revisedCase, cueId: "other-cue" } }, { ...first, restored: "MATCHED" })).not.toThrow();
+    const restored = restoreRecoveryArtifacts(SessionRecoveryRecordSchema.parse(control.recoverySnapshot));
+    const runtimeB = createCoachAgentRuntime({ checkpointer: saver, policy });
+    const mirror = vi.fn(async () => persistence.stableHead({ checkpointId: "must-not-publish" }));
+    const reconnectController = new CoachAgentStage3Controller({ dispatch: event => runtimeB.dispatch(event), post,
+      bridgeAvailable: () => true, isLive: () => true, onAgentResult: mirror });
+    let displayedCases = validated.cueCases;
+    let displayedThreads = validated.learningThreads;
+    const accept = vi.fn((agent: Awaited<ReturnType<typeof runtimeB.dispatch>>) => {
+      const landed = restoreCheckpointTeachingCase(restored.plan, restored.session, agent.state.cueCases[cue.id], agent.state.learningThreads[0]);
+      displayedCases = { ...displayedCases, ...(landed.cue_cases ?? {}) };
+      displayedThreads = landed.learning_threads ? [...landed.learning_threads] : displayedThreads;
+    });
+    try {
+      const reconnect = buildReconnectReplayEvent(record);
+      await expect(reconnectController.reconnect(reconnect, agent => {
+        expect(agent.restored).toBe("MATCHED");
+        expect(agent.state.cueCases[cue.id]).toEqual(firstCase); // Still the exact confirmed checkpoint, never latest Graph.
+        assertRecoveryTeachingProgress(restored.plan, record, validated.cueCases, agent);
+      }).then(accept)).rejects.toThrow("已保存的补充比恢复点中的诊断更新");
+      expect(accept).not.toHaveBeenCalled(); expect(mirror).not.toHaveBeenCalled();
+      expect(commitRuntimeHead).toHaveBeenCalledOnce(); // Only the original failed write.
+      expect(displayedCases[cue.id]).toEqual(revisedCase);
+      expect(displayedCases[cue.id].attemptBudget.disagreement).toBe(1);
+      const { createElement } = await import("react");
+      const { renderToStaticMarkup } = await import("react-dom/server");
+      const { TeachingDiagnosisPanel } = await import("../../components/playback/teaching-diagnosis-panel");
+      const html = renderToStaticMarkup(createElement(TeachingDiagnosisPanel, { cue, decisionFacts: [], cueCase: displayedCases[cue.id],
+        hasTrustedDecisionContext: true, onSubmit() {}, onSkip() {}, onConfirm() {}, onDisagree() {} }));
+      expect(html).toContain(revisedCase.transferRule!.do);
+      expect(html).not.toContain("我不同意这个结论");
+      expect(displayedThreads).toEqual([revisedThread]);
+      expect(artifacts).toEqual(savedArtifacts);
+      expect(oldHead.checkpointId).toBe(first.checkpoint.checkpointId);
+      expect(policy.calls).toHaveLength(0); expect(post).not.toHaveBeenCalled();
+      // A superseded Host can reject before any mirror as well; rejection cannot be swallowed as an optional mirror failure.
+      await expect(reconnectController.reconnect(reconnect, () => { throw new Error("superseded fixture owner"); })).rejects.toThrow("superseded fixture owner");
+      expect(mirror).not.toHaveBeenCalled();
+    } finally { reconnectController.dispose(); }
   } finally { controller.dispose(); }
 });
