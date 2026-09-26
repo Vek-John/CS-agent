@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：不能把遗留annotation直接当作当前地图演示错误
+
+- 假设：Snapshot拒绝本人旧状态后，Adapter仍生成raw.state位置标注，可能引导地图到旧位置。
+- 实际链：正式REVIEW_UNCERTAINTY经Stage3和显式Stage2都受presentationPurpose门约束，当前只有ACTION_FACT_REPLAY，不开放地图工具；默认诊断严格排除annotation/callout/坐标。三种真实Adapter fixture均不能绕过此门，新鲜位置对照也保持原资格。
+- 行动：不修改生产或伪造focus制造失败；保留4项跨层回归及消费证据。未来开放地图事实展示时，必须先建立位置来源绑定，不能复用annotation存在性当可靠性证明。[验证记录](validation/ANNOTATION_CONSUMPTION.md)。
+- 限制：仅实际模块入口与合成输入，非浏览器绘制或旧历史全集认证。下一项有限检查工具选择摘要截断是否丢失讲解尾部限定，先核实实际Policy路径再决定，不扩无收益审查。
+
 ## 2026-09-26：Snapshot拒绝旧采样后，状态栏不能重新补回资源
 
 - 问题：Adapter已有正确Snapshot gate，不确定性WIN_RATE_DROP仍可保留教学cue；View最近旧行查找却绕过该结论，显示旧40HP/75甲/ak47/$1,234。普通DEATH/HP_CHANGE因缺独立上下文会被拒，不是UI复现。

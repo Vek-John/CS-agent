@@ -2,6 +2,14 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已核实：旧位置标注被当前工具资格门挡住（2026-09-26）
+
+- ID annotation-consumption，基线4d25954 clean；主控拥有必要实现/测试/docs，revision_semantics_review默认配置8分钟只读追踪实际Adapter→cue→Stage3/Stage2/诊断，不改文件或启动服务。
+- 目标/流程：缺失本人快照的不确定性cue，旧raw.state位置是否成为可展示的教学地图证据。A1实际消费和资格门；A2合法新鲜对照；A3仅真实误导才窄修，不改focus/compiledPlan制造失败；A4相关tests/TS/build、证据和行动结论push。
+- 风险/边界：现行判断focus可能已阻止所有地图工具，遗留字段本身不等于用户错误。先小fixture，不读Demo/用户库、不模型/UI/安装；默认教学门和旧已保存产物保持，15分钟调查上限，执行者清理自己的小探针与进程。未发现缺口则闭合假设并选择实际体验改进，不做无收益“防御性”重构。
+- 实际结果：stale/missing/fresh三种正式REVIEW_UNCERTAINTY都保留annotation，但真实Stage2/Stage3入口均无地图capability，诊断不传annotation/callout/坐标。显式Stage2 Host拒绝零能力结果。未发现当前可达误导，不改生产；新增4项跨层回归，59相关tests、TS及production build通过。[证据](validation/ANNOTATION_CONSUMPTION.md)。代理已RELEASE，无后台资源。
+- 下一独立线索：Stage3工具选择摘要对每段讲解截240字，但保留原引用；下一轮只小验证合法长讲解尾部条件是否在实际Policy输入中丢失，明确确定性/可选模型入口区别，不调用模型、不扩大摘要预算或重做全文审查。
+
 ## 已交付：状态栏旧采样误用修复（2026-09-26）
 
 - ID decision-state-freshness，基线9a8d6f5 clean；主控真实链/必要View改动及docs，revision_semantics_review默认配置独占新decision-state-freshness.test.ts，先调查不改生产。
