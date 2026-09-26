@@ -72,6 +72,19 @@ function disagreementEvent(eventId: string, rawText: string): CoachAgentEvent {
 }
 
 describe("Coach Agent teaching diagnosis bootstrap", () => {
+  it("revises a goal without rebuilding a phantom teammate belief from its rejected wording", async () => {
+    const runtime = createCoachAgentRuntime();
+    await runtime.dispatch(reflectionEvent("goal-context-original", { selectedGoal: "TRADE", rawText: "我想给队友补枪" }));
+    const submission = reflectionEvent("goal-context-revised", { selectedGoal: undefined, rawText: "不是给队友补枪，是保枪" });
+    const revised = await runtime.dispatch({ ...submission, type: "SUBMIT_DISAGREEMENT" } as CoachAgentEvent);
+    const result = revised.state.cueCases[cueId];
+    expect(result.hinge?.kind).toBe("RISK");
+    expect(result.claims.map(claim => claim.type)).toEqual(["GOAL"]);
+    expect(result.reflection?.selectedGoal).toBe("SAVE");
+    expect(result.previousReflection?.rawText).toBe("我想给队友补枪");
+    expect(result.attemptBudget.disagreement).toBe(1);
+  });
+
   it("revises two separately bounded long reflections through the real runtime without fallback or duplicate attempts", async () => {
     const policy = new FakePolicyAdapter({ failure: new Error("must not call Policy") });
     const runtime = createCoachAgentRuntime({ policy });

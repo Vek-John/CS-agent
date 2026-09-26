@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：纯目标与独立条件陈述分离（2026-09-26）
+
+- ID goal-context-separation；基线b0ea734 clean，主控拥有teaching-diagnosis.ts/tests/docs；revision_semantics_review默认配置8分钟只读风险/终审，无并写。
+- 目标：纯目标句（包括否定/疑问）不再重复产生敌情/队友/时间信念并劫持hinge；保留独立敌情、队友位置、窗口和执行陈述。A1初次及revision同反例红复现；A2只排除有限完整目标分句而不删除裸关键词，原文/来源保留；A3指定focus、肯定GOAL和独立事实条件保持；A4相关tests/TS/build、窄审与文档push。
+- 流程：USER描述→只用于分类的上下文投影→typed claim与GOAL→hinge；不引入schema/模型/完整NLP。风险为删裸词吞掉“补枪窗口”、删词留下“队友”假信念、旧修订重复伪信念；5分钟红例、12分钟实现、15分钟验证，无用户DB/Demo/服务，主控清进程，锁屏A5仍独立。
+
+- 结果：7个真实红例转绿；纯否定/疑问目标不再经信息/队友/时间/战术伪信念选错hinge。真实独立位置/敌情/补枪窗口/执行问题仍保留，指定focus/肯定目标保持；Graph一次修订也通过。独审发现旧自动TACTICAL_CONTEXT会把剩余“时间充足”仍当战术，增加omittedGoal门和旧混合反思回归后主控关闭。7文件132tests、TS/production build通过，reviewer只读RELEASE。[证据](validation/GOAL_CONTEXT_SEPARATION.md)。
+- 后继/限制：有限完整目标分句规则，不处理任意否定/指代，不重算保存结果。下一项已读explicitInformationContradiction：只检查decisionFact含“没有看到敌人”等文本，executeDiagnostic忽略claims就标CONTRADICTED。需先用“用户也说没看到”与“用户只想拿信息”核实是否误判为信念错误；不把缺少可见证据直接等同于假设错误，不扩大NLP/调用旧Jev集合。测试/build退出，push后释放；无用户DB/服务，UI A5独立保留。
+
 ## 已交付：自由目标描述的否定与歧义（2026-09-26）
 
 - ID reflection-goal-polarity，基线52ca299 clean；主控拥有teaching-diagnosis.ts/tests/docs；revision_semantics_review默认配置8分钟只读语义链，不并写。

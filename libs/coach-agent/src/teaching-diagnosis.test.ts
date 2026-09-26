@@ -678,3 +678,55 @@ describe("bounded free-text goal assertions", () => {
     expect(time.source).toBe("USER");
   });
 });
+
+
+describe("goal-only text is not an independent condition claim", () => {
+  it.each(["不是拿信息，是保枪", "不是给队友补枪，是保枪", "不是拖时间，是保枪", "不是执行战术，是保枪", "拿信息？"])("does not route a rejected/uncertain goal into a belief hinge: %s", rawText => {
+    const output = diagnoseCue(input({ focusCode: "POSITIONING", reflection: reflection({ selectedGoal: undefined, rawText }) }));
+    expect(output.cueCase.hinge?.kind).toBe("RISK");
+    expect(output.cueCase.claims.map(claim => claim.type)).toEqual(["GOAL"]);
+    expect(output.cueCase.reflection?.rawText).toBe(rawText);
+  });
+
+  it.each([
+    ["不是补枪，是保枪；队友在我后方", "TEAMMATE_BELIEF", "SYNC"],
+    ["不是拿信息，是保枪；我看到敌人在前面", "ENEMY_BELIEF", "INFORMATION"],
+    ["补枪窗口只有半秒", "TIME_BELIEF", "TRADE"],
+    ["队友无法补枪", "TEAMMATE_BELIEF", "TRADE"],
+    ["我的瞄准有问题", "EXECUTION_REPORT", "RISK"],
+  ])("retains independent assertions in %s", (rawText, claimType, kind) => {
+    const output = diagnoseCue(input({ focusCode: "POSITIONING", reflection: reflection({ selectedGoal: "SAVE", rawText }) }));
+    expect(output.cueCase.claims.some(claim => claim.type === claimType)).toBe(true);
+    expect(output.cueCase.hinge?.kind).toBe(kind);
+  });
+
+  it("keeps explicit focus and affirmative goals, and does not restore a former goal echo on revision", () => {
+    const rawText = "不是补枪，是保枪";
+    const focused = diagnoseCue(input({ focusCode: "TRADE", reflection: reflection({ selectedGoal: undefined, rawText }) }));
+    expect(focused.cueCase.hinge?.kind).toBe("TRADE");
+    const positive = diagnoseCue(input({ reflection: reflection({ selectedGoal: "EXECUTE_PLAN", rawText: "执行战术" }) }));
+    expect(positive.cueCase.hinge?.kind).toBe("SYNC");
+    const originalInput = input({ reflection: reflection({ selectedGoal: "TRADE", rawText: "我想给队友补枪" }) });
+    const original = diagnoseCue(originalInput);
+    const revised = reviseDiagnosis({ previous: original, input: originalInput,
+      disagreement: reflection({ selectedGoal: undefined, rawText }) });
+    expect(revised.cueCase.hinge?.kind).toBe("RISK");
+    expect(revised.cueCase.claims.map(claim => claim.type)).toEqual(["GOAL"]);
+    expect(revised.cueCase.previousReflection?.rawText).toBe(originalInput.reflection.rawText);
+    const oldTactical = input({ reflection: reflection({ selectedGoal: "EXECUTE_PLAN", rawText: "我想执行战术", questionType: "TACTICAL_CONTEXT" }) });
+    const tacticalRevision = reviseDiagnosis({ previous: diagnoseCue(oldTactical), input: oldTactical,
+      disagreement: reflection({ selectedGoal: undefined, rawText: "不是执行战术，是保枪" }) });
+    expect(tacticalRevision.cueCase.hinge?.kind).toBe("RISK");
+    expect(tacticalRevision.cueCase.claims.map(claim => claim.type)).toEqual(["GOAL"]);
+    const oldMixed = input({ reflection: reflection({ selectedGoal: "EXECUTE_PLAN", rawText: "我想执行战术，，时间还充足。", questionType: "TACTICAL_CONTEXT" }) });
+    const mixedRevision = reviseDiagnosis({ previous: diagnoseCue(oldMixed), input: oldMixed,
+      disagreement: reflection({ selectedGoal: undefined, rawText: "不是执行战术，是保枪" }) });
+    expect(mixedRevision.cueCase.claims.map(claim => claim.type)).toEqual(["GOAL", "TIME_BELIEF"]);
+    expect(mixedRevision.cueCase.hinge?.kind).toBe("TIMING");
+    const withObservation = input({ reflection: reflection({ selectedGoal: "GET_INFO", rawText: "想拿信息，我看到敌人在前面" }) });
+    const retained = reviseDiagnosis({ previous: diagnoseCue(withObservation), input: withObservation,
+      disagreement: reflection({ selectedGoal: undefined, rawText: "不是拿信息，是保枪" }) });
+    expect(retained.cueCase.claims.find(claim => claim.type === "ENEMY_BELIEF")?.content).toContain("看到敌人在前面");
+    expect(retained.cueCase.hinge?.kind).toBe("INFORMATION");
+  });
+});

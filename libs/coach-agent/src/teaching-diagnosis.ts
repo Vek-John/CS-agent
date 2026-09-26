@@ -274,7 +274,7 @@ type ReflectionQuestionContext = Pick<TeachingDiagnosisInput, "focusCode" | "cue
 
 function questionTypeFor(input: ReflectionQuestionContext | undefined, reflection: UserReflection): ReflectionQuestionType {
   if (reflection.questionType) return reflection.questionType;
-  const text = `${reflection.rawText ?? ""} ${input?.focusCode ?? input?.cue?.primary_focus_code ?? ""}`.toLowerCase();
+  const text = `${reflectionContextText(reflection.rawText)} ${input?.focusCode ?? input?.cue?.primary_focus_code ?? ""}`.toLowerCase();
   if (/队友|补枪|同步|跟上|叫我|语音|战术/.test(text)) return /语音|战术|叫我/.test(text) ? "TACTICAL_CONTEXT" : "TEAMMATE_EXPECTATION";
   if (/时间|来不及|时机|等/.test(text)) return "TIMING";
   if (/信息|听到|脚步|看到|报点|敌人/.test(text)) return "INFORMATION_JUDGMENT";
@@ -287,7 +287,7 @@ function disagreementQuestionType(reflection: UserReflection): ReflectionQuestio
   // Voice/fixed-play/teammate-coordination claims are outside parsed Demo
   // facts. Route those to sync for the one bounded disagreement pass; a
   // hearing-only claim remains an information judgment instead.
-  const text = reflection.rawText ?? "";
+  const text = reflectionContextText(reflection.rawText);
   if (/语音|叫我|报点|固定战术/.test(text)) return "TACTICAL_CONTEXT";
   if (/听到|脚步|声音|信息|看到|敌人/.test(text)) return "INFORMATION_JUDGMENT";
   return undefined;
@@ -338,20 +338,45 @@ function claim(
   });
 }
 
+const GOAL_TEXT_PATTERNS: readonly [ReflectionGoal, RegExp][] = [
+  ["TRADE", /补枪|帮队友|跟枪|\btrade\b/],
+  ["GET_INFO", /拿信息|探信息|找信息|摸信息|获取信息|\bget\s*info\b/],
+  ["TAKE_SPACE", /抢空间|拿空间|首杀|前压|\btake\s*space\b/],
+  ["DELAY", /拖时间|拖延|耗时间|\bdelay\b/],
+  ["ROTATE", /转点|转到|\brotate\b/],
+  ["SAVE", /保枪|保经济|\bsave\b/],
+  ["EXECUTE_PLAN", /执行战术|执行计划|按战术|\bexecute\b/],
+  ["MECHANICAL_ATTEMPT", /纯执行|压枪|瞄准|手滑|操作失误|\bmechanical\b/],
+];
+
+/** Only remove complete, limited goal expressions from the classifier view.
+ * Raw reflections and claim provenance are never rewritten. A remaining word
+ * such as window, position or inability keeps the whole contextual clause.
+ */
+function reflectionContext(rawText: string | undefined): { text: string; omittedGoal: boolean } {
+  let omittedGoal = false;
+  const text = boundedText(rawText).toLowerCase().split(/[，,。.!！?？;；\n]|而是|但是|但|所以|因此|不过/u)
+    .filter(clause => {
+      if (!clause.trim()) return false;
+      if (!GOAL_TEXT_PATTERNS.some(([, pattern]) => pattern.test(clause))) return true;
+      let remainder = clause;
+      for (const [, pattern] of GOAL_TEXT_PATTERNS) remainder = remainder.replace(new RegExp(pattern.source, "g"), "");
+      remainder = remainder.replace(/给队友|目标|目的|当时|原本|本来|其实|只是|并非|不是|没有|为了|想要|准备|打算|尝试|继续|不想|不要|而是|也想|还想|\b(?:i|do|not|want|to|was|trying|am)\b|[我是不没未想要去也还再能该吗呢么\s]/g, "");
+      if (remainder.length === 0) omittedGoal = true;
+      return remainder.length > 0;
+    }).join("，");
+  return { text, omittedGoal };
+}
+
+function reflectionContextText(rawText: string | undefined): string {
+  return reflectionContext(rawText).text;
+}
+
 function inferGoalFromText(rawText: string | undefined): ReflectionGoal | undefined {
   const text = boundedText(rawText).toLowerCase();
   if (!text) return undefined;
-  const patterns: readonly [ReflectionGoal, RegExp][] = [
-    ["TRADE", /补枪|帮队友|跟枪|\btrade\b/],
-    ["GET_INFO", /拿信息|探信息|找信息|摸信息|获取信息|\bget\s*info\b/],
-    ["TAKE_SPACE", /抢空间|拿空间|首杀|前压|\btake\s*space\b/],
-    ["DELAY", /拖时间|拖延|耗时间|\bdelay\b/],
-    ["ROTATE", /转点|转到|\brotate\b/],
-    ["SAVE", /保枪|保经济|\bsave\b/],
-    ["EXECUTE_PLAN", /执行战术|执行计划|按战术|\bexecute\b/],
-    ["MECHANICAL_ATTEMPT", /纯执行|压枪|瞄准|手滑|操作失误|\bmechanical\b/],
-  ];
-  if (!patterns.some(([, pattern]) => pattern.test(text))) return undefined;
+
+  if (!GOAL_TEXT_PATTERNS.some(([, pattern]) => pattern.test(text))) return undefined;
   // This is deliberately a conservative lexical classifier. Recognized but
   // uncertain/rejected goals return UNKNOWN, not undefined: revisions must
   // not silently restore the old goal when the user has just rejected it.
@@ -360,7 +385,7 @@ function inferGoalFromText(rawText: string | undefined): ReflectionGoal | undefi
   const negative = new Set<ReflectionGoal>();
   for (const clause of text.split(/[，,。.!！?？;；\n]|而是|但是|但|所以|因此|不过/u)) {
     const rejected = /不|没|未|并非|别|无意|放弃|\b(?:not|no|never|don['’]t|didn['’]t|wasn['’]t|can['’]t|won['’]t)\b/.test(clause);
-    for (const [goal, pattern] of patterns) {
+    for (const [goal, pattern] of GOAL_TEXT_PATTERNS) {
       if (pattern.test(clause)) (rejected ? negative : positive).add(goal);
     }
   }
@@ -377,11 +402,12 @@ export function buildUserClaims(rawReflection: UserReflection | unknown, input?:
     GET_INFO: "拿信息", TAKE_SPACE: "抢空间或首杀", TRADE: "给队友补枪", DELAY: "拖时间", ROTATE: "转点", SAVE: "保枪", EXECUTE_PLAN: "执行战术", MECHANICAL_ATTEMPT: "纯执行尝试", OTHER: "其他目标", UNKNOWN: "当时目标不确定",
   };
   claims.push(claim(reflection, "GOAL", `用户表示当时的目标是${goalLabels[goal]}。`, [], "goal"));
-  const text = boundedText(reflection.rawText).toLowerCase();
+  const context = reflectionContext(reflection.rawText);
+  const text = context.text;
   if (text && /队友|补枪|跟我|一起|同步/.test(text)) {
     claims.push(claim(reflection, "TEAMMATE_BELIEF", `用户补充：${boundedText(reflection.rawText)}。`, /语音|叫我|报点|战术/.test(text) ? ["Demo 无法验证队友语音、战术或是否确实同步。"] : [], "teammate"));
   }
-  if (reflection.questionType === "TACTICAL_CONTEXT" || (text && /语音|叫我|报点|战术|固定/.test(text))) {
+  if (text && ((reflection.questionType === "TACTICAL_CONTEXT" && !context.omittedGoal) || /语音|叫我|报点|战术|固定/.test(text))) {
     claims.push(claim(reflection, "TACTICAL_CONTEXT", `用户补充了可能影响决策的语音或战术背景：${boundedText(reflection.rawText)}。`, ["Demo 无法直接验证语音或固定战术内容。"], "context"));
   }
   if (text && /时间|来不及|秒|倒计时|快没/.test(text)) claims.push(claim(reflection, "TIME_BELIEF", `用户补充了当时的时间判断：${boundedText(reflection.rawText)}。`, ["Demo 时间轴可以验证剩余时间，但不能验证用户主观感受。"], "time"));
@@ -416,11 +442,11 @@ export function selectHingeCondition(input: TeachingDiagnosisInput, claims: read
   let conditionCode = "RISK_BUDGET";
   let statement = "在这次接触前，你是否有足够资源承受首个风险，并保留撤退或二次处理空间？";
   const hasClaim = (type: UserClaimType) => claims.some((claim) => claim.type === type);
-  if (claims.some((claim) => claim.type === "TACTICAL_CONTEXT")) {
+  if (goal === "EXECUTE_PLAN" || claims.some((claim) => claim.type === "TACTICAL_CONTEXT")) {
     kind = "SYNC";
     conditionCode = "TEAM_SYNC";
     statement = "用户补充的队友预期或战术/听觉信息是否成立，并且能在这次接触中改变可执行选项？";
-  } else if (goal === "TRADE" || /TRADE|补枪|同步/.test(`${focus} ${claims.map((claim) => claim.content).join(" ")}`)) {
+  } else if (goal === "TRADE" || /TRADE|补枪|同步/.test(`${focus} ${claims.filter(claim => claim.type === "TEAMMATE_BELIEF").map(claim => reflectionContextText(claim.content.replace(/^用户补充：/, ""))).join(" ")}`)) {
     kind = "TRADE";
     conditionCode = "TRADE_WINDOW";
     statement = "队友是否能在相近的接触窗口看到同一目标并及时响应？";
