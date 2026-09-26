@@ -177,6 +177,7 @@ import { HistoryPageRequests } from "../../lib/review-history/history-page-reque
 import { refreshHistoryPage } from "../../lib/review-history/refresh-history-page";
 import { HistoryRestoreController, HistoryRestoreError } from "../../lib/review-history/history-restore-controller";
 import { HistoryPersistenceController, type RuntimeHeadRetry } from "../../lib/review-history/history-persistence-controller";
+import { persistPreparedReviewStart, persistNarrationAfterStart } from "../../lib/review-history/prepared-start-persistence";
 import {
   ignoreHistoryAnalysisEvent,
   runHistoryAnalysisGeneration,
@@ -1869,15 +1870,14 @@ export function Cs2dPlaybackHost({
               narrationByCueRef.current = nextNarration;
               setNarrationByCue(nextNarration);
               const durabilityReady = historyDurabilityReadyRef.current;
-              if (durabilityReady) {
-                void durabilityReady
-                  .then(() => historyPersistenceControllerRef.current?.artifact(
-                    "NARRATION_BUNDLE",
-                    preparationEvent.cueId,
-                    preparationEvent.result.narration,
-                    "narration-bundle.v1",
-                  ))
-                  .catch(() => setHistoryError("讲解已生成，但保存到资料库失败。"));
+              const history = historyPersistenceControllerRef.current;
+              if (durabilityReady && history) {
+                const ownership = history.ownershipGeneration;
+                const isCurrentNarration = () => preparationEvent.generationId === String(generationRef.current)
+                  && history === historyPersistenceControllerRef.current && history.ownershipGeneration === ownership;
+                void persistNarrationAfterStart({ history, durability: durabilityReady, isCurrent: isCurrentNarration,
+                  cueId: preparationEvent.cueId, narration: preparationEvent.result.narration,
+                }).catch(() => { if (isCurrentNarration()) setHistoryError("讲解已生成，但保存到资料库失败。"); });
               }
               const finalPlan = planRef.current;
               const readyCount = Object.values(preparationEvent.routeState.readiness).filter((value) => value !== "PENDING").length;
@@ -1926,6 +1926,7 @@ export function Cs2dPlaybackHost({
                 identity.sessionId,
                 preparationEvent.routeState,
               );
+              const startNarrationByCue = narrationByCueRef.current;
               let record: SessionRecoveryRecord;
               try {
                 record = buildSessionRecoveryRecord({
@@ -1936,7 +1937,7 @@ export function Cs2dPlaybackHost({
                   routeState: preparationEvent.routeState,
                   session: initialSession,
                   boundaryKind: "ROUTE_START",
-                  narrationByCue: narrationByCueRef.current,
+                  narrationByCue: startNarrationByCue,
                   analysis: nextBundle,
                   agentCheckpointId: null,
                 });
@@ -1967,53 +1968,16 @@ export function Cs2dPlaybackHost({
                 acceptPersistedStart: (result) => { if (result) acceptRecoveryResult(result); },
                 mountSession: setSession,
               });
-              const durabilityCommit = (async () => {
-                if (desktopLibraryEnabled) {
-                  const history = historyPersistenceControllerRef.current!;
-                  await history.beginRevision({
-                    routeId: preparationEvent.plan.id,
-                    routeHash: preparationEvent.routeState.routeFingerprint,
-                    analysisVersion: nextBundle.metadata.adapter_version,
-                    graphVersion: COACH_AGENT_GRAPH_VERSION,
-                    promptVersion: preparationEvent.plan.director_decision_set?.manifest.promptVersion ?? preparationEvent.plan.generation_manifest.prompt_version,
-                    modelMetadata: {
-                      directorStatus: preparationEvent.plan.director_decision_set?.manifest.status ?? "UNKNOWN",
-                      directorProvider: preparationEvent.plan.director_decision_set?.manifest.provider ?? "UNKNOWN",
-                      ...(preparationEvent.plan.director_decision_set?.manifest.model
-                        ? { directorModel: preparationEvent.plan.director_decision_set.manifest.model }
-                        : {}),
-                      parserVersion: preparationEvent.plan.generation_manifest.parser_version,
-                      plannerVersion: preparationEvent.plan.planner_version,
-                    },
-                  });
-                  await history.artifact("ANALYSIS_BUNDLE", nextBundle.demo_id, JSON.parse(payload.bundleJson), "cs2d-analysis-bundle.v1");
-                  await history.artifact("CANDIDATE_SET", nextBundle.candidate_set.id, nextBundle.candidate_set as unknown as Record<string, unknown>, "candidate-set.v1");
-                  await history.artifact("REVIEW_PLAN", preparationEvent.plan.id, preparationEvent.plan, "review-plan.v1");
-                  for (const [cueId, narration] of Object.entries(narrationByCueRef.current)) {
-                    await history.artifact("NARRATION_BUNDLE", cueId, narration, "narration-bundle.v1");
-                  }
-                  await history.artifact("SESSION_RECOVERY", record.boundary.boundaryId, record as unknown as Record<string, unknown>, "session-recovery-record.v2");
-                  await history.stableHead({
-                    recoveryArtifactKey: record.boundary.boundaryId,
-                    sessionId: identity.sessionId,
-                    runId: identity.runId,
-                    demoContentHash: nextBundle.metadata.demo_content_hash ?? replayHashRef.current ?? "",
-                    selectedPlayerId: nextBundle.selected_steam_id,
-                    routeId: preparationEvent.plan.id,
-                    routeHash: preparationEvent.routeState.routeFingerprint,
-                    recoveryBoundary: "ROUTE_START",
-                    defaultRouteCursor: 0,
-                    completedCueCount: 0,
-                    totalCueCount: preparationEvent.routeState.selectedCueCount,
-                    stableProgress: {
-                      routeFrozen: true,
-                      readiness: preparationEvent.routeState.readiness,
-                    },
-                  });
-                }
-              })();
-              historyDurabilityReadyRef.current = durabilityCommit;
               const isCurrentStart = () => preparationEvent.generationId === String(generationRef.current);
+              const durabilityCommit = desktopLibraryEnabled
+                ? persistPreparedReviewStart({
+                    history: historyPersistenceControllerRef.current!, plan: preparationEvent.plan,
+                    routeState: preparationEvent.routeState, record, analysis: nextBundle,
+                    narrationByCue: startNarrationByCue, readRawAnalysis: () => JSON.parse(payload.bundleJson),
+                    isCurrent: isCurrentStart,
+                  })
+                : Promise.resolve();
+              historyDurabilityReadyRef.current = durabilityCommit;
               void settlePreparedCoachingStart({
                 durability: durabilityCommit, isCurrent: isCurrentStart,
                 saved: () => setReviewPreparationStatus({ phase: "READY", detail: "教学路线与可恢复起点已就绪。" }),

@@ -1,6 +1,15 @@
 # CS-Agent 持续优化任务板
 
-更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
+更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
+
+## 已交付：起点讲解保存按当时快照收敛（2026-09-27）
+
+- ID startup-narration-snapshot，基线1c9d060 clean；partial_revision_restore默认配置独占新prepared-start-persistence实际保存seam与测试，root拥有Host接线/docs/集成push。先实际Orchestrator4cue+deferred beginRevision，验证首两cue捕获后后两cue进入live map是否导致6次保存及额外启动等待。
+- A1先提最小接口及原等待证据；A2起点保存只用同record捕获的讲解，后续按原后台queue各存一次；A3必要起点artifact/head顺序不变、失败不head、旧owner不写新历史；A4相关tests/TS/build、root关键diff/日志和push。只在有实际收益时提取Host保存链，不造另一套harness规则。
+- 风险：captured readiness与完整Narration要匹配，record内summary不是完整bundle，不能拿summary替代存档；bulk解析保持原时机、不额外复制。5分钟smoke/15分钟任务、测试60秒、两次基础设施失败简化；合成小输入，存储stub，零Demo/用户DB/模型/GUI/安装，执行者清理进程，原A5独立。
+- 接口已确定：persistPreparedReviewStart同步捕获完整Narration entries并保持原保存顺序，Host的record与保存共用startNarrationByCue；已预备超过2项也全部保留。后台persistNarrationAfterStart绑定当时history/ownership/generation，完成等待后不重新取可能已切换的current Controller；root独占Host接线，agent独占模块与测试。
+- 交付：最终3个合法Adapter cue的真实Orchestrator序列，原起点等后1保存、Narration总4次；新起点HEAD先于后1、后1挂起时激活回调已执行、总3次。初始四轮夹具提名不足不是业务红，改用已可达三cue不放松教学门。8新增/100相关tests、TypeScript及build通过；root已读diff/日志，agentRELEASE，无进程/用户数据操作。[证据](validation/STARTUP_NARRATION_SNAPSHOT.md)。
+- 后继：当前NarrationBundle仍不在API小产物期限集合，首批必需讲解的fetch/body挂起仍可能阻塞起点；下一有限任务先核实该payload的真实上界与存储工作，若适合则复用既有期限，不给大Analysis/Candidate/Route套同一阈值，也不新增重复生成或自动重试。
 
 ## 已交付：准备阶段小控制记录的等待上限（2026-09-26）
 

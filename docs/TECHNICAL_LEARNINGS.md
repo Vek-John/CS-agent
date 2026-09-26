@@ -6,7 +6,14 @@
 > - 产品目标与范围以 [PRD.md](../PRD.md) 和 [MVP_SCOPE.md](../MVP_SCOPE.md) 为准。
 > - 本文记录「为什么做这个选择」「实际踩到了什么问题」「如何验证」；它可以解释架构，但不能覆盖架构契约。
 >
-> 最后更新：2026-09-26
+> 最后更新：2026-09-27
+
+## 2026-09-27：起点保存不能再读取后来扩大的讲解集合
+
+- 问题：起点record已捕获首批readiness，Host却在等待Revision/Analysis保存后才读取live Narration map，后续cue被首批和后台各保存一次，并延后激活。
+- 决策：record与保存共用同步捕获的完整讲解map，保留当时所有ready项；后cue仅后台保存。两条写入绑定Controller/ownership/generation，异步后不重新取已切换实例；原产物/head顺序及bulk读取时机保持。
+- 验证：三个合法Adapter cue的实际编排序列，写入4→3，后cue保存挂起不再阻挡激活回调；8新增/100相关tests、TS/build通过。初始四轮提名不足不是产品红，未放松教学资格。[记录](validation/STARTUP_NARRATION_SNAPSHOT.md)。
+- 限制：存储stub、合成Replay，未真实浏览器/SQLite或毫秒基准；下一步只核实首批NarrationBundle保存的等待期限适用性，不重复生成或改大文件阈值。
 
 ## 2026-09-26：准备好的会话仍可能卡在小记录创建
 
