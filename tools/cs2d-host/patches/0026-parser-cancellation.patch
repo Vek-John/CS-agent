@@ -1,0 +1,303 @@
+diff --git a/apps/app/src/viewer/ingest/useDemoParser.ts b/apps/app/src/viewer/ingest/useDemoParser.ts
+--- a/apps/app/src/viewer/ingest/useDemoParser.ts
++++ b/apps/app/src/viewer/ingest/useDemoParser.ts
+@@ -67,43 +67,75 @@
+     return worker
+   }
+ 
+-  /**
+-   * Decompresses the upload (`.gz` / `.zip` / `.zst`) in a dedicated worker that
+-   * is terminated as soon as it returns the raw `.dem`. This reclaims the
+-   * grow-only WASM memory the zstd decoder allocates (~640MB for a large demo)
+-   * before the parser runs, so big `.zst` demos don't exhaust the worker's
+-   * memory. Raw `.dem` uploads pass straight through.
+-   */
+-  function decompress(buffer: ArrayBuffer): Promise<ArrayBuffer> {
+-    const w = new Worker(new URL('./decompress.worker.ts', import.meta.url), {
+-      type: 'module',
++  let operation: AbortController | null = null
++
++  function cancel(): void {
++    const pending = operation
++    if (!pending) return
++    operation = null
++    pending.abort()
++    if (status.value === 'reading' || status.value === 'parsing') status.value = 'idle'
++  }
++
++  function isCurrent(current: AbortController): boolean {
++    return operation === current && !current.signal.aborted
++  }
++
++  function readFile(file: File, current: AbortController): Promise<ArrayBuffer> {
++    return new Promise((resolve, reject) => {
++      const cancelled = () => reject(new Error('PARSE_CANCELLED'))
++      current.signal.addEventListener('abort', cancelled, { once: true })
++      if (current.signal.aborted) { cancelled(); return }
++      // Reading a File is not abortable. Observe its eventual result without publishing it.
++      Promise.resolve().then(() => {
++        if (!isCurrent(current)) throw new Error('PARSE_CANCELLED')
++        return file.arrayBuffer()
++      }).then(resolve, reject).finally(() => {
++        current.signal.removeEventListener('abort', cancelled)
++      })
+     })
++  }
++
++  /** Each decompression worker owns one request and settles even when cancelled. */
++  function decompress(buffer: ArrayBuffer, current: AbortController): Promise<ArrayBuffer> {
++    const w = new Worker(new URL('./decompress.worker.ts', import.meta.url), { type: 'module' })
+     return new Promise<ArrayBuffer>((resolve, reject) => {
++      let settled = false
++      const finish = (error?: Error, value?: ArrayBuffer) => {
++        if (settled) return
++        settled = true
++        current.signal.removeEventListener('abort', cancelled)
++        w.onmessage = null
++        w.onerror = null
++        w.terminate()
++        if (error) reject(error)
++        else resolve(value!)
++      }
++      const cancelled = () => finish(new Error('PARSE_CANCELLED'))
+       w.onmessage = (e: MessageEvent<DecompressResponse>) => {
++        if (settled || !isCurrent(current)) return
+         const msg = e.data
+-        if (msg.type === 'progress') {
+-          setPhase(msg.phase)
+-          return
+-        }
+-        w.terminate()
+-        if (msg.ok) {
+-          rawSize.value = msg.rawSize
+-          resolve(msg.buffer)
+-        } else {
+-          reject(new Error(msg.error))
+-        }
+-      }
+-      // If the worker dies (e.g. the browser kills it for running out of memory
+-      // on a very large demo), surface it instead of hanging forever.
++        if (msg.type === 'progress') { setPhase(msg.phase); return }
++        if (msg.ok) { rawSize.value = msg.rawSize; finish(undefined, msg.buffer) }
++        else finish(new Error(msg.error))
++      }
+       w.onerror = (ev) => {
+-        w.terminate()
+-        reject(new Error(ev.message || 'O worker de descompressão falhou (memória?).'))
+-      }
+-      w.postMessage({ buffer }, [buffer])
++        if (settled || !isCurrent(current)) return
++        finish(new Error(ev.message || 'O worker de descompressão falhou (memória?).'))
++      }
++      current.signal.addEventListener('abort', cancelled, { once: true })
++      if (current.signal.aborted) { cancelled(); return }
++      try { w.postMessage({ buffer }, [buffer]) } catch (error) {
++        finish(error instanceof Error ? error : new Error(String(error)))
++      }
+     })
+   }
+ 
+-  async function parse(file: File): Promise<void> {
++  /** False is cancellation, distinct from a normally settled success or displayed error. */
++  async function parse(file: File): Promise<void | false> {
++    cancel()
++    const current = new AbortController()
++    operation = current
+     error.value = null
+     replay.value = null
+     voice.value = null
+@@ -116,78 +148,72 @@
+     parseTotalTicks.value = 0
+     status.value = 'reading'
+     setPhase('reading')
+-
+-    let buffer: ArrayBuffer
+     try {
+-      buffer = await file.arrayBuffer()
+-    } catch {
+-      error.value = '无法读取 Demo 文件，请重新选择后重试。'
+-      status.value = 'error'
+-      return
++      let buffer: ArrayBuffer
++      try { buffer = await readFile(file, current) } catch {
++        if (!isCurrent(current)) return false
++        error.value = '无法读取 Demo 文件，请重新选择后重试。'
++        status.value = 'error'
++        return
++      }
++      if (!isCurrent(current)) return false
++      status.value = 'parsing'
++      let raw: ArrayBuffer
++      try { raw = await decompress(buffer, current) } catch (err) {
++        if (!isCurrent(current)) return false
++        error.value = err instanceof Error ? err.message : String(err)
++        status.value = 'error'
++        return
++      }
++      if (!isCurrent(current)) return false
++      const w = ensureWorker()
++      await new Promise<void>((resolve) => {
++        let settled = false
++        const finish = () => {
++          if (settled) return
++          settled = true
++          current.signal.removeEventListener('abort', finish)
++          w.onmessage = null
++          w.onerror = null
++          w.terminate()
++          if (worker === w) worker = null
++          resolve()
++        }
++        w.onmessage = (e: MessageEvent<ParseResponse>) => {
++          if (settled || !isCurrent(current)) return
++          const msg = e.data
++          if (msg.type === 'progress') {
++            if (msg.phase === 'parsing' && msg.totalTicks) setParseTicks(msg.tick ?? 0, msg.totalTicks)
++            else setPhase(msg.phase)
++            return
++          }
++          if (msg.ok) {
++            replay.value = msg.replay as Replay
++            voice.value = msg.voice
++            demoContentHash.value = msg.demoContentHash
++            hashLatencyMs.value = msg.hashLatencyMs
++            progress.value = 1
++            status.value = 'done'
++          } else { error.value = msg.error; status.value = 'error' }
++          finish()
++        }
++        w.onerror = (ev) => {
++          if (settled || !isCurrent(current)) return
++          error.value = ev.message || 'O worker de parsing falhou (memória?).'
++          status.value = 'error'
++          finish()
++        }
++        current.signal.addEventListener('abort', finish, { once: true })
++        if (current.signal.aborted) { finish(); return }
++        try { w.postMessage({ buffer: raw, frameRate: 8 }, [raw]) } catch (err) {
++          if (isCurrent(current)) { error.value = err instanceof Error ? err.message : String(err); status.value = 'error' }
++          finish()
++        }
++      })
++      if (!isCurrent(current)) return false
++    } finally {
++      if (operation === current) operation = null
+     }
+-    status.value = 'parsing'
+-
+-    let raw: ArrayBuffer
+-    try {
+-      // Decompress first in a throwaway worker, then use a separate parser
+-      // worker so the zstd decoder's heap never overlaps the parser's heap.
+-      raw = await decompress(buffer)
+-    } catch (err) {
+-      error.value = err instanceof Error ? err.message : String(err)
+-      status.value = 'error'
+-      return
+-    }
+-
+-    const w = ensureWorker()
+-
+-    await new Promise<void>((resolve) => {
+-      let settled = false
+-      const finish = () => {
+-        if (settled) return
+-        settled = true
+-        w.onmessage = null
+-        w.onerror = null
+-        w.terminate()
+-        if (worker === w) worker = null
+-        resolve()
+-      }
+-      w.onmessage = (e: MessageEvent<ParseResponse>) => {
+-        if (settled) return
+-        const msg = e.data
+-        if (msg.type === 'progress') {
+-          if (msg.phase === 'parsing' && msg.totalTicks) {
+-            setParseTicks(msg.tick ?? 0, msg.totalTicks)
+-          } else {
+-            setPhase(msg.phase)
+-          }
+-          return
+-        }
+-        if (msg.ok) {
+-          replay.value = msg.replay as Replay
+-          voice.value = msg.voice
+-          demoContentHash.value = msg.demoContentHash
+-          hashLatencyMs.value = msg.hashLatencyMs
+-          progress.value = 1
+-          status.value = 'done'
+-        } else {
+-          error.value = msg.error
+-          status.value = 'error'
+-        }
+-        // The received Replay/voice buffers now belong to this page. Release
+-        // the parser's grow-only WASM heap while keeping those results usable.
+-        finish()
+-      }
+-      // A worker crash (e.g. out-of-memory on a huge demo) would otherwise leave
+-      // the UI stuck on "parsing" forever — surface it as an error instead.
+-      w.onerror = (ev) => {
+-        if (settled) return
+-        error.value = ev.message || 'O worker de parsing falhou (memória?).'
+-        status.value = 'error'
+-        finish()
+-      }
+-      // Transfer the buffer (zero-copy) to the worker.
+-      w.postMessage({ buffer: raw, frameRate: 8 }, [raw])
+-    })
+   }
+ 
+   /**
+@@ -200,6 +226,7 @@
+     fileName: string
+     fileSize?: number
+   }): void {
++    cancel()
+     error.value = null
+     replay.value = entry.replay
+     voice.value = entry.voice
+@@ -211,6 +238,7 @@
+   }
+ 
+   function reset() {
++    cancel()
+     status.value = 'idle'
+     phase.value = 'reading'
+     progress.value = 0
+@@ -227,6 +255,7 @@
+   }
+ 
+   onUnmounted(() => {
++    cancel()
+     worker?.terminate()
+     worker = null
+   })
+@@ -246,6 +275,7 @@
+     parseTick,
+     parseTotalTicks,
+     parse,
++    cancel,
+     hydrate,
+     reset,
+   }
+diff --git a/apps/app/src/viewer/DemoAnalyzerView.vue b/apps/app/src/viewer/DemoAnalyzerView.vue
+--- a/apps/app/src/viewer/DemoAnalyzerView.vue
++++ b/apps/app/src/viewer/DemoAnalyzerView.vue
+@@ -72,6 +72,7 @@
+ 
+ function beginManagedLoad() {
+   managedLoadGeneration += 1
++  parser.cancel()
+   managedReadyGeneration = -1
+   managedLoadAbort?.abort()
+   managedLoadAbort = new AbortController()
+@@ -870,7 +871,7 @@
+     parser.reset()
+     return
+   }
+-  await parser.parse(file)
++  if (await parser.parse(file) === false) return
+   if (managedLibraryMode.value) return
+   // New parse done: save to local history and open via the URL (with id).
+   if (parser.status.value === 'done' && parser.replay.value) {

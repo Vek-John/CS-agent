@@ -8,6 +8,12 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：取消必须结算调用者，而不只是终止Worker
+
+- 问题：beginManagedLoad只取消传输/胜率Worker，旧parser.parse仍占据managedParseTail；单纯terminate也不会自动resolve其Promise。另一个可达风险是hydrate后旧非managed handleFile从共享refs误存新Replay。
+- 决策：0026每parse拥有独立取消controller，各读取/解压/Parser阶段结算并拒绝旧owner回调；cancel只影响pending，不清已完成Replay/voice/hash。parse取消返回false，成功/错误保留void，handleFile仅false早退；managed仍用原代际门。File读取已开始后只能忽略晚结果，同栈尚未启动则不再启动IO。
+- 验证：实际managed tail阻塞红→绿，11新增/60相关tests，root独立复查、两端TS/build及benchmark小smoke通过。[记录](validation/PARSER_CANCELLATION.md)。纯source/FakeWorker，无真实WASM取消、GUI或大文件等待测量；没有改变DB/VALIDATE门或泛化archive/history异步路径。
+
 ## 2026-09-27：一次性验证的超时不应触发第二次提交
 
 - 问题：Viewer finalize fetch/json无期限；READY异常又用同token提交CORRUPT，服务端却在写入前已消费令牌。不能通过重复提交猜测第一次是否生效。

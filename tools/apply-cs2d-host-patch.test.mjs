@@ -38,7 +38,9 @@ describe("cs2d patched checkout seam", () => {
     expect(patch).toMatch(/pause: \(\) => \{[\s\S]*?emitHostPlaybackState\(\)/);
     expect(patch).toMatch(/seekCanonicalTick: \(tick\) => \{[\s\S]*?emitHostPlaybackState\(\)/);
     expect(patch).toMatch(/stopHostBridge = listenForPlaybackCommands[\s\S]*?void nextTick\(emitHostPlaybackState\)/);
-    expect(patch).not.toMatch(/^\+\s*(?:const|let|await|return).*file\.arrayBuffer\(\)/m);
+    // File byte ownership remains in useDemoParser, never the Viewer controller.
+    const viewerPatches = patch.split(/(?=^diff --git )/m).filter(section => section.split("\n")[0].includes("DemoAnalyzerView.vue")).join("\n");
+    expect(viewerPatches).not.toMatch(/^\+\s*(?:const|let|await|return).*file\.arrayBuffer\(\)/m);
     expect(patch).toMatch(/managedLoadAbort\?\.abort\(\)/);
     expect(patch).toMatch(/managedParseTail[\s\S]*assertManagedLoadCurrent\(generation\)/);
     expect(patch).toMatch(/if \(managedLibraryMode\.value\) return/);

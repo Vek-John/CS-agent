@@ -52,7 +52,7 @@ async function benchmark(input) {
   }
   const counters = { read: 0, parse: 0, digest: 0, flush: 0 };
   let parseTimings;
-  const parser = { status: { value: 'idle' }, replay: { value: null }, voice: { value: null }, demoContentHash: { value: null }, hashLatencyMs: { value: null }, fileName: { value: 'benchmark.dem' },
+  const parser = { cancel() {}, status: { value: 'idle' }, replay: { value: null }, voice: { value: null }, demoContentHash: { value: null }, hashLatencyMs: { value: null }, fileName: { value: 'benchmark.dem' },
     async parse(selectedFile) {
       counters.parse++;
       parser.replay.value = null; parser.status.value = 'parsing';

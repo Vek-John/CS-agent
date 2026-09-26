@@ -489,6 +489,7 @@ flowchart LR
 Viewer的VALIDATE确认小POST对fetch与响应JSON使用共同20秒期限，不约束Demo传输或WASM解析；每个返回的validationToken在客户端开始提交时即弃用，不因结果未知自动再发READY或CORRUPT。迟到结果不得发布导入成功/REPLAY_READY；超时只表示客户端结果未确认，不能推断服务端撤销。解析先失败时可使用尚未提交的token做一次有界失败收敛，旧加载的结果仍受原代际门约束。
 同一Viewer页内，RESTORE可复用当前加载代际已成功就绪且demoId/byteSize/contentHash均匹配的Parser Replay。必须仍完成新的READ capability请求、响应与长度检查，并对新读body重新SHA-256校验；异步完成时重核代际、Replay引用、done与hash，失败不能发布缓存成功。复用仅节省Parser/Replay重建，不省授权或文件读取；其他模式或缺少可信hash沿冷解析。切换时清选人并等待Vue卸载旧舞台，再绑定新requestId/mode发REPLAY_READY，仍经原玩家/舞台ACK恢复门，不持久化额外Replay缓存。
 Parser Worker最终成功/失败消息或error处理完成后终止对应实例，以解除常驻WASM资源；进度消息不终止。完成门先失效旧回调，清理只作用于捕获的Worker，不能影响后继请求。已交接到页面的Replay、voice与hash继续供播放/恢复使用；下一次冷解析重建Worker，同页温恢复不依赖该Worker存活。
+切换managed Demo先推进加载代际并取消当前解析操作，使原parse调用结算、串行tail可以继续；取消必须覆盖读取/解压/Parser等待，而非只terminate Worker。每次parse拥有独立取消身份，迟到回调不得更新后继状态；已开始的File读取可继续底层IO，但不能再被消费。cancel/reset/hydrate/unmount均结束pending操作，完成后的Replay/voice/hash不被单独cancel清除。取消返回false供非managed导入停止旧保存/导航，成功与显示错误维持原void结算；managed继续原代际/hash/READY检查。
 
 当前 Adapter 仍可用确定性规则生成兼容的候选 ReviewPlan，作为 Director 尚未完全接入时的回退；目标流程必须通过 SceneIndex、Teaching Director 和 PlanCompiler 生成正式 ReviewPlan。两条路径共享同一 Replay、canonical tick、Observation 和校验器。
 

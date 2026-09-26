@@ -2,6 +2,16 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：切换Demo时结算旧解析（2026-09-27）
+
+- ID parser-cancellation，基线8406814 clean；partial_revision_restore默认配置独占0026、上游Parser/Viewer对应patch、registry及必要小测试/stub；root独占docs、最终审查/两端TS/build/commit push。唯一代码写入者复用7f2b，不改其他checkout。目标为换文件时旧read/decompress/parse立即可结算取消，新managed串行tail能继续；完成后的Replay/voice/hash保留，温恢复不被cancel清空。
+- A1实际composable+Viewer tail小harness复现等待；A2每解析独立操作owner、可settle的cancel，beginManagedLoad代际推进后接入；A3各阶段取消/迟到回调/下一次解析/reset/hydrate/unmount，原读失败/worker释放/温恢复/VALIDATE保持；A4相关tests、两端TS/build、root独立代码复查后push。禁止只terminate Worker却悬空Promise，也不丢串行/hash/READY门。
+- 接口决定：parse仅取消时返回false，成功/失败保留原void；非managed handleFile收到false即退出，防止hydrate取消旧parse后旧流程拿新Replay写入recent/导航。managed parseManagedFile仍以原await后代际门识别旧请求，不另造Viewer全局generation。root已确认该最小范围，执行者补实际函数回归。
+- 风险：File.arrayBuffer不能物理中止，必须提前结算操作且忽略迟到，不声称磁盘IO已取消；Worker取消只清对应owner。非managed handleFile恢复后读取共享状态与hydrate交错需核实最小门。5分钟接口/红测试检查、15分钟有限实现，测试60秒，两次同设施失败即简化；纯小fixture/FakeWorker，无大Demo/用户DB/GUI/模型/安装，执行者清理测试，root清理build。沿现有emil/apple反馈，无新布局/动画。
+
+- 交付：实际managed tail原oldSettled=false红例→旧parse取消结算、新Worker启动；新增11/总60相关tests通过。read/decompress/parser、迟到成功/错误/progress、reset/hydrate/unmount、已完成warm数据及旧非managed不写recent/不导航覆盖；同栈立即cancel不开始File IO。root读源码/diff/log独立复查，两端TS/build和成本工具小smoke通过。0025→0026隔离升级/再复用通过，空upstream11显式skip不计通过。旧静态arrayBuffer门已限到Viewer控制面，managed bypass精确接受取消早退；0022/23仅以0026完整reverse作已覆盖凭证。[记录](validation/PARSER_CANCELLATION.md)。执行者RELEASE，所有测试/build/临时资源清理。
+- 下一有限目标：Parser的ensureWorker构造位于读取/解压错误catch之外；若Worker启动同步抛错，可能遗留parsing状态。先用构造异常小例核实真实入口能否结算和重试，再补必要局部错误处理，不拓展为取消机制重构或重复大Demo测试。
+
 ## 已交付：解析验证确认有界且只提交一次（2026-09-27）
 
 - ID validation-deadline，基线4a4bf2a clean；root独占0025/registry/Host timeout反馈/新实际Viewer函数测试/docs，partial_revision_restore默认5分钟预检与3分钟终审只读。目标为解析成功→VALIDATE确认fetch/body最长20秒→成功才ready，否则明确未确认/重选；A1真实函数两类挂起红，A2单期限与每token单尝试，A3迟到/旧代际/CORRUPT清理/协议拒绝保持，A4相关tests/两端TS/build及窄审push。

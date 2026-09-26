@@ -16,7 +16,7 @@ const digest = async body => Array.from(new Uint8Array(await webcrypto.subtle.di
 async function harness() {
   const body = new Blob([bytes]); const hash = await digest(body);
   const replay = { players: [{ steamId: 'player' }], rounds: [] };
-  const parser = { status: { value: 'idle' }, replay: { value: null }, demoContentHash: { value: null }, hashLatencyMs: { value: 1 }, fileName: { value: 'match.dem' }, parse: vi.fn(async file => { parser.status.value='done'; parser.replay.value=replay; parser.demoContentHash.value=await digest(file); }) };
+  const parser = { cancel() {}, status: { value: 'idle' }, replay: { value: null }, demoContentHash: { value: null }, hashLatencyMs: { value: 1 }, fileName: { value: 'match.dem' }, parse: vi.fn(async file => { parser.status.value='done'; parser.replay.value=replay; parser.demoContentHash.value=await digest(file); }) };
   const result = { demoId: 'demo', contentHash: hash, originalFilename: 'match.dem', byteSize: body.size, deduplicated: true };
   const command = { ...result, requestId: 'restore', capabilityToken: 'fresh-read', mode: 'RESTORE' };
   const events=[]; const stages=[];
