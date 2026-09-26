@@ -2,6 +2,18 @@
 
 更新时间：2026-09-27。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：真实路线默认工具选择（2026-09-27）
+
+- ID real-route-default-policy，基线58e0535 clean，7f2b实际checkout；partial_revision_restore默认配置独占有界probe脚本及.local-data小摘要，root独占docs和最终复查/checks/push。既有guided-lifecycle摘要只证明no-visual路径（显式禁止Policy），real-cue-resources仅局部投影，不能回答自然默认工具选择；不复用它们伪称当前完整Replay消费。
+- A1先小smoke；A2只读原主目录已授权60,601,900B test_demo、目标既有玩家，必要一次8fps WASM parse→当前Adapter/真实讲解/冻结route/默认Runtime；输出匿名cue ordinal/focus/assessment/引用计数/合法工具/实际RULE或Policy/FINISH与policyCalls。A3按源码解释事实门、汇总可执行下一步；不放低门制造SELECT，不预设产品bug。零CS-Net/Jev/网络/SQLite/UI调用，原始Replay不出child，普通identity从同次读取计算，不另做哈希审计。
+- 风险：同步WASM须外层120秒kill，单child 3GiB堆/input≤128MiB，stdout≤64KiB且错误仅代码，不回传原身份/坐标/讲解正文。15分钟有限任务、5分钟smoke，同设施两失败简化；禁止重复正式parse刷结果，root不并发build，执行者负责child/timer退出后RELEASE。验证后再相关TS/build/push。
+- 已核实源码：当前focus只有ACTION_FACT_REPLAY映射，零能力直接结束，单能力通过确定性合法性判断后source RULE/policyCalls0，多能力才调用PolicyAdapter。Runtime缺省deterministic，不能将工具执行数写成模型参与数。
+
+
+- 交付：smoke后唯一真实run读/parse各1次（60,601,900B，parse7567ms/总7813ms），9回合/51候选/2cue。第一段actionRefs0→能力0→FINISH，第二段actionRefs1→唯一慢放→RULE；两段REVIEW_UNCERTAINTY/INSUFFICIENT_EVIDENCE，policyCalls/fetch均0。不从旧44/4数量推断回归，不为触发模型制造多能力。[匿名结果与结论](validation/REAL_ROUTE_DEFAULT_POLICY.md)。
+- root审查有界parent/child、实际默认Runtime和事实门，并补START scope匹配断言，仅smoke复验，不重复正式parse。19相关tests、probe专项TS、两端TS/build通过；执行者RELEASE，进程/timer清理，无产品行为改动。真实输入为原主目录既有test_demo及指定玩家，返回只枚举/计数；Viewer ACK和Session推进明确为harness驱动。
+- 下一有限目标（action-fact-coverage）：无独立动作引用不等于玩家没有动作。先查当前action生成器覆盖哪些直接可知事实、哪些候选只保留结果；从源码与现有小fixture找有实质收益的覆盖缺口，只有原始事实/玩家/时间/引用绑定都充分才考虑补充。不重复正式Demo parse、Jev拒判或UI矩阵，不为提高工具调用率造动作/放低门。
+
 ## 已交付：动作回放完成反馈（2026-09-27）
 
 - ID viewer-action-completion-feedback，基线ccd4a3c clean；root独占0031/registry/docs和验证/push，前执行者均RELEASE，无委派。既有实际IAB截图证实ACK成功、返回decision暂停后banner仍“正在回到决策点”；只在既有RETURNING且已到decision的完成分支改为“已回到决策点”。沿已启用emil/apple反馈语义，不改布局/动画/暂停/终点/ACK条件。

@@ -1,0 +1,61 @@
+{
+  "status": "PASSED",
+  "source": "REAL_DEMO",
+  "demoBytes": 60601900,
+  "demoReads": 1,
+  "parsePasses": 1,
+  "parseMs": 7567,
+  "rounds": 9,
+  "candidates": 51,
+  "cues": 2,
+  "winrateStatus": "UNAVAILABLE",
+  "networkCalls": 0,
+  "defaultAdapter": "DETERMINISTIC",
+  "ruleSelections": 1,
+  "policyCalls": 0,
+  "finishCues": 1,
+  "mockViewerAcks": 1,
+  "rows": [
+    {
+      "ordinal": 1,
+      "focus": "REVIEW_UNCERTAINTY",
+      "assessment": "INSUFFICIENT_EVIDENCE",
+      "actionRefs": 0,
+      "evidenceRefs": 2,
+      "decisionRefs": 6,
+      "legalCapabilities": [],
+      "source": "FINISH",
+      "selectedTool": null,
+      "purpose": null,
+      "rationaleCode": null,
+      "rationaleAvailability": "NOT_RETAINED_OR_NOT_CALLED",
+      "policyCalls": 0,
+      "runStatus": "CUE_COMPLETED"
+    },
+    {
+      "ordinal": 2,
+      "focus": "REVIEW_UNCERTAINTY",
+      "assessment": "INSUFFICIENT_EVIDENCE",
+      "actionRefs": 1,
+      "evidenceRefs": 2,
+      "decisionRefs": 5,
+      "legalCapabilities": [
+        {
+          "tool": "REPLAY_CUE_SLOW",
+          "purpose": "ACTION_FACT_REPLAY",
+          "evidenceRefCount": 10
+        }
+      ],
+      "source": "RULE",
+      "selectedTool": "REPLAY_CUE_SLOW",
+      "purpose": "ACTION_FACT_REPLAY",
+      "rationaleCode": null,
+      "rationaleAvailability": "NOT_RETAINED_OR_NOT_CALLED",
+      "policyCalls": 0,
+      "runStatus": "WAITING_TOOL"
+    }
+  ],
+  "totalMs": 7813,
+  "limitation": "Real Demo parsing and actual Adapter/default Runtime. Session ticks and successful Viewer ACKs are harness-driven, not rendering. Runtime source MODEL denotes the policy-adapter branch, not proof of a model request. No rationale retained by Runtime; no professional judgment quality evaluation.",
+  "implementationBase": "58e0535"
+}

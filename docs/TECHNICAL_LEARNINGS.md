@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：真实工具选择不等于模型决策
+
+- 一次授权60.6MB Demo解析后，当前Adapter产生51候选/2cue：两者均保持REVIEW_UNCERTAINTY/INSUFFICIENT_EVIDENCE。第一段没有独立动作引用，合法能力0→FINISH；第二段有1条合法动作引用，唯一慢放能力→RULE。policyCalls与fetch均0。
+- 解释：当前目的映射只开放ACTION_FACT_REPLAY；单能力Graph直接规则选择，不能把工具调用数或Runtime默认入口称为模型参与/专业判断提高。Runtime不保留rationale则输出null，不重跑函数制造“实际理由”。
+- 行动：保留无动作依据时的不演示，不因旧44/4与当前51/2数量不同擅自放宽门。下一项先核实动作事实覆盖范围，而非制造多能力触发Policy。[证据](validation/REAL_ROUTE_DEFAULT_POLICY.md)。
+- 限制：Session时钟/Viewer ACK为harness驱动，真实播放另有小场景证据；无模型/SQLite/GUI，本次不是整场端到端或统计质量评估。原始Replay未离开child，正式parse只一次，进程/期限资源清理。
+
 ## 2026-09-27：完成反馈必须与已确认状态一致
 
 - 实际IAB两次观察到动作已经完成、返回decision并暂停，Viewer仍显示“正在回到决策点”。0031仅把同一完成分支文案改为“已回到决策点”，不改时钟、返回条件或ACK。
