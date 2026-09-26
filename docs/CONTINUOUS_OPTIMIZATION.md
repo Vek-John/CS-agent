@@ -8,6 +8,16 @@
 
 
 
+
+## 已交付：基础血量未知显示（2026-09-27）
+
+- ID baseline-health-display，基线a79bc81 clean，7f2b真实树；root独占View/窄测试/docs/验证与push，无委派，其他owner均RELEASE。A1重建真实三段View核对snapshot未知/冲突和missing字段；A2成立则仅health数值可知门，未知明确展示“血量未知”，保留其他chips；A3已知0与legacy、SSR真实StatusList及相关tests/两端TS/build后push。
+- 沿已读emil/apple状态反馈和Next客户端边界，不改布局/动画；15分钟小任务，小合成输入不冒称真实Demo。无Parser/模型/用户库/安装/发布，root负责全部进程清理；不扩大资源矩阵，既有问答来源门保持。
+
+
+- 交付：7个实际View回归由红转绿，未知/冲突/缺失/非法值显示“血量未知”，保留真实0和其他chips；4文件112tests及两端TS/build通过。真实StatusList SSR+生产status CSS在IAB小页核实40 HP/未知/0 HP，340px内容容器无挤压；未声称完整Host/native A5。root集中diff审查后清理tab、4323server和构建进程，无模型/用户数据。
+- 下一有限目标 baseline-armor-display：已见View对armor/has_helmet仍直读raw生成“没甲/头甲/甲”。一次用同一小View核实护甲数值及头盔已知性组合，成立才收窄这组显示，不拆成多轮单字段检查、不扩展整场或Parser矩阵；其余播放/问答门保持。
+
 ## 已交付：基础路线血量追问（2026-09-27）
 
 - ID baseline-health-question，基线f9714a5 clean，7f2b实际树；partial_revision_restore默认配置独占resource-source/questions及窄测试，Host仅questionInput传真实health chip文本；root docs/契约/最终检查与push，无其他活动写入者。A1实际Adapter→三段View→讲解→已完成Session→基础问答；A2显示与可信本人同采样血量一致才答；A3缺失/冲突/新鲜度/死亡/错人/source代际/结果gate/诊断回归、相关tests/两端TS/build。

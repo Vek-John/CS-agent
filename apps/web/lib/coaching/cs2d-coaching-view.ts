@@ -95,7 +95,12 @@ export function buildThreeStageCoachingView(input: {
   const playerStateUnknown = Boolean(input.semantics?.decisionSnapshot && !state);
   if (input.callout && !playerStateUnknown) chips.push({ kind: "location", text: input.callout });
   if (state) {
-    chips.push({ kind: "health", text: `${Math.max(0, state.health)} HP` });
+    const snapshot = input.semantics?.decisionSnapshot;
+    const healthMissing = [...state.missing_fields, ...(snapshot?.missingFields ?? [])]
+      .some(field => field === "health" || field.startsWith("health.") || field.startsWith("health["));
+    const healthKnown = !healthMissing && Number.isInteger(state.health) && state.health >= 0 && state.health <= 100 &&
+      (!snapshot || snapshot.selectedPlayer.value?.health === state.health);
+    chips.push({ kind: "health", text: healthKnown ? `${state.health} HP` : "血量未知" });
     chips.push({
       kind: "armor",
       text: state.armor <= 0 ? "没甲" : state.has_helmet ? `${state.armor} 头甲` : `${state.armor} 甲`

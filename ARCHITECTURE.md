@@ -1677,6 +1677,9 @@ DiagnosticResult/hinge的条件级SUPPORTED、PARTIALLY_SUPPORTED或CONTRADICTED
 道具种类追问仅在baseline三段讲解（包含FALLBACK）已呈现合法Narration时复述当前可见道具chip。Host提供实际chip文本，来源cache复用View同一库存种类投影并验证当前Snapshot、玩家/决策/采样及已允许事实引用；文本与可信来源完全相同才可答，显示字符串本身不授予事实权限。非空种类继续保留“数量未知”，不得按种类长度推算颗数；空列表只有来源确认空库存、原数量投影为0且实际显示“无道具”时可复述。诊断分支不能借隐藏的baseline chips开放种类答案，其他资源数值追问仍沿原完整诊断measurement门。匹配结果参与问答来源key，换显示或来源使旧回答/回调失效；不增加模型、工具、历史写入或战术建议。
 
 
+
+基础状态栏的health数值必须为0至100的整数，样本与现代snapshot均未标记health缺失，且现代snapshot的health与样本一致；否则显示“血量未知”，不能把负值钳成0或从未知快照复用旧数字。整体状态绑定门仍先执行，单个health不可知不隐藏其他合法chips。旧无snapshot的状态仍接受有效且未标记缺失的health；明确已知0保持“0 HP”，不同于未知。
+
 基础血量追问仅复述当前实际显示的health chip。Host传入显示文本，cache同时要求既有currentDiagnosisResources的合法health、View原同采样绑定、raw state与当前Snapshot数值一致、selectedPlayer canonical事实引用在cue/material中唯一且正文/来源/可用性/observed/时间一致，并属于当前observable refs；原始state ID不作为讲解引用。来源文本与实际chip完全相等才可回答，文本本身不授予权限。来源标签明确当前状态，缺失/冲突/陈旧/死亡/未知/换源仍拒绝，诊断不能借baseline chip绕过measurement门；不扩展护甲、弹匣或道具数量的baseline资格。
 
 职业案例未接入检索时不编造，语音/战术补充只作为未验证假设，不回写事实或改判；错误前提不被接受，不明确/越界问法给具体可问范围。文本不触发seek、工具、推进或回看，控制沿用已有明确按钮。提问不发送Reflection/Disagreement/Graph/Memory事件，不消耗诊断attempt，不新增模型请求。

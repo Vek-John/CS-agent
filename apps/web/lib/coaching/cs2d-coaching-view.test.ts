@@ -205,3 +205,37 @@ it("restores legacy cues through the same outcome gate without repeating unverif
   expect(JSON.stringify(shown)).not.toMatch(/高血量队友|主动接了|继续留在枪线/);
   expect(JSON.stringify({ legacy, oldProse })).toBe(before);
 });
+
+
+it.each(["snapshot-unknown", "snapshot-conflict", "sample-missing", "snapshot-missing", "invalid-negative", "invalid-nan"])("shows unknown health without discarding other current chips: %s", mode => {
+  const input = inventoryViewInput();
+  const before = buildThreeStageCoachingView(input);
+  const state = input.decisionState;
+  const snapshot = input.semantics.decisionSnapshot!;
+  if (mode === "snapshot-unknown") snapshot.selectedPlayer.value!.health = null;
+  if (mode === "snapshot-conflict") snapshot.selectedPlayer.value!.health = 39;
+  if (mode === "sample-missing") state.missing_fields = [...state.missing_fields, "health"];
+  if (mode === "snapshot-missing") snapshot.missingFields = [...snapshot.missingFields, "health"];
+  if (mode === "invalid-negative" || mode === "invalid-nan") {
+    state.health = mode === "invalid-negative" ? -1 : NaN;
+    snapshot.selectedPlayer.value!.health = state.health;
+  }
+  const view = buildThreeStageCoachingView(input);
+  expect(view.currentState.chips.find(chip => chip.kind === "health")?.text).toBe("血量未知");
+  expect(view.currentState.chips.filter(chip => chip.kind !== "health")).toEqual(before.currentState.chips.filter(chip => chip.kind !== "health"));
+  const html = renderToStaticMarkup(createElement(CoachingStatusList, { chips: view.currentState.chips }));
+  expect(html).toContain("血量未知");
+  expect(html).not.toMatch(/(?:40|0|NaN) HP/);
+});
+
+it("keeps verified zero health distinct from unknown, including legacy state-only input", () => {
+  const input = inventoryViewInput();
+  input.decisionState.health = 0; input.decisionState.alive = false;
+  input.semantics.decisionSnapshot!.selectedPlayer.value!.health = 0;
+  input.semantics.decisionSnapshot!.selectedPlayer.value!.alive = false;
+  expect(buildThreeStageCoachingView(input).currentState.chips.find(chip => chip.kind === "health")?.text).toBe("0 HP");
+  const legacy = { ...input, semantics: undefined };
+  expect(buildThreeStageCoachingView(legacy).currentState.chips.find(chip => chip.kind === "health")?.text).toBe("0 HP");
+  legacy.decisionState.missing_fields = [...legacy.decisionState.missing_fields, "health"];
+  expect(buildThreeStageCoachingView(legacy).currentState.chips.find(chip => chip.kind === "health")?.text).toBe("血量未知");
+});

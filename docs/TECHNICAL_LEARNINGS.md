@@ -2588,3 +2588,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决策：Host仅传实际health chip文本；cache联合既有currentDiagnosisResources与View同采样绑定，验证raw/snapshot/数值、cue/material canonical事实来源/可用性/observed/时间及唯一refs，再与显示字符串完全匹配。答复使用canonical Fact refs，不用raw state ID，不从输入文字解析血量；来源说明当前状态而非诊断。诊断原measurement门不变，scope仅health。
 - 验证：实际默认链1红→绿，16新增/5文件162tests通过；覆盖显示缺失/冲突、未知/陈旧/死亡/错人/值与引用冲突、source替换/清空/伪造/旧回调、未完成gate和诊断不能借chip。零fetch、输入不变，无模型/历史写入。最终两端TS/build结果见任务板；日志.local-data/baseline-health-question。
 - 限制/后继：未运行浏览器或SQLite验收，未扩其他资源。未知snapshot拒答测试沿用先前40 HP显示值，不能据此宣称未知View已复现错误；但源码显示View只过整体采样门便输出raw health，下一有限目标用重建View的小case核实未知/冲突字段是否仍显确定血量，成立才收窄该字段显示。
+
+
+## 2026-09-27：状态栏明确区分未知血量与0 HP
+
+- 问题：重建真实三段View证实，snapshot health为null/冲突或missing_fields标health时仍显示raw 40 HP；负值被Math.max钳成0。整体sample绑定不代表每个字段都可知。
+- 决策：仅health增加整数0–100、缺失标志、现代snapshot数值一致门；未知显示“血量未知”，不挤掉其他合法chips。旧无snapshot的有效值仍显示，明确0 HP保留，不修改问答门/Parser/讲解正文。
+- 验证：7红→绿，4文件112tests及两端TypeScript/production build通过。真实CoachingStatusList SSR与生产status CSS在IAB的340px内容容器显示40 HP/血量未知/0 HP，图标文字清楚，其他chips相同；临时tab与loopback4323服务已关闭。仅小合成状态，不是完整Host或原生A5；临时SSR入口补React绑定后成功，产品未因此改动。日志与静态验证页留.local-data/baseline-health-display。
+- 下一步：同一View中护甲仍直接按raw armor/has_helmet生成“没甲/头甲/甲”，需一次性核实护甲值与头盔已知性组合，再决定窄修，避免逐字段反复全量验收。此处尚未验证为实际缺陷，不把健康显示修复外推至所有资源。
