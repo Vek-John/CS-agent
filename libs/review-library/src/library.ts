@@ -23,7 +23,7 @@ import { dirname } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGunzip, createGzip, gunzip } from "node:zlib";
-import { promisify } from "node:util";
+import { isDeepStrictEqual, promisify } from "node:util";
 import type { DatabaseSync } from "node:sqlite";
 import {
   SqliteCheckpointSaver,
@@ -104,6 +104,7 @@ export type ReviewLibraryErrorCode =
   | "ARTIFACT_CORRUPT"
   | "REVISION_ARTIFACTS_INCOMPLETE"
   | "RUNTIME_HEAD_IDENTITY_MISMATCH"
+  | "RUNTIME_HEAD_CONFLICT"
   | "DELETION_IMPACT_CHANGED"
   | "DELETE_FAILED"
   | "EVIDENCE_CONFLICT";
@@ -1665,7 +1666,7 @@ export class DesktopReviewLibrary {
     }
     const stable = json(input.stableProgress, this.smallJsonMaxBytes);
     const now = this.iso();
-    await this.owner.enqueueWrite((db) => {
+    const committed = await this.owner.enqueueWrite((db) => {
       const identity = db
         .prepare(
           "SELECT r.demo_id,r.selected_player_id,d.content_hash,rr.review_id,rr.route_id,rr.route_hash FROM reviews r JOIN demo_assets d ON d.demo_id=r.demo_id JOIN review_revisions rr ON rr.review_revision_id=? WHERE r.review_id=?",
@@ -1784,22 +1785,38 @@ export class DesktopReviewLibrary {
         )
           throw new ReviewLibraryError("RUNTIME_HEAD_IDENTITY_MISMATCH");
       }
-      const previous = db
-        .prepare(
-          "SELECT review_revision_id,session_id,run_id,route_id,route_hash,default_route_cursor,completed_cue_count,recovery_boundary FROM review_runtime_heads WHERE review_id=?",
-        )
-        .get(input.reviewId) as
-        | {
-            review_revision_id: string;
-            session_id: string;
-            run_id: string;
-            route_id: string;
-            route_hash: string;
-            default_route_cursor: number;
-            completed_cue_count: number;
-            recovery_boundary: RecoveryBoundary;
-          }
-        | undefined;
+      const previous = db.prepare("SELECT * FROM review_runtime_heads WHERE review_id=?")
+        .get(input.reviewId) as RuntimeHeadRow | undefined;
+      if (previous?.recovery_artifact_id === recoveryArtifact.artifact_id) {
+        // A lost acknowledgement may be retried, but an artifact is not a license
+        // to rewrite its committed head or the Review projection.
+        const expectedFields = {
+          review_id: input.reviewId, review_revision_id: input.reviewRevisionId,
+          recovery_artifact_id: recoveryArtifact.artifact_id, recovery_artifact_key: recoveryArtifact.artifact_key,
+          recovery_artifact_revision: recoveryArtifact.artifact_revision,
+          session_id: text(input.sessionId, 160), run_id: text(input.runId, 160), demo_id: opaque(input.demoId),
+          demo_content_hash: hash(input.demoContentHash), selected_player_id: text(input.selectedPlayerId, 160),
+          route_id: text(input.routeId, 160), route_hash: text(input.routeHash, 160), recovery_boundary: input.recoveryBoundary,
+          checkpoint_thread_id: input.checkpointThreadId ? text(input.checkpointThreadId, 160) : null,
+          checkpoint_namespace: input.checkpointNamespace !== undefined ? input.checkpointNamespace.slice(0, 160) : null,
+          checkpoint_id: input.checkpointId ? text(input.checkpointId, 160) : null,
+          current_cue_id: input.currentCueId ? text(input.currentCueId, 160) : null,
+          default_route_cursor: natural(input.defaultRouteCursor), completed_cue_count: natural(input.completedCueCount),
+          total_cue_count: natural(input.totalCueCount), last_playback_tick: input.lastPlaybackTick === undefined ? null : natural(input.lastPlaybackTick),
+        };
+        const review = db.prepare("SELECT active_revision_id,status,completed_at FROM reviews WHERE review_id=?")
+          .get(input.reviewId) as Pick<ReviewRow, "active_revision_id" | "status" | "completed_at">;
+        if (Object.entries(expectedFields).some(([key, value]) => previous[key as keyof RuntimeHeadRow] !== value)
+          || !isDeepStrictEqual(JSON.parse(previous.stable_progress_json), JSON.parse(stable.text))
+          || review.active_revision_id !== input.reviewRevisionId || review.status !== (input.reviewStatus ?? "IN_PROGRESS")
+          || review.completed_at !== (input.completedAt ?? null)) {
+          throw new ReviewLibraryError("RUNTIME_HEAD_CONFLICT");
+        }
+        return previous;
+      }
+      if ((previous?.recovery_artifact_id ?? null) !== (input.expectedRecoveryArtifactId ?? null)) {
+        throw new ReviewLibraryError("RUNTIME_HEAD_CONFLICT");
+      }
       if (
         previous?.review_revision_id === input.reviewRevisionId &&
         (previous.session_id !== input.sessionId ||
@@ -1859,12 +1876,10 @@ export class DesktopReviewLibrary {
         input.completedAt ?? null,
         input.reviewId,
       );
+      return db.prepare("SELECT * FROM review_runtime_heads WHERE review_id=?")
+        .get(input.reviewId) as unknown as RuntimeHeadRow;
     });
-    return runtimeHeadFromRow(
-      this.owner.db
-        .prepare("SELECT * FROM review_runtime_heads WHERE review_id=?")
-        .get(input.reviewId) as unknown as RuntimeHeadRow,
-    );
+    return runtimeHeadFromRow(committed);
   }
 
   async renameReview(reviewIdValue: string, titleValue: string): Promise<ReviewRecord> {

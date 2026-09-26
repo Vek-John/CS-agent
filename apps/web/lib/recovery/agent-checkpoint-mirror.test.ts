@@ -69,7 +69,7 @@ function record(id: string, updatedAt: number): SessionRecoveryRecord {
   });
 }
 
-async function fixture(fetcher = vi.fn(async (_url: string, _init?: RequestInit) => Response.json({ saved: true }))) {
+async function fixture(fetcher = vi.fn(async (_url: string, _init?: RequestInit) => Response.json({ saved: true, recoveryArtifactId: "confirmed-artifact" }))) {
   const a = record("A", 1000); const b = record("B", 1000);
   const api = createReviewHistoryApi(fetcher as unknown as typeof fetch);
   const deps = { createReview: vi.fn(), startRevision: vi.fn(), appendArtifact: api.appendArtifact, commitRuntimeHead: api.commitRuntimeHead, markFailed: vi.fn() };

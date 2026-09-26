@@ -230,6 +230,8 @@ export type CommitRuntimeHeadInput = Omit<
   ReviewRuntimeHead,
   "updatedAt" | "recoveryArtifactId" | "recoveryArtifactKey" | "recoveryArtifactRevision"
 > & {
+  /** Compare-and-swap predecessor. Missing/null permits creation only when no head exists. */
+  readonly expectedRecoveryArtifactId?: string | null;
   /** Exact SESSION_RECOVERY artifact that must match this head in the commit transaction. */
   readonly recoveryArtifactKey: string;
   /** Revision selected by the application validator; prevents validation/commit races. */

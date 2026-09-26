@@ -36,3 +36,19 @@ it("does not apply the checkpoint deadline to heavy AnalysisBundle uploads",asyn
   await vi.advanceTimersByTimeAsync(deadline*2);expect(finished).toBe(false);expect(vi.getTimerCount()).toBe(0);
   expect(fetcher.mock.calls[0][1]).not.toHaveProperty("signal");late.resolve(Response.json({saved:true}));await pending;expect(finished).toBe(true);
 });
+
+it.each([undefined, null, {}, { recoveryArtifactId: "" }, { recoveryArtifactId: 1 }])("rejects ambiguous head acknowledgement %j", async payload => {
+  const fetcher = vi.fn(async () => payload === undefined ? new Response("{bad") : Response.json(payload));
+  await expect(createReviewHistoryApi(fetcher).commitRuntimeHead("review", { expectedRecoveryArtifactId: null }))
+    .rejects.toMatchObject({ code: "INVALID_RUNTIME_HEAD_ACK" });
+  expect(fetcher).toHaveBeenCalledOnce();
+});
+
+it("returns the confirmed artifact ID and preserves a head conflict without retry", async () => {
+  const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ recoveryArtifactId: "head-1" }))
+    .mockResolvedValueOnce(Response.json({ code: "RUNTIME_HEAD_CONFLICT" }, { status: 409 }));
+  const api = createReviewHistoryApi(fetcher);
+  await expect(api.commitRuntimeHead("review", { expectedRecoveryArtifactId: null })).resolves.toEqual({ recoveryArtifactId: "head-1" });
+  await expect(api.commitRuntimeHead("review", { expectedRecoveryArtifactId: "head-1" })).rejects.toMatchObject({ code: "RUNTIME_HEAD_CONFLICT" });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});

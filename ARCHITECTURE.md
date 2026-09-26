@@ -738,7 +738,7 @@ Host只有从当前请求得到身份全字段匹配、Graph/sessionStatus均COM
 
 镜像按runtime稳定边界保存→SESSION_RECOVERY artifact→runtime head→当前Host接收结果的顺序等待，每次await后及错误显示前复核归属。仅READY/DEGRADED且返回实际record、恢复/会话/路线/玩家/hash/checkpoint及boundary匹配时才继续，禁止用draft替代未确认record。匹配的DEGRADED内存记录仍可由资料库成功持久化；保留该降级状态，不伪称IndexedDB成功。旧A不能在await后取得已adopt B的控制器写A数据，晚错误不更新B；已发请求只绑定原A，客户端不能撤销或证明服务器未提交。
 
-历史API的SESSION_RECOVERY追加、runtime-head与五类单教学点产物（USER_INTERACTION、CUE_CASE、DIAGNOSTIC_RESULT、TRANSFER_RULE、LEARNING_THREAD）使用每次20秒fetch+JSON共用期限；复用requestJsonWithDeadline并保留非2xx JSON错误code、原2xx空/非法JSON的void成功语义。期限先本地结算再abort，迟到响应不继续提交后续head或发布结果。AnalysisBundle及未列出的artifact/历史操作不套此期限。教学请求超时返回TEACHING_SAVE_TIMEOUT，沿既有保存失败处理；产物不完整或interactionDurable=false时禁止本次head镜像，已展示诊断不因保存失败被清空。反思保存失败后既有流程仍可继续诊断，但不能宣称新的恢复点已确认。每请求期限不等于整条保存链20秒。SESSION_RECOVERY实际受smallJsonMaxBytes默认256KiB UTF-8存储限制，head请求上限128000字节；两端还会读取/验证既有AnalysisBundle，20秒是保守客户端等待策略，不是服务端SLA或新增保存证明。
+历史API的SESSION_RECOVERY追加、runtime-head与五类单教学点产物（USER_INTERACTION、CUE_CASE、DIAGNOSTIC_RESULT、TRANSFER_RULE、LEARNING_THREAD）使用每次20秒fetch+JSON共用期限；复用requestJsonWithDeadline并保留非2xx JSON错误code；artifact追加保留原2xx空/非法JSON的void成功语义，runtime-head成功必须返回非空recoveryArtifactId供下一次提交使用。期限先本地结算再abort，迟到响应不继续提交后续head或发布结果。AnalysisBundle及未列出的artifact/历史操作不套此期限。教学请求超时返回TEACHING_SAVE_TIMEOUT，沿既有保存失败处理；产物不完整或interactionDurable=false时禁止本次head镜像，已展示诊断不因保存失败被清空。反思保存失败后既有流程仍可继续诊断，但不能宣称新的恢复点已确认。每请求期限不等于整条保存链20秒。SESSION_RECOVERY实际受smallJsonMaxBytes默认256KiB UTF-8存储限制，head请求上限128000字节；两端还会读取/验证既有AnalysisBundle，20秒是保守客户端等待策略，不是服务端SLA或新增保存证明。
 
 当前镜像保存失败时不发布新的已确认record/head，Host保留上次已确认记录并说明保存未确认，合法live Agent结果仍可继续。IndexedDB open/transaction沿原1.5秒保护；已写入的IDB缓存或已发HTTP可能在服务器生效，不做回滚/未提交保证。默认桌面激活会话在起点durabilityCommit（含beginRevision）结束后进行；本轮不扩创建review/revision、其他持久化Promise或整条队列的端到端期限，不新增自动重试。API成功后的正常artifact→head顺序、服务器原单调进度及幂等校验不变。
 
@@ -1405,7 +1405,14 @@ SQLite 使用 pinned Node `24.19.0` built-in sqlite。每次连接必须启用 W
 
 Web/Cloudflare 继续保留 PostgreSQL Adapter：核心结构化 migration 保存匿名 principal 与 consent、Memory Proposal/Record、不可变 revision、typed provenance、tombstone、Outbox consumer 状态和结构化召回索引；可选 pgvector migration 与核心 migration 分离。只有 `libs/memory-postgres` 可以访问这些表。PostgreSQL 是该 Web 运行形态的 Memory 真相，但不是桌面依赖或桌面 checkpoint saver。
 
-Review 表的关系固定为 `demo_assets 1─N reviews 1─N review_revisions 1─N review_artifacts`，并以 `review_runtime_heads` 指向最近可恢复的稳定边界。历史列表只读 `reviews + demo_assets` 分页摘要；只有点击具体 Review 才按指定 active Revision SQL-select 并读取其有界 Artifact。写入 JSON/checksum 是存储校验，不代表语义 READY：Review History 应用服务必须在 Artifact append 与 RuntimeHead commit 前复用 Analysis adapter、ReviewPlan、Narration、CueCase、SessionRecovery 等真实领域 validator；DAL 再在同一写事务中校验精确 Recovery artifact 的 ID/key/revision、session/run/boundary/checkpoint 与 head 一致。旧 head 若没有可唯一回填的三元 Artifact 身份必须失败关闭。SQLite 小型 backup 只保存数据库真相和相对路径，不隐式复制全部 `.dem`；完整资料库导出是独立后续能力。
+Review 表的关系固定为 `demo_assets 1─N reviews 1─N review_revisions 1─N review_artifacts`，并以 `review_runtime_heads` 指向最近可恢复的稳定边界。历史列表只读 `reviews + demo_assets` 分页摘要；只有点击具体 Review 才按指定 active Revision SQL-select 并读取其有界 Artifact。写入 JSON/checksum 是存储校验，不代表语义 READY：Review History 应用服务必须在 Artifact append 与 RuntimeHead commit 前复用 Analysis adapter、ReviewPlan、Narration、CueCase、SessionRecovery 等真实领域 validator；DAL 再在同一写事务中校验精确 Recovery artifact 的 ID/key/revision、session/run/boundary/checkpoint 与 head 一致。旧 head 若没有可唯一回填的三元 Artifact 身份必须失败关闭。
+
+RuntimeHead 提交采用事务内 compare-and-swap：HTTP 必须携带 `expectedRecoveryArtifactId`（首次为 null），DAL 缺失也仅按 null 处理，不能无条件覆盖已有 head。目标不同则当前 artifact ID 必须等于预期，否则返回 `RUNTIME_HEAD_CONFLICT`（HTTP 409）；同目标仅在全部持久 head 字段、stableProgress 及该请求负责的 Review status/completedAt/activeRevision 一致时幂等返回，不重写更新时间，同目标不同字段也拒绝。原身份/产物/单调进度门保留。返回值取自本次事务内确认的行，不能在等待后重新读取可能已推进的 head 作为本次 ACK。无需存储迁移。
+
+HistoryPersistenceController 按 owner generation 串行提交 head，捕获排队输入，在有效成功 ACK 后推进 expected ID；reset/adopt/create 使旧排队请求及迟到 ACK 失效。新 Review 从 null 开始；历史 RESTORE/REANALYZE/SELECT_PLAYER 从读取的 head 初始化。旧存储 head 缺全部 artifact 绑定但 Review/Demo 身份匹配时仅可用 null 开始显式重新分析；它仍不能精确恢复，也不能作为新保存 ACK。已存旧数据不因新提交协议失效，旧无 expected 字段的 HTTP 写客户端需加载匹配版本。
+
+超时/冲突后保持原 expected ID，不自动读取新 head、rebase 或重试；原请求可能仍在服务端完成。CAS 保护迟到网络请求及并发竞争，不替代上游业务事件归属/顺序门，也不识别主动以最新 token 再提交的语义旧状态。安全重试入口尚未实现；此时重新打开历史以读取已确认状态。
+SQLite 小型 backup 只保存数据库真相和相对路径，不隐式复制全部 `.dem`；完整资料库导出是独立后续能力。
 
 ### 10.2 本地 Demo 与 Artifact 文件
 

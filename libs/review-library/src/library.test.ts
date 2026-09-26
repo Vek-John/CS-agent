@@ -23,6 +23,7 @@ import {
   currentDesktopReviewLibrary,
   installDesktopReviewLibrary,
   type ImportDemoInput,
+  type CommitRuntimeHeadInput,
   type JsonValue,
 } from "./server";
 
@@ -50,7 +51,7 @@ async function bodyBytes(body: NodeJS.ReadableStream): Promise<Buffer> {
   return Buffer.concat(values);
 }
 
-async function harness(options: { smallJsonMaxBytes?: number } = {}) {
+async function harness(options: { smallJsonMaxBytes?: number; now?: () => Date } = {}) {
   const root = await mkdtemp(join(tmpdir(), "cs-agent-review-library-"));
   cleanup.push(root);
   const owner = new SqliteDatabaseOwner({ path: join(root, "cs-agent.sqlite3") });
@@ -58,6 +59,7 @@ async function harness(options: { smallJsonMaxBytes?: number } = {}) {
     owner,
     dataRoot: root,
     smallJsonMaxBytes: options.smallJsonMaxBytes,
+    now: options.now,
     partialMaxAgeMs: 1,
   });
   await library.initialize();
@@ -1189,6 +1191,7 @@ describe("DesktopReviewLibrary revisions, artifacts, recovery, and deletion", ()
     });
     const paused = await h.library.commitRuntimeHead({
       ...routeStart,
+      expectedRecoveryArtifactId: routeStart.recoveryArtifactId,
       recoveryArtifactKey: "cue-paused-checkpoint-a",
       recoveryArtifactRevision: 1,
       recoveryBoundary: "CUE_PAUSED",
@@ -1476,5 +1479,105 @@ describe("DesktopReviewLibrary revisions, artifacts, recovery, and deletion", ()
     const symlinked = await h.library.verify();
     expect(symlinked.issues[0]?.kind).toBe("SYMLINK_ESCAPE");
     await h.owner.close();
+  });
+});
+
+
+describe("runtime head compare-and-swap", () => {
+  async function setup() {
+    let time = Date.parse("2026-09-26T00:00:00Z");
+    const h = await harness({ now: () => new Date(time++) });
+    const imported = await importValue(h.library, demoBytes(), "cas-demo");
+    const review = await h.library.createReview({ demoId: imported.demo.demoId, selectedPlayerId: "player-a", selectedPlayerName: "A", title: "CAS" });
+    const newRevision = () => h.library.startRevision({ reviewId: review.reviewId, analysisVersion: "a1", graphVersion: "g1", promptVersion: "p1", modelMetadata: {}, routeId: "route-a", routeHash: "route-hash" });
+    const revision = await newRevision();
+    const saver = new SqliteCheckpointSaver({ owner: h.owner });
+    const input: CommitRuntimeHeadInput = { reviewId: review.reviewId, reviewRevisionId: revision.reviewRevisionId,
+      recoveryArtifactKey: "same-cue-c0", recoveryArtifactRevision: 1,
+      sessionId: "session-cas", runId: "run-cas", demoId: imported.demo.demoId, demoContentHash: imported.demo.contentHash,
+      selectedPlayerId: "player-a", routeId: "route-a", routeHash: "route-hash", recoveryBoundary: "CUE_PAUSED",
+      checkpointThreadId: "thread-cas", checkpointNamespace: "", checkpointId: "checkpoint-c0", currentCueId: "cue-0",
+      defaultRouteCursor: 0, completedCueCount: 0, totalCueCount: 1, stableProgress: { completedCueIds: [] } };
+    async function checkpoint(head: CommitRuntimeHeadInput) {
+      await saver.put({ configurable: { thread_id: head.checkpointThreadId!, checkpoint_ns: head.checkpointNamespace! } },
+        { v: 4, id: head.checkpointId!, ts: "2026-09-26T00:00:00Z", channel_values: { agent: {
+          sessionId: head.sessionId, runId: head.runId, demoId: head.demoId, demoContentHash: head.demoContentHash,
+          selectedPlayerId: head.selectedPlayerId, routeId: head.routeId, routeHash: head.routeHash,
+        } }, channel_versions: {}, versions_seen: {} }, { source: "input", step: 0, parents: {} }, {});
+    }
+    await checkpoint(input);
+    await appendCriticalArtifacts(h.library, revision.reviewRevisionId, "cas-c0", input);
+    async function successor(previousArtifactId: string, anotherRevision = false, suffix = "c1"): Promise<CommitRuntimeHeadInput> {
+      const next = { ...input, expectedRecoveryArtifactId: previousArtifactId, recoveryArtifactKey: `same-cue-${suffix}`, checkpointId: `checkpoint-${suffix}`,
+        reviewRevisionId: anotherRevision ? (await newRevision()).reviewRevisionId : revision.reviewRevisionId };
+      await checkpoint(next);
+      if (anotherRevision) await appendCriticalArtifacts(h.library, next.reviewRevisionId, `cas-${suffix}`, next);
+      else {
+        const old = h.owner.db.prepare("SELECT json_payload FROM review_artifacts WHERE review_revision_id=? AND artifact_type='SESSION_RECOVERY'").get(revision.reviewRevisionId) as { json_payload: string };
+        await h.library.appendArtifact({ reviewRevisionId: revision.reviewRevisionId, artifactType: "SESSION_RECOVERY", artifactKey: next.recoveryArtifactKey,
+          artifactRevision: 1, schemaVersion: "session-recovery-record.v2", payload: { ...JSON.parse(old.json_payload), agentCheckpointId: next.checkpointId }, idempotencyKey: `cas-${suffix}` });
+      }
+      return next;
+    }
+    return { ...h, input, successor };
+  }
+
+  it.each([false, true])("rejects a delayed old head after a newer target (another revision: %s)", async anotherRevision => {
+    const h = await setup();
+    try {
+      const first = await h.library.commitRuntimeHead(h.input); // Missing expectation means no head.
+      const next = await h.successor(first.recoveryArtifactId!, anotherRevision);
+      const second = await h.library.commitRuntimeHead(next);
+      expect(second.checkpointId).toBe("checkpoint-c1");
+      await expect(h.library.commitRuntimeHead(h.input)).rejects.toMatchObject({ code: "RUNTIME_HEAD_CONFLICT" });
+      const stored = await h.library.loadReview(h.input.reviewId);
+      expect(stored.runtimeHead).toEqual(second);
+      expect(stored.review.activeRevisionId).toBe(next.reviewRevisionId);
+    } finally { await h.owner.close(); }
+  });
+
+  it("allows only one concurrent successor for the captured predecessor", async () => {
+    const h = await setup();
+    try {
+      const first = await h.library.commitRuntimeHead(h.input);
+      const c1 = await h.successor(first.recoveryArtifactId!);
+      const c2 = await h.successor(first.recoveryArtifactId!, false, "c2");
+      const results = await Promise.allSettled([h.library.commitRuntimeHead(c1), h.library.commitRuntimeHead(c2)]);
+      const succeeded = results.filter(result => result.status === "fulfilled");
+      const rejected = results.filter(result => result.status === "rejected");
+      expect(succeeded).toHaveLength(1); expect(rejected).toHaveLength(1);
+      expect(rejected[0].reason).toMatchObject({ code: "RUNTIME_HEAD_CONFLICT" });
+      expect((await h.library.loadReview(h.input.reviewId)).runtimeHead).toEqual(succeeded[0].value);
+    } finally { await h.owner.close(); }
+  });
+
+  it("permits a new revision to replace an observed legacy head with no artifact binding", async () => {
+    const h = await setup();
+    try {
+      const first = await h.library.commitRuntimeHead(h.input);
+      await h.owner.enqueueWrite(db => {
+        db.prepare("UPDATE review_runtime_heads SET recovery_artifact_id=NULL,recovery_artifact_key=NULL,recovery_artifact_revision=NULL WHERE review_id=?").run(h.input.reviewId);
+      });
+      const legacy = (await h.library.loadReview(h.input.reviewId)).runtimeHead!;
+      expect(legacy.recoveryArtifactId).toBeUndefined();
+      const next = await h.successor(first.recoveryArtifactId!, true);
+      const committed = await h.library.commitRuntimeHead({ ...next, expectedRecoveryArtifactId: null });
+      expect(committed.reviewRevisionId).toBe(next.reviewRevisionId);
+      await expect(h.library.commitRuntimeHead({ ...h.input, expectedRecoveryArtifactId: null })).rejects.toMatchObject({ code: "RUNTIME_HEAD_CONFLICT" });
+    } finally { await h.owner.close(); }
+  });
+
+  it("acknowledges an identical committed target without rewriting head or review fields", async () => {
+    const h = await setup();
+    try {
+      const first = await h.library.commitRuntimeHead({ ...h.input, expectedRecoveryArtifactId: null });
+      const before = h.owner.db.prepare("SELECT * FROM reviews WHERE review_id=?").get(h.input.reviewId);
+      await expect(h.library.commitRuntimeHead({ ...h.input, expectedRecoveryArtifactId: null })).resolves.toEqual(first);
+      expect(h.owner.db.prepare("SELECT * FROM reviews WHERE review_id=?").get(h.input.reviewId)).toEqual(before);
+      for (const change of [{ lastPlaybackTick: 123 }, { stableProgress: { changed: true } }, { reviewStatus: "FAILED" as const }, { completedAt: "2026-09-26T01:00:00Z" }]) {
+        await expect(h.library.commitRuntimeHead({ ...h.input, expectedRecoveryArtifactId: first.recoveryArtifactId, ...change })).rejects.toMatchObject({ code: "RUNTIME_HEAD_CONFLICT" });
+      }
+      expect((await h.library.loadReview(h.input.reviewId)).runtimeHead).toEqual(first);
+    } finally { await h.owner.close(); }
   });
 });

@@ -12,7 +12,7 @@ export interface HistoryPersistenceDeps {
     modelMetadata: Record<string, unknown>;
   }): Promise<{ revisionId: string }>;
   appendArtifact(reviewId: string, input: { revisionId: string; artifactType: string; artifactKey: string; artifactRevision?: number; schemaVersion: string; payload: unknown; idempotencyKey: string }): Promise<void>;
-  commitRuntimeHead(reviewId: string, input: Record<string, unknown>): Promise<void>;
+  commitRuntimeHead(reviewId: string, input: Record<string, unknown>): Promise<{ recoveryArtifactId: string }>;
   markFailed(reviewId: string): Promise<void>;
 }
 
@@ -24,15 +24,22 @@ export class HistoryPersistenceController {
   #revisionMode: "REANALYZE" | "SELECT_PLAYER" = "REANALYZE";
   #revisionPromise?: Promise<string | undefined>;
   #reviewPromise?: Promise<string>;
+  #expectedRecoveryArtifactId: string | null = null;
+  #headTail: Promise<void> = Promise.resolve();
   constructor(private readonly deps: HistoryPersistenceDeps) {}
   /** Read-only ownership epoch; identity can initialize without changing this epoch. */
   get ownershipGeneration() { return this.#generation; }
   get reviewId() { return this.#reviewId; }
   get revisionId() { return this.#revisionId; }
-  reset(): void { this.#generation += 1; this.#reviewId = undefined; this.#revisionId = undefined; this.#demoId = undefined; this.#revisionMode = "REANALYZE"; this.#reviewPromise = undefined; this.#revisionPromise = undefined; }
-  adopt(reviewId: string, revisionId: string | undefined, demoId: string, mode: "REANALYZE" | "SELECT_PLAYER" = "REANALYZE") { this.#generation += 1; this.#reviewId = reviewId; this.#revisionId = revisionId; this.#demoId = demoId; this.#revisionMode = mode; this.#reviewPromise = undefined; this.#revisionPromise = undefined; }
+  reset(): void { this.#generation += 1; this.#reviewId = undefined; this.#revisionId = undefined; this.#demoId = undefined; this.#revisionMode = "REANALYZE"; this.#reviewPromise = undefined; this.#revisionPromise = undefined; this.#expectedRecoveryArtifactId = null; this.#headTail = Promise.resolve(); }
+  adopt(reviewId: string, revisionId: string | undefined, demoId: string, mode: "REANALYZE" | "SELECT_PLAYER" = "REANALYZE", runtimeHead: unknown = null) {
+    const expected = storedHeadExpectation(runtimeHead, reviewId, demoId);
+    this.#generation += 1; this.#reviewId = reviewId; this.#revisionId = revisionId; this.#demoId = demoId; this.#revisionMode = mode; this.#reviewPromise = undefined; this.#revisionPromise = undefined;
+    this.#expectedRecoveryArtifactId = expected; this.#headTail = Promise.resolve();
+  }
   async createForPlayer(input: { demoId: string; selectedPlayerId: string; selectedPlayerName: string; title: string; mapName?: string }): Promise<string> {
     const generation = ++this.#generation;
+    this.#expectedRecoveryArtifactId = null; this.#headTail = Promise.resolve();
     this.#reviewId = undefined; this.#revisionId = undefined; this.#demoId = input.demoId; this.#revisionMode = "SELECT_PLAYER"; this.#revisionPromise = undefined;
     const pending = this.deps.createReview(input).then((review) => review.reviewId);
     this.#reviewPromise = pending;
@@ -90,7 +97,15 @@ export class HistoryPersistenceController {
     });
     if (generation !== this.#generation || reviewId !== this.#reviewId || revisionId !== this.#revisionId) throw new Error("STALE_HISTORY_GENERATION");
   }
-  async stableHead(input: Record<string, unknown>): Promise<void> {
+  stableHead(input: Record<string, unknown>): Promise<void> {
+    const generation = this.#generation;
+    const snapshot = structuredClone(input);
+    const pending = this.#headTail.then(() => this.commitStableHead(snapshot, generation));
+    this.#headTail = pending.catch(() => undefined);
+    return pending;
+  }
+  private async commitStableHead(input: Record<string, unknown>, requestedGeneration: number): Promise<void> {
+    if (requestedGeneration !== this.#generation) throw new Error("STALE_HISTORY_GENERATION");
     const generation = this.#generation; const reviewPromise = this.#reviewPromise; const revisionPromise = this.#revisionPromise;
     const reviewId = this.#reviewId ?? await reviewPromise; const revisionId = this.#revisionId ?? await revisionPromise;
     if (generation !== this.#generation || reviewPromise !== this.#reviewPromise || revisionPromise !== this.#revisionPromise) throw new Error("STALE_HISTORY_GENERATION");
@@ -99,8 +114,11 @@ export class HistoryPersistenceController {
     // The DemoAsset identity is bound when the Review is created/adopted.
     // AnalysisBundle.demo_id is a separate parser artifact identifier and may
     // never override the managed-library UUID at this durability boundary.
-    await this.deps.commitRuntimeHead(reviewId, { ...input, demoId, reviewRevisionId: revisionId });
+    const committed = await this.deps.commitRuntimeHead(reviewId, { ...input, demoId, reviewRevisionId: revisionId,
+      expectedRecoveryArtifactId: this.#expectedRecoveryArtifactId });
     if (generation !== this.#generation || reviewId !== this.#reviewId || revisionId !== this.#revisionId) throw new Error("STALE_HISTORY_GENERATION");
+    if (!committed) throw new Error("INVALID_RUNTIME_HEAD_ACK");
+    this.#expectedRecoveryArtifactId = recoveryArtifactIdFromHead(committed);
   }
   async markFailed(): Promise<void> {
     const generation = this.#generation;
@@ -111,4 +129,24 @@ export class HistoryPersistenceController {
     if (!reviewId) return;
     await this.deps.markFailed(reviewId);
   }
+}
+
+/** Missing stored head is distinct from a malformed acknowledgement or corrupt stored head. */
+export function recoveryArtifactIdFromHead(head: unknown): string | null {
+  if (head === null) return null;
+  const id = head && typeof head === "object" && "recoveryArtifactId" in head ? head.recoveryArtifactId : undefined;
+  if (typeof id !== "string" || !id.trim() || id.length > 240 || id.includes("\0")) throw new Error("INVALID_RUNTIME_HEAD_ACK");
+  return id;
+}
+
+function storedHeadExpectation(head: unknown, reviewId: string, demoId: string): string | null {
+  // Pre-binding history rows can still be explicitly reanalyzed. They cannot be
+  // used for exact recovery, and must never qualify as a new save acknowledgement.
+  if (head && typeof head === "object") {
+    const stored = head as Record<string, unknown>;
+    if (stored.recoveryArtifactId === undefined && stored.recoveryArtifactKey === undefined && stored.recoveryArtifactRevision === undefined
+      && stored.reviewId === reviewId && stored.demoId === demoId
+      && [stored.reviewRevisionId, stored.sessionId, stored.runId].every(value => typeof value === "string" && value.trim())) return null;
+  }
+  return recoveryArtifactIdFromHead(head);
 }

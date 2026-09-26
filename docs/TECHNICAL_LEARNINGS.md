@@ -1997,3 +1997,12 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 问题/决定：USER_INTERACTION 及四类教学投影原先直接 fetch/json，悬挂时挡住教学保存与后续 head。只对这五类复用既有 deadline，每请求20秒，返回 TEACHING_SAVE_TIMEOUT；成功 payload、idempotencyKey、HTTP错误和空JSON语义不变。原失败路径保留显示、禁本次 head；不自动重试或回滚已存产物。
 - 验证：五类 fetch 悬挂＋实际Controller保存链 busy 不释放共6红→绿；扩 body迟到、成功顺序/幂等、HTTP错误、AnalysisBundle不受影响。相关6文件77tests，TS与production build见[证据](validation/TEACHING_SAVE_DEADLINE.md)。默认 partial_revision_restore 只读独审无must-fix，已 RELEASE。
 - 限制：每请求20秒，不是端到端总时限或服务端SLA；超时不证明服务端未写入，无法据此安全自动重试。USER_INTERACTION失败后原流程仍可诊断，interactionDurable=false阻止head。验证是实际API/Controller/helper与假transport，不冒称Host挂载、真实SQLite/浏览器；不操作用户Demo/DB/密钥，无模型调用。后续优先小型真实SQLite复现同cue旧提交覆盖，再定义最小CAS接线。
+
+
+## 2026-09-26：恢复点事务需要预期前驱，成功响应必须属于本次提交
+
+- 问题：同cue诊断修订不改变路线计数，旧请求可越过原单调门覆盖新checkpoint；跨Revision还会把activeRevision改回。部分提交失败后的自动重试因此不安全。
+- 决定：HTTP显式expectedRecoveryArtifactId，事务内CAS；同目标完整相等才幂等，不修改时间/Review，不同拒绝409。ACK返回事务内行。Controller串行，成功ACK推进token，history恢复/重分析携读取的head；超时不自动rebase/retry。无需迁移，旧HTTP无条件提交不兼容，已存数据可读。
+- 验证：partial_revision_restore默认配置独占DAL与隔离tmp SQLite，3红→绿；同cue/跨Revision、并发两后继仅一成功、同目标不同tick/progress/status/completedAt拒绝；主控实际diff复核并补API/Controller/Host接线。8文件114tests通过，独审指出legacy head无法重新分析后补1红→绿、真实SQLite legacy→newRevision，并复验相关3文件49tests；TS/build见[证据](validation/RUNTIME_HEAD_CAS.md)。
+- 独审：revision_semantics_review默认配置只读发现旧无artifact绑定head不应按新ACK校验。存储读取增加有限身份匹配兼容，ACK仍严格；复核关闭must-fix，双方RELEASE。没有完整性/哈希审计或UI服务。
+- 限制：没有新增重试入口；冲突/未确认仍沿原保存失败提示，需要重开历史读取确认点。CAS不识别主动以新token提交的业务旧状态，不代替业务owner门。验证含实际临时SQLite，不含真实用户库/桌面/整Host挂载，无Demo/模型/安装部署；后继优先核实如何在不重复诊断、不丢当前展示的前提下让用户重试同一个已保存提交。

@@ -1,4 +1,5 @@
 import { requestJsonWithDeadline } from "../coaching/request-json-deadline";
+import { recoveryArtifactIdFromHead } from "./history-persistence-controller";
 import type { ReviewSummary } from "@cs-coach/review-library";
 import type { ReviewHistoryItem } from "../../components/history/review-history-sidebar";
 import type { ManagedDemoSource, ReviewHistoryDetail } from "./history-restore-controller";
@@ -41,7 +42,7 @@ export const CHECKPOINT_REQUEST_TIMEOUT_MS = 20_000;
 export const TEACHING_SAVE_TIMEOUT_MS = 20_000;
 // Only per-cue teaching projections and user input. Large analysis/route payloads retain their own lifetime.
 const TEACHING_ARTIFACT_TYPES = new Set(["USER_INTERACTION", "CUE_CASE", "DIAGNOSTIC_RESULT", "TRANSFER_RULE", "LEARNING_THREAD"]);
-async function checkpointJson(fetcher: typeof fetch, endpoint: string, init: RequestInit, teaching = false): Promise<void> {
+async function checkpointJson(fetcher: typeof fetch, endpoint: string, init: RequestInit, teaching = false): Promise<unknown> {
   const response = await requestJsonWithDeadline(fetcher, endpoint, init, {
     timeoutMs: teaching ? TEACHING_SAVE_TIMEOUT_MS : CHECKPOINT_REQUEST_TIMEOUT_MS,
     timeoutError: () => new ReviewHistoryApiError(teaching ? "TEACHING_SAVE_TIMEOUT" : "CHECKPOINT_SAVE_TIMEOUT"),
@@ -52,6 +53,7 @@ async function checkpointJson(fetcher: typeof fetch, endpoint: string, init: Req
     const code = body && typeof body === "object" && "code" in body && typeof body.code === "string" ? body.code : "REQUEST_FAILED";
     throw new ReviewHistoryApiError(code);
   }
+  return response.payload;
 }
 
 function query(url: string, values: Record<string, string | undefined>): string {
@@ -148,8 +150,13 @@ export function createReviewHistoryApi(fetcher: typeof fetch = fetch) {
       else if (TEACHING_ARTIFACT_TYPES.has(input.artifactType)) await checkpointJson(fetcher, endpoint, request, true);
       else await responseJson(await fetcher(endpoint, request));
     },
-    async commitRuntimeHead(reviewId: string, input: Record<string, unknown>): Promise<void> {
-      await checkpointJson(fetcher, `/api/review-history/${encodeURIComponent(reviewId)}/runtime-head`, { method: "PUT", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify(input) });
+    async commitRuntimeHead(reviewId: string, input: Record<string, unknown>): Promise<{ recoveryArtifactId: string }> {
+      const result = await checkpointJson(fetcher, `/api/review-history/${encodeURIComponent(reviewId)}/runtime-head`, { method: "PUT", headers: JSON_HEADERS, cache: "no-store", body: JSON.stringify(input) });
+      try {
+        const recoveryArtifactId = recoveryArtifactIdFromHead(result);
+        if (recoveryArtifactId) return { recoveryArtifactId };
+      } catch { /* An ambiguous acknowledgement must not advance the client's expected head. */ }
+      throw new ReviewHistoryApiError("INVALID_RUNTIME_HEAD_ACK");
     },
   };
 }

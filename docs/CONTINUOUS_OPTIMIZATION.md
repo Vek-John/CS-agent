@@ -2,6 +2,16 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：恢复点提交并发保护（2026-09-26）
+
+- 基线1da3de5 clean；主控有限goal拥有apps协议/Controller/Host及docs，partial_revision_restore默认配置独占libs/review-library契约/DAL/tests。共享树按文件独占，无其他运行写owner。
+- 目标/流程：客户端带读取或上次确认的artifact ID→服务端事务比较当前head→相符才提交；同目标完全相同幂等确认，迟到旧请求拒绝，保留新进度。A1真实临时SQLite同cue与跨Revision红例；A2首次null/缺失按无head、同目标同内容幂等且不同内容不绕门；A3客户端串行head写及初始/恢复/重新分析expected接线，超时不自动rebase/retry，旧owner ACK不污染新owner；A4相关tests/TS/build与独立窄审；A5架构学习证据commit/push。
+- 接口：DAL expectedRecoveryArtifactId可选，缺失视null；HTTP必须显式null或非空ID，拒绝旧无条件协议；不迁移已存数据。API返回已确认recoveryArtifactId，Controller只在合法ACK后推进token。正常产物顺序/身份/单调检查不放宽。
+- 风险/阶段：5分钟小复现，15分钟实现，15分钟整链验证；重点同cue计数相同、跨Revision、首次route启动/重新分析和超时服务器仍执行。仅隔离tmp SQLite，不碰用户DB/Demo/密钥/Memory，无服务/模型/安装部署；两次基础设施失败先简化。各owner清自有测试资源，本轮不加重试UI或猜latest Graph，不声称通用语义旧result识别。交付后选择基于新证据的明确失败恢复路径。
+
+- 结果：DAL真实SQLite 3红→绿；主控接线后8文件114tests通过。独审发现旧存储head无绑定不能重分析，新增1红→绿并分离legacy存储读取与严格ACK；相关3文件49tests再过，TypeScript/production build通过（仅现有SQLite experimental warning）。revision_semantics_review确认must-fix关闭，两个owner均RELEASE，主控关键diff及生产调用集中复核。[证据](validation/RUNTIME_HEAD_CAS.md)。
+- 本轮未加重试入口；未知保存结果保留旧token，可能需要重开历史读取确认进度。后继：核实能否在当前owner中保留同一已保存提交及原expected，让显式重试只重复这次head提交且不重跑诊断；一旦新动作/owner变化即失效，不猜最新Graph。原UI A5独立待验，未操作用户库或启动服务。自有测试/build结束，commit/push后释放文件。
+
 ## 已交付：教学保存等待上限与恢复重试资格（2026-09-26）
 
 - 基线 e27360e clean；主控有限 goal 独占 API/目标测试/docs；partial_revision_restore 默认配置只读 DAL/route，8 分钟内交付并 RELEASE，无服务/DB/文件写入。

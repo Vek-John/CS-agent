@@ -32,6 +32,7 @@ describe("Review RuntimeHead route", () => {
       method: "PUT",
       headers: { "content-type": "application/json", [DESKTOP_APP_ORIGIN_HEADER]: APP_ORIGIN },
       body: JSON.stringify({
+        expectedRecoveryArtifactId: null,
         reviewRevisionId: "revision-a",
         recoveryArtifactKey: "recovery-a",
         sessionId: "session-a",

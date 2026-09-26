@@ -768,7 +768,7 @@ export function Cs2dPlaybackHost({
       assertCurrentOpen();
       historyRestorePlayerRef.current = restored.detail.review.selectedPlayerId;
       if (mode !== "RESTORE") {
-        historyPersistenceControllerRef.current!.adopt(reviewId, undefined, restored.detail.review.demoId, mode);
+        historyPersistenceControllerRef.current!.adopt(reviewId, undefined, restored.detail.review.demoId, mode, restored.detail.runtimeHead);
         setReviewPreparationStatus({
           phase: "ROUTE",
           detail: mode === "SELECT_PLAYER"
@@ -841,7 +841,7 @@ export function Cs2dPlaybackHost({
         ? createRecoverySessionIdentity()
         : { recoveryId: record!.recoveryId, sessionId: record!.sessionId, runId: record!.runId };
       recoveryIdentityRef.current = identity; setRecoveryIdentity(identity);
-      historyPersistenceControllerRef.current!.adopt(reviewId, restored.detail.revision?.id, restored.detail.review.demoId);
+      historyPersistenceControllerRef.current!.adopt(reviewId, restored.detail.revision?.id, restored.detail.review.demoId, "REANALYZE", restored.detail.runtimeHead);
       bundleRef.current = normalizedAnalysis;
       planRef.current = restoredPlan; routeStateRef.current = restoredRoute;
       narrationByCueRef.current = restoredNarration;

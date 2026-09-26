@@ -46,7 +46,7 @@ it("releases a partial teaching save without promoting its head or continuing af
   const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
     const input = JSON.parse(String(init?.body));
     return input.artifactType === "DIAGNOSTIC_RESULT"
-      ? Object.assign(new Response(), { json: () => body.promise }) : Response.json({ saved: true });
+      ? Object.assign(new Response(), { json: () => body.promise }) : Response.json({ saved: true, recoveryArtifactId: "confirmed-artifact" });
   });
   const api = createReviewHistoryApi(fetcher as typeof fetch);
   const history = new HistoryPersistenceController({ createReview: vi.fn(), startRevision: vi.fn(),
@@ -77,7 +77,7 @@ it("releases a partial teaching save without promoting its head or continuing af
 
 it("preserves successful teaching payloads, idempotency and artifact-before-head ordering", async () => {
   vi.useFakeTimers();
-  const fetcher = vi.fn(async (_url: string, _init?: RequestInit) => Response.json({ saved: true }));
+  const fetcher = vi.fn(async (_url: string, _init?: RequestInit) => Response.json({ saved: true, recoveryArtifactId: "confirmed-artifact" }));
   const api = createReviewHistoryApi(fetcher as typeof fetch);
   const history = new HistoryPersistenceController({ createReview: vi.fn(), startRevision: vi.fn(),
     appendArtifact: api.appendArtifact, commitRuntimeHead: api.commitRuntimeHead, markFailed: vi.fn() });
@@ -123,7 +123,7 @@ it("does not apply the per-cue deadline to large analysis artifacts", async () =
   expect(saved).toBe(false);
   expect(fetcher.mock.calls[0][1]?.signal).toBeUndefined();
   expect(vi.getTimerCount()).toBe(0);
-  gate.resolve(Response.json({ saved: true }));
+  gate.resolve(Response.json({ saved: true, recoveryArtifactId: "confirmed-artifact" }));
   await pending;
   expect(saved).toBe(true);
 });
