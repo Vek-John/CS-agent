@@ -103,6 +103,9 @@ Adapter只取不晚于decisionTick、同回合且最多半秒旧的样本，不�
 
 时钟公开事实拥有当时采样来源与可用时间，不能单独批准等待、接敌或路线建议；`objectiveAllowsDelay`和缺LOS的RETURN_AND_FIRE判断门不因此放宽。模型不自行补数或复刻HUD取整。Viewer生产构建必须包含当前parser源码补丁编译的WASM，不能只更新Rust源码而使用旧parser二进制。
 
+
+确定性Narrator的当前情况说明保留原前三条决策事实，再按原顺序增补至最多六条；每次增补后正文不得超过1600字符，超限即停止，不截断事实句子。这样当前Adapter的有限状态/受击/人数/比分/时钟/C4事实可在短文内完整呈现，不因任意前三条截断而遗漏已知时钟。仅消费已有合法决策事实，不从ID或文本猜测时钟、不重新计算秒数，不改变引用/建议/专业判断门。原前三条本身超长时保留既有本地fallback契约；旧保存讲解直接复用，新生成本地投影以deterministic-narration/1.1.0标识。
+
 ### 2.4.2 逐次本人受击事实
 
 Parser以独立可选`Round.hurtEvents`保留`player_hurt`的canonical Demo tick、稳定事件ID、可空受害者和可空reported伤害/剩余生命护甲字段；在原ADR过滤前采集，不改变原`Round.events`顺序、索引引用或ADR规则。事件按`freezeStartTick <= tick < postEndTick`归属。报告伤害不等于实际HP损失，不自动推断overkill、攻击者、武器、方向或可见接触。

@@ -787,7 +787,15 @@ export function deterministicNarrationBundle(
   const adviceRefs = packageInput.advice.map((advice) => advice.id).filter((ref) => adviceNamespace.has(ref));
   const evidenceRefs = packageInput.evidence.map((evidence) => evidence.id).filter((ref) => evidenceNamespace.has(ref));
   const outcomeRefs = unique([...outcome.outcomeFacts.map((fact) => fact.id), ...outcome.deathKillHpRefs, ...outcome.measurementRefs]);
-  const first = packageInput.decisionContext.facts.slice(0, 3).map((fact) => fact.text).join(" ") || "当前可用决策事实有限";
+  // Preserve the original three facts. Current Adapter context has at most six
+  // bounded facts; add complete statements only while they fit the wire budget.
+  let first = packageInput.decisionContext.facts.slice(0, 3).map((fact) => fact.text).join(" ") || "当前可用决策事实有限";
+  for (const fact of packageInput.decisionContext.facts.slice(3, 6)) {
+    if (!decisionNamespace.has(fact.id)) continue;
+    const expanded = `${first} ${fact.text}`;
+    if (expanded.length > 1600) break;
+    first = expanded;
+  }
   const action = packageInput.playerAction[0]?.text ?? "当前记录不足以确认具体行动意图。";
   const advice = packageInput.advice[0]?.text ?? UNCERTAIN_ADVICE_TEXT;
   const coreIssueRefs = !packageInput.decisionAssessment ? unique([...decisionRefs, ...actionRefs])

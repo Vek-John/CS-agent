@@ -4,6 +4,18 @@
 
 
 
+
+## 已交付：公开回合时钟讲解覆盖（2026-09-27）
+
+- ID narration-clock-coverage，基线874677a clean，7f2b实际树；partial_revision_restore默认配置独占小probe先核实，root独占docs/契约/最终check与push，前任务全部RELEASE。A1实际Adapter→Package→Narrator完整人数+受击+合法clock验证位置与正文；A2有遗漏才作有界呈现修复；A3真实引用/未知时钟/已有内容/旧保存与零请求快路径、相关tests/两端TS/build后push。
+- A1：合法clock约110秒在第5条，refs有来源而正文前三条无时间；全文5条179字符。未知/暂停/植包均保持null。批准原前三条后逐条增补至6条且<=1600字符，遇超限停止，不新增schema或snapshot传输，不按ID/文字猜类型；本地投影版本1.1。
+- 边界：不读真实Demo，不重跑Parser/模型/Jev/UI，不改clock可知门、选点/窗口/专业判断或用户库。五分钟小验证/20分钟有限交付，单进程<60秒，同设施两败简化；写入所有权随A1方案确认，不凭任意ID后缀或文本关键词判定事实类型。处理Narrator前三条遗漏及wire1600字符边界，执行者清进程后root审查实际diff。
+
+
+- 交付：正文由140到179字符，实际requestNarrationBundle显示第5条“约110秒”、fetch0，原前三条保留；未知/暂停/植包仅显示无法确认。新增8例、6文件103相关tests、两端TS/production build均通过。数量上限6、逐条字符预算保留已容纳的4/5条、namespace外事实拒绝及原超长本地fallback覆盖；实际RecoveryRecord→JSON→restore保留旧三事实，不声称SQLite实测。
+- root集中读实际10行呈现改动、manifest版本和新测试，无契约门放宽；执行者RELEASE，所有probe/test/build退出。日志.local-data/narration-clock-coverage。首恢复fixture缺默认limitations:[]造成测试shape差异，补齐fixture后通过，恢复产品逻辑未动。
+- 下一有限目标 narration-visible-references：已见currentSituation.refs仍取全部decision refs，而正文现在有6条/长度上限。用一个超限小case核实引用是否包含未呈现事实，判断是否需仅收窄当前情况引用；不扩大为全量引用审计，不改专业判定/工具/保存历史。
+
 ## 已交付：决策前本人开火消费（2026-09-27）
 
 - ID decision-prior-self-fire，基线f8d805d clean，实际7f2b。partial_revision_restore默认配置先独占.local-data小probe与来源诊断，root独占docs/契约决策/最终验证与push；A1回报后再分配最小产品文件，不并发修改。
