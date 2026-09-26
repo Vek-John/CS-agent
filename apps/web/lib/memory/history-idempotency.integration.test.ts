@@ -2,8 +2,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  createRemoteCoachAgentDispatchEnvelope,
+  parseRemoteCoachAgentDispatchResponse,
   CoachAgentEventSchema,
   CoachAgentIdentitySchema,
   diagnoseTeachingCue,
@@ -22,8 +24,19 @@ import {
   desktopBehaviorOpportunityClaim,
 } from "./agent-events";
 
+import { POST } from "../../app/api/coaching/agent/route";
+import { startCueEvent } from "../../../../libs/coach-agent/src/test-fixtures";
+import { setMemoryRuntimeForTests, resetMemoryRuntimeForTests } from "./server";
+import { issueTestMemoryPrincipalCookie } from "./principal";
+
+// This test owns the read/teaching path. Do not start unrelated deferred writes
+// from the later reflection while the temporary SQLite owner is being closed.
+vi.mock("next/server", () => ({ after: vi.fn() }));
+
 const cleanup: string[] = [];
 afterEach(async () => {
+  resetMemoryRuntimeForTests();
+  vi.unstubAllEnvs();
   await Promise.all(cleanup.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
 
@@ -264,5 +277,55 @@ it.each([false, true])("corrects the original SQLite judgment after a changed hi
     expect(opportunityCounts()).toEqual({ claims: 1, evidence: 1 });
     expect(await repository.getRecordVersion(userId, originalRecord.memoryId, originalRecord.revision)).toEqual(originalRecord);
     if (independentRecord) expect(await repository.getRecordVersion(userId, independentRecord.memoryId)).toEqual(independentRecord);
+    if (!seedNewKey) {
+      vi.stubEnv("NODE_ENV", "test");
+      const memoryRuntime = setMemoryRuntimeForTests({ repository, authorizationStore: repository,
+        memoryEnabled: true, nodeEnv: "test", allowTestPrincipal: true });
+      const brief = await memoryRuntime.service.getBrief(userId);
+      expect(brief.corrections).toContainEqual(expect.objectContaining({
+        content: disagreement.reflection.rawText, memoryId: originalRecord.memoryId,
+      }));
+      expect(brief.memories.some(record => record.memoryId === originalRecord.memoryId)).toBe(false);
+      const cookie = (await issueTestMemoryPrincipalCookie(userId, { consent: "GRANTED", consentVersion: 1 })).split(";")[0];
+      const nextIdentity = { ...event.identity, sessionId: "session-correction-recall", runId: "run-correction-recall" };
+      const dispatch = async (event: CoachAgentEvent) => {
+        const response = await POST(new Request("http://localhost/api/coaching/agent", {
+          method: "POST", headers: { "content-type": "application/json", cookie },
+          body: JSON.stringify(createRemoteCoachAgentDispatchEnvelope(event)),
+        }));
+        expect(response.status).toBe(200);
+        return parseRemoteCoachAgentDispatchResponse(await response.json());
+      };
+      const started = await dispatch(startCueEvent({ identity: nextIdentity, cueId: "cue-recalled",
+        eventId: "recalled-start", capabilities: [], routeSegmentIndex: 0 }));
+      expect(started.state.memoryBrief?.corrections).toEqual([{
+        content: disagreement.reflection.rawText, source: "USER", revision: corrected.record!.revision,
+      }]);
+      expect(JSON.stringify(started.state.memoryBrief)).not.toContain(originalRecord.memoryId);
+      expect(JSON.stringify(started.state.memoryBrief)).not.toContain(userId);
+      const nextReflection = (cueId: string) => CoachAgentEventSchema.parse({ ...event,
+        identity: nextIdentity, eventId: `reflect-${cueId}`, cueId,
+        reflection: { ...event.reflection, cueId, rawText: "", selectedGoal: "OTHER" },
+        input: { ...event.input, cueId, cue: { ...event.input.cue, id: cueId }, decisionFacts: [],
+          decisionResources: { health: 100, armor: 100, hasHelmet: true, utilityCount: 1, evidenceRefs: [] },
+        },
+      });
+      const reflection = nextReflection("cue-recalled");
+      if (reflection.type !== "SUBMIT_REFLECTION") throw new Error("reflection fixture required");
+      const baseline = diagnoseTeachingCue({ ...(reflection.input as Parameters<typeof diagnoseTeachingCue>[0]), reflection: reflection.reflection });
+      const taught = await dispatch(reflection);
+      expect(taught.state.cueCases["cue-recalled"].pedagogyMode).toBe("REINFORCE");
+      expect(taught.state.cueCases["cue-recalled"].verdict).toEqual(baseline.cueCase.verdict);
+      expect(taught.state.cueCases["cue-recalled"].claims).toEqual(baseline.cueCase.claims);
+      await memoryRuntime.service.setAuthorization(userId, { userId, memoryEnabled: true, consent: "REVOKED", consentVersion: 2 });
+      const revokedStart = await dispatch(startCueEvent({ identity: nextIdentity, cueId: "cue-after-revoke",
+        eventId: "revoked-start", segmentId: "segment-after-revoke", capabilities: [], routeSegmentIndex: 1 }));
+      expect(revokedStart.state.activeCueId).toBe("cue-after-revoke");
+      expect(revokedStart.state.routeCursor).toBe(1);
+      expect(revokedStart.state.memoryBrief).toBeUndefined();
+      const afterRevoke = await dispatch(nextReflection("cue-after-revoke"));
+      expect(afterRevoke.state.cueCases["cue-after-revoke"].pedagogyMode).not.toBe("REINFORCE");
+      expect((await memoryRuntime.service.getBrief(userId)).corrections).toEqual([]);
+    }
   } finally { await owner.close(); }
 });

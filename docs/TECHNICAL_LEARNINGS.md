@@ -2064,3 +2064,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决定：一次修订保存有界previousLearningThread及acceptedDisagreement。原thread导出目标，实际接受的异议提供文案/ID；同身份、同cue/thread及规范化内容匹配才发CORRECT。Graph拒绝第二次异议或复用旧eventId返回旧case时，不得采纳新文字/候选/事实。用户纠正形成DISPUTED，仍不是Demo事实或专业正确性证明。
 - 验证：真实diagnose/revise→producer→MemoryService→临时SQLite，原记录revision增加、旧revision保留、独立新key记录不变、重复事件无计数/机会增量。真实Runtime第二异议拒绝和同ID换文案不产生新纠正，JSON恢复及旧快照缺失保守拒发。8文件161tests、TypeScript、production build通过；独审发现输入来源问题并复审关闭。[证据](validation/REVISED_DIAGNOSIS_MEMORY_TARGET.md)。
 - 限制：旧修订缺快照仍可读但不自动纠正/回填；无用户数据库、HTTP/UI、模型/真实Demo验收，不承诺旧客户端识别新增字段。Memory schema/消费者策略不变。下一项检查已有DISPUTED→Brief独立通道的实际教练消费，不假定要新建召回能力。
+
+
+## 2026-09-26：纠正能被召回不等于诊断理解了纠正
+
+- 问题：上轮完成纠正写入后，需要证实真正的后续消费，避免把数据库成功说成教练已经采纳新观点。
+- 验证：扩展真实SQLite修订测试，注入同repository/authorizationStore的Memory runtime，经实际POST净化后进入Graph。USER纠正保留，管理ID不进Brief，旧DISPUTED聚合不作active；可验证资源诊断REINFORCE，但claims/verdict与无记忆基线一致。授权撤回后下一合法cue清空Brief、不再REINFORCE。4文件69tests、TypeScript和production build通过；最终目标断言复验3tests/TS。[证据](validation/CORRECTION_RECALL_CONSUMPTION.md)。
+- 决定/边界：现链已贯通，不新增重复召回逻辑。源码确认默认模式仅看corrections.length、工具只有偏好，原文不参与语义诊断；UNVERIFIABLE优先DEFER。不承诺理解了历史异议、改善专业判断或清除既往展示。Next after在该读链测试中拦截，不启动后续反思的异步写；实际写链由上一轮验证。无用户DB、模型或真实浏览器。
+- 可执行后继：独立只读跟踪发现TeachingDiagnosisPanel把除CLARIFY外所有模式都称“第一次讲清”。下一项改准确中性标题，不把模式提示包装成语义判断改善。

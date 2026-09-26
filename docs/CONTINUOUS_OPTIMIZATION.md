@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：纠正召回到后续教学的实际消费（2026-09-26）
+
+- ID memory-correction-recall；基线28c44c5 clean；主控拥有history-idempotency.integration.test.ts及docs；revision_semantics_review默认配置只读消费语义，8分钟终点，无并发写。
+- 目标/流程：真实修订纠正→隔离SQLite→MemoryService Brief→真实POST服务端净化→后续诊断模式；撤回consent后新cue回到基线。A1纠正作为USER保留而旧DISPUTED不列active；A2实际路由移除ID且Graph使用有界模式；A3授权撤回清空新cue，不重写比赛事实/判决；A4相关tests/TS/build并记录语义未实现边界；交付有限验证与必要窄修后push。
+- 风险预检：Next after后台写不能逃逸临时库生命周期，测试拦截新反思的after调度（本轮仅验证召回）；复用已有schema/Brief，不开服务/模型/桌面/用户DB。5分钟小链，12分钟测试，15分钟验证，同一工具两败先简化；owner关闭tmp库和清理stub。旧Memory写链已有上一轮真实验证，不重复模拟全栈。
+
+- 结果：既有召回链实际通过，无需新增生产召回逻辑。真实修订→SQLite→getBrief→POST→Graph保留USER纠正、移除管理ID，旧争议不列active；可验证资源诊断模式REINFORCE而claims/verdict等于无记忆基线。撤回授权后合法下一cue清空Brief并不再REINFORCE。4文件69tests、TS/build通过，新增最终断言后目标3tests/TS复验；无完整浏览器/HTTP服务或语义质量证明。
+- 重要边界：当前只采用“需要复核”的模式/工具提示，没有把历史原文交给诊断语义判断；UNVERIFIABLE仍DEFER。只读reviewer已RELEASE。[证据](validation/CORRECTION_RECALL_CONSUMPTION.md)。后继已核实TeachingDiagnosisPanel除CLARIFY外一概显示“第一次讲清”，会误标REINFORCE/CHECK_TRANSFER/DEFER；下一项用真实产物修正现有模式标题，保持判决与引用不变。主控清tmp库/stub，无常驻进程；原锁屏A5单独保留。
+
 ## 已交付：记忆纠正绑定修订前目标（2026-09-26）
 
 - 基线afab505 clean；主控有限goal拥有contracts/diagnosis/Memory producer及相关unit/docs；partial_revision_restore默认配置先只读消费者，随后独占history-idempotency.integration.test.ts隔离SQLite回归。其余owner RELEASE，无同文件并写。
