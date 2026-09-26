@@ -2,6 +2,15 @@
 
 更新时间：2026-09-26。执行流程唯一模板为 [PROJECT_UPDATE_TEMPLATE.md](prompts/PROJECT_UPDATE_TEMPLATE.md)，架构唯一事实源为 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
+## 已交付：收起主枪当前库存（2026-09-26）
+
+- ID primary-inventory-identity，基线2b36007 clean；主控Adapter来源/真实消费/docs，partial_revision_restore默认配置weapons/lib+0019/tool，revision_semantics_review默认配置primary源fixture及必要旧grenade helper提取适配。
+- 流程：可靠动态向量N前缀→所有当前handle与标签完整验证→第一primary优先、否则第一pistol，未知空串保持schema省略。A1实际源tail/partial/earlyreturn红例；A2合法优先级/USP保持、grenade/active回归；A3普通Viewer持刀时primary与经济统计不消费历史物品，Host本来显示active不扩宣称；A4相关tests/TS/Web及WASM/Viewer build、真实只允许primary字段变化、文档push。
+- 风险/边界：不重复长度probe或改整个装备系统；可抽窄完整inventory helper防规则漂移，但旧grenade验收不降低。不因先见rifle就漏后续unknown。5分钟接口/12分钟实现/20分钟交付，root唯一60.6MB前后WASM各120秒、bulk留进程+压缩基线，纯统计，清理自建资源；不模型/安装/UI/用户DB，原A5独立保留。
+
+- 结果：实际primary9红/3绿→12绿，grenade旧11断言全绿；实际Viewer/经济选择9断言、88相关tests、TS/Web及native9+vendor33/WASM/Viewer build/TS通过。真实19,777行primary变化，18,655旧标签消失、683处于持刀展示条件，所有非primary字段及回合边界保持，10人消费通过，0网络。[证据](validation/PRIMARY_INVENTORY_IDENTITY.md)。
+- 清理/后继：两默认代理RELEASE，无must-fix，临时fixture/checkout和所有进程退出。空primary仍未知/无枪合并回退，不作专业质量或完整经济/UI结论。source修复阶段收敛；下一有限目标为当前库存Adapter1.11/Timeline1.2的明确空/种类/unknown经隔离SQLite保存重开→History Restore→View保真及零重分析，已有JSON往返不足以替代这条恢复链；只在有失败时改生产，保护用户库，原A5独立。
+
 ## 已交付：道具库存完整性（2026-09-26）
 
 - ID grenade-inventory-certainty，基线b99d12e clean；主控Adapter/只读probe/真实消费/docs，partial_revision_restore默认配置生产0018/patch工具，revision_semantics_review默认配置源注入inventory fixture；其他owner均RELEASE。

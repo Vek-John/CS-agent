@@ -1,0 +1,84 @@
+--- a/packages/parser/src/weapons.rs
++++ b/packages/parser/src/weapons.rs
+@@ -141,9 +141,9 @@
+     }
+ }
+ 
+-/// Complete verified grenade kinds, or unknown if any current inventory slot cannot be trusted.
++/// Complete current inventory labels in slot order, or unknown if any slot is untrusted.
+ /// The vector root is its current length; retained children beyond it are historical tail.
+-pub(crate) fn grenade_inventory(ctx: &Context, pawn: &Entity) -> Option<Vec<String>> {
++fn current_inventory_labels(ctx: &Context, pawn: &Entity) -> Option<Vec<String>> {
+     // Defensive iteration bound, not a claim about the game's maximum inventory.
+     let count = match pawn.get_property_by_name("m_pWeaponServices.m_hMyWeapons") {
+         Ok(FieldValue::Unsigned32(n)) if *n <= 64 => *n as usize,
+@@ -161,8 +161,18 @@
+         if weapon.index() != (handle & 0x3fff) || (weapon.serial() & 0x3ff) != (handle >> 14) {
+             return None;
+         }
+-        let label = weapon_label(weapon.class().name());
++        let label = disambiguate_usp(weapon, weapon_label(weapon.class().name()));
+         if label.is_empty() { return None; }
++        out.push(label);
++    }
++    Some(out)
++}
++
++/// Complete verified grenade kinds; duplicates are types, not a grenade count.
++pub(crate) fn grenade_inventory(ctx: &Context, pawn: &Entity) -> Option<Vec<String>> {
++    let labels = current_inventory_labels(ctx, pawn)?;
++    let mut out = Vec::new();
++    for label in labels {
+         if GRENADE_INVENTORY_LABELS.contains(&label.as_str()) && !out.contains(&label) {
+             out.push(label);
+         }
+@@ -191,26 +201,19 @@
+ /// wins outright, otherwise the first pistol carried. Empty if they only hold a
+ /// knife/grenades/C4/Zeus. Used to surface the stowed weapon while the knife is out.
+ pub(crate) fn primary_weapon(ctx: &Context, pawn: &Entity) -> String {
++    // Validate the entire prefix before selecting: an early rifle cannot hide
++    // a later unknown slot that might invalidate the inventory snapshot.
++    let labels = match current_inventory_labels(ctx, pawn) {
++        Some(labels) => labels,
++        None => return String::new(),
++    };
+     let mut pistol = String::new();
+-    if let Ok(it) = pawn.get_iter("m_pWeaponServices.m_hMyWeapons") {
+-        for h in it.flatten() {
+-            let hv: usize = match h.try_into() {
+-                Ok(v) => v,
+-                Err(_) => continue,
+-            };
+-            if let Ok(w) = ctx.entities().get_by_handle(hv) {
+-                let label = disambiguate_usp(&w, weapon_label(w.class().name()));
+-                if label.is_empty() || NON_GUN_LABELS.contains(&label.as_str()) {
+-                    continue;
+-                }
+-                if is_pistol(&label) {
+-                    if pistol.is_empty() {
+-                        pistol = label;
+-                    }
+-                } else {
+-                    return label;
+-                }
+-            }
++    for label in labels {
++        if NON_GUN_LABELS.contains(&label.as_str()) { continue; }
++        if is_pistol(&label) {
++            if pistol.is_empty() { pistol = label; }
++        } else {
++            return label;
+         }
+     }
+     pistol
+--- a/packages/parser/src/lib.rs
++++ b/packages/parser/src/lib.rs
+@@ -22,7 +22,7 @@
+ use collector::Collector;
+ 
+ const DEMO_TICK_RATE: f64 = 64.0;
+-const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1.active-weapon-identity.v1.grenade-inventory.v1";
++const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1.active-weapon-identity.v1.grenade-inventory.v1.primary-weapon.v1";
+ 
+ /// Parses the bytes of a `.dem` in a single pass and returns `(Replay JSON, voice
+ /// blob)`. The `Replay` matches `replay-schema 2D`; the blob follows the `CLV2`

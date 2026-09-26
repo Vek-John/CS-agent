@@ -200,3 +200,15 @@ it("registers complete current inventory semantics with an explicit sample versi
   expect(additions).toContain("grenadeInventoryVersion?: 1");
   expect(additions).not.toMatch(/event_pawn_to_packed|primary_weapon|\.flatten\(\)/);
 });
+
+it("registers primary selection only after complete current inventory validation", () => {
+  expect(CS2D_PATCH_FILES[18]).toMatch(/0019-primary-inventory-identity\.patch$/);
+  const patch = readFileSync(CS2D_PATCH_FILES[18], "utf8");
+  const additions = patch.split("\n").filter(line => line.startsWith("+") && !line.startsWith("+++")).join("\n");
+  expect(additions).toContain("fn current_inventory_labels(ctx: &Context, pawn: &Entity) -> Option<Vec<String>>");
+  expect(additions).toContain("let labels = current_inventory_labels(ctx, pawn)?");
+  expect(additions).toContain("let labels = match current_inventory_labels(ctx, pawn)");
+  expect(additions).toContain("disambiguate_usp(weapon, weapon_label(weapon.class().name()))");
+  expect(additions).toContain("grenade-inventory.v1.primary-weapon.v1");
+  expect(additions).not.toMatch(/get_by_handle|event_pawn_to_packed|\.flatten\(\)/);
+});

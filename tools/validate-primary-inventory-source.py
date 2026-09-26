@@ -1,8 +1,8 @@
-"""Compile the actual grenade inventory projection against sparse vector fixtures.
+"""Exercise actual primary inventory selection against current-slot fixtures.
 
-No Demo reads or dependency downloads. --baseline-dir selects pre-change
-weapons.rs. The production label tables/functions and vendor entity lookup are
-injected. Vector root/children are supplied by a fake entity, not a wire decoder.
+No Demo reads or downloads. --baseline-dir selects saved weapons.rs. Production
+tables, inventory functions, prop_u32 and vendor lookup are injected; fake
+entities supply parent lengths and retained children, not decoded network data.
 """
 import argparse
 from pathlib import Path
@@ -31,17 +31,16 @@ def main():
     selected = args.baseline_dir or current
     weapons = (selected / 'weapons.rs').read_text()
     constants = weapons[weapons.index('const KNIFE_LABEL:'):weapons.index('pub(crate) fn weapon_label(')]
-    names = ['weapon_label', 'grenade_inventory']
+    names = ['weapon_label', 'primary_weapon', 'disambiguate_usp', 'is_pistol']
     if 'fn current_inventory_labels(' in weapons:
-        names.extend(['current_inventory_labels', 'disambiguate_usp'])
+        names.append('current_inventory_labels')
     functions = '\n'.join(block(weapons, f'fn {name}(') for name in names)
-    if 'fn current_inventory_labels(' in weapons:
-        functions += '\n' + block((current / 'props.rs').read_text(), 'fn prop_u32(')
-    fixture = (ROOT / 'tools/cs2d-host/fixtures/grenade-inventory.rs').read_text()
+    functions += '\n' + block((current / 'props.rs').read_text(), 'fn prop_u32(')
+    fixture = (ROOT / 'tools/cs2d-host/fixtures/primary-inventory.rs').read_text()
     fixture = (fixture.replace('// WEAPON_CODE', constants + '\n' + functions)
                .replace('// SOURCE2_LOOKUP', block((ROOT / 'vendor/source2-demo/src/entity/container.rs').read_text(), 'pub fn get_by_handle(')))
-    print(f'Grenade inventory source: {selected}', flush=True)
-    with tempfile.TemporaryDirectory(prefix='cs-grenade-inventory-') as temp:
+    print(f'Primary inventory source: {selected}', flush=True)
+    with tempfile.TemporaryDirectory(prefix='cs-primary-inventory-') as temp:
         source = Path(temp) / 'regression.rs'; binary = Path(temp) / 'regression'
         source.write_text(fixture)
         subprocess.run(['rustc', '--edition=2021', '--test', '-Awarnings', str(source), '-o', str(binary)], check=True, timeout=60)

@@ -8,6 +8,12 @@
 >
 > 最后更新：2026-09-26
 
+## 2026-09-26：收起主枪也必须读当前库存前缀
+
+- 问题：primary遍历历史children/index-only且遇枪早返回，既可造历史枪，又遮蔽后续未知。共享当前完整标签验证后才按旧primary/pistol优先级选择，grenade类型/unknown规则保持。
+- 验证：实际primary9红→12绿、旧grenade11绿；实际Viewer/经济选择函数9断言、88相关tests、TS/Web及native9+vendor33/WASM/Viewer build/TS通过。真实19,777行primary变化，其中18,655旧标签消失、683行处于持刀展示条件；其他所有字段（含grenades）及9回合边界不变，10人消费通过，0网络。[证据](validation/PRIMARY_INVENTORY_IDENTITY.md)。
+- 限制：采样行数非独立事件；Host本来只显示active，不声称专业教练判断提升或完整购买账/UI验证。空primary仍合并unknown/无枪，旧存档不重算；当前source工作阶段收敛，下一项验证新库存语义经隔离SQLite重开/History Restore后不丢失、不触发重分析。代理与进程已释放，原A5独立。
+
 ## 2026-09-26：库存向量历史尾部造成真实“幽灵道具”
 
 - 问题：get_iter是历史children，不等于当前向量；partial列表又被当完整，去重类型数被称颗数。旧空Vec省略本来是unknown，不能误判旧协议已表达真实零。

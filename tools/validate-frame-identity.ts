@@ -8,7 +8,7 @@ import { buildCs2dAnalysisBundle, serializeCs2dAnalysisBundle, deserializeCs2dAn
 // Run each mode under 120 seconds. Large Replay stays in this process; local compressed
 // baseline preserves exact source samples without printing identities or positions.
 const [mode, path, snapshot, expectedRevision = "frame-identity.v1"] = process.argv.slice(2);
-assert(["frame-identity.v1", "active-weapon-identity.v1", "grenade-inventory.v1"].includes(expectedRevision));
+assert(["frame-identity.v1", "active-weapon-identity.v1", "grenade-inventory.v1", "primary-weapon.v1"].includes(expectedRevision));
 assert(["--baseline", "--verify"].includes(mode) && path && snapshot);
 let networkCalls = 0;
 globalThis.fetch = async () => { networkCalls++; throw new Error("NETWORK_FORBIDDEN"); };
@@ -27,15 +27,23 @@ const frames = replay.rounds.reduce((n,round) => n+round.frames.length,0);
 const players = replay.rounds.reduce((n,round) => n+round.frames.reduce((m,frame) => m+frame.players.length,0),0);
 assert(frames>0 && players>0);
 if (mode === "--baseline") {
-  assert(replay.generatedBy?.endsWith(".death-identity.v1"));
+  assert(replay.generatedBy?.endsWith(".death-identity.v1") || replay.generatedBy?.endsWith(`.${expectedRevision}`));
   const compressed=gzipSync(JSON.stringify(projection)); writeFileSync(snapshot,compressed,{mode:0o600});
-  console.log(JSON.stringify({mode,demoBytes,demoReads:1,parsePasses:1,parseMs,frames,players,baselineBytes:compressed.length,networkCalls}));
+  console.log(JSON.stringify({mode,parserRevision:replay.generatedBy,demoBytes,demoReads:1,parsePasses:1,parseMs,frames,players,baselineBytes:compressed.length,networkCalls}));
 } else {
   assert(replay.generatedBy?.endsWith(`.${expectedRevision}`));
   const before=JSON.parse(gunzipSync(readFileSync(snapshot)).toString()) as typeof projection;
   const inventoryRevision = expectedRevision === "grenade-inventory.v1";
   const withoutInventory = (rounds: typeof projection) => rounds.map(r => ({ ...r, frames: r.frames.map(f => ({ ...f, players: f.players.map(p => { const { grenades, grenadeInventoryVersion, ...rest } = p; return rest; }) })) }));
-  const same=isDeepStrictEqual(inventoryRevision ? withoutInventory(projection) : projection, inventoryRevision ? withoutInventory(before) : before);
+  const primaryRevision = expectedRevision === "primary-weapon.v1";
+  const withoutPrimary = (rounds: typeof projection) => rounds.map(r => ({ ...r, frames: r.frames.map(f => ({ ...f, players: f.players.map(p => { const { primary, ...rest } = p; return rest; }) })) }));
+  const comparable = (rounds: typeof projection) => inventoryRevision ? withoutInventory(rounds) : primaryRevision ? withoutPrimary(rounds) : rounds;
+  const same=isDeepStrictEqual(comparable(projection),comparable(before));
+  const primarySummary = { changedRows: 0, oldPrimaryNowMissing: 0, knifeDisplayChanges: 0 };
+  if(primaryRevision) for(const [ri,r] of projection.entries()) for(const [fi,f] of r.frames.entries()) for(const [pi,p] of f.players.entries()) {
+    const old=before[ri]?.frames[fi]?.players[pi];
+    if(old?.primary!==p.primary){primarySummary.changedRows++;if(old?.primary&&!p.primary)primarySummary.oldPrimaryNowMissing++;if(p.weapon==="Faca")primarySummary.knifeDisplayChanges++;}
+  }
   const inventorySummary = { knownEmpty: 0, knownNonempty: 0, unknown: 0, changedRows: 0, oldPositiveNowEmpty: 0 };
   if (inventoryRevision) for (const [ri,r] of projection.entries()) for (const [fi,f] of r.frames.entries()) for (const [pi,p] of f.players.entries()) {
     assert.equal(p.grenadeInventoryVersion, 1);
@@ -61,6 +69,6 @@ if (mode === "--baseline") {
     bundles++;
   }
   assert.equal(networkCalls,0);
-  console.log(JSON.stringify({mode,demoBytes,demoReads:1,parsePasses:1,parseMs,totalMs:Math.round(performance.now()-began),rounds:replay.rounds.length,frames,players,sameFramesAndRoundBounds:same,comparison:inventoryRevision ? "All fields except intended grenade inventory changes" : "All frame fields",...(inventoryRevision?{inventorySummary}:{}),negativeZeroCoordinates,bundles,networkCalls,limitation:"Single sample coverage only; invalid binding behavior is exercised in synthetic source-injected lifecycle tests."},null,2));
+  console.log(JSON.stringify({mode,demoBytes,demoReads:1,parsePasses:1,parseMs,totalMs:Math.round(performance.now()-began),rounds:replay.rounds.length,frames,players,sameFramesAndRoundBounds:same,comparison:inventoryRevision ? "All fields except intended grenade inventory changes" : primaryRevision ? "All fields except intended primary changes" : "All frame fields",...(inventoryRevision?{inventorySummary}:{}),...(primaryRevision?{primarySummary}:{}),negativeZeroCoordinates,bundles,networkCalls,limitation:"Single sample coverage only; invalid binding behavior is exercised in synthetic source-injected lifecycle tests."},null,2));
   assert(same,"FRAME_OR_ROUND_BOUNDARY_CHANGED_REQUIRES_INVESTIGATION");
 }

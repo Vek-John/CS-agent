@@ -158,11 +158,18 @@ Parser来源追加frame-identity.v1。合法完整帧保持字段与既有回合
 
 ### 2.4.8 完整道具种类与未知库存
 
-`m_hMyWeapons`是动态向量；父Unsigned32表示当前长度，内部children可能保留缩短后的历史尾部。Parser只读取显式长度前N项（N<=64为防护上限，不是游戏携带上限），逐项核对network packed类型/范围/index/低10serial及可识别物品类型。任一当前项不可验证时，整份道具种类列表未知；不把None/无效handle当合法空槽，也不把剩余部分列表当完整。长度0，或完整已验证库存中确无道具时输出明确[]。primary库存主枪路径本轮不迁移。
+`m_hMyWeapons`是动态向量；父Unsigned32表示当前长度，内部children可能保留缩短后的历史尾部。Parser只读取显式长度前N项（N<=64为防护上限，不是游戏携带上限），逐项核对network packed类型/范围/index/低10serial及可识别物品类型。任一当前项不可验证时，整份道具种类列表未知；不把None/无效handle当合法空槽，也不把剩余部分列表当完整。长度0，或完整已验证库存中确无道具时输出明确[]。道具与收起枪械共用该完整库存验证，枪械选择规则见下一节。
 
 新PlayerState每行带`grenadeInventoryVersion: 1`；`grenades`是去重的已确认道具种类，省略代表未知、[]代表已确认没有。Adapter只有版本1的完整合法列表才能用于Flash存在/不存在和种类陈述；旧未标记raw Replay数组不追认完整。类型列表不证明物理颗数：非空时Timeline不制造count=1条目，标记inventory.count缺失；未知标记inventory缺失；仅明确空支持utilityCount=0。种类通过DecisionSnapshot进入受限教学上下文，生命/身份/其他资源不受库存未知影响。
 
 Parser追加grenade-inventory.v1，Adapter/Signal 1.11.0、Timeline1.2.0标记新派生语义。既有已保存bundle仍按原产物读取（兼容1.10.0等旧版），不悄悄重算或删除历史结论；重新解析/分析才获得新事实语义。不依据类型数声称携带N颗，不由道具存在直接批准战术建议。
+
+
+### 2.4.9 收起枪械的当前库存来源
+
+`primary`沿完整当前库存标签顺序选择：第一支非手枪的枪械优先，否则第一支手枪，USP/P2000沿定义编号消歧。选择前须完成整个N项前缀验证，先遇步枪不能遮蔽后续未知项；历史尾部、失效句柄或不可识别当前项不得成为收起枪械。未知、已确认无枪时均沿既有空字符串/省略primary回退，不伪造库存不存在结论。该投影与grenade种类共用current_inventory_labels，但道具仍按类型去重、非空颗数仍未知。
+
+普通Viewer持刀时用已确认primary展示收起枪械，缺失回退当前刀；Host教练模式始终显示active，不把该修复声称为新的教练资源判断。经济统计的已有primary/active枪选择消费新来源，不修改购买重建算法。Parser追加primary-weapon.v1；public schema与旧产物直接恢复保持，重新解析才更新旧来源。
 
 
 ### 2.5 事实、推断、建议分层
