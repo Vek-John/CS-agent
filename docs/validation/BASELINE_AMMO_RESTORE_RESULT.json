@@ -1,0 +1,62 @@
+{
+  "taskId": "baseline-ammo-history-restore",
+  "baseline": "f70d504",
+  "productCodeChanged": false,
+  "path": [
+    "synthetic Replay",
+    "production Adapter",
+    "temporary SQLite save/close/reopen",
+    "actual GET",
+    "HistoryRestoreController",
+    "restored Session reducer",
+    "new source cache",
+    "View",
+    "grounded question"
+  ],
+  "cases": {
+    "positive_7": "PASS",
+    "known_zero": "PASS",
+    "absent_source": "unknown preserved",
+    "latest_v2_missing": "unknown despite older valid sample",
+    "decision_same_tick_fire": "unknown preserved"
+  },
+  "invariants": {
+    "independentAmmoRefs": true,
+    "strictPriorSource": true,
+    "restoredInitialAndPreEndQuestionRejected": true,
+    "completedSessionQuestionAvailable": true,
+    "unchangedSavedArtifactsAndRuntimeHead": true
+  },
+  "afterConsumerVerification": {
+    "analysisGenerationCalls": 0,
+    "narrationGenerationCalls": 0,
+    "fetchCalls": 0,
+    "viewerSourceCalls": 0,
+    "managedDemoLoadCalls": 0,
+    "frozenRouteValidationCalls": 1
+  },
+  "validation": {
+    "restoreFiles": 3,
+    "restorePassed": 15,
+    "coachingFiles": 3,
+    "coachingPassed": 115,
+    "newCases": 5,
+    "webTypecheck": "PASS after new test",
+    "viewerTypecheck": "PASS",
+    "webBuild": "PASS",
+    "formalViewerBuild": "PASS",
+    "rootDiffReview": "no must-fix"
+  },
+  "cleanup": {
+    "temporaryDatabase": "finally removed",
+    "sourceCache": "invalidated",
+    "browserOrServerStarted": false
+  },
+  "limitations": [
+    "Synthetic times are not parsed Demo ticks",
+    "Header-only managed Demo fixture; no Parser or Viewer transport",
+    "No new GUI/native A5 or legacy-version migration verification",
+    "Question turns remain page-local"
+  ],
+  "nextTask": "equipment-boolean-source-presence"
+}

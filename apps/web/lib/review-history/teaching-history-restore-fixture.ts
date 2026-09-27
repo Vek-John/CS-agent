@@ -164,10 +164,11 @@ export async function withReopenedTeachingHistory({ replay, transformAnalysis, b
     const events: string[] = []; await preparation.run(event => events.push(event.type));
     if (times) { times.recoveryPreparationMs = performance.now() - recoveryStarted; times.openToReadyMs = performance.now() - openStarted; }
     expect(events).toContain("READY_TO_START"); expect(events).not.toContain("NARRATION_UPDATE");
+    await verify({ analysis, normalized, recovered, savedNarration });
+    // Include consumer verification (cache/View/questions) in the no-regeneration boundary.
     expect(prepareRoute).toHaveBeenCalledOnce(); // Frozen route validation, not a new Director call.
     expect(prepareNarration).not.toHaveBeenCalled(); expect(generateNarration).not.toHaveBeenCalled(); expect(generateAnalysis).not.toHaveBeenCalled();
     expect(forbiddenTransport).not.toHaveBeenCalled(); expect(requestViewerSource).not.toHaveBeenCalled(); expect(loadManagedDemo).not.toHaveBeenCalled();
-    await verify({ analysis, normalized, recovered, savedNarration });
     expect(normalized.match_timeline).toEqual(validated.analysis.match_timeline);
     const reopened = await library.loadReview(review.reviewId, { materializeExternalArtifacts: true });
     expect(reopened.artifacts).toEqual(savedArtifacts); // No repair/regeneration/append during restore.

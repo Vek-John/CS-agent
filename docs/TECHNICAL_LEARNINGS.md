@@ -8,6 +8,15 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：弹匣记录经过历史重开后仍以原来源回答
+
+- 问题：基础弹匣展示已贯通首次带看，独立来源经过 SQLite 保存、关闭重开和恢复归一化后的消费尚无直接证据；已有恢复 helper 的零调用断言只执行到准备完成，未覆盖验证回调中的展示与追问。
+- 决策：复用真实临时库/产物校验/GET/HistoryRestoreController，不重造冻结cue或绕过Session门；新增五场小合成恢复测试。仅把helper原调用断言移到verify后，不改产品或持久化契约。
+- 验证：7/0重开后View和答案一致、仍用独立ammo ref且严格早于决策；无源、最新v2缺失和decision同tick开火无数值答案。最新缺失场明确保留更旧记录，证明恢复不回退旧值。恢复Session经实际START/TICK到完成边界，初态/末前不可问；消费结束后的分析/讲解生成、fetch和Viewer请求均0，准备路线只校验冻结路线一次，保存artifact/head不变。
+- 检查：恢复3文件15项、相关来源/问答3文件115项；两端TS、Web/正式Viewer production build通过，root实际diff集中复查。测试finally清临时SQLite并失效cache，未访问用户库。首次Viewer TS日志重定向遇目录创建竞态，目录完成后重跑成功，无产品问题。[证据](validation/BASELINE_AMMO_RESTORE_RESULT.json)。
+- 限制：合成坐标不是解析Demo tick，受管Demo只是header夹具；Parser/Viewer传输未执行，不称真实UI重挂载或native A5验收，也未测试旧版本迁移。问答仍本页临时状态，不新增历史问答保存。
+- 下一项：源码显示prop_bool将属性不存在/错类型折为false，当前helmet/defuser都走此路径且Snapshot会将false视为已知。选择equipment-boolean-source-presence小来源预检，先证明生产读取与下游表现，再定必要窄修复；不扩大到所有数值字段或从缺值猜装备。
+
 ## 2026-09-27：基础讲解显示严格决策前的最近弹匣记录
 
 - 实现：cache复用原currentDiagnosisResources，只在同一当前View状态/cue覆盖Snapshot/武器/规范状态事实归属通过后形成有界显示；有Snapshot覆盖时再走原资源校验并比对独立ammo引用。Host提前read同一source、取投影传View和问答，避免View反向依赖cache。独立refs不成为cue事实，不扩Narrator或改持久产物。

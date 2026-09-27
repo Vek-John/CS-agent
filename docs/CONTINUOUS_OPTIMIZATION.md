@@ -12,6 +12,16 @@
 
 
 
+## 已交付验证：基础弹匣历史恢复（2026-09-27）
+
+- ID baseline-ammo-history-restore；基线 f70d504 已 push/clean，真实 7f2b 复用，既有 owner 均 RELEASE。partial_revision_restore 继承默认模型/推理，独占新 baseline-ammo-restore.integration.test.ts；共用 fixture 必要改动先协调。root 文档、实际 diff 复查、两端 TS/正式 build、提交 push。
+- 目标/流程：小合成 Replay→真实 Adapter→隔离 SQLite 保存关闭重开→GET/HistoryRestoreController→恢复 cache/View/合法 Session 问答；7/0 保留，缺来源/最新缺失/同 tick 动作保持未知，独立 ammo refs 不变。恢复及追问后零分析/讲解/网络/Viewer再生成、保存产物不变。
+- 风险/检查：复用既有生命周期 helper，正常 Vitest 模块图避免独立 CJS WeakMap 假失败；先 7 发 smoke 60 秒再扩，约15分钟。临时库 finally 清理，不读用户库或正式 Demo、不 GUI/模型/Parser/安装部署；产品无证据不改，共用断言须覆盖 verify 回调后。相关恢复与来源测试、两端 TS/正式 build 后交付验证证据，合成时间不称真实 Demo tick。
+
+- 验收：5种新场景均通过真实临时 SQLite close/reopen→GET→Controller→恢复 Session reducer→cache/View/问答。7/0保持独立引用；无来源/最新v2缺失/同tick开火保持未知，最新缺失时更旧记录仍存在但不回退。恢复初态及结果末尾前不可问，实际完成门后才可问；产物与runtime head未变。
+- 交付：共享helper仅将零再生成/transport断言移到verify之后；无产品源码修复。恢复3文件15项+来源/问答3文件115项通过，两端TS、Web/正式Viewer production build通过，新增文件完成后补跑TS。root读真实diff及输出，无must-fix；临时库finally清理、cache失效、无browser/server。[证据](validation/BASELINE_AMMO_RESTORE_RESULT.json)。仅小合成控制面恢复，不等于真实Demo解析/Viewer重新挂载、native A5或旧版本迁移覆盖。
+- 下一有限目标 equipment-boolean-source-presence：真实源码props.rs的prop_bool将缺属性/错类型折成false，collector对helmet/defuser共用它，decision-context直接boolOrNull。先用小原生属性夹具证明“明确false”和“缺失”区别及当前Snapshot/View影响，再决定仅两字段的来源修复；不预设真实比赛缺失率，不扩所有属性/重扫Demo/重判历史。
+
 ## 已交付：基础讲解最近弹匣展示与追问（2026-09-27）
 
 - ID baseline-ammo-display-and-question，基线b18c064已push/clean，7f2b复用，原owners RELEASE。partial_revision_restore默认配置独占cache/View/QA/Host窄接线及新baseline-ammo-question测试；root docs/ARCH/tools可选GUI小fixture/统一checks与push。
