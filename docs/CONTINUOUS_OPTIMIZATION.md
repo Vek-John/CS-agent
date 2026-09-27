@@ -12,6 +12,22 @@
 
 
 
+## 已交付：致盲事件Controller身份与原始时间修复（2026-09-27）
+
+- ID blind-controller-identity-preflight，8c0d8f0已push/clean，复用7f2b；partial_revision_restore默认配置独占CSS GetPlayer/native一手来源与.local-data/blind-controller-identity-preflight外部证据，root独占本地event descriptor/实体链检查与docs，A1不改产品。
+- 目标/流程：原始userid编码→当前Controller→唯一SteamID与生命周期→可实现的Parser接口。A1五分钟沿真正native实现定位，不拿生成类型当wire证明；A2与source2-demo当前descriptor/EventValue及实体样本匹配，极小fixture验证缺失/重绑/歧义；A3明确可修复接口和验证证据，充分时继续源头最小修复，否则记录确切缺口。
+- 边界/风险：runtime API值与Demo wire可能不同，不能将userid直接当pawn或从晚缓存补人。零正式Demo/用户库/模型/GUI/server/安装；只已有代码、官方/项目一手小源码，15分钟有限、probe<60秒，同设施两败简化。临时文件各owner清理，root接口决定后才派生产文件所有权，无并发写；交付证据与阶段push。
+
+- A1已获固定一手DemoFile.NET fd59701：type9 PlayerController解码为低byte+1，type8独立StrictEHandle；CSS事件GetPlayer只到engine virtual，不能代替wire规则。本地GameEvent此前丢失descriptor/wire type，root据此批准A2保留小类型访问API后再归属，不凭字段名猜测。
+- A2 owner扩展：partial_revision_restore独占vendor event类型元数据/小tests、受控0035及registry、Parser与replay-core来源字段/身份fixture；root ARCH/docs/最终checks与push；prior_fire_boundary_review只读独立审查。事件时冻结Controller身份、原tick/id/报告时长、有限值门，旧展示兼容、Adapter/教学不改；负值不支持即unknown，不作pawn存活推断。
+- A3需实际wire/descriptor、类型错配/缺失/当前重绑/无owner/高位和sentinel、duration/tick保真及无future-map回填的窄验证，native Parser/WASM、两端TS/build及尾patch复用。新增实现20分钟有限、probe<60秒，bulk无用户数据，owner清理后RELEASE；不做正式Demo/GUI/模型或全域重构。
+
+- 集成发现与修复：root独占Adapter index.ts及index.test.ts一行known chain/两case回归，新增Parser末链原退回base；红到绿后整文件64tests通过、已RELEASE给最终build。仅来源保留不消费blinds，不扩教学；独立审查A1已指出缺payload默认0风险，实施已纳入存在门，待最终diff复核。
+
+- 交付：vendor新增匹配descriptor/wire类型且payload存在的小API，受控0035按type9解析当前Controller并冻结双方身份，有限duration/原tick/id/版本与未取整报告保真；旧展示和旧缓存形状兼容，未读取真实Demo，未接教学断言。root实际源码/补丁/日志审查，独立审查无must-fix，owner已RELEASE。
+- 验证：修前同源5红/2绿，修后8场景；Parser12/vendor36、原patch工具19、Adapter64通过。WASM、两端TS/build均通过；root另走正式cs2d:build补齐/cs2d/资源路径和HTML清理（上游direct build不代替它）。0035尾apply/reverse/reapply及current reuse通过，自建测试目录/进程清理。匿名[证据](validation/BLIND_CONTROLLER_IDENTITY_RESULT.json)记录支持范围和未验证实战覆盖。
+- 下一独立目标 decision-prior-self-blind：新来源已具备可靠主体/原tick，沿现有本人受击路径，仅将严格决策前、本人、新鲜存活/同回合约束下的有界“致盲事件发生”带到当前上下文，旧字段缺失保持未知。不推断当前失明/遮挡程度/投掷者可知/战术错误，不必依赖原生桌面或重新解析正式Demo；先小来源和引用验证再接实际消费。
+
 ## 已交付学习：自身致盲事实来源可行性（2026-09-27）
 
 - ID own-blind-source-feasibility，基线f8c4916已push/clean，7f2b顺序复用。partial_revision_restore默认配置独占只读源码调查和.local-data/own-blind-source-feasibility小证据，root docs/结论与后续接口决策；当前不改生产代码。

@@ -192,6 +192,14 @@ Parser追加grenade-inventory.v1，Adapter/Signal 1.11.0、Timeline1.2.0标记�
 
 只在本人新鲜存活快照及当前canonical状态事实引用有效时形成采样说明，Narration和View保持当前cue、完整已叙述事实与引用一致。界面仅说明最近采样的地面接触记录或未知，并提示其不代表开火瞬间移动；不推导空中/跳跃/急停/命中/战术错误，不增加动作工具或CS-Net特征。Adapter/signals 1.13继续读取1.12及旧兼容产物；无字段的保存记录不回填、不重算。 新生成的决策前开火补充必须严格早于绑定采样tick，因为同tick事件在帧起始回调之后处理；带TICK_START地面来源的当前snapshot/View也拒绝同采样tick开火。旧无phase的保存产物仍可按旧形状读取，不改写冻结事实。
 
+### 2.4.11 致盲事件的当前Controller身份与原始时间
+
+`player_blind`的userid/attacker只在事件descriptor与实际wire字段类型一致为9（PlayerController）、对应原始值实际存在时归属。当前支持0..65534的整数，65535以及负值/越界保持未知；这是明确的支持范围，不声称其他表示永不出现。以低8位槽位加1查询事件当时的当前实体，要求CCSPlayerController和有效非0/MAX SteamID。type8实体句柄、type4旧整数或仅同名字段不能借此门归属；不按pawn handle解释，不要求当前pawn存活，也不使用早先userid缓存或事后映射补人。
+
+受害者与可空投掷者在事件时冻结。既有`Round.blinds`仍只输出已解析受害者、经过同样类型/存在门验证的type2有限正报告时长和有效事件tick的记录，按回合半开窗口分配；空数组不证明没有致盲。旧展示`t/duration`保持0.1秒取整，新产物附`id`、原始canonical `tick`、`blindEvidenceVersion:1`和未取整的`reportedDuration`。旧Replay可缺这些字段，不反推tick、不补版本；Parser generatedBy追加blind-identity.v1，版本间引用不互换。
+
+这一层只修复Replay事实来源；Adapter仅登记完整Parser版本链，不消费致盲字段，DecisionSnapshot/教学尚未接入。报告时长不是精确屏幕遮挡、视野或事件结束证明；投掷者身份属于全知Replay，不自动成为本人知识。未来若消费，只能另经严格决策前、本人、回合/死亡/新鲜度及来源引用验证，不能由Viewer白色衰减直接形成专业判断。
+
 ### 2.5 事实、推断、建议分层
 
 - `Fact`：Demo 可直接验证；

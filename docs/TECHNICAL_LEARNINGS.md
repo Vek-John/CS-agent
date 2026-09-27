@@ -8,6 +8,16 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：致盲事件必须按wire类型解析当前Controller
+
+- 一手结论：[固定DemoFile.NET生成器](https://github.com/saul/demofile-net/blob/fd59701a998cf30a46adc4942e063d90de73c07a/src/DemoFile.Source1EventGen/Program.cs#L239)按type9的ValShort低8位加1得到Controller实体索引，65535为无效；[枚举](https://github.com/saul/demofile-net/blob/fd59701a998cf30a46adc4942e063d90de73c07a/src/DemoFile/Model/GameEventKeyType.cs)区分type8 StrictEHandle。CSS GetPlayer经native只是转调引擎virtual，不能用它另一个GetPlayerFromUserid辅助函数替代Demo wire证据。
+- 决策：source2-demo保留descriptor/wire类型和原始payload存在性，现有EventValue转换不变。Controller只按经验证type9和当前实体读取，支持u16非sentinel值，负值/越界明确unknown支持边界而非实战不可能的断言。事件时冻结recipient/flasher，不按pawn存活推断身份，不查最终userid map；其他旧事件路径不扩大修改。
+- 关键风险：protobuf accessor缺值默认0，单验type9仍会把缺失值归slot0。实现者和独立审查同时识别，故新增API必须验证实际Option有值；报告duration也要求type2/有值/有限且>0。当前源码小fixture验证这些门，不能把它冒称读取过真实Demo descriptor。
+- 来源合同：旧展示t/duration保持兼容，新blind记录保留稳定id、原tick、blindEvidenceVersion1和未取整reportedDuration，旧缓存字段可缺。Adapter只登记Parser来源链、未消费致盲字段；空数组仍未知，报告duration不能解释为精确视野或当前失明。
+- 必要兼容修复：Adapter完整末链匹配在新增generatedBy后原会退回base，红例已复现；仅新增一条known chain登记，旧ground和新blind链的序列化均保留，index完整64tests通过。未更改Adapter派生语义或教学范围。
+- 交付验证：同源fixture修前5红/2绿，修后8绿；真实Parser12/vendor36（含payload缺失、Float存在门、serde）与patch工具19、Adapter64通过，WASM和两端TS/build通过。root审实际diff/日志，独立审查无must-fix、执行者RELEASE。root最终补走正式cs2d:build：上游direct build未设/cs2d/资源路径，也未运行HTML清理，不能替代项目生产入口。尾apply/reverse/reapply与reuse通过，临时目录/进程清理。[来源与验收](validation/BLIND_CONTROLLER_IDENTITY_RESULT.json)。
+- 限制与后续：未验证真实Demo的type9覆盖率或负值编码，不宣称视觉精度/教学改善；未读取用户Demo/SQLite/Memory/密钥、未启动模型/GUI或安装部署。下一项只接新版来源的本人决策前事件发生事实，保留旧数据unknown与严格引用/生存/回合门，不推持续失明或错误决策。
+
 ## 2026-09-27：致盲展示数据尚不能直接作为决策事实
 
 - 结论：先修复事实来源，再考虑教学接线。当前仅保留旧`round.blinds`的既有可视化兼容，不将其用于新增教学断言，不能从其秒数反推精确Demo tick，也不能把空数组解释为未致盲、把`duration`解释为完全不可见。

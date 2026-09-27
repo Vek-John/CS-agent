@@ -1,0 +1,169 @@
+diff --git a/packages/parser/src/assemble.rs b/packages/parser/src/assemble.rs
+--- a/packages/parser/src/assemble.rs
++++ b/packages/parser/src/assemble.rs
+@@ -475,13 +475,17 @@
+         }
+     }
+ 
+-    // Flash blinds (victim steamId resolved via the userid -> steam map; the
+-    // flasher steamId is already resolved at event time).
+-    for (tick, uid, dur, flasher) in &c.blinds_raw {
++    // Keep legacy display timing; canonical evidence retains the exact event tick and report.
++    // Unknown subjects stay out of the display list, not evidence that no flash occurred.
++    for (ordinal, (tick, victim, dur, flasher)) in c.blinds_raw.iter().enumerate() {
+         if let Some(idx) = round_of(*tick, &rounds) {
+-            if let Some(steam) = c.userid_to_steam.get(uid) {
++            if let Some(steam) = victim {
+                 let start = rounds[idx].freeze_start_tick;
+                 rounds[idx].blinds.push(Blind {
++                    id: format!("cs2d-blind-{}-{}", tick, ordinal + 1),
++                    tick: *tick,
++                    blind_evidence_version: 1,
++                    reported_duration: *dur,
+                     t: round1((*tick as f64 - start as f64) / DEMO_TICK_RATE),
+                     duration: round1(*dur),
+                     steam_id: steam.clone(),
+diff --git a/packages/parser/src/collector.rs b/packages/parser/src/collector.rs
+--- a/packages/parser/src/collector.rs
++++ b/packages/parser/src/collector.rs
+@@ -137,9 +137,8 @@
+     pub(crate) hurts: Vec<(u32, String, i32, String)>,
+     /// Shots (tracers): (tick, x, y, yaw, optional event-resolved shooter).
+     pub(crate) shots: Vec<(u32, f64, f64, f64, Option<String>)>,
+-    /// Blinds: (tick, userid, duration, flasher steamId). The victim steamId comes
+-    /// from the userid->steam map; the flasher is resolved from the attacker pawn.
+-    pub(crate) blinds_raw: Vec<(u32, i32, f64, Option<String>)>,
++    /// Blinds freeze optional victim/flasher identity at event time; never late-fill from userid caches.
++    pub(crate) blinds_raw: Vec<(u32, Option<String>, f64, Option<String>)>,
+     /// Chat: (tick, name, text, team-only). The steamId is resolved by name at build.
+     pub(crate) chats: Vec<(u32, String, String, bool)>,
+     /// Defuse start: (tick, userid, has_kit). steamId resolved via userid.
+@@ -539,8 +538,7 @@
+     fn on_game_event(&mut self, ctx: &Context, ge: &GameEvent) -> ObserverResult {
+         let tick = ctx.tick();
+ 
+-        // Feed the userid -> steamId map from events that carry both (player_blind
+-        // only has userid, so we need this bridge).
++        // Legacy bridge retained for pickup/defuse consumers; blind events do not use it.
+         if let (Some(uid), Some(ph)) = (ev_i32(ge, "userid"), ev_i32(ge, "userid_pawn")) {
+             if !self.userid_to_steam.contains_key(&uid) {
+                 if let Some(s) = steam_from_pawn_handle(self, ctx, ph) {
+@@ -732,15 +730,12 @@
+                 }
+             }
+             "player_blind" => {
+-                let dur = ev_f32(ge, "blind_duration");
+-                if dur > 0.0 {
+-                    if let Some(uid) = ev_i32(ge, "userid") {
+-                        // Flasher: player_blind carries the thrower as `attacker` (a
+-                        // userid, not a pawn handle, unlike player_hurt), resolved
+-                        // via the same userid -> steam bridge as the victim.
+-                        let flasher = ev_i32(ge, "attacker")
+-                            .and_then(|u| self.userid_to_steam.get(&u).cloned());
+-                        self.blinds_raw.push((tick, uid, dur, flasher));
++                if ge.validated_value_type("blind_duration") == Some(2) && tick != u32::MAX {
++                    let dur = ev_f32(ge, "blind_duration");
++                    if dur.is_finite() && dur > 0.0 {
++                        let victim = event_controller_owner(ctx, ge, "userid");
++                        let flasher = event_controller_owner(ctx, ge, "attacker");
++                        self.blinds_raw.push((tick, victim, dur, flasher));
+                     }
+                 }
+             }
+diff --git a/packages/parser/src/lib.rs b/packages/parser/src/lib.rs
+--- a/packages/parser/src/lib.rs
++++ b/packages/parser/src/lib.rs
+@@ -23,7 +23,7 @@
+ use collector::Collector;
+ 
+ const DEMO_TICK_RATE: f64 = 64.0;
+-const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1.active-weapon-identity.v1.grenade-inventory.v1.primary-weapon.v1.sampled-ground.v1";
++const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1.active-weapon-identity.v1.grenade-inventory.v1.primary-weapon.v1.sampled-ground.v1.blind-identity.v1";
+ 
+ /// Parses the bytes of a `.dem` in a single pass and returns `(Replay JSON, voice
+ /// blob)`. The `Replay` matches `replay-schema 2D`; the blob follows the `CLV2`
+diff --git a/packages/parser/src/props.rs b/packages/parser/src/props.rs
+--- a/packages/parser/src/props.rs
++++ b/packages/parser/src/props.rs
+@@ -317,3 +317,20 @@
+     }
+ 
+ }
++
++/// Type-9 event values are controller-slot references, not native pawn handles.
++/// The u16 subset is intentional; unsupported encodings remain unknown.
++pub(crate) fn event_controller_owner(ctx: &Context, ge: &GameEvent, key: &str) -> Option<String> {
++    if ge.validated_value_type(key) != Some(9) { return None; }
++    let raw = match ge.get_value(key).ok()? { EventValue::Int(raw) => *raw, _ => return None };
++    let raw = u16::try_from(raw).ok()?;
++    if raw == u16::MAX { return None; }
++    let index = (raw & 0xff) as usize + 1;
++    let controller = ctx.entities().get_by_index(index).ok()?;
++    if controller.class().name() != "CCSPlayerController" { return None; }
++    let steam = match controller.get_property_by_name("m_steamID") {
++        Ok(FieldValue::Unsigned64(steam)) if *steam != 0 && *steam != u64::MAX => *steam,
++        _ => return None,
++    };
++    Some(steam.to_string())
++}
+diff --git a/packages/parser/src/schema.rs b/packages/parser/src/schema.rs
+--- a/packages/parser/src/schema.rs
++++ b/packages/parser/src/schema.rs
+@@ -308,11 +308,16 @@
+ #[derive(Serialize)]
+ #[serde(rename_all = "camelCase")]
+ pub(crate) struct Blind {
++    pub(crate) id: String,
++    pub(crate) tick: u32,
++    pub(crate) blind_evidence_version: u8,
++    /// Unrounded game-event report, not proof of current or complete visual occlusion.
++    pub(crate) reported_duration: f64,
+     pub(crate) t: f64,
+     pub(crate) duration: f64,
+     /// The blinded player (victim).
+     pub(crate) steam_id: String,
+-    /// Who threw the flash, resolved from the event's attacker pawn (None when
++    /// Who threw the flash, resolved from the current event controller (None when
+     /// the parser could not resolve it). Lets the impact view attribute
+     /// "enemies flashed" to a player.
+     pub(crate) flasher_steam_id: Option<String>,
+@@ -337,3 +342,19 @@
+         }
+     }
+ }
++
++#[cfg(test)]
++mod blind_evidence_tests {
++    #[test]
++    fn blind_json_preserves_canonical_source_and_unrounded_report() {
++        let blind = super::Blind { id: "cs2d-blind-101-1".into(), tick: 101, blind_evidence_version: 1, reported_duration: 0.04_f32 as f64, t: 0.0, duration: 0.0, steam_id: "synthetic-player".into(), flasher_steam_id: None };
++        let json = serde_json::to_value(&blind).unwrap();
++        assert_eq!(json["id"], "cs2d-blind-101-1");
++        assert_eq!(json["tick"], 101);
++        assert_eq!(json["blindEvidenceVersion"], 1);
++        assert_eq!(json["reportedDuration"], 0.04_f32 as f64);
++        assert_eq!(json["duration"], 0.0);
++        assert_eq!(json["steamId"], "synthetic-player");
++        assert!(json["flasherSteamId"].is_null());
++    }
++}
+diff --git a/packages/replay-core/src/schema.ts b/packages/replay-core/src/schema.ts
+--- a/packages/replay-core/src/schema.ts
++++ b/packages/replay-core/src/schema.ts
+@@ -189,8 +189,14 @@
+ 
+ /** A player blinded by a flash: the viewer fades the level from t to t+duration. */
+ export interface BlindFlash {
+-  t: number
+-  /** Total blind duration, in seconds. */
++  /** Present on current event-time identity output; absent on old cached replays. */
++  id?: string
++  tick?: number
++  blindEvidenceVersion?: 1
++  /** Original finite positive game-event report; not a current visibility measurement. */
++  reportedDuration?: number
++  t: number
++  /** Legacy rounded report used for display; not an exact current-visibility measurement. */
+   duration: number
+   /** The blinded player (victim). */
+   steamId: string

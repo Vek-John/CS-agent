@@ -87,11 +87,26 @@ pub struct GameEvent<'a> {
     id: i32,
     list: &'a GameEventList,
     keys: Vec<EventValue>,
+    wire_value_types: Vec<Option<i32>>,
 }
 
 impl<'a> GameEvent<'a> {
     pub(crate) fn new(list: &'a GameEventList, ge: CSvcMsgGameEvent) -> Self {
         let id = ge.eventid();
+        // Preserve wire metadata independently of the compatibility EventValue projection.
+        let wire_value_types = ge.keys.iter().map(|key| {
+            let present = match key.r#type() {
+                1 => key.val_string.is_some(),
+                2 => key.val_float.is_some(),
+                3 | 8 => key.val_long.is_some(),
+                4 | 9 => key.val_short.is_some(),
+                5 => key.val_byte.is_some(),
+                6 => key.val_bool.is_some(),
+                7 => key.val_uint64.is_some(),
+                _ => false,
+            };
+            present.then_some(key.r#type()).filter(|_| key.r#type.is_some())
+        }).collect();
         let keys = ge
             .keys
             .iter()
@@ -109,7 +124,7 @@ impl<'a> GameEvent<'a> {
             })
             .collect::<Vec<_>>();
 
-        Self { id, list, keys }
+        Self { id, list, keys, wire_value_types }
     }
 
     /// Returns the event's numeric ID.
@@ -144,6 +159,16 @@ impl<'a> GameEvent<'a> {
             .map(|(value, key)| (key.name.as_str(), value))
     }
 
+    /// Wire type only when its value is present and agrees with the event descriptor.
+    /// Missing keys, missing type/value payloads, or mismatches remain unknown.
+    pub fn validated_value_type(&self, name: &str) -> Option<i32> {
+        let definition = self.list.list.get(&self.id)?;
+        let key = definition.name_to_key.get(name)?;
+        let expected = key.value_type?;
+        let actual = self.wire_value_types.get(key.id as usize).copied().flatten()?;
+        (actual == expected).then_some(actual)
+    }
+
     /// Gets the value for a specific key.
     ///
     /// # Arguments
@@ -174,4 +199,48 @@ impl<'a> GameEvent<'a> {
             .ok_or_else(|| GameEventError::UnknownKey(key.to_string()))?;
         Ok(&self.keys[key.id as usize])
     }
+}
+
+#[cfg(test)]
+mod wire_type_tests {
+    use super::*;
+    use crate::proto::{csvc_msg_game_event, csvc_msg_game_event_list, CSvcMsgGameEventList};
+    fn definition(kind: Option<i32>) -> GameEventList {
+        GameEventList::new(CSvcMsgGameEventList { descriptors: vec![csvc_msg_game_event_list::DescriptorT {
+            eventid: Some(1), name: Some("player_blind".into()), keys: vec![csvc_msg_game_event_list::KeyT { r#type: kind, name: Some("userid".into()) }],
+        }] })
+    }
+    fn event(list: &GameEventList, kind: i32, value: Option<i32>) -> GameEvent<'_> {
+        let mut key = csvc_msg_game_event::KeyT { r#type: Some(kind), ..Default::default() };
+        if kind == 8 || kind == 3 { key.val_long = value; } else { key.val_short = value; }
+        GameEvent::new(list, CSvcMsgGameEvent { eventid: Some(1), keys: vec![key], ..Default::default() })
+    }
+    #[test] fn retains_descriptor_and_wire_types_without_changing_integer_projection() {
+        for kind in [3,4,8,9] {
+            let list = definition(Some(kind)); let ge = event(&list, kind, Some(257));
+            assert_eq!(ge.validated_value_type("userid"), Some(kind));
+            let raw: i32 = ge.get_value("userid").unwrap().try_into().unwrap(); assert_eq!(raw, 257);
+        }
+    }
+    #[test] fn missing_payload_descriptor_or_mismatched_wire_is_unknown() {
+        let list = definition(Some(9));
+        assert_eq!(event(&list,9,None).validated_value_type("userid"),None);
+        assert_eq!(event(&list,4,Some(1)).validated_value_type("userid"),None);
+        assert_eq!(event(&list,8,Some(1)).validated_value_type("userid"),None);
+        assert_eq!(event(&list,9,Some(1)).validated_value_type("absent"),None);
+        let absent = GameEvent::new(&list, CSvcMsgGameEvent { eventid: Some(1), ..Default::default() });
+        assert_eq!(absent.validated_value_type("userid"),None);
+        let unknown = definition(None); assert_eq!(event(&unknown,9,Some(1)).validated_value_type("userid"),None);
+    }
+    #[test] fn float_requires_present_payload_and_matching_descriptor() {
+        let list = definition(Some(2));
+        for value in [None, Some(0.04)] {
+            let ge = GameEvent::new(&list, CSvcMsgGameEvent { eventid: Some(1), keys: vec![csvc_msg_game_event::KeyT { r#type: Some(2), val_float: value, ..Default::default() }], ..Default::default() });
+            assert_eq!(ge.validated_value_type("userid"), value.map(|_| 2));
+        }
+        let wrong = definition(Some(9));
+        let ge = GameEvent::new(&wrong, CSvcMsgGameEvent { eventid: Some(1), keys: vec![csvc_msg_game_event::KeyT { r#type: Some(2), val_float: Some(0.04), ..Default::default() }], ..Default::default() });
+        assert_eq!(ge.validated_value_type("userid"), None);
+    }
+
 }

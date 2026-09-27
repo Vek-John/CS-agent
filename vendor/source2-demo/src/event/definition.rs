@@ -11,4 +11,5 @@ pub(crate) struct GameEventDefinition {
 pub(crate) struct GameEventKey {
     pub(crate) id: i32,
     pub(crate) name: String,
+    pub(crate) value_type: Option<i32>,
 }

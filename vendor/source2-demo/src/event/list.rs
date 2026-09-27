@@ -41,6 +41,7 @@ impl GameEventList {
                         Rc::new(GameEventKey {
                             id: i as i32,
                             name: key.name().into(),
+                            value_type: key.r#type,
                         })
                     })
                     .collect::<Vec<_>>();

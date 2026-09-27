@@ -1,0 +1,84 @@
+{
+  "scope": "synthetic event/controller fixtures; no Demo parse",
+  "sourceBefore": {
+    "failed": 5,
+    "passed": 2
+  },
+  "sourceAfter": {
+    "passed": 8
+  },
+  "nativeParser": 12,
+  "vendor": 36,
+  "patchRegistry": 19,
+  "tail": "0034->0035 apply/reverse/reapply and reverse-check passed in self-cleaning TemporaryDirectory",
+  "controlledReuse": "passed",
+  "wasmBuild": "exit0",
+  "webTypecheck": "exit0",
+  "viewerTypecheck": "exit0",
+  "viewerBuild": "exit0",
+  "webBuild": "exit0",
+  "limits": [
+    "Type9 supports only unsigned 0..65534; other values unknown",
+    "Unknown recipient omitted from existing display array; not evidence of no event",
+    "Reported duration is not precise vision/ongoing blindness",
+    "No actual Demo coverage measurement or teaching/Adapter blind consumption"
+  ],
+  "baseline": "8c0d8f0",
+  "sources": {
+    "CSS-GameEvent.cs": "https://raw.githubusercontent.com/roflmuffin/CounterStrikeSharp/653d651f1ac09ac1ddb423d588f871b891038860/managed/CounterStrikeSharp.API/Modules/Events/GameEvent.cs",
+    "CSS-natives-events.cpp": "https://raw.githubusercontent.com/roflmuffin/CounterStrikeSharp/653d651f1ac09ac1ddb423d588f871b891038860/src/scripting/natives/natives_events.cpp",
+    "CSS-Utilities.cs": "https://raw.githubusercontent.com/roflmuffin/CounterStrikeSharp/653d651f1ac09ac1ddb423d588f871b891038860/managed/CounterStrikeSharp.API/Utilities.cs",
+    "SDK-igameevents.h": "https://raw.githubusercontent.com/alliedmodders/hl2sdk/625bfd4e39816ad0e1eae3b3144a3b5425c5c7a0/public/igameevents.h",
+    "DemoFile-Source1GameEvents.cs": "https://raw.githubusercontent.com/saul/demofile-net/fd59701a998cf30a46adc4942e063d90de73c07a/src/DemoFile.Game.Cs/Source1GameEvents.cs",
+    "DemoFile-CsDemoParser.cs": "https://raw.githubusercontent.com/saul/demofile-net/fd59701a998cf30a46adc4942e063d90de73c07a/src/DemoFile.Game.Cs/CsDemoParser.cs",
+    "DemoFile-EventGen.cs": "https://raw.githubusercontent.com/saul/demofile-net/fd59701a998cf30a46adc4942e063d90de73c07a/src/DemoFile.Source1EventGen/Program.cs",
+    "DemoFile-GameEventKeyType.cs": "https://raw.githubusercontent.com/saul/demofile-net/fd59701a998cf30a46adc4942e063d90de73c07a/src/DemoFile/Model/GameEventKeyType.cs",
+    "DemoFile-CEntityIndex.cs": "https://raw.githubusercontent.com/saul/demofile-net/fd59701a998cf30a46adc4942e063d90de73c07a/src/DemoFile/Model/CEntityIndex.cs",
+    "DemoFile-CPlayerSlot.cs": "https://raw.githubusercontent.com/saul/demofile-net/fd59701a998cf30a46adc4942e063d90de73c07a/src/DemoFile/Model/CPlayerSlot.cs"
+  },
+  "tailEvidence": {
+    "operation": "Executed once; recorded from observed successful output, not rerun",
+    "setup": "TemporaryDirectory(cs-blind-tail-); copy six pre-change files from .local-data/blind-controller-identity-preflight/before at original relative paths",
+    "commands": [
+      "git apply <absolute 0035-blind-event-identity.patch>",
+      "git apply --reverse <absolute 0035-blind-event-identity.patch>",
+      "git apply <absolute 0035-blind-event-identity.patch>",
+      "git apply --reverse --check <absolute 0035-blind-event-identity.patch>"
+    ],
+    "result": "0034→0035 apply/reverse/reapply + reverse-check PASS; temporary checkout removed",
+    "eachExitCode": 0,
+    "cleanup": "TemporaryDirectory context exited; all self-created tail files removed",
+    "currentCheckoutReuse": {
+      "command": "node tools/apply-cs2d-host-patch.mjs --reuse-patched-checkout",
+      "exitCode": 0,
+      "log": "reuse.txt"
+    }
+  },
+  "adapterProvenance": {
+    "red": 1,
+    "greenTotal": 64,
+    "blindFieldConsumption": false
+  },
+  "independentReview": {
+    "mustFix": 0,
+    "scope": "actual vendor/Parser/0035/fixture/schema/Adapter diff, no independent test run"
+  },
+  "commands": [
+    "python3 tools/validate-blind-identity-source.py",
+    "pnpm exec vitest run tools/apply-cs2d-host-patch.test.mjs",
+    "pnpm exec vitest run libs/cs2d-analysis-adapter/src/index.test.ts",
+    "CARGO_NET_OFFLINE=true node tools/apply-cs2d-host-patch.mjs --reuse-patched-checkout --test-parser",
+    "CARGO_NET_OFFLINE=true node tools/apply-cs2d-host-patch.mjs --reuse-patched-checkout --build-parser",
+    "pnpm typecheck",
+    "pnpm cs2d:typecheck",
+    "pnpm build",
+    "CARGO_NET_OFFLINE=true pnpm cs2d:build"
+  ],
+  "viewerProductionBuild": {
+    "command": "CARGO_NET_OFFLINE=true pnpm cs2d:build",
+    "exitCode": 0,
+    "log": ".local-data/blind-controller-identity-preflight/viewer-production-build.txt",
+    "resourceBase": "/cs2d/",
+    "htmlSanitized": true
+  }
+}
