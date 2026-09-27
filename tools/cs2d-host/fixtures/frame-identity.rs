@@ -19,6 +19,7 @@ struct Context(Entities); impl Context { fn entities(&self) -> &Entities { &self
 type RoundClockSample = ();
 // RAW_FRAME
 // STATE_TYPES
+// GROUND_SAMPLE
 mod weapon_ammo {
     use super::*;
     pub struct WeaponAmmo;
@@ -135,5 +136,21 @@ fn has(c: &Collector, id: &str) -> bool { c.frames.last().unwrap().players.iter(
         ctx.0.0[1].values.insert("m_hPlayerPawn",FieldValue::Unsigned32(packed(134,serial)));
         ctx.0.0[0].weapon="AK-47"; sample(&mut c,&ctx,600);
         assert_eq!(knife_split(&c).is_some(),!incomplete);
+    }
+}
+
+#[test] fn actual_ground_reader_preserves_unknown_and_current_sample_binding() {
+    for mode in 0..6 {
+        let (mut c, mut ctx) = fixture();
+        let mut floor = ctx.0.0[0].clone(); floor.index=0;floor.serial=0;floor.class=Class("CWorld"); ctx.0.0.push(floor);
+        if mode > 0 {
+            ctx.0.0[0].values.insert("m_fFlags", FieldValue::Unsigned32(if mode==2 {0} else {1}));
+            ctx.0.0[0].values.insert("m_hGroundEntity", FieldValue::Unsigned32(if mode==2 || mode==3 {0xffffff} else {0}));
+        }
+        if mode==4 {ctx.0.0[0].values.insert("m_fFlags",FieldValue::Signed32(1));}
+        if mode==5 {ctx.0.0.last_mut().unwrap().serial=1;}
+        sample(&mut c,&ctx,100);
+        let evidence=&c.frames[0].players.iter().find(|p|p.steam_id=="111").unwrap().ground_evidence;
+        assert_eq!(ground_sample::fixture_summary(evidence),(match mode {1=>Some("FLAG_SET"),2=>Some("FLAG_UNSET"),_=>None},"TICK_START",100,"111"));
     }
 }

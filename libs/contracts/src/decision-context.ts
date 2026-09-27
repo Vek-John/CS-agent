@@ -1,3 +1,4 @@
+import type { GroundSampleEvidence } from "./ground-sample";
 import type { Advice, TeamSide } from "./index";
 import type { ObservableState } from "./observation";
 import type { DecisionAssessmentArtifact } from "./decision-assessment";
@@ -48,6 +49,7 @@ export interface DecisionSnapshot {
     helmet: boolean | null; weapon: string | null; grenades: readonly string[] | null;
     money: number | null; equipmentValue: number | null; hasDefuseKit: boolean | null;
     callout: string | null;
+    groundEvidence?: GroundSampleEvidence;
   }>;
   aliveCounts: DecisionValue<{ allies: number; enemies: number; includesSelectedPlayer: true }>;
   players: readonly DecisionPlayerSummary[];

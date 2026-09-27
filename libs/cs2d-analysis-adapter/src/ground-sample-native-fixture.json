@@ -1,0 +1,26 @@
+[
+  {
+    "phase": "TICK_START",
+    "playerId": "synthetic-self",
+    "sampledAtTick": 1400,
+    "source": "SOURCE2_PAWN_FLAGS",
+    "value": null,
+    "version": 1
+  },
+  {
+    "phase": "TICK_START",
+    "playerId": "synthetic-self",
+    "sampledAtTick": 1400,
+    "source": "SOURCE2_PAWN_FLAGS",
+    "value": "FLAG_SET",
+    "version": 1
+  },
+  {
+    "phase": "TICK_START",
+    "playerId": "synthetic-self",
+    "sampledAtTick": 1400,
+    "source": "SOURCE2_PAWN_FLAGS",
+    "value": "FLAG_UNSET",
+    "version": 1
+  }
+]

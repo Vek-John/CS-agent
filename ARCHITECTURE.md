@@ -184,6 +184,14 @@ Parser追加grenade-inventory.v1，Adapter/Signal 1.11.0、Timeline1.2.0标记�
 普通Viewer持刀时用已确认primary展示收起枪械，缺失回退当前刀；Host教练模式始终显示active，不把该修复声称为新的教练资源判断。经济统计的已有primary/active枪选择消费新来源，不修改购买重建算法。Parser追加primary-weapon.v1；public schema与旧产物直接恢复保持，重新解析才更新旧来源。
 
 
+### 2.4.10 采样地面接触事实
+
+可选 `GroundSampleEvidence` 使用单一结构 `{version:1, source:"SOURCE2_PAWN_FLAGS", phase:"TICK_START", sampledAtTick, playerId, value:"FLAG_SET"|"FLAG_UNSET"|null}`。Parser在既有帧起始采样、当前verified pawn内读取严格类型的m_fFlags，并用当前地面实体绑定或网络invalid sentinel作一致性门；缺失、错型、无法解析或冲突产生合法unknown（value null），不默认成未设置。属性采样不等于本tick新更新，更不等于射击瞬间状态。
+
+该对象随Replay的groundEvidence、PlayerStateSample的ground_evidence和DecisionSnapshot本人value中的groundEvidence传递。每个接收边界验证精确结构，并将playerId/sampledAtTick绑定到所属玩家与帧/状态；Agent运行时和持久Analysis包同样验证，不依赖TypeScript或passthrough保存未知字段。absent保留旧记录语义，合法null与absent不同；非法source/phase/身份/时间对象不得重新包装成可信unknown。
+
+只在本人新鲜存活快照及当前canonical状态事实引用有效时形成采样说明，Narration和View保持当前cue、完整已叙述事实与引用一致。界面仅说明最近采样的地面接触记录或未知，并提示其不代表开火瞬间移动；不推导空中/跳跃/急停/命中/战术错误，不增加动作工具或CS-Net特征。Adapter/signals 1.13继续读取1.12及旧兼容产物；无字段的保存记录不回填、不重算。 新生成的决策前开火补充必须严格早于绑定采样tick，因为同tick事件在帧起始回调之后处理；带TICK_START地面来源的当前snapshot/View也拒绝同采样tick开火。旧无phase的保存产物仍可按旧形状读取，不改写冻结事实。
+
 ### 2.5 事实、推断、建议分层
 
 - `Fact`：Demo 可直接验证；

@@ -40,6 +40,7 @@ export const CS2D_PATCH_FILES = Object.freeze([
   resolve(root, 'tools/cs2d-host/patches/0029-win-rate-idle-fallback.patch'),
   resolve(root, 'tools/cs2d-host/patches/0030-win-rate-user-fallback.patch'),
   resolve(root, 'tools/cs2d-host/patches/0031-viewer-action-completion-feedback.patch'),
+  resolve(root, 'tools/cs2d-host/patches/0032-sampled-ground-evidence.patch'),
 ])
 
 export const CS2D_REUSE_DECISIONS = Object.freeze({
@@ -72,6 +73,7 @@ const CONTROLLED_EXACT_PATHS = new Set([
   'packages/parser/Cargo.lock',
   'packages/parser/src/weapons.rs',
   'packages/parser/src/weapon_ammo.rs',
+  'packages/parser/src/ground_sample.rs',
   'packages/parser/src/assemble.rs',
   'packages/parser/src/collector.rs',
   'packages/parser/src/props.rs',
@@ -565,15 +567,19 @@ function inspectPatchedCheckout(upstream) {
   const pendingActionCompletionPatch = !reverseStates[30] &&
     run('git', ['apply', '--check', actionCompletionPatch], { cwd: upstream, capture: true, allowFailure: true }).status === 0
   if (paths.length > 0 && !reverseStates[30] && !pendingActionCompletionPatch) throw new Error('Viewer action completion patch is neither exactly applied nor cleanly applicable')
+  const sampledGroundPatch = CS2D_PATCH_FILES[31]
+  const pendingSampledGroundPatch = !reverseStates[31] &&
+    run('git', ['apply', '--check', sampledGroundPatch], { cwd: upstream, capture: true, allowFailure: true }).status === 0
+  if (paths.length > 0 && !reverseStates[31] && !pendingSampledGroundPatch) throw new Error('Sampled ground patch is neither exactly applied nor cleanly applicable')
   // Later identity markers intentionally supersede earlier generatedBy lines.
-  if (paths.length > 0 && !reverseStates[18] && !pendingPrimaryInventoryPatch) throw new Error('Primary inventory patch is neither exactly applied nor cleanly applicable')
-  if (paths.length > 0 && !reverseStates[17] && !pendingGrenadeInventoryPatch && !reverseStates[18]) throw new Error('Grenade inventory patch is neither exactly applied nor cleanly applicable')
-  if (paths.length > 0 && !reverseStates[16] && !pendingActiveWeaponIdentityPatch && !reverseStates[17] && !reverseStates[18]) throw new Error('Active weapon identity patch is neither exactly applied nor cleanly applicable')
-  if (paths.length > 0 && !reverseStates[15] && !pendingFrameIdentityPatch && !reverseStates[16] && !reverseStates[17] && !reverseStates[18]) throw new Error('Frame pawn identity patch is neither exactly applied nor cleanly applicable')
-  if (paths.length > 0 && !reverseStates[14] && !pendingDeathIdentityPatch && !reverseStates[15] && !reverseStates[16] && !reverseStates[17] && !reverseStates[18]) throw new Error('Death identity patch is neither exactly applied nor cleanly applicable')
-  if (paths.length > 0 && !reverseStates[13] && !pendingBombIdentityPatch && !reverseStates[14] && !reverseStates[15] && !reverseStates[16] && !reverseStates[17] && !reverseStates[18]) throw new Error('Bomb identity patch is neither exactly applied nor cleanly applicable')
-  if (paths.length > 0 && !reverseStates[12] && !pendingAmmoCachePatch && !reverseStates[13] && !reverseStates[14] && !reverseStates[15] && !reverseStates[16] && !reverseStates[17] && !reverseStates[18]) throw new Error('Prior-tick ammo cache patch is neither exactly applied nor cleanly applicable')
-  if (paths.length > 0 && !reverseStates[11] && !pendingAmmoPatch && !reverseStates[12] && !reverseStates[13] && !reverseStates[14] && !reverseStates[15] && !reverseStates[16] && !reverseStates[17] && !reverseStates[18]) throw new Error('Active weapon ammo patch is neither exactly applied nor cleanly applicable')
+  if (paths.length > 0 && !reverseStates[18] && !pendingPrimaryInventoryPatch && !reverseStates[31]) throw new Error('Primary inventory patch is neither exactly applied nor cleanly applicable')
+  if (paths.length > 0 && !reverseStates[17] && !pendingGrenadeInventoryPatch && !reverseStates[18] && !reverseStates[31]) throw new Error('Grenade inventory patch is neither exactly applied nor cleanly applicable')
+  if (paths.length > 0 && !reverseStates[16] && !pendingActiveWeaponIdentityPatch && !reverseStates[17] && !reverseStates[18] && !reverseStates[31]) throw new Error('Active weapon identity patch is neither exactly applied nor cleanly applicable')
+  if (paths.length > 0 && !reverseStates[15] && !pendingFrameIdentityPatch && !reverseStates[16] && !reverseStates[17] && !reverseStates[18] && !reverseStates[31]) throw new Error('Frame pawn identity patch is neither exactly applied nor cleanly applicable')
+  if (paths.length > 0 && !reverseStates[14] && !pendingDeathIdentityPatch && !reverseStates[15] && !reverseStates[16] && !reverseStates[17] && !reverseStates[18] && !reverseStates[31]) throw new Error('Death identity patch is neither exactly applied nor cleanly applicable')
+  if (paths.length > 0 && !reverseStates[13] && !pendingBombIdentityPatch && !reverseStates[14] && !reverseStates[15] && !reverseStates[16] && !reverseStates[17] && !reverseStates[18] && !reverseStates[31]) throw new Error('Bomb identity patch is neither exactly applied nor cleanly applicable')
+  if (paths.length > 0 && !reverseStates[12] && !pendingAmmoCachePatch && !reverseStates[13] && !reverseStates[14] && !reverseStates[15] && !reverseStates[16] && !reverseStates[17] && !reverseStates[18] && !reverseStates[31]) throw new Error('Prior-tick ammo cache patch is neither exactly applied nor cleanly applicable')
+  if (paths.length > 0 && !reverseStates[11] && !pendingAmmoPatch && !reverseStates[12] && !reverseStates[13] && !reverseStates[14] && !reverseStates[15] && !reverseStates[16] && !reverseStates[17] && !reverseStates[18] && !reverseStates[31]) throw new Error('Active weapon ammo patch is neither exactly applied nor cleanly applicable')
   const errors = paths.length > 0 || patchesExactlyApplied
     ? markerErrors(upstream, !pendingManagedLibraryPatch, !pendingShotActorPatch, !pendingTeachingPlaybackPatch, !pendingRoundClockPatch, !pendingHurtEventsPatch, !pendingShotIdentityPatch, !pendingBombIdentityPatch, !pendingDeathIdentityPatch, !pendingFrameIdentityPatch, !pendingActiveWeaponIdentityPatch, !pendingGrenadeInventoryPatch, !pendingPrimaryInventoryPatch)
     : []
@@ -584,7 +590,7 @@ function inspectPatchedCheckout(upstream) {
     patchesExactlyApplied,
     markerErrors: errors,
   })
-  return { decision, head, paths, diffCheck: check, patchesExactlyApplied, markerErrors: errors, pendingManagedLibraryPatch, pendingShotActorPatch, pendingTeachingPlaybackPatch, pendingRoundClockPatch, pendingHurtEventsPatch, pendingShotIdentityPatch, pendingAmmoPatch, pendingAmmoCachePatch, pendingBombIdentityPatch, pendingDeathIdentityPatch, pendingFrameIdentityPatch, pendingActiveWeaponIdentityPatch, pendingGrenadeInventoryPatch, pendingPrimaryInventoryPatch, pendingDemoPickerPatch, pendingReplayReusePatch, pendingParserReleasePatch, pendingReadFailurePatch, pendingValidationFeedbackPatch, pendingValidationDeadlinePatch, pendingParserCancellationPatch, pendingParserStartFailurePatch, pendingWinRateOwnerPatch, pendingWinRateIdlePatch, pendingWinRateUserPatch, pendingActionCompletionPatch }
+  return { decision, head, paths, diffCheck: check, patchesExactlyApplied, markerErrors: errors, pendingManagedLibraryPatch, pendingShotActorPatch, pendingTeachingPlaybackPatch, pendingRoundClockPatch, pendingHurtEventsPatch, pendingShotIdentityPatch, pendingAmmoPatch, pendingAmmoCachePatch, pendingBombIdentityPatch, pendingDeathIdentityPatch, pendingFrameIdentityPatch, pendingActiveWeaponIdentityPatch, pendingGrenadeInventoryPatch, pendingPrimaryInventoryPatch, pendingDemoPickerPatch, pendingReplayReusePatch, pendingParserReleasePatch, pendingReadFailurePatch, pendingValidationFeedbackPatch, pendingValidationDeadlinePatch, pendingParserCancellationPatch, pendingParserStartFailurePatch, pendingWinRateOwnerPatch, pendingWinRateIdlePatch, pendingWinRateUserPatch, pendingActionCompletionPatch, pendingSampledGroundPatch }
 }
 
 function applyPatches(upstream) {
@@ -661,6 +667,7 @@ async function main(argv = process.argv.slice(2)) {
       ...(inspection.pendingWinRateIdlePatch ? [CS2D_PATCH_FILES[28]] : []),
       ...(inspection.pendingWinRateUserPatch ? [CS2D_PATCH_FILES[29]] : []),
       ...(inspection.pendingActionCompletionPatch ? [CS2D_PATCH_FILES[30]] : []),
+      ...(inspection.pendingSampledGroundPatch ? [CS2D_PATCH_FILES[31]] : []),
     ]
     for (const patch of pendingPatches) {
       if (!patch) throw new Error('pending patch missing from controlled stack')

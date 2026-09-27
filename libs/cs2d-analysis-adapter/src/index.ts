@@ -1,3 +1,4 @@
+import { isGroundSampleEvidence, groundSampleText, type GroundSampleEvidence } from "@cs-coach/contracts";
 import { decisionSelfFireText } from "./decision-self-fire";
 import { verifiedGrenadeKinds } from "./grenade-kinds";
 import { normalizeWeaponAmmo, type Cs2dWeaponAmmo } from "./weapon-ammo";
@@ -78,6 +79,7 @@ export const CS2D_SOURCE = {
 function parserVersion(replay: Cs2dReplay): string {
   const base = `${CS2D_SOURCE.repository}@${CS2D_SOURCE.commit}`;
   const revisions = [
+    ["hurt-events.v1", "shot-identity.v2", "ammo-clip.v2", "bomb-identity.v1", "death-identity.v1", "frame-identity.v1", "active-weapon-identity.v1", "grenade-inventory.v1", "primary-weapon.v1", "sampled-ground.v1"],
     ["hurt-events.v1", "shot-identity.v2", "ammo-clip.v2", "bomb-identity.v1", "death-identity.v1", "frame-identity.v1", "active-weapon-identity.v1", "grenade-inventory.v1", "primary-weapon.v1"],
     ["hurt-events.v1", "shot-identity.v2", "ammo-clip.v2", "bomb-identity.v1", "death-identity.v1", "frame-identity.v1", "active-weapon-identity.v1", "grenade-inventory.v1"],
     ["hurt-events.v1", "shot-identity.v2", "ammo-clip.v2", "bomb-identity.v1", "death-identity.v1", "frame-identity.v1", "active-weapon-identity.v1"],
@@ -92,10 +94,10 @@ function parserVersion(replay: Cs2dReplay): string {
   return known ? `${base}/${known.join("/")}` : base;
 }
 
-export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.12.0" as const;
+export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.13.0" as const;
 export const CS2D_TIMELINE_VERSION = "zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec/timeline/1.2.0" as const;
 export const CS2D_OBSERVATION_VERSION = "cs2d-analysis-adapter/1.7.0/internal-observation" as const;
-export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.12.0/signals" as const;
+export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.13.0/signals" as const;
 export const CS2D_PLANNER_VERSION = "cs2d-analysis-adapter/1.6.0/planner" as const;
 
 /** MVP pacing target: a full match should feel coached, not interrupted. */
@@ -143,6 +145,7 @@ export interface Cs2dPlayerState {
   readonly armor: number;
   readonly helmet?: boolean;
   readonly defuser?: boolean;
+  readonly groundEvidence?: GroundSampleEvidence;
   readonly grenadeInventoryVersion?: 1;
   readonly grenades?: readonly string[];
 }
@@ -280,7 +283,7 @@ export interface Cs2dExcludedRound {
 }
 
 export interface Cs2dAnalysisMetadata {
-  readonly adapter_version: typeof CS2D_ADAPTER_VERSION | "cs2d-analysis-adapter/1.11.0" | "cs2d-analysis-adapter/1.10.0" | "cs2d-analysis-adapter/1.9.0" | "cs2d-analysis-adapter/1.8.0" | "cs2d-analysis-adapter/1.7.0" | "cs2d-analysis-adapter/1.6.1" | "cs2d-analysis-adapter/1.6.0" | "cs2d-analysis-adapter/1.5.2" | "cs2d-analysis-adapter/1.5.1" | "cs2d-analysis-adapter/1.5.0" | "cs2d-analysis-adapter/1.4.0";
+  readonly adapter_version: typeof CS2D_ADAPTER_VERSION | "cs2d-analysis-adapter/1.12.0" | "cs2d-analysis-adapter/1.11.0" | "cs2d-analysis-adapter/1.10.0" | "cs2d-analysis-adapter/1.9.0" | "cs2d-analysis-adapter/1.8.0" | "cs2d-analysis-adapter/1.7.0" | "cs2d-analysis-adapter/1.6.1" | "cs2d-analysis-adapter/1.6.0" | "cs2d-analysis-adapter/1.5.2" | "cs2d-analysis-adapter/1.5.1" | "cs2d-analysis-adapter/1.5.0" | "cs2d-analysis-adapter/1.4.0";
   readonly source: Cs2dReplaySourceMetadata;
   readonly input_map: string;
   readonly selected_steam_id: string;
@@ -567,6 +570,7 @@ function normalizeStateSample(
     return undefined;
   }
   const missingFields: string[] = ["pitch", "velocity"];
+  if (state.groundEvidence !== undefined && (!isGroundSampleEvidence(state.groundEvidence) || state.groundEvidence.playerId !== state.steamId || state.groundEvidence.sampledAtTick !== tick)) throw new Error("Invalid player ground sample binding.");
   if (typeof state.helmet !== "boolean") missingFields.push("helmet");
   const weapon = safeText(state.weapon, "UNKNOWN_ITEM");
   if (weapon === "UNKNOWN_ITEM") missingFields.push("active_item");
@@ -585,6 +589,7 @@ function normalizeStateSample(
   return {
     player_id: state.steamId,
     tick,
+    ...(state.groundEvidence === undefined ? {} : { ground_evidence: { ...state.groundEvidence, value: state.alive === true && finiteNumber(state.health) && state.health > 0 ? state.groundEvidence.value : null } }),
     side: sideOrFallback(state.side, "T"),
     world_position: { x: state.x, y: state.y, z: state.z },
     yaw: state.yaw,
@@ -996,7 +1001,7 @@ function buildCanonicalGeneratorInput(
         kind: "DECISION_CONTEXT",
         roundNumber: raw.round.number,
         tick: state.sample.tick,
-        text: [stateFactText(state), sourceSnapshot.selfFireEvents?.length ? decisionSelfFireText() : undefined].filter(Boolean).join(" "),
+        text: [stateFactText(state), sourceSnapshot.selectedPlayer.value?.alive === true && sourceSnapshot.selectedPlayer.value.health! > 0 && sourceSnapshot.selectedPlayer.value.groundEvidence ? groundSampleText(sourceSnapshot.selectedPlayer.value.groundEvidence.value) : undefined, sourceSnapshot.selfFireEvents?.length ? decisionSelfFireText() : undefined].filter(Boolean).join(" "),
         sourceRefs: [...state.sample.fact_refs, ...(sourceSnapshot.selfFireEvents ?? []).map(event => event.sourceRef)],
         observedByPlayer: true,
         missingFields: [...state.sample.missing_fields],
@@ -1594,7 +1599,7 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
     throw new Error("cs2d win-probability contract is invalid.");
   }
   if (
-    ![CS2D_ADAPTER_VERSION, "cs2d-analysis-adapter/1.11.0", "cs2d-analysis-adapter/1.10.0", "cs2d-analysis-adapter/1.9.0", "cs2d-analysis-adapter/1.8.0", "cs2d-analysis-adapter/1.7.0", "cs2d-analysis-adapter/1.6.1", "cs2d-analysis-adapter/1.6.0", "cs2d-analysis-adapter/1.5.2", "cs2d-analysis-adapter/1.5.1", "cs2d-analysis-adapter/1.5.0", "cs2d-analysis-adapter/1.4.0"].includes(bundle.metadata.adapter_version) ||
+    ![CS2D_ADAPTER_VERSION, "cs2d-analysis-adapter/1.12.0", "cs2d-analysis-adapter/1.11.0", "cs2d-analysis-adapter/1.10.0", "cs2d-analysis-adapter/1.9.0", "cs2d-analysis-adapter/1.8.0", "cs2d-analysis-adapter/1.7.0", "cs2d-analysis-adapter/1.6.1", "cs2d-analysis-adapter/1.6.0", "cs2d-analysis-adapter/1.5.2", "cs2d-analysis-adapter/1.5.1", "cs2d-analysis-adapter/1.5.0", "cs2d-analysis-adapter/1.4.0"].includes(bundle.metadata.adapter_version) ||
     bundle.metadata.source.repository !== CS2D_SOURCE.repository ||
     bundle.metadata.source.commit !== CS2D_SOURCE.commit ||
     bundle.metadata.renderer_input !== false ||
@@ -1615,6 +1620,11 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
     assertValidReviewPlan(bundle.match_timeline, bundle.review_plan);
   } else if (bundle.review_plan.segments.length > 0 || bundle.review_plan.cues.length > 0) {
     throw new Error("A non-complete cs2d analysis plan must not expose partial teaching content.");
+  }
+
+  for (const sample of bundle.match_timeline.player_state_tracks ?? []) {
+    if (sample.ground_evidence !== undefined && (!isGroundSampleEvidence(sample.ground_evidence) || sample.ground_evidence.playerId !== sample.player_id || sample.ground_evidence.sampledAtTick !== sample.tick)) throw new Error("Invalid stored player ground sample.");
+    if (sample.ground_evidence?.value != null && (sample.alive !== true || !finiteNumber(sample.health) || sample.health <= 0)) throw new Error("Known ground sample requires a live player state.");
   }
 
   const materialByState = new Map(

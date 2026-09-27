@@ -1,3 +1,4 @@
+import { isGroundSampleEvidence, groundSampleText } from "@cs-coach/contracts";
 import { decisionSelfFireText } from "../../../../libs/cs2d-analysis-adapter/src/decision-self-fire";
 import { matchesDecisionState, verifiedUtilityKindText } from "./utility-kind-evidence";
 import { projectDecisionUtilityCount } from "@cs-coach/coach-agent/decision-utilities";
@@ -36,6 +37,7 @@ export interface ThreeStageCoachingView {
     chips: readonly CoachingStatusChip[];
     fallbackText?: string;
     priorSelfFire?: { text: string; refs: readonly string[] };
+    sampledGround?: { text: string; refs: readonly string[] };
     limitations: readonly string[];
   };
   problem: {
@@ -94,12 +96,15 @@ function priorSelfFireForView(input: Parameters<typeof buildThreeStageCoachingVi
     observer?.boundary !== "OBSERVABLE" || observer.source !== "DEMO_OBSERVER_EVIDENCE" || observer.state.observer_player_id !== state.player_id || observer.state.at_tick !== decisionTick) return;
   const missing = [...state.missing_fields, ...snapshot.missingFields];
   if (missing.some(field => ["health", "alive", "fresh_player_state"].some(key => field === key || field.startsWith(`${key}.`)))) return;
+  const ground = snapshot.selectedPlayer.value?.groundEvidence;
+  if (ground !== undefined && !isGroundSampleEvidence(ground)) return;
+  const tickStart = ground?.phase === "TICK_START" || state.ground_evidence?.phase === "TICK_START";
   const events = snapshot.selfFireEvents;
   if (!Array.isArray(events) || !events.length || events.length > 3 || !Number.isSafeInteger(snapshot.roundNumber) || snapshot.roundNumber < 1 ||
     events.some(event => !event || typeof event !== "object") || new Set(events.map(event => event.sourceRef)).size !== events.length || events.some(event =>
       Object.keys(event).sort().join(",") !== "source,sourceRef,tick" || event.source !== "DEMO_WEAPON_FIRE" ||
       typeof event.sourceRef !== "string" || event.sourceRef.length > 160 || !new RegExp(`^cs2d-r${snapshot.roundNumber}-event-[1-9][0-9]*$`).test(event.sourceRef) ||
-      !Number.isSafeInteger(event.tick) || event.tick < 0 || event.tick >= decisionTick || event.tick > state.tick || event.tick < decisionTick - 10 * tickRate)) return;
+      !Number.isSafeInteger(event.tick) || event.tick < 0 || event.tick >= decisionTick || event.tick > state.tick || (tickStart && event.tick === state.tick) || event.tick < decisionTick - 10 * tickRate)) return;
   const refs = snapshot.selectedPlayer.evidenceRefs;
   if (!refs.length || refs.length > 8 || new Set(refs).size !== refs.length) return;
   const facts: Fact[] = [];
@@ -114,6 +119,41 @@ function priorSelfFireForView(input: Parameters<typeof buildThreeStageCoachingVi
     facts.push(fact);
   }
   const text = decisionSelfFireText();
+  const cited = facts.filter(fact => fact.text.includes(text));
+  return cited.length ? { text, refs: cited.map(fact => fact.id) } : undefined;
+}
+
+/** Only an already narrated, cited own sample may become a visible ground fact. */
+function sampledGroundForView(input: Parameters<typeof buildThreeStageCoachingView>[0], state: PlayerStateSample | undefined): ThreeStageCoachingView["currentState"]["sampledGround"] {
+  const snapshot = input.semantics?.decisionSnapshot, cue = input.cue, tickRate = input.tickRate, decisionTick = input.decisionTick;
+  const observer = input.semantics?.observableContext;
+  if (!state || !snapshot || !cue || typeof tickRate !== "number" || !Number.isSafeInteger(tickRate) || tickRate <= 0 ||
+    typeof decisionTick !== "number" || !Number.isSafeInteger(decisionTick) || cue.decision_tick !== decisionTick || snapshot.decisionTick !== decisionTick ||
+    input.narration.cueId !== cue.id || input.narration.candidateId !== cue.candidate_id || input.narration.primaryFocusCode !== cue.primary_focus_code ||
+    state.alive !== true || !Number.isInteger(state.health) || state.health <= 0 || state.health > 100 ||
+    snapshot.selectedPlayer.value?.alive !== true || snapshot.selectedPlayer.value.health !== state.health ||
+    snapshot.selectedPlayerId !== state.player_id || snapshot.sampledAtTick !== state.tick ||
+    decisionTick - state.tick > Math.ceil(tickRate / 2) ||
+    observer?.boundary !== "OBSERVABLE" || observer.source !== "DEMO_OBSERVER_EVIDENCE" || observer.state.observer_player_id !== state.player_id || observer.state.at_tick !== decisionTick) return;
+  const missing = [...state.missing_fields, ...snapshot.missingFields];
+  if (missing.some(field => ["health", "alive", "fresh_player_state"].some(key => field === key || field.startsWith(`${key}.`)))) return;
+  const sample = state.ground_evidence, saved = snapshot.selectedPlayer.value?.groundEvidence;
+  if (!isGroundSampleEvidence(sample) || !isGroundSampleEvidence(saved) || sample.playerId !== state.player_id || saved.playerId !== state.player_id ||
+    sample.sampledAtTick !== state.tick || saved.sampledAtTick !== state.tick || sample.value !== saved.value) return;
+  const refs = snapshot.selectedPlayer.evidenceRefs;
+  if (!refs.length || refs.length > 8 || new Set(refs).size !== refs.length) return;
+  const facts: Fact[] = [];
+  for (const ref of refs) {
+    const matching = (input.decisionFacts ?? []).filter(fact => fact.id === ref), cueFacts = cue.facts.filter(fact => fact.id === ref);
+    const fact = matching[0], original = cueFacts[0];
+    if (matching.length !== 1 || cueFacts.length !== 1 || !fact || !original || !cue.observable_fact_refs.includes(ref) ||
+      fact.source !== "DEMO" || original.source !== "DEMO" || fact.availability !== "DECISION" || original.availability !== "DECISION" ||
+      !fact.observed_by_player || !original.observed_by_player || fact.available_at_tick !== state.tick || original.available_at_tick !== state.tick ||
+      fact.text !== original.text || !fact.text.trim() || !input.narration.currentSituation.text.includes(fact.text) ||
+      input.narration.currentSituation.refs.filter(value => value === ref).length !== 1) return;
+    facts.push(fact);
+  }
+  const text = groundSampleText(sample.value);
   const cited = facts.filter(fact => fact.text.includes(text));
   return cited.length ? { text, refs: cited.map(fact => fact.id) } : undefined;
 }
@@ -197,6 +237,7 @@ export function buildThreeStageCoachingView(input: {
     currentState: {
       chips,
       priorSelfFire: priorSelfFireForView(input, state),
+      sampledGround: sampledGroundForView(input, state),
       limitations: input.semantics ? [...new Set([...(playerStateUnknown ? ["无法确认该决策点的当前玩家状态，暂不展示生命、护甲等资源。"] : []), ...situation.limitations, ...(assessment?.limitations ?? []).map(playerFacingLimitation)])].slice(0, 3) : [],
       ...(chips.length === 0 ? { fallbackText: playerStateUnknown ? "当前玩家状态暂无法确认。" : compactText(input.narration.currentSituation.text) } : {})
     },

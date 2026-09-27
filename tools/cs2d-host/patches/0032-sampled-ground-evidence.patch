@@ -1,0 +1,121 @@
+diff --git a/packages/parser/src/schema.rs b/packages/parser/src/schema.rs
+--- a/packages/parser/src/schema.rs
++++ b/packages/parser/src/schema.rs
+@@ -229,6 +229,7 @@
+     pub(crate) grenades: Option<Vec<String>>,
+     /// Present even when inventory verification failed and grenades is omitted.
+     pub(crate) grenade_inventory_version: u8,
++    pub(crate) ground_evidence: crate::ground_sample::GroundSampleEvidence,
+ }
+ 
+ // Events. We flatten the types into an enum serialized by `type` (tagged), like
+diff --git a/packages/parser/src/collector.rs b/packages/parser/src/collector.rs
+--- a/packages/parser/src/collector.rs
++++ b/packages/parser/src/collector.rs
+@@ -431,6 +431,7 @@
+             let active_weapon_handle = identity.as_ref().map(|id| id.handle());
+             let weapon_ammo = self.ammo_cache.for_frame(tick, &steam_id, identity.as_ref());
+             players.push(PlayerState {
++                ground_evidence: crate::ground_sample::sample(ctx, pawn, &steam_id, tick),
+                 steam_id,
+                 x: round1(world_coord(pawn, "CBodyComponent.m_cellX", "CBodyComponent.m_vecX")),
+                 y: round1(world_coord(pawn, "CBodyComponent.m_cellY", "CBodyComponent.m_vecY")),
+diff --git a/packages/parser/src/assemble.rs b/packages/parser/src/assemble.rs
+--- a/packages/parser/src/assemble.rs
++++ b/packages/parser/src/assemble.rs
+@@ -311,6 +311,7 @@
+                     defuser: p.defuser,
+                     grenades: p.grenades.clone(),
+                     grenade_inventory_version: p.grenade_inventory_version,
++                    ground_evidence: p.ground_evidence.clone(),
+                 })
+                 .collect();
+             rounds[idx].frames.push(Frame {
+diff --git a/packages/parser/src/lib.rs b/packages/parser/src/lib.rs
+--- a/packages/parser/src/lib.rs
++++ b/packages/parser/src/lib.rs
+@@ -17,12 +17,13 @@
+ mod schema;
+ mod weapons;
+ mod weapon_ammo;
++mod ground_sample;
+ 
+ use assemble::{build_replay, build_voice_blob};
+ use collector::Collector;
+ 
+ const DEMO_TICK_RATE: f64 = 64.0;
+-const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1.active-weapon-identity.v1.grenade-inventory.v1.primary-weapon.v1";
++const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1.active-weapon-identity.v1.grenade-inventory.v1.primary-weapon.v1.sampled-ground.v1";
+ 
+ /// Parses the bytes of a `.dem` in a single pass and returns `(Replay JSON, voice
+ /// blob)`. The `Replay` matches `replay-schema 2D`; the blob follows the `CLV2`
+diff --git a/packages/replay-core/src/schema.ts b/packages/replay-core/src/schema.ts
+--- a/packages/replay-core/src/schema.ts
++++ b/packages/replay-core/src/schema.ts
+@@ -289,6 +289,8 @@
+    *  Unversioned historical lists do not prove a complete inventory. */
+   grenades?: string[]
+   /** Inventory verification semantics, present even when grenades is unknown. */
+   grenadeInventoryVersion?: 1
++  /** Own-pawn tick-start sample, never shot-instant movement or airborne state. */
++  groundEvidence?: { version: 1; source: 'SOURCE2_PAWN_FLAGS'; phase: 'TICK_START'; sampledAtTick: number; playerId: string; value: 'FLAG_SET' | 'FLAG_UNSET' | null }
+ }
+ 
+diff --git a/packages/parser/src/ground_sample.rs b/packages/parser/src/ground_sample.rs
+new file mode 100644
+--- /dev/null
++++ b/packages/parser/src/ground_sample.rs
+@@ -0,0 +1,53 @@
++//! Own-pawn tick-start evidence. A missing bit is not a claim of airborne motion.
++use serde::Serialize;
++use source2_demo::prelude::*;
++
++#[derive(Clone, Serialize)]
++#[serde(rename_all = "camelCase")]
++pub(crate) struct GroundSampleEvidence {
++    version: u8,
++    source: &'static str,
++    phase: &'static str,
++    sampled_at_tick: u32,
++    player_id: String,
++    value: Option<&'static str>,
++}
++fn strict(value: Option<&FieldValue>) -> Option<u32> {
++    match value { Some(FieldValue::Unsigned32(v)) => Some(*v), _ => None }
++}
++fn project(flags: Option<u32>, ground: Option<u32>, bound: bool) -> Option<&'static str> {
++    match (flags, ground) {
++        (Some(f), Some(h)) if h < 0xffffff && bound && f & 1 == 1 => Some("FLAG_SET"),
++        (Some(f), Some(0xffffff)) if f & 1 == 0 => Some("FLAG_UNSET"),
++        _ => None,
++    }
++}
++// Called only after verified_controller_pawn has established the current owner.
++pub(crate) fn sample(ctx: &Context, pawn: &Entity, player_id: &str, tick: u32) -> GroundSampleEvidence {
++    let flags = strict(pawn.get_property_by_name("m_fFlags").ok());
++    let ground = strict(pawn.get_property_by_name("m_hGroundEntity").ok());
++    let bound = ground.filter(|h| *h < 0xffffff).and_then(|h| ctx.entities().get_by_index((h & 0x3fff) as usize).ok().map(|e| e.index() == (h & 0x3fff) && (e.serial() & 0x3ff) == (h >> 14))).unwrap_or(false);
++    let alive = matches!(pawn.get_property_by_name("m_iHealth"), Ok(FieldValue::Signed32(v)) if *v > 0)
++        && matches!(pawn.get_property_by_name("m_lifeState"), Ok(FieldValue::Unsigned32(0) | FieldValue::Unsigned8(0) | FieldValue::Signed32(0)));
++    GroundSampleEvidence { version: 1, source: "SOURCE2_PAWN_FLAGS", phase: "TICK_START", sampled_at_tick: tick, player_id: player_id.into(), value: if alive { project(flags, ground, bound) } else { None } }
++}
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test] fn strict_values_and_unknown() {
++        assert_eq!(strict(None), None); assert_eq!(strict(Some(&FieldValue::Float(0.0))), None);
++        assert_eq!(strict(Some(&FieldValue::Unsigned32(0))), Some(0));
++        assert_eq!(project(Some(1), Some(0), true), Some("FLAG_SET"));
++        assert_eq!(project(Some(0), Some(0xffffff), false), Some("FLAG_UNSET"));
++        assert_eq!(project(Some(4), Some(0xffffff), false), Some("FLAG_UNSET"));
++        for (f,h,b) in [(None,Some(0),true),(Some(1),None,true),(Some(1),Some(0xffffff),false),(Some(0),Some(0),true),(Some(1),Some(0),false),(Some(1),Some(u32::MAX),false)] { assert_eq!(project(f,h,b),None); }
++    }
++    #[test] fn serde_preserves_null_phase_and_identity() {
++        for value in [None, Some("FLAG_SET"), Some("FLAG_UNSET")] {
++            let e=GroundSampleEvidence { version:1,source:"SOURCE2_PAWN_FLAGS",phase:"TICK_START",sampled_at_tick:1400,player_id:"synthetic-self".into(),value };
++            let json=serde_json::to_value(e).unwrap();
++            assert_eq!(json["phase"],"TICK_START");assert_eq!(json["sampledAtTick"],1400);assert_eq!(json["playerId"],"synthetic-self");assert_eq!(json["value"],serde_json::json!(value));
++            println!("GROUND_SAMPLE_FIXTURE={}", json);
++        }
++    }
++}

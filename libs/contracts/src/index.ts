@@ -385,3 +385,5 @@ export * from "./teaching-diagnosis";
 export * from "./decision-context";
 export * from "./decision-assessment";
 export * from "./decision-observation";
+
+export * from "./ground-sample";

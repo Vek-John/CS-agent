@@ -1,3 +1,4 @@
+import type { GroundSampleEvidence } from "./ground-sample";
 import type { Direction, WorldPoint } from "./geometry";
 
 export interface ActiveItem {
@@ -24,6 +25,7 @@ export interface PlayerStateSample {
   yaw: number;
   pitch: number;
   velocity?: Direction;
+  ground_evidence?: GroundSampleEvidence;
   alive: boolean;
   health: number;
   armor: number;

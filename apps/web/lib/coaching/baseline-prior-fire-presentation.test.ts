@@ -77,3 +77,15 @@ it("preserves new serialized evidence but never manufactures a note in an old sa
   expect(buildThreeStageCoachingView(restored).currentState.priorSelfFire).toBeUndefined();
   expect(JSON.stringify(restored)).toBe(before);
 });
+
+it("rejects same-tick occurrence with explicit tick-start evidence but keeps legacy no-phase compatibility", () => {
+  const input = structuredClone(fixture().input), snapshot = input.semantics.decisionSnapshot!;
+  const sample = snapshot.selfFireEvents![0].tick;
+  snapshot.sampledAtTick = sample; input.decisionState!.tick = sample;
+  input.decisionFacts = input.decisionFacts.map(fact => ({ ...fact, available_at_tick: sample }));
+  input.cue.facts = input.cue.facts.map(fact => fact.availability === "DECISION" ? { ...fact, available_at_tick: sample } : fact);
+  expect(buildThreeStageCoachingView(input).currentState.priorSelfFire).toBeDefined();
+  snapshot.selectedPlayer.value!.groundEvidence = { version: 1, source: "SOURCE2_PAWN_FLAGS", phase: "TICK_START", sampledAtTick: sample, playerId: self, value: null };
+  input.decisionState!.ground_evidence = { ...snapshot.selectedPlayer.value!.groundEvidence };
+  expect(buildThreeStageCoachingView(input).currentState.priorSelfFire).toBeUndefined();
+});

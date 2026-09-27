@@ -214,3 +214,12 @@ it("registers primary selection only after complete current inventory validation
   expect(additions).toContain("grenade-inventory.v1.primary-weapon.v1");
   expect(additions).not.toMatch(/get_by_handle|event_pawn_to_packed|\.flatten\(\)/);
 });
+
+ it("registers current-pawn ground evidence as a controlled parser tail", () => {
+  expect(CS2D_PATCH_FILES[31]).toMatch(/0032-sampled-ground-evidence\.patch$/);
+  expect(isControlledDirtyPath("packages/parser/src/ground_sample.rs")).toBe(true);
+  const patch = readFileSync(CS2D_PATCH_FILES[31], "utf8");
+  expect(patch).toContain('phase: "TICK_START"');
+  expect(patch).toContain('ground_evidence: p.ground_evidence.clone()');
+  expect(patch).toContain('ground_evidence: crate::ground_sample::sample(ctx, pawn, &steam_id, tick)');
+ });

@@ -48,10 +48,17 @@ def main():
         helpers += '\n' + block(props, 'fn verified_controller_pawn')
     definitions = '\n'.join(block(schema, f'struct {name} ') for name in ['PlayerState', 'PlayerMeta'])
     definitions = re.sub(r'^\s*#\[serde[^\n]*\]\n', '\n', definitions, flags=re.MULTILINE)
+    ground = (current / 'ground_sample.rs').read_text().split('#[cfg(test)]')[0]
+    ground = re.sub(r'^//!.*\n', '', ground, flags=re.MULTILINE)
+    ground = ground.replace('use serde::Serialize;', '').replace('use source2_demo::prelude::*;', 'use super::*;')
+    ground = ground.replace('#[derive(Clone, Serialize)]', '#[derive(Clone)]')
+    ground = re.sub(r'^#\[serde[^\n]*\]\n', '', ground, flags=re.MULTILINE)
+    ground += '\npub(crate) fn fixture_summary(e: &GroundSampleEvidence) -> (Option<&\'static str>, &str, u32, &str) { (e.value, e.phase, e.sampled_at_tick, &e.player_id) }'
     fixture = (ROOT / 'tools/cs2d-host/fixtures/frame-identity.rs').read_text()
     parts = {
         '// SOURCE2_LOOKUP': block((ROOT / 'vendor/source2-demo/src/entity/container.rs').read_text(), 'pub fn get_by_handle('),
         '// IDENTITY_HELPERS': helpers,
+        '// GROUND_SAMPLE': 'mod ground_sample {\n' + ground + '\n}',
         '// STATE_TYPES': definitions,
         '// RAW_FRAME': block(collector, 'struct RawFrame '),
         '// FRAME_SAMPLE': sample,

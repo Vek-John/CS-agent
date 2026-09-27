@@ -69,6 +69,33 @@ describe("prior self fire remains decision context, not action or tactical judgm
     const snap = snapshot({ ...original, frames: original.frames.filter(frame => frame.tick !== 1400) });
     expect(snap.sampledAtTick).toBe(1392); expect(snap.selfFireEvents).toEqual([]);
   });
+  it.each([1391, 1392])("uses strictly prior events at tick-start sample boundary: synthetic %s", at => {
+    const original = fireReplay("DEATH", [shot(at)]).rounds[0];
+    const round = { ...original, frames: original.frames.filter(frame => frame.tick !== 1400) };
+    const snap = snapshot(round);
+    expect(snap.sampledAtTick).toBe(1392);
+    expect(snap.selfFireEvents).toHaveLength(at < 1392 ? 1 : 0);
+  });
+  it("keeps an immutable legacy 1.12 same-sample snapshot readable without granting new tick-start provenance", () => {
+    const legacy = structuredClone(prepared().bundle);
+    Object.assign(legacy.metadata, { adapter_version: "cs2d-analysis-adapter/1.12.0" });
+    // Construct the old producer's state before freezing this synthetic legacy packet.
+    for (const item of [...legacy.candidate_set.candidates, ...legacy.candidate_set.materials]) {
+      const snap = item.decisionSnapshot;
+      if (snap?.selfFireEvents?.length) snap.sampledAtTick = snap.selfFireEvents[0].tick;
+    }
+    const candidateSet = assembleCandidateSet(legacy.candidate_set);
+    const plan = compileReviewPlan({ timeline: legacy.match_timeline, candidateSet,
+      directorDecisionSet: deterministicDirectorFallback(candidateSet), planId: legacy.review_plan.id,
+      observationVersion: legacy.candidate_set.generationManifest.observationVersion, signalVersion: legacy.candidate_set.generationManifest.signalVersion }).plan;
+    const frozenLegacy = { ...legacy, candidate_set: candidateSet, review_plan: plan };
+    const saved = JSON.stringify(frozenLegacy);
+    expect(deserializeCs2dAnalysisBundle(saved)).toEqual(frozenLegacy);
+    expect(JSON.stringify(frozenLegacy)).toBe(saved);
+    const snap = structuredClone(frozenLegacy.candidate_set.materials.find(m => m.decisionSnapshot?.selfFireEvents?.length)!.decisionSnapshot!);
+    snap.selectedPlayer.value!.groundEvidence = { version: 1, source: "SOURCE2_PAWN_FLAGS", phase: "TICK_START", sampledAtTick: snap.sampledAtTick!, playerId: self, value: null };
+    expect(() => assertDecisionSnapshot(snap)).toThrow(/self-fire/);
+  });
   it.each(["stale", "missing-self", "zero-health", "outside-live", "expired"])("rejects unavailable context: %s", mode => {
     const original = fireReplay("DEATH", [shot(1392)]).rounds[0];
     const round = mode === "stale" ? { ...original, frames: original.frames.filter(frame => frame.tick < 1360) }

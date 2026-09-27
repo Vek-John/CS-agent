@@ -4,7 +4,8 @@ import type { Cs2dRound } from "./index";
 export const MAX_DECISION_SELF_FIRE_EVENTS = 3;
 const tick = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
 
-/** Prior occurrence only; never infer a target, hit, line of sight or intent. */
+/** The frame is tick-start, so same-tick events are not yet part of its state.
+ * Prior occurrence only; never infer a target, hit, line of sight or intent. */
 export function decisionSelfFireEvents(input: {
   round: Cs2dRound; selectedPlayerId: string; decisionTick: number; sampledAtTick: number | null;
   tickRate: number; alive: boolean;
@@ -18,7 +19,7 @@ export function decisionSelfFireEvents(input: {
     (round.frames ?? []).some(frame => frame.players.some(player => player.steamId === selectedPlayerId && (player.alive === false || player.health === 0)) && unsafeDeath(frame.tick)) ||
     (round.hurtEvents ?? []).some(event => event.victimSteamId === selectedPlayerId && event.reportedHealthAfter === 0 && unsafeDeath(event.tick))) return [];
   return (round.events ?? []).flatMap((event, index) => event.type === "shot" && event.shooterSteamId === selectedPlayerId && tick(event.tick) &&
-    event.tick >= round.startTick && event.tick >= decisionTick - tickRate * 10 && event.tick < decisionTick && event.tick <= sampledAtTick
+    event.tick >= round.startTick && event.tick >= decisionTick - tickRate * 10 && event.tick < decisionTick && event.tick < sampledAtTick
     ? [{ source: "DEMO_WEAPON_FIRE" as const, sourceRef: `cs2d-r${round.number}-event-${index + 1}`, tick: event.tick }] : [])
     .sort((a, b) => a.tick - b.tick || a.sourceRef.localeCompare(b.sourceRef)).slice(-MAX_DECISION_SELF_FIRE_EVENTS);
 }

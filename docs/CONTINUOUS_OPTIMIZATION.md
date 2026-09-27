@@ -12,6 +12,21 @@
 
 
 
+## 已交付：采样地面事实完整接线（2026-09-27）
+
+- ID sampled-ground-fact-contract，基线e1df6ad已push/clean，7f2b复用；partial_revision_restore默认配置先独占.local-data A1；主控确认字段流与接口后独占必要受控Parser新patch、registry/tests、contracts/runtime shape、Adapter和View窄接线。root独占docs/集成/浏览器/最终checks/push，其他owner RELEASE。
+- A1五分钟画完整字段流：producer→Replay→转换→runtime校验→package/叙述→保存恢复→View，明确value/unknown/absent/invalid、TICK_START/time、本人/ref。A2最小端到端事实消费；A3跨层串联与旧记录/错型/非法phase/未来时间/错身份/缺失回归，native/patch/WASM/两端TS/build与可见验证。实现25分钟、集成15分钟，阶段失败两次同设施简化。
+- 必须保留unknown，不能Boolean默认false或只改TS接口忽略runtime接收端；只显示最近采样可支持事实，不称AIRBORNE/射击瞬间/急停错误。旧保存无字段不重算，timeline/cue/assessment/tool与CS-Net不变。无需再次正式parse；无用户Demo/SQLite/Memory/密钥修改，无安装/发布/主main。单owner清理临时进程/例程RELEASE，root最终commit/push。
+
+- A1完整流确认/A2批准：共享GroundSampleEvidence{version:1,source:SOURCE2_PAWN_FLAGS,phase:TICK_START,sampledAtTick,playerId,value:FLAG_SET|FLAG_UNSET|null}；Parser同帧verified pawn→schema/assemble/replay-core→PlayerState.ground_evidence→snapshot.selectedPlayer.value.groundEvidence→canonical状态Fact/叙述/View。旧absent保持，合法null是unknown；错误结构/source/phase/身份/时间拒绝，不包装成可信unknown。
+- 接收端特别核实：coach-agent PlayerStateSchema原为passthrough，新增字段必须显式校验及绑定父player_id/tick；snapshot payload exactKeys、generatedBy/版本识别、保存恢复同步。Adapter1.13继续读1.12旧包。文案使用最近采样地面接触事实，不向用户暴露帧/位设置术语；不推出射击瞬间。prior_fire_boundary_review默认配置只读检查这些运行时/恢复路径，5分钟入口+一次最终diff复核，禁止并写。
+
+- 集成追加必修：root合成phase probe证实decision1400/sample1392时，同tick shot1392仍被并入state Fact，而真实runner先采TICK_START再处理当tick事件。批准新生成prior-fire改为strict event.tick < sampledAtTick，旧1.12产物仍可解码不重算；新phase的View按该门一致。只小fixture，不重parse。当前首轮WASM/两端build通过但TS修改后需重做受影响检查，不能用首轮绿冒称最终验收。
+
+- 交付：0032真实采样/serde→Replay→Adapter→runtime/持久bundle→Narration/View已通，合法三态与旧absent保留；Rust实际输出3对象作为跨层fixture。首6文件223tests通过；同tick修复后3文件70项受影响复验通过（重叠不累加），Web TS复验及最终Viewer TS/两端production build全过。native ground2项、实际frame-source11项、尾patch apply/reverse/reuse与WASM构建通过。
+- 独立审查定位并闭合非存活known的snapshot/timeline/runtime不一致，无未关闭must-fix；root另修同sample tick事件顺序，已读实际diff和probe 1/1→1/0。保留旧无phase1.12读取不改写冻结JSON。执行者均RELEASE，全部test/build/浏览器tab与4323服务退出，无正式Demo重读/模型/用户DB/安装发布。[完整字段流与验收](validation/SAMPLED_GROUND_FACT.md)。
+- root IAB真实View/StatusList SSR四态在340px内容正常；Host仅增加同一原生段落，旧记录无新说明，不冒称完整Host/native验收。当前恢复证据是实际bundle JSON/校验入口；下一独立目标 sampled-ground-history-restore复用现有隔离SQLite/API/HistoryRestoreController验证新known/null/旧absence的重开与零再分析/解析，不操作用户库。既有inventory-restore测试固定1.11断言将按实际兼容意图处理，而非只改数字宣称恢复通过。
+
 ## 已交付学习：采样地面标志真实覆盖（2026-09-27）
 
 - ID sampled-ground-coverage，基线6b129e7已push/clean，7f2b复用；partial_revision_restore默认配置独占.local-data探针/小tests及临时native example，root独占docs/最终diff与checks/push。前owner RELEASE，无并行产品写入。

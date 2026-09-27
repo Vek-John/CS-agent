@@ -1,3 +1,4 @@
+import { isGroundSampleEvidence } from "@cs-coach/contracts";
 import { decisionSelfFireEvents, MAX_DECISION_SELF_FIRE_EVENTS } from "./decision-self-fire";
 import { verifiedGrenadeKinds } from "./grenade-kinds";
 import { decisionSelfHurtEvents, selfHurtFactText, MAX_SELF_HURT_EVENTS } from "./self-hurt";
@@ -26,6 +27,7 @@ export function buildDecisionSnapshot(input: {
   const all = frame?.players ?? [];
   const selected = all.find((player) => player.steamId === selectedPlayerId);
   const grenadeKinds = verifiedGrenadeKinds(selected);
+  if (selected?.groundEvidence !== undefined && (!isGroundSampleEvidence(selected.groundEvidence) || selected.groundEvidence.playerId !== selectedPlayerId || selected.groundEvidence.sampledAtTick !== frame?.tick)) throw new Error("Invalid decision ground sample binding.");
   const side = sideOrNull(selected?.side);
   const sourceRefs = frame ? [`state-${round.number}-${frame.tick}`] : [];
   const complete = fresh && input.rosterIds.length === 10 && new Set(input.rosterIds).size === 10 && all.length === 10 && new Set(all.map((player) => player.steamId)).size === 10 && input.rosterIds.every((id) => all.some((player) => player.steamId === id && sideOrNull(player.side) && typeof player.alive === "boolean"));
@@ -84,7 +86,7 @@ export function buildDecisionSnapshot(input: {
     version: "decision-snapshot.v1", snapshotId, roundNumber: round.number, selectedPlayerId, decisionTick, sampledAtTick: frame?.tick ?? null,
     selfFireEvents: decisionSelfFireEvents({ round, selectedPlayerId, decisionTick, sampledAtTick: frame?.tick ?? null, tickRate, alive: Boolean(fresh && selected?.alive === true && selected.health > 0) }),
     ...(Array.isArray(round.hurtEvents) ? { selfHurtEvents: decisionSelfHurtEvents(round, selectedPlayerId, decisionTick, tickRate, Boolean(fresh && selected?.alive === true)) } : {}),
-    selectedPlayer: value(fresh && selected ? { side, alive: boolOrNull(selected.alive), health: numberOrNull(selected.health), armor: numberOrNull(selected.armor), helmet: boolOrNull(selected.helmet), weapon: textOrNull(selected.weapon), grenades: grenadeKinds ?? null, money: numberOrNull(selected.money), equipmentValue: numberOrNull(selected.equipValue), hasDefuseKit: boolOrNull(selected.defuser), callout: mirageChineseCallout(selected.lastPlaceName) ?? null } : null, "OBSERVABLE", fresh ? [] : ["决策前缺少足够新的玩家状态。"]),
+    selectedPlayer: value(fresh && selected ? { side, alive: boolOrNull(selected.alive), health: numberOrNull(selected.health), armor: numberOrNull(selected.armor), helmet: boolOrNull(selected.helmet), weapon: textOrNull(selected.weapon), grenades: grenadeKinds ?? null, money: numberOrNull(selected.money), equipmentValue: numberOrNull(selected.equipValue), hasDefuseKit: boolOrNull(selected.defuser), callout: mirageChineseCallout(selected.lastPlaceName) ?? null, ...(selected.groundEvidence === undefined ? {} : { groundEvidence: { ...selected.groundEvidence, value: selected.alive === true && numberOrNull(selected.health) !== null && selected.health > 0 ? selected.groundEvidence.value : null } }) } : null, "OBSERVABLE", fresh ? [] : ["决策前缺少足够新的玩家状态。"]),
     aliveCounts: value(complete && side ? { allies: allies.length, enemies: all.filter((player) => player.side !== side && player.alive === true).length, includesSelectedPlayer: true } : null, "OBSERVABLE"),
     players: all.slice(0, MAX_DECISION_SNAPSHOT_PLAYERS).map((player: Cs2dPlayerState) => ({ playerId: player.steamId, side: sideOrNull(player.side), alive: boolOrNull(player.alive), health: numberOrNull(player.health), boundary: "APPLICABILITY_ONLY" })),
     score: value(numberOrNull(round.scoreT) !== null && numberOrNull(round.scoreCt) !== null ? { t: round.scoreT, ct: round.scoreCt } : null, "OBSERVABLE"),
@@ -138,7 +140,7 @@ export function assertDecisionContextShape(snapshot: DecisionSnapshot): void {
   exactKeys(snapshot, ["version", "snapshotId", "roundNumber", "selectedPlayerId", "decisionTick", "sampledAtTick", "selectedPlayer", "aliveCounts", "players", "score", "clock", "bomb", "supportChecks", "pressureChecks", "spatialChecks", "missingFields", "limitations", ...(snapshot.selfHurtEvents === undefined ? [] : ["selfHurtEvents"]), ...(snapshot.selfFireEvents === undefined ? [] : ["selfFireEvents"])], "DecisionSnapshot");
   if (typeof snapshot.snapshotId !== "string" || typeof snapshot.selectedPlayerId !== "string" || !Number.isSafeInteger(snapshot.roundNumber)) throw new Error("DecisionSnapshot identity is invalid.");
   const values: [DecisionValue<unknown>, readonly string[]][] = [
-    [snapshot.selectedPlayer, ["side", "alive", "health", "armor", "helmet", "weapon", "grenades", "money", "equipmentValue", "hasDefuseKit", "callout"]],
+    [snapshot.selectedPlayer, ["side", "alive", "health", "armor", "helmet", "weapon", "grenades", "money", "equipmentValue", "hasDefuseKit", "callout", ...(snapshot.selectedPlayer.value?.groundEvidence === undefined ? [] : ["groundEvidence"])]],
     [snapshot.aliveCounts, ["allies", "enemies", "includesSelectedPlayer"]],
     [snapshot.score, ["t", "ct"]],
     [snapshot.clock, ["phase", "elapsedSeconds", "remainingSeconds"]],
@@ -154,7 +156,7 @@ export function assertDecisionContextShape(snapshot: DecisionSnapshot): void {
     for (const event of snapshot.selfFireEvents) {
       exactKeys(event, ["source", "sourceRef", "tick"], "Decision self-fire event");
       if (event.source !== "DEMO_WEAPON_FIRE" || typeof event.sourceRef !== "string" || !new RegExp(`^cs2d-r${snapshot.roundNumber}-event-[1-9][0-9]*$`).test(event.sourceRef) || event.sourceRef.length > 160 ||
-        typeof event.tick !== "number" || !Number.isSafeInteger(event.tick) || event.tick < 0 || event.tick >= snapshot.decisionTick || snapshot.sampledAtTick === null || event.tick > snapshot.sampledAtTick) throw new Error("Decision self-fire event has invalid or non-prior evidence.");
+        typeof event.tick !== "number" || !Number.isSafeInteger(event.tick) || event.tick < 0 || event.tick >= snapshot.decisionTick || snapshot.sampledAtTick === null || (event.tick > snapshot.sampledAtTick || (snapshot.selectedPlayer.value?.groundEvidence?.phase === "TICK_START" && event.tick === snapshot.sampledAtTick))) throw new Error("Decision self-fire event has invalid or non-prior evidence.");
     }
     if (snapshot.selfFireEvents.length && (snapshot.selectedPlayer.boundary !== "OBSERVABLE" || snapshot.selectedPlayer.value?.alive !== true || !(typeof snapshot.selectedPlayer.value.health === "number" && snapshot.selectedPlayer.value.health > 0))) throw new Error("Decision self-fire evidence requires a live selected player.");
   }
@@ -168,6 +170,8 @@ export function assertDecisionContextShape(snapshot: DecisionSnapshot): void {
   }
   const selected = snapshot.selectedPlayer.value;
   if (selected) {
+    if (selected.groundEvidence !== undefined && (!isGroundSampleEvidence(selected.groundEvidence) || selected.groundEvidence.playerId !== snapshot.selectedPlayerId || selected.groundEvidence.sampledAtTick !== snapshot.sampledAtTick || selected.groundEvidence.sampledAtTick > snapshot.decisionTick)) throw new Error("Invalid snapshot ground evidence.");
+    if (selected.groundEvidence?.value != null && (selected.alive !== true || selected.health === null || selected.health <= 0)) throw new Error("Known ground sample requires a live selected player.");
     if (selected.side !== null && selected.side !== "T" && selected.side !== "CT") throw new Error("DecisionSnapshot side is invalid.");
     for (const value of [selected.health, selected.armor, selected.money, selected.equipmentValue]) if (value !== null && (numberOrNull(value) === null || value < 0)) throw new Error("DecisionSnapshot resource is invalid.");
     for (const value of [selected.alive, selected.helmet, selected.hasDefuseKit]) if (value !== null && typeof value !== "boolean") throw new Error("DecisionSnapshot player state is invalid.");

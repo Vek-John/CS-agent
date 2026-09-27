@@ -1,3 +1,4 @@
+import { isGroundSampleEvidence, type GroundSampleEvidence } from "@cs-coach/contracts";
 import { projectDecisionResources } from "./decision-resources";
 import { MAX_DIAGNOSTIC_UTILITY_COUNT } from "./decision-utilities";
 export { projectDecisionUtilityCount } from "./decision-utilities";
@@ -109,6 +110,7 @@ const OutcomeFactSchema = z.object({
   limitations: z.array(ShortTextSchema).max(MAX_DIAGNOSIS_LIMITATIONS),
 }).strict();
 const PlayerStateSchema = z.object({
+  ground_evidence: z.custom<GroundSampleEvidence>(isGroundSampleEvidence).optional(),
   player_id: IdSchema,
   tick: z.number().int().nonnegative(),
   side: z.enum(["T", "CT"]),
@@ -119,7 +121,10 @@ const PlayerStateSchema = z.object({
   equipment_value: z.number().finite().nonnegative().optional(),
   inventory: z.array(z.object({ count: z.number().finite().nonnegative() }).passthrough()).max(32),
   active_item: z.object({ item_id: z.string().max(120), item_class: z.string().max(40) }).passthrough().optional(),
-}).passthrough();
+}).passthrough().superRefine((state, ctx) => {
+  if (state.ground_evidence?.value != null && (state.alive !== true || state.health <= 0)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Known ground sample requires a live player state." });
+  if (state.ground_evidence && (state.ground_evidence.playerId !== state.player_id || state.ground_evidence.sampledAtTick !== state.tick)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Ground sample does not match player state." });
+});
 
 /** Identity-free resource projection used when the full decision frame stays in Host. */
 export const DecisionResourcesSchema = z.object({

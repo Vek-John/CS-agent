@@ -8,6 +8,16 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：可选来源字段要贯通所有运行时接收者
+
+- 问题：地面来源覆盖已验证，但仅在Parser或TS接口加字段不能保证当前事实可见，也不能保证持久包/Agent正确处理unknown。决定采用共享GroundSampleEvidence，明确TICK_START、本人、采样时间及FLAG_SET/FLAG_UNSET/null，旧absent不回填。
+- 完整接线：0032当前verified pawn采集及serde→assemble/Replay→Adapter Timeline/snapshot→canonical状态Fact/Narration→当前引用绑定View/Host；generatedBy与Adapter/signals1.13标识新派生，旧1.12及既有版本仍可读取。严格schema检查同时覆盖raw输入、snapshot、持久Timeline和Agent runtime，不依赖passthrough。[字段流与验收](validation/SAMPLED_GROUND_FACT.md)。
+- 独立审查发现snapshot拒绝非存活known，而持久Timeline/Agent接收层曾漏同一约束；已在三处统一，合法null/absent继续通过。原始非存活采样投影unknown，非法跨边界确定值不能悄悄变成可信unknown。实际Rust serde三态小输出成为串联输入，验证真实转换、runtime与JSON恢复后呈现。
+- 集成额外发现同sample tick开火被附加到帧起始状态事实。真实runner顺序证明采样先于同tick事件；root小probe严格早于sample保留1、同tick原保留1→修复后0。新生成与明确TICK_START的snapshot/View收紧，旧无phase冻结记录不重算、不改正文；canonical采样时间不移动。
+- UI：沿emil/apple，真实View+StatusList SSR/IAB四态（set/unset/null/legacy）在340px内容正常，Host同一原生段落已接线；旧记录只有原chips。没有新增动画/透明度机制；tab与临时服务已退出。小页不是完整Host/native A5。
+- 验证：首轮6文件223tests；时间边界追加后3文件70项受影响复验通过（与前者有重叠，不相加）；Web TypeScript通过。实际ground reader/serde 2项与采样源码harness11项通过，0031→0032隔离apply/reverse及reuse通过，WASM构建通过。最终Viewer TypeScript与两端production build复验均通过，全部进程退出。
+- 限制/后继：未再次解析真实Demo、未运行模型或用户库；JSON保存恢复不是HTTP/SQLite重开实测。下一独立项复用隔离历史库与RestoreController验证新known/null/旧无字段重开不重分析，保持正确采样事实不冒充专业判断改善。
+
 ## 2026-09-27：地面标志覆盖成立，但采样阶段存在实际差异
 
 - 问题：上轮只能证明字段/容器语义，未证明当前授权Demo是否有地面来源。复用实际verified_controller_pawn，严格读取flags与辅助ground handle；本人playing-side样本与明确存活分列，bulk留native child。
