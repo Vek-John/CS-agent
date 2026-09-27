@@ -1,0 +1,204 @@
+{
+  "synthetic": true,
+  "networkCalls": 0,
+  "rows": [
+    {
+      "mode": "positive",
+      "syntheticDecisionTick": 1400,
+      "syntheticContainerTick": 1400,
+      "syntheticAmmoTick": 1399,
+      "currentHandle": 114697,
+      "ammoHandle": 114697,
+      "compact": {
+        "weapon": "AK-47",
+        "clip": 7,
+        "evidenceRefs": [
+          "state-1-1400-weapon-ammo-end-at-1399"
+        ]
+      },
+      "canonicalStateRefs": [
+        "fact-cs2d-r1-event-2-state"
+      ],
+      "ammoRefsAreCanonicalState": false,
+      "ammoRefsAreCueFact": false,
+      "baselineWeaponChip": "AK-47",
+      "directMatchedKinds": [
+        "health",
+        "armor",
+        "ammo"
+      ],
+      "baselineAnswerCount": 0,
+      "diagnosticAnswerCount": 1,
+      "diagnosticResourceKinds": [
+        "health",
+        "armor",
+        "ammo"
+      ],
+      "diagnosticAnswerSource": "当前诊断数值证据与本人资源记录交叉核对",
+      "diagnosticStatus": "AWAITING_CONFIRMATION",
+      "diagnosticClipMeasurement": [
+        {
+          "id": "measurement-c1-weapon-clip",
+          "label": "AK-47 决策前最近记录弹匣",
+          "value": 7,
+          "unit": "发",
+          "evidenceRefs": [
+            "state-1-1400-weapon-ammo-end-at-1399"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "zero",
+      "syntheticDecisionTick": 1400,
+      "syntheticContainerTick": 1400,
+      "syntheticAmmoTick": 1399,
+      "currentHandle": 114697,
+      "ammoHandle": 114697,
+      "compact": {
+        "weapon": "AK-47",
+        "clip": 0,
+        "evidenceRefs": [
+          "state-1-1400-weapon-ammo-end-at-1399"
+        ]
+      },
+      "canonicalStateRefs": [
+        "fact-cs2d-r1-event-2-state"
+      ],
+      "ammoRefsAreCanonicalState": false,
+      "ammoRefsAreCueFact": false,
+      "baselineWeaponChip": "AK-47",
+      "directMatchedKinds": [
+        "health",
+        "armor",
+        "ammo"
+      ],
+      "baselineAnswerCount": 0,
+      "diagnosticAnswerCount": 1,
+      "diagnosticResourceKinds": [
+        "health",
+        "armor",
+        "ammo"
+      ],
+      "diagnosticAnswerSource": "当前诊断数值证据与本人资源记录交叉核对",
+      "diagnosticStatus": "AWAITING_CONFIRMATION",
+      "diagnosticClipMeasurement": [
+        {
+          "id": "measurement-c1-weapon-clip",
+          "label": "AK-47 决策前最近记录弹匣",
+          "value": 0,
+          "unit": "发",
+          "evidenceRefs": [
+            "state-1-1400-weapon-ammo-end-at-1399"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "same-tick-shot",
+      "syntheticDecisionTick": 1400,
+      "syntheticContainerTick": 1400,
+      "syntheticAmmoTick": 1399,
+      "currentHandle": 114697,
+      "ammoHandle": 114697,
+      "compact": null,
+      "canonicalStateRefs": [
+        "fact-cs2d-r1-event-3-state"
+      ],
+      "ammoRefsAreCanonicalState": false,
+      "ammoRefsAreCueFact": false,
+      "baselineWeaponChip": "AK-47",
+      "directMatchedKinds": [
+        "health",
+        "armor"
+      ],
+      "baselineAnswerCount": 0,
+      "diagnosticAnswerCount": 0,
+      "diagnosticResourceKinds": [
+        "health",
+        "armor"
+      ],
+      "diagnosticAnswerSource": "当前资源的来源缺口",
+      "diagnosticStatus": "AWAITING_CONFIRMATION",
+      "diagnosticClipMeasurement": []
+    },
+    {
+      "mode": "latest-missing",
+      "syntheticDecisionTick": 1400,
+      "syntheticContainerTick": 1400,
+      "syntheticAmmoTick": null,
+      "currentHandle": 114697,
+      "ammoHandle": null,
+      "compact": null,
+      "canonicalStateRefs": [
+        "fact-cs2d-r1-event-2-state"
+      ],
+      "ammoRefsAreCanonicalState": false,
+      "ammoRefsAreCueFact": false,
+      "baselineWeaponChip": "AK-47",
+      "directMatchedKinds": [
+        "health",
+        "armor"
+      ],
+      "baselineAnswerCount": 0,
+      "diagnosticAnswerCount": 0,
+      "diagnosticResourceKinds": [
+        "health",
+        "armor"
+      ],
+      "diagnosticAnswerSource": "当前资源的来源缺口",
+      "diagnosticStatus": "AWAITING_CONFIRMATION",
+      "diagnosticClipMeasurement": []
+    },
+    {
+      "mode": "handle-mismatch",
+      "syntheticDecisionTick": 1400,
+      "syntheticContainerTick": 1400,
+      "syntheticAmmoTick": 1399,
+      "currentHandle": 114698,
+      "ammoHandle": 114697,
+      "compact": null,
+      "canonicalStateRefs": [
+        "fact-cs2d-r1-event-2-state"
+      ],
+      "ammoRefsAreCanonicalState": false,
+      "ammoRefsAreCueFact": false,
+      "baselineWeaponChip": "AK-47",
+      "directMatchedKinds": [
+        "health",
+        "armor"
+      ],
+      "baselineAnswerCount": 0,
+      "diagnosticAnswerCount": 0,
+      "diagnosticResourceKinds": [
+        "health",
+        "armor"
+      ],
+      "diagnosticAnswerSource": "当前资源的来源缺口",
+      "diagnosticStatus": "AWAITING_CONFIRMATION",
+      "diagnosticClipMeasurement": []
+    }
+  ],
+  "taskId": "baseline-ammo-source-preflight",
+  "baseline": "69a2b64",
+  "productChanged": false,
+  "reproduce": "pnpm exec vitest run tools/baseline-ammo-source-preflight.test.mjs",
+  "proposedInterface": [
+    "cache owns guarded compact weapon/clip/independent refs",
+    "Host obtains projection and passes it to View, avoiding cache/View runtime cycle",
+    "baseline requires displayed Snapshot/weapon/state binding and exact current text plus opaque source",
+    "do not insert ammo refs into canonical state facts or increase narration fact cap",
+    "known zero retained; reserve/instantaneous precision/continuity remain unknown"
+  ],
+  "toolLimitation": "Standalone tsx/CJS probe source tokens failed to match inside the question module; normal project Vitest module graph passed. No product fix inferred.",
+  "next": "baseline-ammo-display-and-question",
+  "validation": {
+    "relatedTestFiles": 3,
+    "relatedTestsPassed": 88,
+    "webTypecheck": "PASS",
+    "viewerTypecheck": "PASS",
+    "webProductionBuild": "PASS",
+    "formalViewerProductionBuild": "PASS",
+    "diffCheck": "PASS"
+  }
+}

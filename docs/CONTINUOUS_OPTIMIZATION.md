@@ -12,6 +12,18 @@
 
 
 
+## 已交付预检：基础讲解弹匣来源（2026-09-27）
+
+- ID baseline-ammo-source-preflight，基线69a2b64已push/clean，7f2b复用，既有owners RELEASE。partial_revision_restore默认配置只读产品，独占.local-data小probe/必要独立验证工具；root docs/接口判断/最终审阅与交付，不预授权产品变更。
+- 目标/流程：现有小生产Replay→自然cue→currentDiagnosisResources→独立ammo证据/原sample时间/武器实体→baseline可用性结论。验收正clip与0、最新缺失/decision同tick开火unknown，核实引用是否canonical及身份时间归属，明确最小可行接线或必要缺口。
+- 边界：不将TICK_END ammo来源伪装TICK_START state事实、不借诊断展示或字符串给baseline授权，不抬Narrator事实上限/不改判断；不重parse正式Demo、不跑Parser/模型/用户库/GUI/安装部署。
+- 风险：手造已冻结cue或混用canonical state ref会产生假通过；只用实际生成产物，先正常小样本，单probe60秒/总5–10分钟。owner清自有进程后RELEASE，root核输出及代码；只读学习若无产品变化不伪称新UI交付。
+
+- 实证：自然cue的合成decision/container1400、ammo源1399，clip7/0均可用于实际diagnosis问答；baseline未显示/不可答。独立ammo ref既非canonical state也非cue Fact。同tick开火/最新缺失/handle不符保持unknown，网络0。可复现tools/baseline-ammo-source-preflight.test.mjs一项覆盖五场景，默认不写文件，显式输出以wx拒覆盖。
+- 交付检查：3文件88tests、两端TS、Web及正式Viewer production build通过，产品源码未改。
+- 工具边界：独立tsx/CJS的WeakMap模块加载差异在正常Vitest不复现，未误修产品；失败结果保留。执行者RELEASE、root读真实代码与最终输出，无新UI/Parser/模型/用户库/正式Demo操作。[证据](validation/BASELINE_AMMO_SOURCE_PREFLIGHT_RESULT.json)。
+- 下一有限目标 baseline-ammo-display-and-question：cache提供经过原门的受限weapon/clip/独立refs，Host取后传View，避免cache↔View环；baseline额外绑定实际cue覆盖Snapshot/武器/状态及完整显示文本，不冒充canonical事实或扩Narrator上限。只称决策前最近记录、备弹未知，不改判断；先正常/0/未知与来源失配，再必要小GUI/交付检查。
+
 ## 已交付：可答资源快捷提问（2026-09-27）
 
 - ID resource-question-shortcuts，基线e0c8c3c已push/clean，7f2b复用，全部先前owners RELEASE。root单owner负责现有Panel/availability测试及docs；改动小不新委派。

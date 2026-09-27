@@ -8,6 +8,16 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：弹匣可以复用独立来源，不能冒充当前状态事实
+
+- 实证：可复现[工具](../tools/baseline-ammo-source-preflight.test.mjs)用实际Adapter生成自然DEATH cue、包/Narrator、完成结果门的Session及诊断。v2合成container/decision1400携带此前1399的tick-end弹匣，7发和0发均进入实际诊断measurement及问答；baseline目前仅显示AK-47且无弹匣答案。decision同tick开火、最新v2缺失、handle不一致均未知，不回退旧容器，网络调用0。
+- 引用区别：ammo ref为state-1-1400-weapon-ammo-end-at-1399，canonical state ref为fact-cs2d-r1-event-2-state；前者既不在canonical state引用中，也不是cue Fact。当前诊断已经明确支持独立资源证据，不应为了baseline复用而把该ref替换成state fact，或扩Narrator七事实预算。
+- 最小后续方案（尚未实施）：cache复用currentDiagnosisResources的受限weapon/clip/refs，Host从cache取投影传给显示层，独立注明“决策前最近弹匣记录、备弹未知、非瞬间精确余量”；问答只接受当前实际显示文本与opaque来源匹配。cache已经依赖View，不能让View反向import cache产生运行时环。
+- 来源是必要但非充分条件：新增baseline授权还须与View实际cue覆盖material后的Snapshot、当前武器和状态归属一致；canonical状态引用只用于绑定显示身份/采样，不替代独立ammo时间/引用。保留半秒新鲜度、strict-prior、最新缺失不回退及已知开火/换弹/拾取/丢弃失效门。旧无可信源保持未知，不从reserve或任意文本补值，不以弹匣数量改变专业判断。
+- 工具修正：独立tsx/CJS脚本出现direct source match有值而问答WeakMap来源失配；在项目正常Vitest模块图中同一关键case及最终五场景均通过。该现象属于独立工具模块加载差异，未据此修产品或放宽源校验。原失败输出保留；最终工具不依赖ignored脚本，默认仅断言，显式CS_COACH_AMMO_PREFLIGHT_OUTPUT才以wx写新结果，finally恢复fetch stub。
+- 交付检查：相关3文件88tests、两端TypeScript、Web和正式Viewer production build通过；产品源码未变。
+- 限制：仅v2小合成来源预检，不是新UI功能、正式Demo覆盖或native A5验收。未运行Parser/模型/浏览器或访问用户库。root读实际probe/输出，owner RELEASE，无残留进程。[结果](validation/BASELINE_AMMO_SOURCE_PREFLIGHT_RESULT.json)。下一有限目标 baseline-ammo-display-and-question，按上述额外显示绑定实现独立段落和有据追问，先小案例后必要UI。
+
 ## 2026-09-27：已核实资源可以直接快捷提问
 
 - 问题：实际页面已告知血量/护甲问题可答，但资源问法只有静态文字，用户仍需手输。来源匹配与有限问法已存在，缺口只是可操作入口。
