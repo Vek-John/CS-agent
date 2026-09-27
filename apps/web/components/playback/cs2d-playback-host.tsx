@@ -2355,6 +2355,7 @@ export function Cs2dPlaybackHost({
     presentableNarration, busy: agentToolBusy || diagnosticBusyCueId === cue?.id, takenOver: userTookOver,
     displayedUtilityText: threeStageCoaching?.currentState.chips.find(chip => chip.kind === "utility")?.text,
     displayedHealthText: threeStageCoaching?.currentState.chips.find(chip => chip.kind === "health")?.text,
+    displayedArmorText: threeStageCoaching?.currentState.chips.find(chip => chip.kind === "armor")?.text,
     resourceSource: questionResourceCacheRef.current.read(activePlan && cue && bundle ? {
       plan: activePlan, cue, material: candidateMaterial, timeline: bundle.match_timeline,
       selectedPlayerId: selected?.playerId ?? activePlan.player_id,

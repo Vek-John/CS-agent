@@ -1719,7 +1719,10 @@ DiagnosticResult/hinge的条件级SUPPORTED、PARTIALLY_SUPPORTED或CONTRADICTED
 
 同一状态栏中护甲数值与头盔持有分别校验：护甲须为0至100整数且无缺失标记，现代snapshot数值与样本相同；头盔须为boolean，无helmet/has_helmet缺失标记且现代snapshot一致。未知一项不抹去另一项：例如“100 甲 · 头盔未知”“护甲未知 · 有头盔”。只有已知0护甲且明确无头盔才显示“没甲”；0护甲但头盔已知存在则分别陈述，不由护甲值推导头盔。旧无snapshot输入仍按各字段自身有效性显示。此规则不改变诊断/追问资格或其他chips。
 
-基础血量追问仅复述当前实际显示的health chip。Host传入显示文本，cache同时要求既有currentDiagnosisResources的合法health、View原同采样绑定、raw state与当前Snapshot数值一致、selectedPlayer canonical事实引用在cue/material中唯一且正文/来源/可用性/observed/时间一致，并属于当前observable refs；原始state ID不作为讲解引用。来源文本与实际chip完全相等才可回答，文本本身不授予权限。来源标签明确当前状态，缺失/冲突/陈旧/死亡/未知/换源仍拒绝，诊断不能借baseline chip绕过measurement门；不扩展护甲、弹匣或道具数量的baseline资格。
+基础血量追问仅复述当前实际显示的health chip。Host传入显示文本，cache同时要求既有currentDiagnosisResources的合法health、View原同采样绑定、raw state与当前Snapshot数值一致、selectedPlayer canonical事实引用在cue/material中唯一且正文/来源/可用性/observed/时间一致，并属于当前observable refs；原始state ID不作为讲解引用。来源文本与实际chip完全相等才可回答，文本本身不授予权限。来源标签明确当前状态，缺失/冲突/陈旧/死亡/未知/换源仍拒绝，诊断不能借baseline chip绕过measurement门；不扩展弹匣或道具数量的baseline资格。
+
+基础护甲追问沿相同身份、结果完成门和canonical事实核对，仅复述同一决策采样中已显示的0至100整数护甲值。View与cache共用护甲显示投影，cache同时要求该投影确认数值已知、与raw state/Snapshot/资源投影相等，再与Host传入的完整chip文本完全匹配；不能只匹配“护甲未知”文字而开放数值。回答只说明护甲值，不由护甲推断头盔，已知0和未知分别处理；头盔改变导致完整chip变化时，旧问答来源失效。baseline及FALLBACK可用，诊断分支仍须原measurement，不能借隐藏baseline显示绕过。旧数据无可信来源时保持未知，不重新分析或写历史。
+
 
 职业案例未接入检索时不编造，语音/战术补充只作为未验证假设，不回写事实或改判；错误前提不被接受，不明确/越界问法给具体可问范围。文本不触发seek、工具、推进或回看，控制沿用已有明确按钮。提问不发送Reflection/Disagreement/Graph/Memory事件，不消耗诊断attempt，不新增模型请求。
 

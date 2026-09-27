@@ -1,0 +1,93 @@
+{
+  "taskId": "baseline-armor-question",
+  "baseline": "e0b008e",
+  "changes": [
+    "baseline/FALLBACK armor question bound to actual chip and same sampled canonical source",
+    "shared armor projection returns known numeric value separately from display text",
+    "diagnosis still requires its own measurement; armor never supplies helmet knowledge"
+  ],
+  "tests": {
+    "new": 16,
+    "related": 154,
+    "files": 7,
+    "webTypecheck": "PASS",
+    "viewerTypecheck": "PASS",
+    "webBuild": "PASS",
+    "formalViewerBuild": "PASS",
+    "harnessBuildSeconds": 4.67
+  },
+  "ui": {
+    "before": {
+      "mounted": true,
+      "childReady": true,
+      "stageReady": 1,
+      "replayReady": 1,
+      "selected": 1,
+      "analysisReady": 1,
+      "prepareRoute": 1,
+      "prepareNarration": 2,
+      "agentRequests": 4,
+      "forbiddenFetches": 0,
+      "providerFetches": 0,
+      "playbackReports": 716,
+      "playing": false,
+      "tick": 1400,
+      "acks": 1,
+      "errors": [],
+      "selfBlindFixture": false,
+      "syntheticIdentity": true,
+      "parserEnabled": false,
+      "modelEnabled": false,
+      "diagnostics": false,
+      "realLifecycle": null
+    },
+    "after": {
+      "mounted": true,
+      "childReady": true,
+      "stageReady": 1,
+      "replayReady": 1,
+      "selected": 1,
+      "analysisReady": 1,
+      "prepareRoute": 1,
+      "prepareNarration": 2,
+      "agentRequests": 4,
+      "forbiddenFetches": 0,
+      "providerFetches": 0,
+      "playbackReports": 716,
+      "playing": false,
+      "tick": 1400,
+      "acks": 1,
+      "errors": [],
+      "selfBlindFixture": false,
+      "syntheticIdentity": true,
+      "parserEnabled": false,
+      "modelEnabled": false,
+      "diagnostics": false,
+      "realLifecycle": null
+    },
+    "console": []
+  },
+  "uiResult": {
+    "displayedChip": "100 头甲",
+    "question": "当时有多少护甲？",
+    "answer": "100 甲",
+    "source": "当前状态已显示的护甲与同一决策采样交叉核对",
+    "savedScreenshot": ".local-data/baseline-armor-question/answer-visible.png",
+    "questionAddedRequests": 0,
+    "closedTabs": [
+      "27",
+      "28"
+    ],
+    "stoppedServerPorts": [
+      60259,
+      60457
+    ]
+  },
+  "limitations": [
+    "Synthetic two-round fixture, not measured Demo times or native A5",
+    "Only 100-armor UI case; zero/unknown/helmet combinations covered by production-function tests",
+    "First cropped screenshot did not show the answer; second isolated run saved native visible screenshot",
+    "No Parser/model/user database/install/deployment"
+  ],
+  "next": "resource-question-shortcuts"
+}

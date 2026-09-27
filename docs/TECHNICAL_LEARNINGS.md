@@ -8,6 +8,15 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：基础护甲问答复用实际显示与数值资格
+
+- 问题：实际Adapter/View/完整Session链已显示“100 头甲”，但基础讲解的护甲问法返回空来源。旧cache只为baseline开放health/clock/utilityKinds；诊断measurement路径独立有效。
+- 决策：Host传入实际护甲chip，source cache要求当前plan/cue/玩家/新鲜同采样、raw/Snapshot/resources数值及唯一canonical事实一致，并与完整chip匹配。View原护甲/头盔显示逻辑提为共享projectArmorChip，返回text和可选已知value；答案只复述护甲数量，不用护甲值推断头盔。FALLBACK共用baseline；诊断仍需自己的measurement。
+- 集成发现：资源投影允许有限小数，单匹配View“护甲未知”文本可能反而授权1.5甲。root真实diff审阅后要求共享已知value参与匹配，补小数和cue显示snapshot标记未知而material已知两例，均拒答。未扩health或资源域重构；已有0/正值/头盔未知用语保持。
+- 验证：首个实际链红→绿，16新case及7文件154相关tests通过；两端TS、Web及正式Viewer build、独立harness build(4.67秒)通过。root小IAB实测合成比赛自动带看/动作演示自然完成后，在现有输入框提问，回答100甲与当前状态来源。问答前后Analysis1/Route1/Narration2/Agent4、provider/外部0保持，console错误/警告空。
+- 限制：GUI为合成186帧/2玩家场景，非正式Demo或native A5，未扩大实战/专业判断验收；0/未知组合由生产函数测试覆盖。保存截图首次裁切未覆盖回答，随后仅为证据改用原始可见截图重新走小场景；不重测或改变产品。无模型、Parser、用户库或安装发布操作。
+- 下一有限目标 resource-question-shortcuts：实际页面的护甲/血量可答提示目前只是静态文字，用户仍须手输；复用原资源问法列表和现有onAsk/live来源校验，把当前可答提示做为可键盘操作的快捷入口，保持不可答资源不显示、已有草稿不覆盖，不新增问答能力或模型请求。
+
 ## 2026-09-27：缺失受击数值不能成为死亡报告
 
 - 实证：1480B有效合成Demo经真实Parser解码14个player_hurt回调，实际collector四字段表达式/ev_i32把type3/4/5缺payload、错descriptor、Float0.5、type9及byte±256均转成0。不是手写GameEvent模拟。随后实际Adapter小fixture提供已知本人身份，将该缺值0与null分别输入，selfHurt/priorFire/priorBlind从0条变1条；说明伪零可误触发死亡否决，不代表真实Demo中已发现相同事件。

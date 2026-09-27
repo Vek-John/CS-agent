@@ -12,6 +12,19 @@
 
 
 
+## 已交付：基础讲解的已显示护甲追问（2026-09-27）
+
+- ID baseline-armor-question，基线e0b008e已push/clean，7f2b复用，原owners RELEASE。root docs/ARCH/集成/最终checks与push；partial_revision_restore默认配置独占资源来源/问答/Host窄接线和新armor测试，先小复现后实现。
+- 目标/流程：真实小合成Adapter→View护甲chip→已完成结果门的baseline或FALLBACK→“当时有多少护甲”返回同来源已显示护甲。A1实证缺口；A2同玩家/采样/值/规范事实与显示交叉匹配；A3已知0/正值/未知与头盔独立、旧source失效/诊断不借baseline、原health/clock/utility回归，两端TS/正式build后交付。
+- 范围/风险：不从文本解析数值，不能让护甲数值证明头盔或把未知变0；保持已有View用语及来源cache不重扫大轨迹。沿emil/apple即时反馈和可访问列表，布局/动画不变；必要共享显示投影仅为避免二处格式漂移，不扩重构。A1五分钟、实现15分钟、单test60秒，无正式Demo/模型/用户库/安装部署；自有资源由owner清理，结束RELEASE，root核真实diff/日志。
+
+- A1确认baseline仅health/clock资源匹配，而实际View存在护甲数值组合chip。A2采用共享原护甲显示投影，cache核对原数值/同来源及完整chip，答案仅复述数值、不由其推断头盔；显示变化进入来源key。Host只传当前displayedArmorText，诊断仍按measurement。
+- root UI验收计划：沿既有React Host+Vue小合成harness，新ephemeral origin，一次基础讲解输入护甲问题/答案及零新增分析调用摘要；bulk留page，单browser/server controller、阶段90秒，同设施两败停止并简化，root关闭仅自建tab/service。该UI不涉及旧native A5或正式Demo，不改变其待验状态。
+
+- 交付：实际100头甲chip原先问答空，现回答100甲及当前状态来源；共享投影known value防止小数/显示snapshot未知被错误授权，合法0与helmet独立保持。16新case/7文件154tests，两端TS、Web/正式Viewer build及harness build通过；root集中实际diff复查。
+- IAB实测：小合成场景自然完成当前演示后输入护甲问题，答案与来源可见；问答前后Analysis1/Route1/Narration2/Agent4、外部/provider0均不变、console空。第一次保存截图裁切不适用，随后一次新origin小场景仅重取原始可见截图；tab27/28、60259/60457服务均关闭。非正式Demo/native A5，不称专业判断改善。[验收](validation/BASELINE_ARMOR_QUESTION_RESULT.json)。
+- 下一有限目标 resource-question-shortcuts：本次实际页面的可答资源提示仅为静态文字，需要手输。将当前合法resourceQuestions接为既有onAsk快捷按钮、保持实时来源复核与独立草稿，补键盘操作和过期来源行为；不新增模型/问法或改变判断。
+
 ## 已交付：受击报告的payload存在性（2026-09-27）
 
 - ID hurt-payload-presence，基线566de64已push/clean，7f2b复用，既有owners RELEASE。partial_revision_restore默认配置熟悉真实wire工具，A1独占新probe/fixture及.local-data/hurt-payload-presence；root独占docs/ARCH/Adapter来源登记与消费tests/最终集成提交。A2生产patch/registry须root确认后单owner。

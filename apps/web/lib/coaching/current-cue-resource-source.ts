@@ -1,4 +1,4 @@
-import { buildCoachingCueView, playerStateAtOrBefore } from "./cs2d-coaching-view";
+import { projectArmorChip, buildCoachingCueView, playerStateAtOrBefore } from "./cs2d-coaching-view";
 import { matchesDecisionState, verifiedDisplayedUtilityEvidence } from "./utility-kind-evidence";
 import type { CoachCue, DecisionResources, DiagnosticMeasurement, ReviewPlan, TeachingDiagnosisInput } from "@cs-coach/contracts";
 import type { TeachingDiagnosisHostContext } from "./teaching-diagnosis-host";
@@ -8,7 +8,7 @@ import { currentDiagnosisSnapshot, currentDiagnosisResources, currentDiagnosisWi
 
 /** Opaque, page-local provenance: a saved/labelled measurement cannot manufacture this source. */
 export interface CurrentCueResourceSource { readonly revision: number }
-const sources = new WeakMap<CurrentCueResourceSource, { plan: ReviewPlan; cue: CoachCue; resources?: DecisionResources; clock?: TeachingDiagnosisInput["decisionClock"]; clockFact?: VerifiedResourceText; health?: VerifiedResourceText; utilityKinds?: VerifiedResourceText }>();
+const sources = new WeakMap<CurrentCueResourceSource, { plan: ReviewPlan; cue: CoachCue; resources?: DecisionResources; clock?: TeachingDiagnosisInput["decisionClock"]; clockFact?: VerifiedResourceText; health?: VerifiedResourceText; armor?: VerifiedResourceText & { displayedText: string }; utilityKinds?: VerifiedResourceText }>();
 
 /** One immutable source entry per Host. Typing/replay do not rescan the timeline. */
 export class CurrentCueResourceCache {
@@ -51,19 +51,24 @@ export class CurrentCueResourceCache {
     const viewFacts = buildCoachingCueView(cue, false).decisionFacts;
     const utilityKinds = state ? verifiedDisplayedUtilityEvidence(state, semantics, cue.decision_tick, viewFacts) : undefined;
     const stateRefs = displayedSnapshot?.selectedPlayer.evidenceRefs ?? [];
-    const validHealthRefs = stateRefs.length > 0 && stateRefs.length <= 8 && new Set(stateRefs).size === stateRefs.length && stateRefs.every(ref => {
+    const validStateRefs = stateRefs.length > 0 && stateRefs.length <= 8 && new Set(stateRefs).size === stateRefs.length && stateRefs.every(ref => {
       const shown = viewFacts.filter(fact => fact.id === ref), canonical = decisionFacts.filter(fact => fact.id === ref);
       const a = shown[0], b = canonical[0];
       return shown.length === 1 && canonical.length === 1 && a && b && a.text === b.text &&
         a.source === "DEMO" && b.source === "DEMO" && a.availability === "DECISION" && b.availability === "DECISION" &&
         a.observed_by_player && b.observed_by_player && a.available_at_tick === state?.tick && b.available_at_tick === state?.tick && cue.observable_fact_refs.includes(ref);
     });
-    const health = state && resources?.health !== undefined && validHealthRefs &&
+    const health = state && resources?.health !== undefined && validStateRefs &&
       state.health === resources.health && displayedSnapshot?.selectedPlayer.value?.health === resources.health &&
       matchesDecisionState(state, semantics, cue.decision_tick, viewFacts)
       ? { text: `${resources.health} HP`, refs: [...stateRefs] } : undefined;
+    const armorChip = state ? projectArmorChip(state, displayedSnapshot) : undefined;
+    const armor = state && armorChip && resources?.armor !== undefined && armorChip.value === resources.armor && validStateRefs &&
+      state.armor === resources.armor && displayedSnapshot?.selectedPlayer.value?.armor === resources.armor &&
+      matchesDecisionState(state, semantics, cue.decision_tick, viewFacts)
+      ? { text: `${resources.armor} 甲`, refs: [...stateRefs], displayedText: armorChip.text } : undefined;
     const source = Object.freeze({ revision: ++this.revision });
-    sources.set(source, { plan, cue, resources, clock, clockFact, health, utilityKinds });
+    sources.set(source, { plan, cue, resources, clock, clockFact, health, armor, utilityKinds });
     this.last = { context: { ...context }, source };
     return source;
   }
@@ -125,4 +130,11 @@ export function matchDisplayedBaselineHealth(source: CurrentCueResourceSource | 
   const origin = source && sources.get(source);
   return origin && origin.plan === plan && origin.cue === cue && origin.health && origin.health.text === displayedText
     ? { text: origin.health.text, refs: [...origin.health.refs] } : undefined;
+}
+
+/** Match the full chip, but answer only the independently verified armor quantity, never helmet state. */
+export function matchDisplayedBaselineArmor(source: CurrentCueResourceSource | undefined, plan: ReviewPlan, cue: CoachCue, displayedText: string | undefined): VerifiedResourceText | undefined {
+  const origin = source && sources.get(source);
+  return origin && origin.plan === plan && origin.cue === cue && origin.armor && origin.armor.displayedText === displayedText
+    ? { text: origin.armor.text, refs: [...origin.armor.refs] } : undefined;
 }
