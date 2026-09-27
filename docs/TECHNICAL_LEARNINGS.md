@@ -8,6 +8,18 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：移动来源先区分网络缺失、字段身份与采样阶段
+
+- 问题：当前 Adapter 在 `normalizePlayerState` 固定将 velocity 标为缺失；仅知道本人发生开火，仍不能说射击时是否移动。`PlayerStateSample.velocity` 虽已有可选契约，当前没有真实教学消费者。CS-Net投影固定填充速度及XYZ为0，替换前另需核对训练特征和单位，不能据新字段直接宣称模型改善。
+- 一手来源：[demoinfocs v6.0.0-alpha.0 的 Player.Velocity](https://github.com/markus-wa/demoinfocs-golang/blob/v6.0.0-alpha.0/pkg/demoinfocs/common/player.go#L389-L407)说明单位为游戏units/s，并记录GOTV/SourceTV pawn可能不网络传速度、接口返回零向量；其IsWalking是慢走键状态，不证明实际移动。这是上游实现说明，不是对本项目授权Demo的实测。
+- 字段身份：[demoinfocs PR674](https://github.com/markus-wa/demoinfocs-golang/pull/674)展示速度和视点偏移均有m_vecX/Y/Z裸名。不能把本地缺失速度通过裸名fallback补成可知数值；布局存在也不证明当前pawn的网络更新覆盖。
+- 本地采样：受控cs2d collector普通PlayerState在on_tick_start中按stride采集，先通过verified_controller_pawn；tick-end另行捕获ammo/clock。原frame.tick不能自动证明某个新增字段来自tick-end，更不能证明开火瞬间状态。当前collector的on_ground局部变量只用于掉落武器owner判断，不是玩家落地来源。
+- 本地证据：`vendor/source2-demo/src/parser/demo/commands.rs`构造字段时只使用var_name；`entity/field/serializer.rs::get_path`按同名字段匹配，未消费send_node来消歧。`parser/demo/runner.rs:124–125`先调用on_tick_start再处理该tick消息（messages.rs负责回调与时钟更新）。verified_controller_pawn验证当前实体归属，并不证明每个属性刚刚更新。
+- 小验证：新增可复跑的 `tools/probe-motion-field-state.rs`，直接编译实际vendor FieldState，只有FieldPath/FieldValue为最小夹具；断言缺失不等于Some(0)，更新其他字段及clone后已有0仍保留。命令 `rustc tools/probe-motion-field-state.rs -o .local-data/own-motion-source-feasibility/field-state-reviewed` 后运行，退出0。该容器没有逐字段更新时间；这不证明Demo字段可用性、实际静止或新鲜度。自建二进制已删除。
+- 下一有限目标 sampled-ground-coverage：仅隔离只读验证verified pawn的严格类型m_fFlags采样覆盖，记录明确phase与missing；m_hGroundEntity只作辅助一致性观察。先离线小fixture/唯一parser owner，若需要真实样本另按有界任务卡安排一次，不先写教学/模型。需满足字段覆盖、来源身份、阶段语义才考虑用户可见事实；bit未设不推出跳跃/急停/错误。
+- 验收：26相关tests与两端TypeScript/production build均退出0；root审阅实际vendor源码、上游说明、离线探针和输出。执行者RELEASE，全部进程退出；日志.local-data/own-motion-source-feasibility。
+- 行动边界：本轮不接速度到教学/CS-Net，不以8Hz位置差推瞬时移动、不把缺失零当静止。地面标志候选必须保留来源与采样phase、缺失为未知；bit未设也不直接生成“在空中”或急停错误结论。未解析真实Demo、未调用模型、未安装依赖或改变产品。
+
 ## 2026-09-27：基础状态区保留已验证的开火发生事实
 
 - 问题：真实消费已证明两段 Narration 包含决策前本人开火，但状态 chips 分支省略正文，用户看不到这项上下文。

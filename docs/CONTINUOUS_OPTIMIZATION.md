@@ -12,6 +12,16 @@
 
 
 
+## 已交付学习：本人移动状态来源可行性（2026-09-27）
+
+- ID own-motion-source-feasibility，基线9f6535c已push/clean，复用7f2b；partial_revision_restore默认配置独占.local-data小调查/单smoke，root独占docs/最终集成与push。使用research技能追溯一手源码，支持带看可知事实，不是凭速度判错。
+- A1核实现有props/collector/schema/实体decoder速度与玩家flags的单位、身份、采样时机、未知表示；A2仅必要单个离线fixture，不安装/解析Demo；A3给最小可实施路径或明确必要外部缺失条件。5分钟来源预检、15分钟有限交付、smoke<60秒，同设施两败简化；执行者清进程RELEASE。
+- 已知Adapter固定velocity缺失；collector里的on_ground是掉落武器owner判断。禁止8Hz位置差推开火瞬时移动、字段存在冒充语义已证、或自行生成急停/命中/战术结论。产品/上游补丁/用户Demo/SQLite/Memory/密钥均不改，零模型/Jev/GUI/发布，不依赖native A5。
+
+- 结论：暂不接速度。demoinfocs说明GOTV可缺速度且返回0；本地send-node未消歧，裸m_vecX会与视点偏移混淆。当前PlayerState采样为tick-start，不能称开火瞬间/tick-end。root核实一手源码及runner调用次序；不是本项目Demo覆盖结论。
+- 证据：actual vendor FieldState单离线smoke显示missing≠Some(0)，但旧0无新更新会保持；工具tools/probe-motion-field-state.rs可复跑，minimal FieldPath/FieldValue为fixture。26相关tests、两端TS/build通过。执行者RELEASE，root已审阅源码/输出并移除自建binary，全部进程退出，无Demo/模型/用户库/产品改动。
+- 下一有限目标 sampled-ground-coverage：只读验证当前verified pawn的严格m_fFlags及辅助ground handle，记录采样phase/缺失/冲突匿名计数；先小fixture再决定一次有界真实覆盖验证，不直接接教学/CS-Net，不把bit未设推为空中或急停错误。速度实现须先解决字段消歧与可用性/来源新鲜度；地面来源另有可推进路径，不将它扩大成全项目等待。
+
 ## 已交付：基础路线本人开火事实可见呈现（2026-09-27）
 
 - ID baseline-prior-fire-presentation，最新基线3103a9a已push/clean，复用7f2b，前owner RELEASE。partial_revision_restore默认配置（窄呈现接线）独占小probe/窄tests；A1主控确认后仅View/相关test/Host必要行，root独占docs/最终diff/浏览器与checks/push。
