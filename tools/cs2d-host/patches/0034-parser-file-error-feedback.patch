@@ -1,0 +1,55 @@
+diff --git a/apps/app/src/viewer/ingest/useDemoParser.ts b/apps/app/src/viewer/ingest/useDemoParser.ts
+--- a/apps/app/src/viewer/ingest/useDemoParser.ts
++++ b/apps/app/src/viewer/ingest/useDemoParser.ts
+@@ -21,6 +21,19 @@
+ }
+ /** The `parsing` phase fills this much of the bar (0.30 -> 0.85), driven by ticks. */
+ const PARSE_BAND = 0.55
++
++/** Stable stage feedback; internal Parser details do not establish that a file is corrupt. */
++function fileFailureMessage(stage: 'parse' | 'decompress', detail: unknown): string {
++  if (stage === 'decompress') {
++    if (detail === 'O arquivo .zip está vazio.') return '压缩包中没有可读取的文件。请重新选择压缩包，或先解压为 .dem 文件。'
++    if (detail === 'Demos .bz2 ainda não são suportadas. Descomprima para .dem antes de enviar.') return '暂不支持直接读取 .bz2 压缩包，请先解压为 .dem 文件。'
++    return '文件解压或预处理未完成。如果选择的是压缩包，请先解压为 .dem 文件后重新选择；否则可重新选择或刷新后重试。'
++  }
++  // WrongMagic also covers a truncated (<16-byte) header, not just a different game.
++  if (detail === 'Supports only Source 2 replays') return '这份文件未通过 CS2 Demo 格式检查。请选择完整的 CS2 .dem 文件；如果下载尚未完成，请完成下载后再试。'
++  if (detail === 'Wrong CDemoFileInfo offset') return '比赛文件内容暂时无法完整读取。请确认下载完整；若仍失败，可尝试其他 CS2 Demo。'
++  return '这份比赛暂时无法解析，可能与文件完整性或当前解析器兼容性有关。请确认下载完整，或尝试其他 CS2 Demo。'
++}
+ 
+ /**
+  * Takes a `.dem` file, reads its bytes and delegates parsing to a WebAssembly
+@@ -161,7 +174,7 @@
+       let raw: ArrayBuffer
+       try { raw = await decompress(buffer, current) } catch (err) {
+         if (!isCurrent(current)) return false
+-        error.value = err instanceof Error ? err.message : String(err)
++        error.value = fileFailureMessage('decompress', err instanceof Error ? err.message : err)
+         status.value = 'error'
+         return
+       }
+@@ -200,19 +213,19 @@
+             hashLatencyMs.value = msg.hashLatencyMs
+             progress.value = 1
+             status.value = 'done'
+-          } else { error.value = msg.error; status.value = 'error' }
++          } else { error.value = fileFailureMessage('parse', msg.error); status.value = 'error' }
+           finish()
+         }
+         w.onerror = (ev) => {
+           if (settled || !isCurrent(current)) return
+-          error.value = ev.message || 'O worker de parsing falhou (memória?).'
++          error.value = '解析进程意外停止，暂时无法确认是否是文件问题。请重新选择文件后重试；若仍失败，可尝试其他 Demo。'
+           status.value = 'error'
+           finish()
+         }
+         current.signal.addEventListener('abort', finish, { once: true })
+         if (current.signal.aborted) { finish(); return }
+         try { w.postMessage({ buffer: raw, frameRate: 8 }, [raw]) } catch (err) {
+-          if (isCurrent(current)) { error.value = err instanceof Error ? err.message : String(err); status.value = 'error' }
++          if (isCurrent(current)) { error.value = '文件未能交给解析进程，请重新选择文件后重试。'; status.value = 'error' }
+           finish()
+         }
+       })

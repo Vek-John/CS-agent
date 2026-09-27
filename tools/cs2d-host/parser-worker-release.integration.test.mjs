@@ -9,20 +9,20 @@ function deferred() {
   let resolve; const promise = new Promise(yes => { resolve = yes; });
   return { promise, resolve };
 }
-function harness() {
+function harness(options = {}) {
   const workers = []; const unmount = []; let started = deferred();
   class FakeWorker {
     constructor(url) { this.parser = url.pathname.endsWith('/demoParser.worker.ts'); this.terminate = vi.fn(); workers.push(this); }
     postMessage(message) {
-      if (this.parser) started.resolve(this);
-      else queueMicrotask(() => this.onmessage({ data: { ok: true, buffer: message.buffer, rawSize: message.buffer.byteLength } }));
+      if (this.parser) { started.resolve(this); if (options.parserPostError) throw new Error('private transfer detail'); }
+      else queueMicrotask(() => this.onmessage({ data: options.decompressError === undefined ? { ok: true, buffer: message.buffer, rawSize: message.buffer.byteLength } : { ok: false, error: options.decompressError } }));
     }
   }
   const ref = value => ({ value });
   const make = new Function('ref','shallowRef','onUnmounted','Worker',stripTypeScriptTypes(source.replace(/^import .*$/gm,'')).replaceAll('import.meta.url',JSON.stringify('file:///viewer/ingest/useDemoParser.ts')).replaceAll('export ','')+'\nreturn useDemoParser();');
   const parser = make(ref,ref,fn=>unmount.push(fn),FakeWorker);
   const file = { name:'fixture.dem',size:9,arrayBuffer:async()=>new Uint8Array(9).buffer };
-  return { parser,workers,unmount,async start() { started=deferred(); const completion=parser.parse(file); const worker=await started.promise; return {worker,completion}; } };
+  return { parser,workers,unmount,file,async start() { started=deferred(); const completion=parser.parse(file); const worker=await started.promise; return {worker,completion}; } };
 }
 const result = () => ({ ok:true,replay:{rounds:[]},voice:{tracks:[{packets:[{data:new Uint8Array([1,2])}]}]},demoContentHash:'a'.repeat(64),hashLatencyMs:3 });
 
@@ -72,4 +72,40 @@ describe.skipIf(!source)('actual useDemoParser terminal worker lifetime',()=>{
     expect(next.worker.terminate).toHaveBeenCalledOnce();
   });
 
+});
+
+
+describe.skipIf(!source)('actual Parser file-error feedback',()=>{
+ it.each([
+  ['Supports only Source 2 replays','这份文件未通过 CS2 Demo 格式检查。请选择完整的 CS2 .dem 文件；如果下载尚未完成，请完成下载后再试。'],
+  ['Wrong CDemoFileInfo offset','比赛文件内容暂时无法完整读取。请确认下载完整；若仍失败，可尝试其他 CS2 Demo。'],
+  ['Supports only Source 2 replays: extra','这份比赛暂时无法解析，可能与文件完整性或当前解析器兼容性有关。请确认下载完整，或尝试其他 CS2 Demo。'],
+  ['private internal error','这份比赛暂时无法解析，可能与文件完整性或当前解析器兼容性有关。请确认下载完整，或尝试其他 CS2 Demo。'],
+ ])('projects exact Parser error without claiming corruption: %s',async(message,expected)=>{
+  const h=harness(),first=await h.start(),late=first.worker.onmessage;
+  late({data:{ok:false,error:message}});await first.completion;
+  expect(h.parser.error.value).toBe(expected);expect(h.parser.error.value).not.toContain('损坏');expect(first.worker.terminate).toHaveBeenCalledOnce();
+  const next=await h.start();expect(h.parser.error.value).toBeNull();late({data:{ok:false,error:message}});expect(h.parser.error.value).toBeNull();
+  next.worker.onmessage({data:result()});await next.completion;expect(h.parser.status.value).toBe('done');
+ });
+ it.each([
+  ['O arquivo .zip está vazio.','压缩包中没有可读取的文件。请重新选择压缩包，或先解压为 .dem 文件。'],
+  ['Demos .bz2 ainda não são suportadas. Descomprima para .dem antes de enviar.','暂不支持直接读取 .bz2 压缩包，请先解压为 .dem 文件。'],
+  ['unknown decompression error','文件解压或预处理未完成。如果选择的是压缩包，请先解压为 .dem 文件后重新选择；否则可重新选择或刷新后重试。'],
+ ])('keeps known container feedback and an unknown decompression fallback: %s',async(message,expected)=>{
+  const h=harness({decompressError:message});await h.parser.parse(h.file);expect(h.parser.error.value).toBe(expected);expect(h.workers).toHaveLength(1);expect(h.workers[0].terminate).toHaveBeenCalledOnce();
+ });
+ it('distinguishes a Parser Worker crash from an invalid file',async()=>{
+  const h=harness(),first=await h.start();first.worker.onerror({message:'private crash detail'});await first.completion;
+  expect(h.parser.error.value).toBe('解析进程意外停止，暂时无法确认是否是文件问题。请重新选择文件后重试；若仍失败，可尝试其他 Demo。');
+  expect(first.worker.terminate).toHaveBeenCalledOnce();const next=await h.start();next.worker.onmessage({data:result()});await next.completion;expect(h.parser.status.value).toBe('done');
+ });
+});
+
+describe.skipIf(!source)('actual Parser transfer failure feedback',()=>{
+ it('settles a failed transfer without claiming bad bytes and allows the same file again',async()=>{
+  const options={parserPostError:true},h=harness(options),first=await h.start();await first.completion;
+  expect(h.parser.error.value).toBe('文件未能交给解析进程，请重新选择文件后重试。');expect(first.worker.terminate).toHaveBeenCalledOnce();
+  options.parserPostError=false;const next=await h.start();expect(h.parser.error.value).toBeNull();next.worker.onmessage({data:result()});await next.completion;expect(h.parser.status.value).toBe('done');
+ });
 });

@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：Parser错误不能一律归为文件损坏
+
+- 问题：真实8B入口显示底层英文“Supports only Source 2 replays”；源码WrongMagic同时涵盖短于16字节与magic不符，不能由这条错误推断游戏类型或损坏原因。
+- 决策：0034在Viewer呈现边界精确识别已知格式/容器错误，未知parse保留完整性或兼容性的不确定性；Worker、传输和解压/预处理各给适用行动。未知预处理还可能来自原始.dem，不一概要求解压。Parser事实、取消、generation/迟到归属和Worker释放不变。
+- 验证：真实原filechooser相同8B文件重选两次，中文下一步提示、Parser Worker2/active0，无模型/外网；9新增行为案例及最终56tests、两端TS/build、工具build、尾patch升级/reuse通过。[证据](validation/PARSER_FILE_ERROR_FEEDBACK.md)。
+- 限制与行动：成功恢复由真实composable的受控Worker结果验证，不冒称正式Demo再解析成功。下一独立目标核实既有player_blind事件能否提供受影响玩家自身的可靠状态：先查身份、时间和持续时长来源，再决定是否接入教学，不将闪光事件等同于精确视觉体验。
+
 ## 2026-09-27：真实文件入口必须计入缓存与模型等待
 
 - 决策：前序合成Host链已通，本轮复用实际DemoAnalyzer/原文件与选人UI，单次已授权小Demo；新origin保护用户存储，self CSP限制Worker外网，已有WASM/INT8/ORT资产不下载。解析与cache、选择后的pipeline分开120秒界，bulk留page/Worker。

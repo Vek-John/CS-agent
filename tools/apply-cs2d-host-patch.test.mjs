@@ -231,3 +231,11 @@ it("registers the persistent picker as the next controlled Viewer-only tail", ()
  expect(patch).toContain('ref="input"');
  expect(patch).not.toContain('packages/parser/');
 });
+
+it("registers actionable Parser feedback as a Viewer-only controlled tail", () => {
+ expect(CS2D_PATCH_FILES[33]).toMatch(/0034-parser-file-error-feedback\.patch$/);
+ const patch = readFileSync(CS2D_PATCH_FILES[33], "utf8");
+ expect(patch.match(/^diff --git/gm)).toHaveLength(1);
+ expect(patch).toContain('apps/app/src/viewer/ingest/useDemoParser.ts');
+ expect(patch).not.toContain('packages/parser/');
+});

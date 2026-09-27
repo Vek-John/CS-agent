@@ -12,6 +12,16 @@
 
 
 
+## 已交付：无效Demo解析错误反馈（2026-09-27）
+
+- ID parser-file-error-feedback，cb61684 clean/push、7f2b顺序复用。partial_revision_restore默认配置独占A1错误来源核实，批准后新0034受控Viewer patch/registry及实际composable小tests；root docs/唯一小UI-controller/最终diff/checks/push。
+- 目标/流程：原文件入口→极小无效.dem→清楚的行动提示而非底层英文→可再次选择；不把所有错误称为损坏、不混淆Parser与模型失败。A1五分钟追WASM错误/读取解压Worker边界；A2最小反馈接线；A3失败后成功、取消/旧回调保护、相关tests/尾patch apply-reverse/reuse/两端TS/build和真实8B UI验收。
+- 范围/风险：不改Rust事实/共享协议/模型；不读取正式Demo或用户库，不重做完整实战解析。15分钟有限，case<60秒，同设施两败简化；owner不启server/browser，root复用real入口只选自建8B文件，结束关闭页面/Worker/服务；owner清测试临时目录并RELEASE，无安装部署。
+
+- 交付：受控0034仅改Viewer错误呈现，格式检查/容器/未知解析/Worker/传输分开，未知预处理条件式提示不误导原始.dem解压。9新增行为案例、4文件56tests、两端TS/build、工具build和尾patch升级/reuse通过，root核实实际diff/来源/日志，owner RELEASE。
+- 真实原filechooser连续选择同一8B样本两次，提示明确且入口可再次选择，Parser Worker2/active0、模型/Agent/provider0；新origin仅补截图，用户正式Demo/库不动，自建页/服务清理。[验收](validation/PARSER_FILE_ERROR_FEEDBACK.md)。后继成功仅由composable受控结果验证，不冒称真实成功解析。
+- 下一有限目标 own-blind-source-feasibility：当前Parser已有player_blind，而教学状态未消费。先离线核实recipient身份、duration/时间界及缺失语义，给出可行动接入或拒绝理由；不直接把事件推为玩家“完全看不见”，不重解析正式Demo或重跑拒判集。root先定边界，原owner可复用独立只读调查。
+
 ## 已交付验证：真实Demo入口与基础路线带看（2026-09-27）
 
 - ID real-demo-host-entry-preflight，4f774c3 clean/push、7f2b顺序复用；partial_revision_restore默认配置先只读真实DemoAnalyzer/Router/Parser Worker/WASM/cs-net/存储边界，A2经root批准才独占tools真实入口模式。root docs/正式输入决策/唯一browser-server生命周期/最终checks/push。
