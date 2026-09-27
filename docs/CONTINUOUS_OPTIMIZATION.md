@@ -12,6 +12,16 @@
 
 
 
+## 已交付：普通段实际 Host/Viewer 冷载入落位（2026-09-27）
+
+- ID ordinary-host-cold-landing；基线18e6c1c已push/clean，真实7f2b复用，全部旧owner RELEASE。目标：真实React Host持久保存ordinary后页面重载，实际Vue Viewer seek到冻结段首，精确Graph握手后继续带看；不伪造Session/Graph/ACK，不将合成时间声称Demo tick。
+- 验收：A1明确可选harness恢复模式、安全同run重载与有界摘要；A2保存/重载→pause/seek→paused落位→exact MATCHED→后续play顺序可观测，禁止提前播放；A3路线/讲解不重复生成、完成带看、清理自有资源；相关工具/恢复tests、两端TS/Web/正式Viewer build后commit push。Graph服务跨页面保留MEMORY，明确不等于上一SQLite对象重开或应用进程重启；legacy重选可能重建小合成Analysis，须单独计数而非藏掉。
+- 所有权/风险：partial_revision_restore默认配置独占react-host-smoke parent/child/runtime/selection/mjs及工具tests，产品先只读有实际失败才协调；root唯一browser/controller/server、docs/验证与提交。默认dirty-origin guard保持，只有显式可选模式及自有run标记可复用本次origin；不读取/清理未知存储。先5分钟方案/15分钟小实现检查，单test60秒，root新port/tab各UI阶段90秒、结束关自有tab/server，同设施两败简化。仅2玩家小fixture，bulk留child，沿已应用emil/apple，不安装部署、不正式Demo/模型/用户SQLite，不扩大native A5等待。
+
+- 实证/修复：首轮实际IAB保存ordinary目标1064，Host旧helper却seek1000，Viewer freeze-skip后无法落到错误目标而超时、Graph重连0；删除Host重复边界映射，两入口直接使用已验证Session.current_tick。修后R2捕获目标2264，真实pause→seek→paused→exact MATCHED→play，完成整场。独审四kind兼容，无must-fix；成功状态不再显示“未完成”误导详情，实际组件SSR验证。
+- 交付：自然0cue/7段，恢复Graph cursor5→最终7/COMPLETED；初次Analysis1/Route1/Narration0，重载Analysis重建1/Route0/Narration0，provider/外部/console0。103相关测试、两端TS/专项harness TS与build/Web/正式Viewer build通过。两个tab与server已清理，owners RELEASE。[证据](validation/ORDINARY_HOST_COLD_LANDING_RESULT.json)。限制：合成输入、MEMORY Graph跨页面、非应用/SQLite进程重启；成功文案只追加SSR，不重复整场UI。
+- 下一有限目标 ordinary-cued-host-resume：当前Viewer冷恢复覆盖自然零cue；复用显式harness用自然双cue路线，在完成首cue后捕获普通段并重载，验证已保存Narration复用、进入下一cue的Outcome门和暂停决策画面。先小链与文件所有权确认，root单browser/controller，无模型/真实Demo/用户库；native A5独立等待。
+
 ## 已交付：普通段 SQLite 冷重开续接（2026-09-27）
 
 - ID ordinary-recovery-cold-start；4920bbf已push/clean、真实7f2b复用，旧owners已RELEASE。主目标：把上轮分离的真实Graph重连与SQLite重开合成一条生产链，避免合成checkpoint状态掩盖持久化不兼容。

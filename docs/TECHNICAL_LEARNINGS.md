@@ -8,6 +8,22 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：普通段恢复必须使用 Session 的落位目标
+
+- 实证：第一轮IAB从真实IndexedDB ordinary提交后重载，Session保存目标是合成1064，但Host本地targetTickForRecovery只有旧三kind分支，ordinary回退首段1000。Viewer freeze-skip到1064，Host等待错误1000而10秒超时，Graph reconnect为0；控制面测试正确不能代表播放器接线正确。
+- 决策：删除Host重复的恢复tick分支；历史库入口和兼容重选入口均消费已验证restoreRecoveryArtifacts返回的session.current_tick。Session仍唯一从冻结计划推导位置，CUE_PAUSED/WRAP_UP/ROUTE_START位置等价，普通段使用自身段首，无任意tick或新版本合同。独立只读核对四kind无must-fix。
+- 修后体验：为避免初始freeze-skip碰巧已到目标，第二轮捕获R2普通段。真实trace为pause→seek合成2264→paused at2264→RECONNECT请求→MATCHED→seek2264→play/playing；到整场总结后点击完成。服务端7次OBSERVE+1次RECONNECT+1次COMPLETE，Graph cursor5重连、最终cursor7/COMPLETED；外部/provider0、console空，tab33/34和49379/49552服务均清理。
+- 生成成本：兼容重选路径在每个页面重新构建小合成Analysis，初次与重载后各1次；Host初次Route1/Narration0，重载后Route0/Narration0，不冒称Analysis没有重建。Graph MEMORY服务跨reload保留，非SQLite/应用进程重启、无Parser/真实Demo；上一SQLite关闭重开证据独立保留。
+- 验证工具：显式--ordinary-recovery与server nonce/同tab own capture只允许一次重载；默认空origin规则保持，不清未知存储。observer仅旁观生产IDB put的transaction complete，真实bridge/Graph response构成有界summary；早play command/state报错，无fakeACK、Session写入或测试暂停。沿emil/apple的明确状态反馈与既有样式，不新增动画/材质。
+
+| Before | After | Why |
+| --- | --- | --- |
+| Host把普通段恢复位置回退到比赛起点 | 两个入口直接使用恢复Session位置 | 消除重复边界映射，避免落位超时 |
+| 标题已恢复，但详情仍提示未完成 | RECOVERED使用普通段固定成功文案或原安全默认文案 | 状态一致，仍不暴露任意Runtime reason |
+
+- 验证：恢复相关3文件47项、状态面板49项、工具2文件7项，共103项；两端TS、专项harness TS/build、Web/正式Viewer build通过。成功文案在实际组件SSR断言验证，未为这一纯文本变化重复整场浏览器流程。临时资源由root单controller清理，无用户库/安装部署。
+- 下一项 ordinary-cued-host-resume：本轮真实Viewer冷恢复是自然零cue路线；用同一可选harness验证已完成第一教学点后的普通段恢复，并实际走到下一教学点，核验保存讲解复用及先结果/再决策点门，不引入模型/真实Demo解析或扩大native A5等待。
+
 ## 2026-09-27：真实 SQLite 续接暴露保存点被常规清理的问题
 
 - 问题：已确认RuntimeHead未变不等于仍能恢复。真实Saver默认保留20条，DAL确认普通段head后写入20个新checkpoint，原exact tuple消失而head仍指原id，外键检查也不报警；head没有checkpoint外键，不能依赖FK检查发现。最小红例仅DAL合法合成关系，不冒称真实比赛。

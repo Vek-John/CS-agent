@@ -21,6 +21,10 @@ export interface RecoveryDiscardInput {
 const DISCARD_NOT_CONFIRMED = "尚未确认放弃成功，已保留恢复资料；基础回放仍可继续。";
 
 export function hostRecoveryStatusDetail(result: SessionRecoveryResult | undefined): string | undefined {
+  if (result?.status === "RECOVERED") {
+    return result.record?.boundary.kind === "ORDINARY_SEGMENT"
+      ? "已回到保存的普通片段起点，可以继续带看。" : undefined;
+  }
   return result?.reason === DISCARD_NOT_CONFIRMED ? DISCARD_NOT_CONFIRMED
     : result?.reason ? "恢复过程暂未完成，请按下方操作继续。" : undefined;
 }

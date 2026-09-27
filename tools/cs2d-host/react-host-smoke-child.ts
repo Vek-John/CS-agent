@@ -5,6 +5,7 @@ import { replayReadyMessage, emitPlaybackEvent } from "@/viewer/player/hostBridg
 import { createSyntheticHostSelection } from "./react-host-smoke-selection";
 import { isPlaybackCommandEnvelope } from "../../libs/contracts/src/playback-bridge";
 import { twoCueViewerReplay, emptyCueViewerReplay, twoCueViewerPlayer } from "./viewer-two-cue-fixture";
+const recoveryMode = new URLSearchParams(location.search).get("ordinaryRecovery") === "1";
 const replay = new URLSearchParams(location.search).get("emptyRoute") === "1" ? emptyCueViewerReplay() : twoCueViewerReplay({ priorSelfBlind: new URLSearchParams(location.search).get("selfBlind") === "1", priorWeaponAmmo: new URLSearchParams(location.search).get("ammo") === "1" });
 const origin = new URL(location.href).searchParams.get("parentOrigin");
 if (origin !== location.origin) throw Error("INVALID_PARENT_ORIGIN");
@@ -26,6 +27,12 @@ window.addEventListener("message", event => {
   loaded = true; selectButton.disabled = false;
   // Synthetic identity only: never derived from or represented as a parsed file hash.
   emitPlaybackEvent(replayReadyMessage({ ...replay, demoContentHash: "a".repeat(64), hashLatencyMs: 0 }));
+});
+if (recoveryMode) window.addEventListener("message", event => {
+  if (event.source !== parent || event.origin !== origin || !isPlaybackCommandEnvelope(event.data)) return;
+  const command = event.data.payload;
+  if (["pause", "play", "seekCanonicalTick"].includes(command.type)) parent.postMessage({ channel: "react-host-smoke", type: "recovery-command",
+    command: command.type, ...(command.type === "seekCanonicalTick" ? { tick: command.canonicalTick } : {}) }, origin);
 });
 const select = (event: MessageEvent<unknown>) => {
   if (event.source !== parent || event.origin !== origin || !isPlaybackCommandEnvelope(event.data) || event.data.payload.type !== "selectPlayer") return;

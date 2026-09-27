@@ -511,6 +511,20 @@ it("shows the bounded discard failure in the actual status panel without exposin
   expect(hostRecoveryStatusDetail({ ...result, reason: "private runtime error" })).toBe("恢复过程暂未完成，请按下方操作继续。");
 });
 
+it("renders successful ordinary recovery without a contradictory incomplete warning or raw reason", async () => {
+  const { hostRecoveryStatusDetail } = await import("./host-recovery-discard");
+  const { SessionRecoveryStatus } = await import("../../components/playback/session-recovery-status");
+  const { createElement } = await import("react"); const { renderToStaticMarkup } = await import("react-dom/server");
+  const saved = record("recovered-panel", 1000);
+  const result = { schemaVersion: "session-recovery-runtime.v1" as const, status: "RECOVERED" as const,
+    recoveryId: saved.recoveryId, record: { ...saved, boundary: { kind: "ORDINARY_SEGMENT" as const,
+      boundaryId: "ordinary", segmentId: "segment-1", segmentIndex: 0, sessionPhase: "PLAYING" as const } }, effects: [], reason: "private runtime detail" };
+  const html = renderToStaticMarkup(createElement(SessionRecoveryStatus, { status: "RECOVERED", detail: hostRecoveryStatusDetail(result), onChooseDemo: () => {} }));
+  expect(html).toContain("复盘已恢复"); expect(html).toContain("普通片段起点");
+  expect(html).not.toContain("恢复过程暂未完成"); expect(html).not.toContain("private runtime detail");
+  expect(hostRecoveryStatusDetail({ ...result, record: saved })).toBeUndefined();
+});
+
 it("leaves a newer discard pending when an older switched-away request settles", async () => {
   const a = record("first", 1000); const b = record("second", 1000);
   const resolves: Array<(result: import("@cs-coach/coach-agent/client").SessionRecoveryResult) => void> = [];

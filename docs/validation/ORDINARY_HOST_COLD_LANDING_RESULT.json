@@ -1,0 +1,220 @@
+{
+  "schemaVersion": "ordinary-host-cold-landing-result.v1",
+  "baseline": "18e6c1c",
+  "synthetic": true,
+  "before": {
+    "recovery": {
+      "enabled": true,
+      "reload": true,
+      "ordinaryCommits": 1,
+      "targetTick": 1064,
+      "armed": false,
+      "reconnectRequests": 0,
+      "reconnectMatched": false,
+      "resumedAfterReconnect": false,
+      "firstRun": {
+        "analysisReady": 1,
+        "prepareRoute": 1,
+        "prepareNarration": 0
+      },
+      "trace": [
+        {
+          "event": "command-pause"
+        },
+        {
+          "event": "command-seekCanonicalTick",
+          "tick": 1000
+        }
+      ]
+    },
+    "mounted": true,
+    "childReady": true,
+    "stageReady": 1,
+    "replayReady": 1,
+    "selected": 1,
+    "analysisReady": 1,
+    "prepareRoute": 0,
+    "prepareNarration": 0,
+    "agentRequests": 0,
+    "forbiddenFetches": 0,
+    "providerFetches": 0,
+    "playbackReports": 4,
+    "playing": false,
+    "tick": 1064,
+    "acks": 0,
+    "errors": [],
+    "emptyRouteFixture": true,
+    "candidateCount": 0,
+    "cueCount": 0,
+    "segmentCount": 7,
+    "selfBlindFixture": false,
+    "ammoFixture": false,
+    "syntheticIdentity": true,
+    "parserEnabled": false,
+    "modelEnabled": false,
+    "diagnostics": false,
+    "realLifecycle": null
+  },
+  "after": {
+    "summary": {
+      "recovery": {
+        "enabled": true,
+        "reload": true,
+        "ordinaryCommits": 1,
+        "targetTick": 2264,
+        "armed": false,
+        "reconnectRequests": 1,
+        "reconnectMatched": true,
+        "resumedAfterReconnect": true,
+        "firstRun": {
+          "analysisReady": 1,
+          "prepareRoute": 1,
+          "prepareNarration": 0
+        },
+        "trace": [
+          {
+            "event": "command-pause"
+          },
+          {
+            "event": "command-seekCanonicalTick",
+            "tick": 2264
+          },
+          {
+            "event": "paused-at-boundary",
+            "tick": 2264,
+            "playing": false
+          },
+          {
+            "event": "reconnect-request"
+          },
+          {
+            "event": "reconnect-matched"
+          },
+          {
+            "event": "command-seekCanonicalTick",
+            "tick": 2264
+          },
+          {
+            "event": "command-play"
+          },
+          {
+            "event": "playing-after-reload",
+            "tick": 2264,
+            "playing": true
+          },
+          {
+            "event": "command-pause"
+          },
+          {
+            "event": "command-seekCanonicalTick",
+            "tick": 3001
+          },
+          {
+            "event": "command-pause"
+          },
+          {
+            "event": "command-seekCanonicalTick",
+            "tick": 3001
+          },
+          {
+            "event": "command-pause"
+          },
+          {
+            "event": "command-seekCanonicalTick",
+            "tick": 3001
+          }
+        ]
+      },
+      "mounted": true,
+      "childReady": true,
+      "stageReady": 1,
+      "replayReady": 1,
+      "selected": 1,
+      "analysisReady": 1,
+      "prepareRoute": 0,
+      "prepareNarration": 0,
+      "agentRequests": 3,
+      "forbiddenFetches": 0,
+      "providerFetches": 0,
+      "playbackReports": 165,
+      "playing": false,
+      "tick": 3000,
+      "acks": 0,
+      "errors": [],
+      "emptyRouteFixture": true,
+      "candidateCount": 0,
+      "cueCount": 0,
+      "segmentCount": 7,
+      "selfBlindFixture": false,
+      "ammoFixture": false,
+      "syntheticIdentity": true,
+      "parserEnabled": false,
+      "modelEnabled": false,
+      "diagnostics": false,
+      "realLifecycle": null
+    },
+    "logs": []
+  },
+  "runtime": {
+    "transportRequests": 9,
+    "reflectionAttempts": 0,
+    "injectedFailures": 0,
+    "dispatches": 9,
+    "events": {
+      "OBSERVE_SEGMENT": 7,
+      "RECONNECT_REPLAY": 1,
+      "COMPLETE_SESSION": 1
+    },
+    "externalFetches": 0,
+    "reconnects": [
+      {
+        "restored": "MATCHED",
+        "status": "COMPLETED",
+        "routeCursor": 5,
+        "checkpointBackend": "MEMORY"
+      }
+    ],
+    "completions": [
+      {
+        "runStatus": "COMPLETED",
+        "sessionStatus": "COMPLETED",
+        "routeCursor": 7,
+        "completedCueCount": 0,
+        "graphCaseCount": 0,
+        "summaryCompletedCueCount": 0,
+        "summaryThemeCount": 0,
+        "checkpointBackend": "MEMORY"
+      }
+    ],
+    "reflections": []
+  },
+  "fix": "Both Host landing paths consume the validated restored Session current_tick instead of an obsolete three-kind mapping.",
+  "checks": {
+    "relatedTests": 103,
+    "typecheck": "passed",
+    "viewerTypecheck": "passed",
+    "harnessTypecheck": "passed",
+    "harnessBuild": "passed",
+    "webProductionBuild": "passed",
+    "formalViewerProductionBuild": "passed"
+  },
+  "cleanup": {
+    "tabs": [
+      33,
+      34
+    ],
+    "ports": [
+      49379,
+      49552
+    ],
+    "closed": true
+  },
+  "screenshot": ".local-data/ordinary-host-cold-landing/completed.png",
+  "limitations": [
+    "Synthetic fixture, not parsed Demo ticks; no Parser/model.",
+    "Legacy re-selection rebuilds fixture Analysis once after reload; Route/Narrator calls remain zero.",
+    "MEMORY Graph service survives browser reload; not SQLite or application restart.",
+    "RECOVERED success copy additionally checked with actual component SSR; no extra GUI pass for text only."
+  ],
+  "next": "ordinary-cued-host-resume"
+}

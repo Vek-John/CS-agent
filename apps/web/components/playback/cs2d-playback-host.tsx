@@ -283,22 +283,6 @@ type RecoveryLanding = {
   readonly analysis: Cs2dAnalysisBundle;
 };
 
-function targetTickForRecovery(
-  record: SessionRecoveryRecord,
-  staged: ReturnType<typeof restoreRecoveryArtifacts>,
-): number {
-  const boundary = record.boundary;
-  if (boundary.kind === "CUE_PAUSED") {
-    const cue = staged.plan.cues.find((candidate) => candidate.id === boundary.cueId);
-    if (!cue) throw new Error("Stored recovery cue is not present in the frozen plan.");
-    return cue.decision_tick;
-  }
-  if (boundary.kind === "WRAP_UP") {
-    return staged.plan.segments.at(-1)?.end_tick ?? 0;
-  }
-  return staged.plan.segments[0]?.start_tick ?? 0;
-}
-
 function recoveryEventId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`.slice(0, 160);
 }
@@ -919,7 +903,7 @@ export function Cs2dPlaybackHost({
         recoveryHandshakeReadyRef.current = false;
         storedHistoryRecoveryLandingRef.current = {
           recoveryId: record.recoveryId,
-          targetTick: targetTickForRecovery(record, recovered),
+          targetTick: recovered.session.current_tick,
           staged: { ...recovered, narrationByCue: restoredNarration, routeState: restoredRoute },
           record,
           analysis: normalizedAnalysis,
@@ -1583,7 +1567,7 @@ export function Cs2dPlaybackHost({
         if (result.status === "REJECTED") return;
         beginRecoveryLanding({
           recoveryId: record.recoveryId,
-          targetTick: targetTickForRecovery(record, staged),
+          targetTick: staged.session.current_tick,
           staged,
           record,
           analysis: normalized,

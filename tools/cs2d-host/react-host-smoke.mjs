@@ -5,17 +5,21 @@ import { dirname, resolve, extname, sep } from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { mkdir, writeFile, readFile, realpath, stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
+import { randomBytes } from 'node:crypto'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const app = resolve(root, '.local-data/upstream/cs2d/apps/app'), web = resolve(root, 'apps/web')
 const dependency = createRequire(resolve(app, 'package.json')), webDependency = createRequire(resolve(web, 'package.json'))
 const args = process.argv.slice(2), realDemo = args.includes('--real-demo'), output = resolve(root, realDemo ? '.local-data/real-demo-host-entry-preflight' : '.local-data/guided-react-host-smoke'), generated = resolve(output, 'src'), dist = resolve(output, 'dist')
+const ordinaryRecovery = args.includes('--ordinary-recovery')
+if (ordinaryRecovery && realDemo) throw Error('RECOVERY_REQUIRES_SYNTHETIC_MODE')
+const runNonce = randomBytes(16).toString('hex')
 const failFirstReflection = args.includes('--fail-first-reflection')
 const diagnostics = args.includes('--diagnostics') || failFirstReflection || realDemo
 const port = Number(args.find(arg => arg.startsWith('--port='))?.slice(7) ?? 4324)
 if (!Number.isInteger(port) || port < 0 || port > 65535) throw Error('INVALID_LOOPBACK_PORT')
 if (!args.includes('--serve-only')) {
   await mkdir(generated, { recursive: true })
-  await writeFile(resolve(generated, 'index.html'), `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Real React Host synthetic smoke</title><body><header style="padding:12px"><strong>合成场景 · 非真实 Demo</strong><p>实际 React Host、Session、默认 Graph 与 Vue Viewer；解析和模型未运行。先载入，再点地图上方明确标注的合成选人按钮，选人后真实 Host 自动准备并开始带看。该按钮替代 DemoAnalyzer 选人；Viewer 名单点击仅切换跟随对象。</p><button id="load" disabled>载入合成比赛</button><details><summary>有界验收摘要</summary><pre id="summary"></pre></details></header><div id="host"></div><script type="module" src="/parent.tsx"></script></body></html>`)
+  await writeFile(resolve(generated, 'index.html'), `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Real React Host synthetic smoke</title><body><header style="padding:12px"><strong>合成场景 · 非真实 Demo</strong><p>实际 React Host、Session、默认 Graph 与 Vue Viewer；解析和模型未运行。先载入，再点地图上方明确标注的合成选人按钮，选人后真实 Host 自动准备并开始带看。该按钮替代 DemoAnalyzer 选人；Viewer 名单点击仅切换跟随对象。</p><button id="load" disabled>载入合成比赛</button><button id="reload-recovery" hidden disabled>捕获普通段并重载</button><p id="recovery-note" hidden>恢复验收：先点击“捕获普通段并重载”启用，再载入并选择合成玩家；第二回合普通进度真实写入成功后自动重载一次。重载后再次载入合成比赛，由 Host 自动恢复。重载保留本次 MEMORY Graph 服务，不代表进程或 SQLite 重启。</p><details><summary>有界验收摘要</summary><pre id="summary"></pre></details></header><div id="host"></div><script type="module" src="/parent.tsx"></script></body></html>`)
   if (realDemo) await writeFile(resolve(generated, 'index.html'), `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Real Demo Host isolated entry</title><body><header style="padding:12px"><strong>真实本机文件入口 · 隔离验收</strong><p>使用原始文件/选人界面。Parser 与本地 WASM INT8 胜率模型真实运行；教练使用受限本地规则。仅支持不超过128MiB的.dem；解析与缓存、选人后分析分别限120秒。新origin自产浏览器缓存保留。</p><button id="load" hidden disabled></button><details open><summary>有界验收摘要</summary><pre id="summary"></pre></details></header><div id="host"></div><script type="module" src="/parent.tsx"></script></body></html>`)
   await writeFile(resolve(generated, 'child.html'), '<!doctype html><html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><div id="app"></div><script type="module" src="/child.ts"></script></html>')
   await writeFile(resolve(generated, 'parent.tsx'), `import ${JSON.stringify(resolve(root, 'tools/cs2d-host/react-host-smoke-parent.tsx'))};`)
@@ -56,6 +60,7 @@ if (args.includes('--serve') || args.includes('--serve-only')) {
         const result = await transport(JSON.parse(Buffer.concat(chunks).toString('utf8')))
         res.writeHead(result.status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(result.payload)); return
       }
+      if (pathname === '/smoke-run.json') { res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify({ ordinaryRecovery, nonce: runNonce })); return }
       if (pathname === '/smoke-metrics.json') { res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(runtime.metrics)); return }
       if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return }
       const parts = pathname.split('/').filter(Boolean), fixedRealFile = realDemo && realFiles.has(parts.join('/')), assetRoot = roots[parts[0]], base = fixedRealFile ? resolve(app, 'public') : assetRoot || dist
@@ -65,7 +70,7 @@ if (args.includes('--serve') || args.includes('--serve-only')) {
     } catch { if (!res.headersSent) res.writeHead(400); res.end('SMOKE_REQUEST_REJECTED') }
   })
   await new Promise((done, fail) => { server.once('error', fail); server.listen(port, '127.0.0.1', done) })
-  console.log(JSON.stringify({ url: `http://127.0.0.1:${server.address().port}/${realDemo ? '?realDemo=1' : diagnostics ? '' : '?teachingDiagnostics=off'}`, realDemo, diagnostics, failFirstReflection, stop: 'SIGINT or SIGTERM', rawReplay: 'child page only', runtime: 'MEMORY' }))
+  console.log(JSON.stringify({ url: `http://127.0.0.1:${server.address().port}/${realDemo ? '?realDemo=1' : ordinaryRecovery ? '?ordinaryRecovery=1&emptyRoute=1&teachingDiagnostics=off' : diagnostics ? '' : '?teachingDiagnostics=off'}`, realDemo, diagnostics, failFirstReflection, ordinaryRecovery, stop: 'SIGINT or SIGTERM', rawReplay: 'child page only', runtime: 'MEMORY' }))
   const stop = () => { server.close(); server.closeAllConnections() }
   process.once('SIGINT', stop); process.once('SIGTERM', stop)
 }
