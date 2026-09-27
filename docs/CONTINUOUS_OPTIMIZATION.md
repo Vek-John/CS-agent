@@ -12,6 +12,17 @@
 
 
 
+## 已交付验证：真实致盲来源覆盖预检（2026-09-27）
+
+- ID self-blind-real-coverage-preflight，278bca1已push/clean，7f2b复用。root核实既有4份匿名摘要均无blind/flash指标；既有授权test_demo存在、60601900B。partial_revision_restore默认配置独占新coverage observer/runner及.local-data小smoke；root docs/正式输入决策/唯一正式执行与资源清理/审阅提交，agent不读正式文件。
+- 目标/流程：有效极小合成Demo验证真实descriptor/wire/named callback→一次事件/当前实体级正式扫描→匿名字段/可解析身份计数→可行动覆盖结论。复用真实validated_value_type/event_controller_owner，不构建Replay或帧集合，不跑Adapter/模型/GUI/DB。原指定玩家仅匿名汇总，昵称多身份则unknown，禁止输出名字/SteamID/raw events。
+- 风险/预算：input硬限128MiB含增长、runtime45秒、owned child RSS512MiB监测、stdout32KiB；先小smoke、cargo offline/locked且编译时间单独统计，旧ground事件预检同文件346ms仅作预期不当新结果。20分钟有限，设施同败两次简化、不重复正式扫描；测试例程/binary/temp由owner清，target缓存留，root终止仅自己进程，原Demo/用户SQLite/Memory/密钥不动，无安装部署。
+
+- 有效smoke：4条named盲事件、type9通过2/拒2、正时长3、无实体身份unknown4；无事件/仅descriptor分开，跨事件多owner不输出选手计数。runtime小child的解析不完整/监测超时/输出超限均正确失败；root读源码/日志后唯一正式执行。
+- 正式结果：完整6849 named/raw事件，其中blind72；type9双方身份与type2正时长72/72通过，原选手受害者9条且跨事件唯一owner。runtime1092ms、native wait4峰90865664B、输出892B，无Replay/模型/GUI/用户库。仅局部字段资格，不等同最终回合或教学窗口数量；原文件只读、不重复扫描。[结果](validation/SELF_BLIND_REAL_COVERAGE_RESULT.json)。
+- 新tools observer/runner与匿名证据交付；执行者RELEASE，root实际结果验证、所有临时example/binary/process清理。产品源码未改；两端TS/正式build按交付门执行。
+- 下一有限目标 known-facts-seven-context：当前Narrator已容纳7条公开事实，但current-cue-questions事实选取仍slice(0,6)。先用生产7事实包核实是否漏已展示C4，再最小调整问答消费与引用/正文预算，保持不推未展示信息/不调用模型；不重做全场UI或事件覆盖。
+
 ## 已交付：决策前本人致盲事件消费（2026-09-27）
 
 - ID decision-prior-self-blind，82c5ba4已push/clean，7f2b复用；partial_revision_restore默认配置先只读A1查selfHurt路径与全部接收边界，root docs/ARCH/接口与最终集成/提交；A1仅.local-data/decision-prior-self-blind，A2批准后明确生产所有权。

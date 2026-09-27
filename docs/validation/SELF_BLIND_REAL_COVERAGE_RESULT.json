@@ -1,0 +1,216 @@
+{
+  "baseline": "278bca1",
+  "inputScope": "one read-only pass over the previously authorized 60601900-byte sample; original selected player; no identities retained",
+  "previousEvidence": "four prior anonymous summaries contained no blind/flash metric keys",
+  "real": {
+    "exitCode": 0,
+    "stopReason": null,
+    "elapsedMs": 1092,
+    "sampledPeakRssBytes": 72728576,
+    "ownedChildMaxRssBytes": 90865664,
+    "outputBytes": 892,
+    "runtimeRssBudgetBytes": 536870912,
+    "runtimeDeadlineSeconds": 45,
+    "inputCapBytes": 134217728,
+    "coverage": {
+      "complete": true,
+      "counts": {
+        "attackerCurrentOwnerResolved": 72,
+        "blindDescriptors": 1,
+        "descriptorMessages": 1,
+        "finitePositiveValidatedDuration": 72,
+        "namedEvents": 6849,
+        "playerBlindEvents": 72,
+        "producerFieldEligibleBlindEvents": 72,
+        "rawBlindMessages": 72,
+        "rawGameEventMessages": 6849,
+        "rawMessagesNotMatchedToBlindDescriptor": 6777,
+        "selectedNameUniquelyResolvedAtBlindEvent": 72,
+        "validEventTick": 72,
+        "victimCurrentOwnerResolved": 72
+      },
+      "descriptorTypes": {
+        "attacker:TYPE_9": 1,
+        "blind_duration:TYPE_2": 1,
+        "userid:TYPE_9": 1
+      },
+      "scope": "global observed events, including any warmup; field eligibility is not round assembly or teaching eligibility",
+      "selected": {
+        "counts": {
+          "producerFieldEligibleEvents": 9,
+          "victimEvents": 9
+        },
+        "status": "ONE_OBSERVED_OWNER"
+      },
+      "validatedTypes": {
+        "attacker:TYPE_9": 72,
+        "blind_duration:TYPE_2": 72,
+        "userid:TYPE_9": 72
+      },
+      "wireTypes": {
+        "attacker:TYPE_9": 72,
+        "blind_duration:TYPE_2": 72,
+        "userid:TYPE_9": 72
+      }
+    },
+    "mode": "EXPLICIT_SINGLE_INPUT"
+  },
+  "smoke": {
+    "exitCode": 0,
+    "stopReason": null,
+    "elapsedMs": 846,
+    "sampledPeakRssBytes": 32768,
+    "ownedChildMaxRssBytes": 2818048,
+    "outputBytes": 1589,
+    "runtimeRssBudgetBytes": 536870912,
+    "runtimeDeadlineSeconds": 45,
+    "inputCapBytes": 134217728,
+    "coverage": {
+      "assertionsPassed": true,
+      "descriptorWithoutEventsFixture": {
+        "complete": true,
+        "counts": {
+          "blindDescriptors": 1,
+          "descriptorMessages": 1
+        },
+        "descriptorTypes": {
+          "attacker:TYPE_9": 1,
+          "blind_duration:TYPE_2": 1,
+          "userid:TYPE_9": 1
+        },
+        "scope": "global observed events, including any warmup; field eligibility is not round assembly or teaching eligibility",
+        "selected": {
+          "counts": null,
+          "status": "NOT_REQUESTED"
+        },
+        "validatedTypes": {},
+        "wireTypes": {}
+      },
+      "eventFixture": {
+        "complete": true,
+        "counts": {
+          "attackerCurrentOwnerUnknown": 4,
+          "blindDescriptors": 1,
+          "blind_durationMissingPayload": 1,
+          "descriptorMessages": 1,
+          "finitePositiveValidatedDuration": 3,
+          "namedEvents": 4,
+          "playerBlindEvents": 4,
+          "rawBlindMessages": 4,
+          "rawGameEventMessages": 4,
+          "selectedNameUnknownOrAmbiguousAtBlindEvent": 4,
+          "useridMissingPayload": 1,
+          "validEventTick": 4,
+          "victimCurrentOwnerUnknown": 4
+        },
+        "descriptorTypes": {
+          "attacker:TYPE_9": 1,
+          "blind_duration:TYPE_2": 1,
+          "userid:TYPE_9": 1
+        },
+        "scope": "global observed events, including any warmup; field eligibility is not round assembly or teaching eligibility",
+        "selected": {
+          "counts": null,
+          "status": "UNRESOLVED"
+        },
+        "validatedTypes": {
+          "attacker:TYPE_9": 4,
+          "blind_duration:MISSING": 1,
+          "blind_duration:TYPE_2": 3,
+          "userid:MISSING": 2,
+          "userid:TYPE_9": 2
+        },
+        "wireTypes": {
+          "attacker:TYPE_9": 4,
+          "blind_duration:TYPE_2": 4,
+          "userid:TYPE_4": 1,
+          "userid:TYPE_9": 3
+        }
+      },
+      "synthetic": true,
+      "zeroEventFixture": {
+        "complete": true,
+        "counts": {},
+        "descriptorTypes": {},
+        "scope": "global observed events, including any warmup; field eligibility is not round assembly or teaching eligibility",
+        "selected": {
+          "counts": null,
+          "status": "NOT_REQUESTED"
+        },
+        "validatedTypes": {},
+        "wireTypes": {}
+      }
+    },
+    "mode": "SYNTHETIC_SMOKE"
+  },
+  "runnerBoundaryChecks": {
+    "incomplete": {
+      "exitCode": 0,
+      "stopReason": "PARSE_INCOMPLETE",
+      "elapsedMs": 18,
+      "sampledPeakRssBytes": 1703936,
+      "ownedChildMaxRssBytes": 8650752,
+      "outputBytes": 31,
+      "runtimeRssBudgetBytes": 536870912,
+      "runtimeDeadlineSeconds": 45,
+      "inputCapBytes": 134217728,
+      "coverage": {
+        "complete": false,
+        "counts": {}
+      }
+    },
+    "monitorTimeout": {
+      "exitCode": -9,
+      "stopReason": "RUNTIME_MONITOR_TIMEOUT",
+      "elapsedMs": 16,
+      "sampledPeakRssBytes": 0,
+      "ownedChildMaxRssBytes": 671744,
+      "outputBytes": 0,
+      "runtimeRssBudgetBytes": 536870912,
+      "runtimeDeadlineSeconds": 45,
+      "inputCapBytes": 134217728
+    },
+    "oversizedOutput": {
+      "exitCode": 0,
+      "stopReason": "RUNTIME_OUTPUT_LIMIT",
+      "elapsedMs": 19,
+      "sampledPeakRssBytes": 933888,
+      "ownedChildMaxRssBytes": 8634368,
+      "outputBytes": 36864,
+      "runtimeRssBudgetBytes": 536870912,
+      "runtimeDeadlineSeconds": 45,
+      "inputCapBytes": 134217728
+    }
+  },
+  "interpretation": {
+    "sourceMappingHasMeasuredCoverage": true,
+    "selectedObservedVictimEvents": 9,
+    "isTeachingCueCount": false,
+    "roundAssemblyPerformed": false,
+    "currentBlindnessVerified": false,
+    "professionalJudgmentImprovementMeasured": false,
+    "formalScans": 1
+  },
+  "limits": [
+    "Counts cover all observed file events, including any warmup.",
+    "Only current Controller and finite positive duration field gates were applied; no candidate/death/freshness window evaluation.",
+    "RSS monitoring is sampled and can overshoot between polls; wait4 records native child high-water RSS at exit.",
+    "Elapsed time includes monitoring/collection overhead, excludes compilation; not an end-to-end product latency benchmark."
+  ],
+  "validationCommands": [
+    "python3 tools/validate-blind-coverage.py --smoke --output <new-smoke-result.json>",
+    "python3 tools/validate-blind-coverage.py --input <authorized-demo> --player <original-selected-player> --output <new-result.json>",
+    "pnpm typecheck",
+    "pnpm cs2d:typecheck",
+    "pnpm build",
+    "CARGO_NET_OFFLINE=true pnpm cs2d:build"
+  ],
+  "productSourceChanged": false,
+  "deliveryChecks": {
+    "webTypecheck": 0,
+    "viewerTypecheck": 0,
+    "webBuild": 0,
+    "productionViewerBuild": 0,
+    "ownedProbeArtifactsRemaining": 0
+  }
+}

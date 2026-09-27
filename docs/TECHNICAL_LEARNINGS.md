@@ -8,6 +8,14 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：致盲来源有实际覆盖，事件数不是教学点数
+
+- 问题与方法：4份已有匿名结果均无blind/flash统计，无法由其判断新来源覆盖。先用有效极小Demo验证真实raw descriptor/wire与named回调、缺值/错型/无当前实体；同时区分无事件和仅有descriptor。随后root只读一次既有授权60.6MB样本，使用当前真实event_controller_owner和source2-demo，不构建Replay、帧列表、候选或模型。
+- 实际结果：完整扫描6849个named events，与raw计数一致；player_blind72条，userid/attacker的descriptor与wire均type9、duration均type2。72条都有有效tick、有限正报告时长与当前双方owner；原指定名字在全部blind事件时对应唯一当前owner，受害者事件9条。输出892字节，不包含昵称/SteamID/raw事件。[匿名结果](validation/SELF_BLIND_REAL_COVERAGE_RESULT.json)。
+- 资源：runtime1092ms，wait4记录的原生child峰值90865664字节（约90.9MB），不含Cargo；轮询峰值72728576字节表明采样可能漏峰，因此不把它冒称真实高水位。预算为128MiB读入硬限、45秒、512MiB RSS监测、32KiB输出；RSS不是OS硬限制，退出后高水位也会令越限结果失败。本次未越预算，进程/随机example/binary均已清理，仅留编译缓存和摘要。
+- 工具边界：小child验证PARSE_INCOMPLETE、监测超时、退出后输出超限均不得冒报成功；compile/runtime阶段分开、只杀自身process group、结果文件拒覆盖。跨事件名字指向多个owner时只报ambiguous，不把不同人汇总成原选手。原始用户文件只读，不访问DB/Memory/GUI/模型，native探针不发网络请求。两端TS及正式production build通过，产品源码未改。
+- 行动：本样本支持现有type9正值来源映射，无需降门或换回缓存；不再重复此扫描。72是全局事件，9是原选手受害者事件，不是正式回合/新鲜决策窗口通过量或教学点数，也不证明当前失明与专业判断改善。下一独立目标检查“已知事实”提问在Narrator升级7事实后仍限6条的消费差异，先构造真实7事实包证明是否漏已展示C4，再作有限接线；不扩大本轮数据扫描。
+
 ## 2026-09-27：本人致盲发生事实进入实际带看
 
 - 决策：消费新版Parser的完整来源字段，只输出本人、近10秒最多3条、LIVE回合/决策严格之前且当前状态新鲜存活的事件；全raw集合重复ID均排除。snapshot仅source/sourceRef/tick，不传投掷者或报告时长。旧/缺/非法字段不变成“没有致盲”。
