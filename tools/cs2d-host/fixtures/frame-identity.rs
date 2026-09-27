@@ -154,3 +154,18 @@ fn has(c: &Collector, id: &str) -> bool { c.frames.last().unwrap().players.iter(
         assert_eq!(ground_sample::fixture_summary(evidence),(match mode {1=>Some("FLAG_SET"),2=>Some("FLAG_UNSET"),_=>None},"TICK_START",100,"111"));
     }
 }
+
+#[cfg(equipment_presence)]
+#[test] fn actual_equipment_reader_keeps_false_distinct_from_missing() {
+    for value in [None, Some(FieldValue::Boolean(false)), Some(FieldValue::Boolean(true)), Some(FieldValue::Unsigned32(1))] {
+        let (mut c, mut ctx) = fixture();
+        if let Some(ref v) = value {
+            ctx.0.0[0].values.insert("m_pItemServices.m_bHasHelmet", v.clone());
+            ctx.0.0[0].values.insert("m_pItemServices.m_bHasDefuser", v.clone());
+        }
+        sample(&mut c, &ctx, 100);
+        let player = c.frames[0].players.iter().find(|p|p.steam_id=="111").unwrap();
+        let expected = match value { Some(FieldValue::Boolean(value))=>Some(value), _=>None };
+        assert_eq!(player.helmet, expected); assert_eq!(player.defuser, expected);
+    }
+}

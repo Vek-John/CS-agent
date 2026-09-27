@@ -206,6 +206,12 @@ Adapter只消费`blindEvidenceVersion:1`且id、原tick、有限正reportedDurat
 
 报告时长不是精确屏幕遮挡、视野或事件结束证明；投掷者身份属于全知Replay，不自动成为本人知识。当前只呈现决策前的事件发生，不推断当时仍失明、具体视野或战术错误，不改变候选/路线/Outcome/建议门。Adapter/signals 1.14读取1.13及旧兼容产物，旧保存的snapshot/narration原样恢复，不回填或再生成。
 
+### 2.4.12 头盔与拆弹器的属性存在性
+
+Parser以完整属性路径读取`m_pItemServices.m_bHasHelmet`和`m_pItemServices.m_bHasDefuser`，仅真实Boolean值形成可选装备事实；明确true/false均保留，缺属性或错类型为None并在Replay JSON中省略，不把缺失补false。两字段使用Option<bool>，assemble沿采样原样透传，Replay继续为optional boolean；generatedBy追加equipment-presence.v1并完整保留在Adapter来源版本。
+
+旧Parser同时省略false和缺失，旧无字段记录不能事后区分，仍按未知读取、不回填或重算；旧显式false仍按原契约读取。DecisionSnapshot分别保留helmet/hasDefuseKit的true/false/null；helmet缺失标记继续限制View和资源诊断，不能仅由缺字段触发已知无头盔的风险条件。当前normalized timeline的has_defuse_kit仍仅true输出，Viewer图标/购买启发式及CS-Net既有Boolean消费未在本次获得新的未知语义，不以本次来源修复声称专业判断质量已改善。
+
 ### 2.5 事实、推断、建议分层
 
 - `Fact`：Demo 可直接验证；

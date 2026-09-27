@@ -46,8 +46,14 @@ def main():
     ])
     if 'fn verified_controller_pawn' in props:
         helpers += '\n' + block(props, 'fn verified_controller_pawn')
+    if 'fn prop_optional_bool(' in props:
+        helpers += '\n' + block(props, 'fn prop_optional_bool(')
     definitions = '\n'.join(block(schema, f'struct {name} ') for name in ['PlayerState', 'PlayerMeta'])
     definitions = re.sub(r'^\s*#\[serde[^\n]*\]\n', '\n', definitions, flags=re.MULTILINE)
+    # The pre-equipment collector still constructs bool fields. Keep the old
+    # baseline constructor shape while testing its identity behavior.
+    if 'fn prop_optional_bool(' not in props:
+        definitions = definitions.replace('helmet: Option<bool>', 'helmet: bool').replace('defuser: Option<bool>', 'defuser: bool')
     ground = (current / 'ground_sample.rs').read_text().split('#[cfg(test)]')[0]
     ground = re.sub(r'^//!.*\n', '', ground, flags=re.MULTILINE)
     ground = ground.replace('use serde::Serialize;', '').replace('use source2_demo::prelude::*;', 'use super::*;')
@@ -72,7 +78,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='cs-frame-identity-') as temp:
         source = Path(temp) / 'regression.rs'; binary = Path(temp) / 'regression'
         source.write_text(fixture)
-        subprocess.run(['rustc', '--edition=2021', '--test', '-Awarnings', str(source), '-o', str(binary)], check=True, timeout=60)
+        subprocess.run(['rustc', '--edition=2021', '--test', '-Awarnings', *(['--cfg', 'equipment_presence'] if 'fn prop_optional_bool(' in props else []), str(source), '-o', str(binary)], check=True, timeout=60)
         subprocess.run([str(binary), '--nocapture'], check=True, timeout=30)
 
 

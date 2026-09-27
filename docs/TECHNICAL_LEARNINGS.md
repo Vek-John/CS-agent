@@ -8,6 +8,15 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：明确没有装备与缺失来源必须分别序列化
+
+- A1修正初步判断：prop_bool对缺属性/错类型返回false，但schema的is_false又省略false，所以完整Parser JSON并未证明会把缺失伪成已知false。实际缺陷是可靠false与未知都输出空字段，下游无法识别明确没有头盔/拆弹器。真实Entity::default验证缺属性，明确值/错类型等五态使用真实FieldValue加受控lookup；抽取实际reader、collector表达式和serde字段，不冒称正式Demo数据。
+- 决策：0037仅让helmet/defuser用prop_optional_bool（实际Boolean→Some，其他None）、Option<bool>与skipNone；明确false保留，unknown省略，assemble原透传。Replay可选类型不变、注释纠正，Parser equipment-presence.v1完整登记到Adapter。旧省略不能倒推false，旧保存产物不改写；其他prop_bool消费者和数值字段不动。
+- A2输出：true/false分别序列化为两个显式Boolean，缺属性/整数/字符串错型均省略；原生输出A1/A2分目录保留。真实frame采样source夹具12项包含新装备读值，Parser12/vendor37、patch registry19及tail apply/reverse/reapply/currentreuse通过。
+- 下游：生产Adapter→Bundle序列化/反序列化→Snapshot/资源/View的三态测试通过。false仍为false，缺失在Snapshot为null并保留helmet缺失标记，View“100甲·头盔未知”，不会被资源诊断当作已知无头盔。五文件203相关测试、两端TS、Web构建通过；正式Viewer/WASM构建通过，root及独审无产品must-fix。工具补examples目录创建，旧frame源码对照按旧reader保留bool构造，防止工具误报。
+- 限制：只有缺属性用了真实空Entity，明确值/错型的属性lookup受控；没有解析正式Demo或测量字段覆盖率。normalized timeline拆弹器仍仅true输出；Viewer图标/购买启发式/CS-Net既有truthy消费没有新增unknown语义。本轮修可知信息完整性，不宣称专业判断质量提升、GUI或native A5完成。
+- 下一有限目标 equipment-boolean-real-coverage：优先已有匿名资料，若没有两字段指标则复用一次有界原生observer，仅统计合法已采样pawn的Boolean true/false/missing/wrong-type覆盖；先小smoke再决定是否进行一次既有授权Demo只读，不创建完整Replay或调用模型，输出匿名计数及实际时长/内存，确认本修复在真实输入上的可用性。
+
 ## 2026-09-27：弹匣记录经过历史重开后仍以原来源回答
 
 - 问题：基础弹匣展示已贯通首次带看，独立来源经过 SQLite 保存、关闭重开和恢复归一化后的消费尚无直接证据；已有恢复 helper 的零调用断言只执行到准备完成，未覆盖验证回调中的展示与追问。

@@ -1,0 +1,108 @@
+{
+  "taskId": "equipment-boolean-source-presence",
+  "baseline": "f41204d",
+  "patch": "0037-equipment-boolean-presence.patch",
+  "parserMarker": "equipment-presence.v1",
+  "finding": "Old serde omitted both known false and unknown; not evidence of unknown becoming false in the serialized Replay.",
+  "before": {
+    "boundary": "True/false/wrong-type property accessor is controlled; missing uses real Entity; serde fields/attributes and collector expressions are actual source",
+    "realEntityMissingProperty": false,
+    "rows": [
+      {
+        "accessorResult": true,
+        "case": "true",
+        "serializedEquipment": {
+          "defuser": true,
+          "helmet": true
+        }
+      },
+      {
+        "accessorResult": false,
+        "case": "false",
+        "serializedEquipment": {}
+      },
+      {
+        "accessorResult": false,
+        "case": "missing",
+        "serializedEquipment": {}
+      },
+      {
+        "accessorResult": false,
+        "case": "wrong-integer",
+        "serializedEquipment": {}
+      },
+      {
+        "accessorResult": false,
+        "case": "wrong-string",
+        "serializedEquipment": {}
+      }
+    ],
+    "synthetic": true,
+    "optionalBooleanSchema": false
+  },
+  "after": {
+    "boundary": "True/false/wrong-type property accessor is controlled; missing uses real Entity; serde fields/attributes and collector expressions are actual source",
+    "realEntityMissingProperty": null,
+    "rows": [
+      {
+        "accessorResult": true,
+        "case": "true",
+        "serializedEquipment": {
+          "defuser": true,
+          "helmet": true
+        }
+      },
+      {
+        "accessorResult": false,
+        "case": "false",
+        "serializedEquipment": {
+          "defuser": false,
+          "helmet": false
+        }
+      },
+      {
+        "accessorResult": null,
+        "case": "missing",
+        "serializedEquipment": {}
+      },
+      {
+        "accessorResult": null,
+        "case": "wrong-integer",
+        "serializedEquipment": {}
+      },
+      {
+        "accessorResult": null,
+        "case": "wrong-string",
+        "serializedEquipment": {}
+      }
+    ],
+    "synthetic": true,
+    "optionalBooleanSchema": true
+  },
+  "validation": {
+    "consumerFiles": 5,
+    "consumerPassed": 203,
+    "frameSourcePassed": 12,
+    "parserPassed": 12,
+    "vendorPassed": 37,
+    "patchRegistryPassed": 19,
+    "tailApplyReverseReapply": "PASS",
+    "currentCheckoutReuse": "PASS",
+    "webTypecheck": "PASS",
+    "viewerTypecheck": "PASS",
+    "webBuild": "PASS",
+    "formalViewerWasmBuild": "PASS",
+    "independentReadOnlyReview": "No product must-fix; runner parent-directory creation corrected",
+    "pre0037FrameBaselinePassed": 11,
+    "pythonSyntax": "PASS; bytecode removed"
+  },
+  "limitations": [
+    "Typed lookup controlled except real Entity missing-property case",
+    "No formal Demo sample/coverage or GUI/native A5 run",
+    "Legacy absent remains unknown; saved artifacts not rewritten",
+    "Viewer icon/buy heuristics/CS-Net Boolean behavior unchanged",
+    "Normalized timeline defuse kit remains true-only; snapshot distinguishes false and null"
+  ],
+  "cleanup": "Random native example/binary and temporary tail checkout removed; no browser/server/user database used",
+  "nextTask": "equipment-boolean-real-coverage"
+}

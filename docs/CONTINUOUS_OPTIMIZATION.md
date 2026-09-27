@@ -12,6 +12,18 @@
 
 
 
+## 已交付：装备布尔属性的缺值语义（2026-09-27）
+
+- ID equipment-boolean-source-presence，基线 f41204d 已push/clean；7f2b复用、原owners RELEASE。partial_revision_restore默认配置独占A1新原生source runner/fixture，A2待实际证据后限定0037/registry/受控Parser；root独占Adapter版本登记/消费测试、docs/ARCH/集成提交。prior_fire_boundary_review默认配置只读Option/omit类型兼容与字段路径。
+- 目标/流程：真实属性reader→区分明确true/false与缺属性/错类型→两装备字段序列化→Adapter Snapshot/View保留真假及未知。先原生小验证；有证据才改产品，不猜实战发生率。验收false不丢、未知不补false、下游兼容、旧产物不改、相关native/TS/正式build后commit push。
+- 风险/阶段：Entity构造接口和新patch混入旧改动；先5分钟A1、cargo offline/locked编译180秒/运行30秒，总20分钟左右。单owner清随机example/binary/进程，保留日志。无正式Demo/模型/GUI/用户SQLite/Memory/密钥/安装部署；不扩其他属性或降低装备判断门，同设施两败简化。
+
+- A1修正：完整schema表明旧false会被is_false省略；实际问题是明确false与缺值同时丢失，未证明正式JSON把缺值伪成已知false。Option+skipNone兼容既有optional Replay类型；不扩旧Viewer图标/模型Boolean映射或has_defuse_kit仅true投影，旧无字段保持unknown。
+
+- 交付：0037以Option/skipNone保留真实Boolean false，缺/错仍省略；新equipment-presence.v1登记，旧数据不回填。A1/A2原始JSON分目录保留，Frame源夹具12、Parser12/vendor37、registry19及tail重放/currentreuse通过；生产消费5文件203项、两端TS、Web/正式Viewer(WASM) build通过。root及独审读真实diff无产品must-fix。
+- 工具收尾：修新runner创建examples目录；原frame对照模式按旧reader匹配bool构造类型，pre-0037精确baseline的11项通过，避免Option升级造成假编译失败。自有临时example/binary/temp已清，不读正式Demo/用户库、不运行模型/GUI。[结果](validation/EQUIPMENT_BOOLEAN_PRESENCE_RESULT.json)。
+- 下一有限目标 equipment-boolean-real-coverage：优先现有匿名资料，无指标时先小observer smoke，再对既有授权Demo做一次有界属性级覆盖读取；只回传true/false/missing/wrong-type匿名计数，不构建完整Replay或模型，不重复全场UI，不把覆盖率当专业判断改善。
+
 ## 已交付验证：基础弹匣历史恢复（2026-09-27）
 
 - ID baseline-ammo-history-restore；基线 f70d504 已 push/clean，真实 7f2b 复用，既有 owner 均 RELEASE。partial_revision_restore 继承默认模型/推理，独占新 baseline-ammo-restore.integration.test.ts；共用 fixture 必要改动先协调。root 文档、实际 diff 复查、两端 TS/正式 build、提交 push。

@@ -1,0 +1,77 @@
+diff --git a/packages/parser/src/collector.rs b/packages/parser/src/collector.rs
+--- a/packages/parser/src/collector.rs
++++ b/packages/parser/src/collector.rs
+@@ -448,8 +448,8 @@
+                 money: prop_i32(ctrl, "m_pInGameMoneyServices.m_iAccount"),
+                 equip_value: prop_i32(pawn, "m_unCurrentEquipmentValue"),
+                 armor: prop_i32(pawn, "m_ArmorValue"),
+-                helmet: prop_bool(pawn, "m_pItemServices.m_bHasHelmet"),
+-                defuser: prop_bool(pawn, "m_pItemServices.m_bHasDefuser"),
++                helmet: prop_optional_bool(pawn, "m_pItemServices.m_bHasHelmet"),
++                defuser: prop_optional_bool(pawn, "m_pItemServices.m_bHasDefuser"),
+                 grenades: grenade_inventory(ctx, pawn),
+                 grenade_inventory_version: 1,
+             });
+diff --git a/packages/parser/src/lib.rs b/packages/parser/src/lib.rs
+--- a/packages/parser/src/lib.rs
++++ b/packages/parser/src/lib.rs
+@@ -23,7 +23,7 @@
+ use collector::Collector;
+ 
+ const DEMO_TICK_RATE: f64 = 64.0;
+-const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1.active-weapon-identity.v1.grenade-inventory.v1.primary-weapon.v1.sampled-ground.v1.blind-identity.v1.hurt-payload.v1";
++const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1.active-weapon-identity.v1.grenade-inventory.v1.primary-weapon.v1.sampled-ground.v1.blind-identity.v1.hurt-payload.v1.equipment-presence.v1";
+ 
+ /// Parses the bytes of a `.dem` in a single pass and returns `(Replay JSON, voice
+ /// blob)`. The `Replay` matches `replay-schema 2D`; the blob follows the `CLV2`
+diff --git a/packages/parser/src/props.rs b/packages/parser/src/props.rs
+--- a/packages/parser/src/props.rs
++++ b/packages/parser/src/props.rs
+@@ -23,6 +23,14 @@
+         Ok(FieldValue::Unsigned16(v)) => *v as i32,
+         Ok(FieldValue::Unsigned8(v)) => *v as i32,
+         _ => 0,
++    }
++}
++
++/// Equipment presence is known only for an actual Boolean property value.
++pub(crate) fn prop_optional_bool(e: &Entity, name: &str) -> Option<bool> {
++    match e.get_property_by_name(name) {
++        Ok(FieldValue::Boolean(value)) => Some(*value),
++        _ => None,
+     }
+ }
+ 
+diff --git a/packages/parser/src/schema.rs b/packages/parser/src/schema.rs
+--- a/packages/parser/src/schema.rs
++++ b/packages/parser/src/schema.rs
+@@ -220,10 +220,10 @@
+     /// the team's buy (eco / force / full).
+     pub(crate) equip_value: i32,
+     pub(crate) armor: i32,
+-    #[serde(skip_serializing_if = "is_false")]
+-    pub(crate) helmet: bool,
+-    #[serde(skip_serializing_if = "is_false")]
+-    pub(crate) defuser: bool,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub(crate) helmet: Option<bool>,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub(crate) defuser: Option<bool>,
+     /// Complete grenade kinds when Some, including an explicit empty list.
+     #[serde(skip_serializing_if = "Option::is_none")]
+     pub(crate) grenades: Option<Vec<String>>,
+diff --git a/packages/replay-core/src/schema.ts b/packages/replay-core/src/schema.ts
+--- a/packages/replay-core/src/schema.ts
++++ b/packages/replay-core/src/schema.ts
+@@ -287,9 +287,9 @@
+   equipValue: number
+   /** Armor (0 to 100). */
+   armor: number
+-  /** Has helmet (omitted when false). */
++  /** Known helmet possession. Missing means unknown or legacy omission; explicit false is retained. */
+   helmet?: boolean
+-  /** Has defuse kit, CT only (omitted when false). */
++  /** Known defuse-kit possession. Missing means unknown or legacy omission; explicit false is retained. */
+   defuser?: boolean
+   /** Complete grenade kinds with version 1; [] means none, omission means unknown.
+    *  Unversioned historical lists do not prove a complete inventory. */
