@@ -12,6 +12,16 @@
 
 
 
+## 已交付：分析失败后的实际恢复入口（2026-09-27）
+
+- ID analysis-failure-retry-entry，基线31d4089已push/clean，实际7f2b复用，前owner RELEASE。partial_revision_restore默认配置独占小复现/入口tests，生产Host/helper/受控patch待root确认；root docs/最终review/浏览器控制与checks/push。
+- A1五分钟：真实selectHostPlayer普通失败后同/异玩家重选，核实本地与managed的可见导入/历史重新分析入口。已读源码选择锁只在新Replay/managed load重置，pick仅调用input ref且input位于landing v-else；先证实入口是否实际无效。A2有缺口才最小修复，优先复用显式导入/已有历史入口，不直接解锁主体、不自动重试。A3失败→用户动作→成功、取消保留、换source迟到与RESTORE零生成，相关tests/两端TS/build后push。
+- 风险：文件input条件挂载导致命令空操作、取消误清原状态、选人解锁绕过会话主体/Revision边界。沿已应用emil/apple与Next；5分钟A1/20分钟有限实现、单test<60秒，bulk不跨owner，无真实Demo/模型/Jev/用户DB/密钥/安装部署。root单browser生命周期，执行者清自有进程/临时资源后RELEASE，同设施两败简化；不扩全Host审计。
+
+- A1真实Vue模板SSR证实landing input1、done0，重复同/异选人被既有主体锁阻止。0033只将原input移常驻根，idle/done/reading均1；Host错误卡按钮复用requestDemoPicker，普通与容量提示按历史可用性给可达操作。不解锁主体/改协议/自动重试。
+- A2/A3：取消保留、同file再选、managed reset/旧infer隔离与RESTORE零生成；root将成功case补为真实Adapter合法包序列化/反序列化。6文件70tests及补强后7受影响case通过，两端TS/build、尾patch apply/reverse/reuse与diff检查通过。root读真实diff/log，执行者RELEASE，进程/临时目录清理；无系统file dialog/完整GUI或正式Demo/用户库实测。[验证](validation/ANALYSIS_FAILURE_RETRY_ENTRY.md)。
+- 下一有限目标 guided-two-cue-handoff：复用小合成Replay自然生成两cue，贯通实际Session从第一段完成/回决策点/讲解/显式继续到第二段的命令与覆盖；现有Viewer单工具播放不能替代该证据。先无桌面小链、必要IAB单controller，保持ACK/未来信息门，不重parse正式Demo或重试旧native A5，无依据不改生产。
+
 ## 已交付：分析容量失败的准确反馈（2026-09-27）
 
 - ID analysis-capacity-feedback，基线ffb8a0c已push/clean，实际7f2b复用，前owner RELEASE。partial_revision_restore沿用默认配置（熟悉Host/恢复），独占窄feedback/helper/tests；adapter或上游patch先由root定接口。root独占docs/最终review/checks/push。

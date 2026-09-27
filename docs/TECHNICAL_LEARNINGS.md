@@ -8,6 +8,14 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：文件选择命令必须有常驻DOM目标
+
+- 问题：失败后选人锁保留原主体，同/异player重复选择不再build；真正恢复路径应走新Demo或已有历史显式重新分析。原input却位于landing v-else，真实Vue编译SSR确认done状态file input从1变0，requestDemoPicker因空ref无法工作。
+- 决策：0033只将唯一原input移到根容器常驻，保留accept/change/value reset；Host失败卡以原生按钮调用现有命令，不预先清数据。普通/容量反馈都按desktopLibraryEnabled限定历史建议；不解锁会话主体、不增加自动重分析/新协议。
+- 验证：idle/done/reading都1个input；取消保留、同file再选、managed换source隔离旧infer、RESTORE零生成、Host实际按钮接线。root审查后将成功例由stub READY改为实际Adapter合法bundle再deserialize，避免把可达分支冒称有效教学结果。6文件70tests通过，补强后的7例复验通过；两端TS/build、0032→0033隔离apply/reverse/reuse与diff检查均通过。
+- 测试工具：两次小环境边界失败后简化为已装Vue compiler prefixIdentifiers/单函数render+SSR，无新增依赖。测的是实际模板/source函数；Parser读取、ViewerStage和模型为stub，系统file dialog/完整GUI未测。没有真实Demo/用户库/安装部署，进程和临时patch目录已清理，owner RELEASE。[完整记录](validation/ANALYSIS_FAILURE_RETRY_ENTRY.md)。
+- 后继行动：转向guided-two-cue-handoff，补现有单段Viewer工具播放与整场Session之间的连续衔接证据；先小合成双cue，保持自然产物与完整覆盖，不重读正式Demo，不再次唤醒旧native锁屏路径。
+
 ## 2026-09-27：容量失败不应建议原样重试
 
 - 问题：生产serializer的16MiB容量错误经真实Viewer catch/严格bridge进入Host，原样给出重选提示；同一失败下h2仍“正在分析”，setup步骤仍“正在构建”。小合法bundle加允许metadata字符串触达实际门，红例已复现，不需要大Replay或真实Demo。

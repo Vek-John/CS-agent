@@ -1790,7 +1790,7 @@ export function Cs2dPlaybackHost({
         if (!analysisEventMatchesSelectedPlayer(selectedPlayerIdRef.current, payload.selectedPlayerId)) return;
         invalidateGeneration();
         invalidateGuidedSeek();
-        setAnalysisError(analysisFailureFeedback(payload.message));
+        setAnalysisError(analysisFailureFeedback(payload.message, desktopLibraryEnabled));
         setAnalysisProgress(undefined);
         setBundle(undefined);
         setPlan(undefined);
@@ -3351,6 +3351,7 @@ export function Cs2dPlaybackHost({
             <section className="cs2d-coach-card cs2d-coach-card--error" role="alert">
               <small>分析未完成</small>
               <p>{analysisError}</p>
+              <button type="button" className="cs2d-coach-primary" onClick={() => send({ type: "requestDemoPicker" } as PlaybackCommand)}>重新选择 Demo</button>
             </section>
           ) : null}
 

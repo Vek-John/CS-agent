@@ -1,0 +1,35 @@
+diff --git a/apps/app/src/viewer/DemoAnalyzerView.vue b/apps/app/src/viewer/DemoAnalyzerView.vue
+--- a/apps/app/src/viewer/DemoAnalyzerView.vue
++++ b/apps/app/src/viewer/DemoAnalyzerView.vue
+@@ -1112,6 +1112,15 @@
+ 
+ <template>
+   <div class="relative h-full w-full bg-ink-950">
++    <!-- Keep the picker mounted while replay/loading branches replace the landing screen. -->
++    <input
++      ref="input"
++      type="file"
++      accept=".dem,.gz,.zip,.zst,.cs2dv"
++      class="hidden"
++      @change="onInput"
++      @click.stop
++    />
+     <!-- Content when the replay is ready: 2D stage or heatmap, per tab -->
+     <template v-if="parser.status.value === 'done' && parser.replay.value">
+       <!-- v-show keeps the stage mounted (preserves playback position across tab switches) -->
+@@ -1378,15 +1387,6 @@
+               <p class="mt-1 text-sm text-ink-400">{{ hostMode ? '也可以把文件拖到这里' : t('analyzer.orClick') }}</p>
+             </div>
+             <p class="text-xs text-ink-500">{{ hostMode ? '.dem / .gz / .zip / .zst · 本机处理' : t('analyzer.formatHint') }}</p>
+-
+-            <input
+-              ref="input"
+-              type="file"
+-              accept=".dem,.gz,.zip,.zst,.cs2dv"
+-              class="hidden"
+-              @change="onInput"
+-              @click.stop
+-            />
+           </div>
+ 
+           <!-- Import an exported replay (.cs2dv); scoped picker, not the demo dropzone -->

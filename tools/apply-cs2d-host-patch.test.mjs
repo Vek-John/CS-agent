@@ -223,3 +223,11 @@ it("registers primary selection only after complete current inventory validation
   expect(patch).toContain('ground_evidence: p.ground_evidence.clone()');
   expect(patch).toContain('ground_evidence: crate::ground_sample::sample(ctx, pawn, &steam_id, tick)');
  });
+
+it("registers the persistent picker as the next controlled Viewer-only tail", () => {
+ expect(CS2D_PATCH_FILES[32]).toMatch(/0033-persistent-demo-picker\.patch$/);
+ const patch = readFileSync(CS2D_PATCH_FILES[32], "utf8");
+ expect(patch).toContain('Keep the picker mounted');
+ expect(patch).toContain('ref="input"');
+ expect(patch).not.toContain('packages/parser/');
+});

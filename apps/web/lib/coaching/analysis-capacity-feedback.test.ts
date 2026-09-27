@@ -12,10 +12,10 @@ import { fireReplay, self } from "../../../../libs/cs2d-analysis-adapter/src/win
 const viewerPath = resolve(".local-data/upstream/cs2d/apps/app/src/viewer/DemoAnalyzerView.vue");
 const viewer = existsSync(viewerPath) ? readFileSync(viewerPath, "utf8") : "";
 const host = readFileSync(new URL("../../components/playback/cs2d-playback-host.tsx", import.meta.url), "utf8");
-function hostFeedback(payload: AnalysisFailedEvent, selectedId = self) {
+function hostFeedback(payload: AnalysisFailedEvent, selectedId = self, hasHistory = false) {
   const start = host.indexOf('      if (payload.type === "ANALYSIS_FAILED")');
   const end = host.indexOf('      if (payload.type === "ANALYSIS_READY")', start);
-  const context: Record<string, any> = { analysisFailureFeedback, selectedPlayerIdRef: { current: selectedId }, historyDurabilityReadyRef: {}, routeStateRef: {}, planRef: {}, userTookOverRef: {},
+  const context: Record<string, any> = { analysisFailureFeedback, desktopLibraryEnabled: hasHistory, selectedPlayerIdRef: { current: selectedId }, historyDurabilityReadyRef: {}, routeStateRef: {}, planRef: {}, userTookOverRef: {},
     historyPersistenceControllerRef: { current: { markFailed: vi.fn(async () => {}) } }, refreshReviewHistory: vi.fn(),
     analysisEventMatchesSelectedPlayer,
   };
@@ -55,7 +55,7 @@ it.each([
   expect(c.historyPersistenceControllerRef.current.markFailed).toHaveBeenCalledOnce();
 });
 it.each([undefined, null, 16, {}, "prefix AnalysisBundle exceeds 16 MiB.", "AnalysisBundle exceeds 16 MiB. suffix", "AnalysisBundle exceeds 16 MiB. ", "Other failure"])("keeps unknown or non-exact messages on generic feedback: %j", message => {
-  expect(analysisFailureFeedback(message)).toBe("比赛分析暂时未能完成，请重新选择比赛或玩家。");
+  expect(analysisFailureFeedback(message)).toBe("比赛分析暂时未能完成。请点击“重新选择 Demo”重新导入比赛后再选择玩家。");
 });
 it("keeps obsolete player failures outside the existing Host failure mutations", () => {
   const c = hostFeedback({ type: "ANALYSIS_FAILED", schemaVersion: "cs2d-analysis-failed.v1", selectedPlayerId: "other", message: "AnalysisBundle exceeds 16 MiB." });
@@ -85,4 +85,13 @@ it("shows stopped feedback in the actual heading and setup expression, preservin
   expect(steps[2].detail).not.toContain("正在构建");
   expect(runInNewContext(expression!, { ...state, analysisError: undefined, teachingPlayback: { paused: true } })).toBe("演示已暂停");
   expect(runInNewContext(expression!, { ...state, analysisError: undefined, userTookOver: true })).toBe("自由查看");
+});
+
+it.each([false, true])("only offers reachable history actions for desktopLibraryEnabled=%s", hasHistory => {
+  for (const message of ["ordinary failure", "AnalysisBundle exceeds 16 MiB."]) {
+    const c = hostFeedback({ type: "ANALYSIS_FAILED", schemaVersion: "cs2d-analysis-failed.v1", selectedPlayerId: self, message }, self, hasHistory);
+    const text = c.setAnalysisError.mock.calls[0][0];
+    expect(text.includes("已有复盘")).toBe(hasHistory);
+    if (message === "ordinary failure") expect(text).toContain("重新选择 Demo");
+  }
 });
