@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { createReviewHistoryApi } from "./api";
+import { createReviewHistoryApi, HISTORY_DETAIL_TIMEOUT_MS } from "./api";
 import { HistoryRestoreController, type ManagedDemoSource, type ReviewHistoryDetail } from "./history-restore-controller";
 import { attachHistoryViewerSource } from "./attach-history-viewer-source";
 
@@ -169,9 +169,10 @@ it.each([
   expect(expectedB).toHaveBeenCalledOnce(); expect(feedbackB).not.toHaveBeenCalled(); expect(oldFeedback).not.toHaveBeenCalled(); expect(oldExpected).not.toHaveBeenCalled();
 });
 
-it("leaves the large detail request outside the viewer-source deadline", async () => {
+it("keeps the large detail request on its separate longer budget", async () => {
   vi.useFakeTimers(); const late = deferred<Response>(); let settled = false;
   const pending = createReviewHistoryApi(() => late.promise).detail("A").then(() => { settled = true; });
-  await vi.advanceTimersByTimeAsync(deadline * 2); expect(settled).toBe(false); expect(vi.getTimerCount()).toBe(0);
-  late.resolve(Response.json(detail("A"))); await pending;
+  expect(HISTORY_DETAIL_TIMEOUT_MS).toBeGreaterThan(deadline * 2);
+  await vi.advanceTimersByTimeAsync(deadline * 2); expect(settled).toBe(false); expect(vi.getTimerCount()).toBe(1);
+  late.resolve(Response.json(detail("A"))); await pending; expect(vi.getTimerCount()).toBe(0);
 });

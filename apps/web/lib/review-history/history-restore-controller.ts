@@ -133,7 +133,7 @@ function recoveryMatchesRuntimeHead(payload: unknown, runtimeHead: unknown): boo
 
 /** Validates only persisted, user-facing shapes. It never rebuilds artifacts. */
 export function restoreHistoryControlPlane(detail: ReviewHistoryDetail): RestoredHistoryControlPlane {
-  if (!detail.review?.id || !detail.review.demoId || !Array.isArray(detail.artifacts)) {
+  if (!object(detail) || !detail.review?.id || !detail.review.demoId || !Array.isArray(detail.artifacts)) {
     throw new HistoryRestoreError("INVALID_DETAIL", "历史记录格式无效。");
   }
   const byKind = artifactMap(detail.artifacts);
@@ -211,7 +211,12 @@ export class HistoryRestoreController {
     const generation = this.#generation;
     const abort = new AbortController();
     this.#abort = abort;
-    const detail = await this.deps.loadDetail(reviewId, abort.signal);
+    let detail: ReviewHistoryDetail;
+    try { detail = await this.deps.loadDetail(reviewId, abort.signal); }
+    catch (error) {
+      if (generation !== this.#generation || abort.signal.aborted) throw new HistoryRestoreError("STALE_REQUEST", "已切换到另一条复盘。");
+      throw error;
+    }
     if (generation !== this.#generation) throw new HistoryRestoreError("STALE_REQUEST", "已切换到另一条复盘。");
     const controlPlane = restoreHistoryControlPlane(detail);
     this.#requests.set(controlPlane, { generation, abort });

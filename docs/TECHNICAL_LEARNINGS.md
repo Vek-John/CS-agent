@@ -8,6 +8,14 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：历史详情读取失败不能要求重新分析
+
+- 问题：detail直接fetch+response.json，响应头或正文停滞可无限等待；Host同一catch把读取失败称为身份/版本校验失败。两个fake-time红例确认120秒后仍未结算。
+- 决策：复用requestJsonWithDeadline，为大detail单设120秒总预算，父取消和非合作transport可本地settle，迟到header不再读body。专用DetailReadError保留可读HTTP错误code，网络/超时/坏JSON显示重试读取；非父取消的transport AbortError仍正常报错。Controller.open成功/失败均检查代际，Host原epoch先挡旧结果。
+- 最后复核：INVALID_DETAIL仅检验外层详情，不证明保存产物损坏；独立格式提示仍拒绝恢复，null/array/number/缺字段都按该门处理。真正artifact/identity/version错误保留原保护。原历史条目可再次点击，不加自动重试或新分析动作。
+- 验证：19新case包含实际API/Controller及从Host提取的真实catch执行，约2.4MB合成响应原样读取、同条目失败后显式重开成功、取消/晚结果和timer清理；原source/Controller/SQLite恢复回归合计5文件71tests通过。两端TS/build通过，最终文本/格式guard修正后Web TS/build复验通过。
+- 限制：这是异步等待预算，不能中断同步JSON或保证服务器取消；大合成响应用于运输保留，不冒称合法的大讲解包/设备性能基准。无完整React挂载/GUI或真实网络/正式Demo；fake timers/listeners/临时库及进程已清理，执行者RELEASE。后继以有限合成数据测新增元数据的存储/读取开销，有证据才优化。
+
 ## 2026-09-27：采样事实的历史重开需要经过真实持久链
 
 - 问题：JSON往返证明结构可读，但不能证明SQLite关闭重开、历史API和准备编排仍复用保存讲解。复用原库存恢复测试的真实生命周期，仅抽出测试helper，原6个库存断言全部保留；当前版本断言改为导出的版本常量。

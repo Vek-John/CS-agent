@@ -1,5 +1,6 @@
 "use client";
 
+import { historyOpenFailureFeedback } from "../../lib/review-history/history-open-feedback";
 import { attachHistoryViewerSource } from "../../lib/review-history/attach-history-viewer-source";
 
 import { hasConfirmedTerminalRecovery, mirrorAgentCheckpoint, type TerminalRecoveryAck } from "../../lib/recovery/agent-checkpoint-mirror";
@@ -926,8 +927,9 @@ export function Cs2dPlaybackHost({
       });
     } catch (error) {
       if (historyOpenEpochRef.current !== openEpoch || (error instanceof HistoryRestoreError && error.code === "STALE_REQUEST")) return;
-      setReviewPreparationStatus({ phase: "ERROR", detail: "保存的产物未通过身份或版本校验。" });
-      setHistoryError("无法安全恢复这条复盘；请明确选择“重新分析”，原始记录未改变。");
+      const feedback = historyOpenFailureFeedback(error);
+      setReviewPreparationStatus(feedback.preparation);
+      setHistoryError(feedback.message);
     }
   }, [acceptRecoveryResult, clearRecoveryLandingTimeout, invalidateGeneration]);
   const reanalyzeHistoryReview = useCallback(async (reviewId: string) => {

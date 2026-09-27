@@ -12,6 +12,19 @@
 
 
 
+## 已交付：历史详情读取等待与可重试反馈（2026-09-27）
+
+- ID history-detail-load-recovery，基线b5bb727已push/clean，7f2b复用；partial_revision_restore默认配置独占api.detail/最小Host反馈/helper/tests，root docs/接口决策/最终checks/push。前owner RELEASE。
+- A1五分钟复现headers/body挂起及读取失败误报校验；A2独立大DTO读取预算（候选120秒，待小验证确认）与可重试读取反馈，复用既有deadline，不改source20秒或其他HTTP；A3 fake time成功/HTTP/坏JSON/父取消/迟到归属、实际反馈接线与历史恢复回归，相关tests/两端TS/build后push。真正artifact/identity/version错误保留保护，不自动retry/重分析。
+- 风险：预算误伤大包、错误分类混淆、旧回调与timer泄漏；5分钟A1/15分钟实现/10分钟集成，同设施两败简化。沿已读emil/apple/Next，保留现有布局/动画。无正式Demo/真实网络/用户库/模型/GUI/安装发布，fake timer替代120秒等待；owner清进程/listener/timer后RELEASE。
+
+- A1红例：实际detail API的headers/body两个挂起测试，fake时间120秒后仍未settle。A2批准独立120000ms总fetch+body预算，复用requestJsonWithDeadline；专用DetailReadError保留HTTP原code，Host小feedback helper真实接线。坏JSON/网络/timeout为可重试读取失败，有效JSON坏DTO/真实artifact失配保留原校验门。非parent取消的transport AbortError不能静默；Controller.open late失败按owner统一STALE，原openEpoch仍保留。现有active sidebar条目可重开，不加新按钮。
+
+- 交付：detail专用120秒fetch+JSON共同预算，typed读取错误和真正artifact校验分开；原openEpoch保留，Controller.open的旧失败补统一STALE。无自动重试/重分析；同review显式重开第二次成功，约2.4MB合成响应原样保留，真正可用产物仍由SQLite恢复回归验证。
+- root最终复核修正A1分类：INVALID_DETAIL只验证外层详情，不能据此声称内部产物损坏；仍拒绝，但给格式错误提示。补object(detail)守卫，null不再TypeError误走artifact反馈，并测null/array/number/缺字段四例。最终5文件71tests、受影响Web TS/build复验及Viewer TS/build均通过；root读实际API/Controller/Host catch与测试，非GUI挂载。
+- 既有source测试原断言detail 40秒后timer0，按其“不套20秒”意图改为独立长预算未结束、成功后timer0；没有降低新deadline验收。执行者RELEASE，所有fake timer/listener、SQLite临时目录与test/build退出；无正式Demo/用户库/模型/GUI/安装发布。120秒不能打断同步JSON或保证服务器停止，日志.local-data/history-detail-load-recovery。
+- 下一有限目标 ground-detail-cost-smoke：新增地面来源在每个采样携带元数据，当前120秒为保守策略而非实测SLA；用生产序列化/恢复路径的有限合成输入量化新增字段体积与详情打开成本，先小样本再有限放大、只输出摘要。若没有明确瓶颈就记录结果不制造优化；不读正式Demo、不重做哈希审计/整场GUI。
+
 ## 已交付验证：采样地面事实历史重开（2026-09-27）
 
 - ID sampled-ground-history-restore，基线ea90609已push/clean，7f2b复用，前owner RELEASE；partial_revision_restore默认配置独占必要history integration tests/临时fixture，root独占docs/最终diff/checks/push。生产缺口先报告后定接口，不扩无关重构。

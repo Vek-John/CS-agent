@@ -7,10 +7,15 @@ import type { ManagedDemoSource, ReviewHistoryDetail } from "./history-restore-c
 const JSON_HEADERS = { "content-type": "application/json" };
 // Small capability DTO only. This bounds client waiting, not issuance or Demo loading on the server/Viewer.
 export const VIEWER_SOURCE_REQUEST_TIMEOUT_MS = 20_000;
+// Detail can include large saved analysis. This bounds async waiting, not synchronous JSON parsing or server work.
+export const HISTORY_DETAIL_TIMEOUT_MS = 120_000;
 
 export class ReviewHistoryApiError extends Error {
   constructor(readonly code: string) { super(code); }
 }
+
+/** Only detail transport/response failures; never artifact or identity validation errors. */
+export class ReviewHistoryDetailReadError extends ReviewHistoryApiError {}
 
 export interface DemoDeletionImpact {
   readonly demoId: string;
@@ -91,7 +96,25 @@ export function createReviewHistoryApi(fetcher: typeof fetch = fetch) {
       };
     },
     async detail(reviewId: string, signal?: AbortSignal): Promise<ReviewHistoryDetail> {
-      return responseJson(await fetcher(`/api/review-history/${encodeURIComponent(reviewId)}`, { cache: "no-store", signal }));
+      try {
+        const response = await requestJsonWithDeadline(fetcher, `/api/review-history/${encodeURIComponent(reviewId)}`, { cache: "no-store" }, {
+          timeoutMs: HISTORY_DETAIL_TIMEOUT_MS,
+          timeoutError: () => new ReviewHistoryDetailReadError("HISTORY_DETAIL_TIMEOUT"),
+          invalidJsonError: () => new ReviewHistoryDetailReadError("HISTORY_DETAIL_INVALID_JSON"),
+          cancelMessage: "History detail request cancelled", readErrorBody: true,
+        }, signal);
+        if (!response.ok) {
+          const body = response.payload;
+          const code = body && typeof body === "object" && "code" in body && typeof body.code === "string" ? body.code : "REQUEST_FAILED";
+          throw new ReviewHistoryDetailReadError(code);
+        }
+        return response.payload as ReviewHistoryDetail;
+      } catch (error) {
+        if (signal?.aborted) throw new DOMException("History detail request cancelled", "AbortError");
+        if (error instanceof ReviewHistoryDetailReadError) throw error;
+        // A transport-origin AbortError without parent cancellation is still a failed read.
+        throw new ReviewHistoryDetailReadError("HISTORY_DETAIL_READ_FAILED");
+      }
     },
     async viewerSource(reviewId: string, signal?: AbortSignal): Promise<ManagedDemoSource> {
       const response = await requestJsonWithDeadline(fetcher,
