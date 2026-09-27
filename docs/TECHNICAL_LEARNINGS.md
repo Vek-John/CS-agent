@@ -8,6 +8,16 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：受限 sidecar 真实 HTTP 重启后续接教学
+
+- 问题：独立Node直接handler验证没有覆盖桌面鉴权、Next traced bundle、运行时资料库注册与HTTP初始化。原prepared为9月24日，不能用于当前实现验收；用当前runtime/desktop webpack构建，复用既有固定Node24.19.0和license，在忽略目录生成独立prepared资源，未覆盖旧资源/安装应用，也无下载。
+- 决策：新runner唯一拥有两次受限sidecar，env空、精确fs权限、Provider NONE、临时data/cache/log；client仅域模型和HTTP，绝不装本地library/开SQLite/直调handler。真实Cookie+Origin、App签发capability→Viewer ingress/finalize、Review/Revision/artifact/head生产接口串接。finalize显式模拟合成fixture成功，不能证明Parser。
+- 验证：最小probe PID52821通过后完整PID52833保存首cue后的ordinary → admin202/close exit0 → PID52834重新GET精确MATCHED，fresh Controller只进入第二cue。Narration请求0/保存路线校验1/无Viewer，artifact/head不变；无Cookie和旧Cookie均拒绝。root读实际结果，独立审查确认无业务替代及令牌输出，无未关闭must-fix。
+- 复验入口：`node tools/desktop-http-recovery.mjs --prepared-root=<本机当前prepare-runtime输出绝对目录> --probe-only`，成功后去掉`--probe-only`运行完整路径；可加`--output=<新JSON路径>`保留结果（拒绝覆盖）。工具不自动构建/下载/安装资源，必须先确认当前源码构建。
+- 风险与清理：ready20秒、HTTP fetch+body10秒且2MiB流式上限、shutdown10秒、整体120秒、两sidecar累计stdout/stderr64KiB；信号中止自有进程并awaitclose再清temp。token只内存、错误限code。真实runtime启用Memory且受consent控制，不声称MEMORY_ENABLED=false；父client fetch计数0不能外推sidecar实测出站0，Provider NONE是配置事实。
+- 检查：13项恢复相关+14项runtime回归、专项及两端TS、syntax、runtime build/desktop webpack production build/正式Viewer build/isolated prepare均通过；两个sidecar及probe正常退出，临时DB/数据/client bundle已清理，prepared构建产物仅保留在忽略测试目录。未改生产功能或架构契约。
+- 限制与下一步：正常HTTP服务重启、合成Replay/header输入，非Tauri/WKWebView、真实Demo/Parser、断电或崩溃恢复。恢复链验证阶段结束；接续default-action-replay-consumption，检查已有动作事实经当前ACTION_FACT_REPLAY和Outcome门进入默认工具的实际接线，先证据后实现，不放宽教学门或重复Jev拒判。
+
 ## 2026-09-27：生产 Agent handler 经独立进程恢复 SQLite
 
 - 问题：已有SQLite关闭重开仍处于同一个Node模块图；浏览器重载又保留MEMORY Graph服务，均未覆盖生产API新进程选择后端。新增独立Node parent/child验收工具，直接调用实际Agent POST的runtimeFor/getSqliteCheckpointSaver，不注入替代Runtime或checkpointer。

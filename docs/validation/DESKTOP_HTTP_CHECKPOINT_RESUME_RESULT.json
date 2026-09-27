@@ -1,0 +1,90 @@
+{
+  "ok": true,
+  "probeOnly": false,
+  "runs": [
+    {
+      "phase": "seed",
+      "pid": 52833,
+      "exitCode": 0,
+      "signal": null
+    },
+    {
+      "phase": "resume",
+      "pid": 52834,
+      "exitCode": 0,
+      "signal": null
+    }
+  ],
+  "seed": {
+    "stage": "SEED_HEAD",
+    "backend": "SQLITE",
+    "recoverableAfterRefresh": true,
+    "consumedCues": 1,
+    "graphEvents": [
+      "OBSERVE_SEGMENT",
+      "OBSERVE_SEGMENT",
+      "START_CUE",
+      "OBSERVE_SEGMENT"
+    ],
+    "generatedAnalysis": 1,
+    "generatedNarration": 2
+  },
+  "resume": {
+    "backend": "SQLITE",
+    "recoverableAfterRefresh": true,
+    "restored": "MATCHED",
+    "consumedCues": 1,
+    "graphEvents": [
+      "RECONNECT_REPLAY",
+      "OBSERVE_SEGMENT",
+      "OBSERVE_SEGMENT",
+      "OBSERVE_SEGMENT",
+      "OBSERVE_SEGMENT",
+      "START_CUE"
+    ],
+    "savedAnalysisAndNarrationReused": true,
+    "routeValidations": 1,
+    "narrationRequests": 0,
+    "viewerCalls": 0,
+    "artifactsAndHeadUnchanged": true,
+    "staleCookieRejected": true
+  },
+  "unauthenticatedRejected": true,
+  "uncontrolledClientFetches": 0,
+  "limitations": [
+    "Prepared production sidecar/Next HTTP; no Tauri GUI.",
+    "Synthetic Replay and header-only import finalized as synthetic-no-parser, never parsed Demo evidence.",
+    "Provider NONE; default runtime Memory feature remains consent-gated.",
+    "Client fixture advances synthetic Session ticks; no Viewer rendering.",
+    "Normal graceful restart, not crash/power-loss recovery.",
+    "uncontrolledClientFetches measures parent/client only; no claim of measured sidecar network egress.",
+    "Seed analysis/narration generation counts describe fixed synthetic fixture construction, not performance measurement."
+  ],
+  "schemaVersion": "desktop-http-checkpoint-resume-result.v1",
+  "baseline": "e8f34c0",
+  "productChanged": false,
+  "checks": {
+    "relatedRecoveryTests": 13,
+    "desktopRuntimeTests": 14,
+    "toolTypecheck": "passed",
+    "scriptSyntax": "passed",
+    "hostTypecheck": "passed",
+    "viewerTypecheck": "passed",
+    "desktopRuntimeBuild": "passed",
+    "desktopWebpackProductionBuild": "passed",
+    "formalViewerProductionBuild": "passed",
+    "isolatedPrepareUsingExistingNode": "passed",
+    "minimalHttpProbe": "passed",
+    "twoStartHttpRecovery": "passed"
+  },
+  "limits": {
+    "startupMs": 20000,
+    "requestIncludingBodyMs": 10000,
+    "shutdownMs": 10000,
+    "overallMs": 120000,
+    "sidecarCombinedOutputBytes": 65536,
+    "responseBytes": 2097152
+  },
+  "cleanup": "Both sidecars acknowledged admin shutdown and closed exit0; parent finally removed isolated data/cache/log/client bundle. Prepared build resources retained only in ignored workspace test directory.",
+  "next": "default-action-replay-consumption"
+}

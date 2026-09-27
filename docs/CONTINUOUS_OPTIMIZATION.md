@@ -12,6 +12,18 @@
 
 
 
+## 已交付验证：真实 sidecar HTTP 跨重启恢复
+
+- ID desktop-http-checkpoint-resume；基线 e8f34c0 已 push/clean，7f2b 复用，旧代理 RELEASE。预检发现现有 prepared 资源为9月24日，需用当前源码重建 runtime/desktop standalone，既有固定 Node 和已构建 Viewer 只作本地输入，不安装/下载/部署。
+- 目标/流程：临时数据根启动受限真实 sidecar → 经 cookie/origin 认证的生产 HTTP 完成首 cue 并保存 ordinary head → 正常退出 → 新 PID/新 origin 打开历史、精确 MATCHED、只续下一 cue。验收为 SQLITE/可恢复、零讲解再生成、旧 cue 不重启、保存物保持、全部进程/临时数据清理；不声称 Tauri/WKWebView 或异常断电已通过。
+- 所有权：partial_revision_restore 继承默认模型/推理，熟悉上一夹具，独占新增 tools/desktop-http-recovery* 与必要窄提取上一 child；产品/docs只读。root 独占资源准备、真实运行、docs、最终审查与交付；单控制器启动/关闭 sidecar，禁止并发运行。5分钟方案、15分钟实现检查。
+- 风险/边界：旧 standalone、生产鉴权、双 SQLite owner、令牌泄露和挂起。env空/Provider NONE，权限限资源与临时 data/cache/log，token仅内存；20秒ready、10秒请求、120秒整体及64KiB输出界，close后清自有temp。同设施两败先简化。无真实Demo/模型/用户库/GUI/安装发布；先轻量启动再扩大，相关测试/TS/正式构建后同分支commit push。
+
+- 交付：新增独立 HTTP runner/client/工具TS配置，不改生产代码或上一direct工具。先probe PID52821确认真实SQLITE/认证拒绝/正常退出；完整seed PID52833 → 正常关闭 → resume PID52834，生产Next HTTP精确MATCHED，仅4个后续OBSERVE和第二cue START，Narration请求0、路线保存物校验1，artifact/head保持；无cookie及旧cookie均被拒绝。
+- 验收：恢复相关13项+desktop-runtime14项测试、专项/两端TS、脚本语法、desktop runtime/webpack production build、正式Viewer build及隔离prepare全部通过。root审实际source/JSON，prior_fire_boundary_review默认配置独立只读协议/生命周期窄审无遗留must-fix；owners RELEASE，服务close/exit0后temp已清。现有Node/license本地复用，旧prepared资源未覆盖。[证据](validation/DESKTOP_HTTP_CHECKPOINT_RESUME_RESULT.json)。
+- 限制：合成Replay与header fixture、显式模拟parser成功finalize，无真实Demo/Parser/Viewer/Tauri窗口；仅正常重启不覆盖断电。Memory按真实runtime开启且consent-gated，不声称关闭；Provider NONE。父client零额外fetch不是sidecar出站请求测量，固定生成数不是性能基准。
+- 下一有限目标 default-action-replay-consumption：恢复链已有跨页面、独立handler及真实HTTP证据，下一轮转向默认工具真实数据消费。已读当前buildStage3StartCue/capability-builder，当前教学分类只接受显式ACTION_FACT_REPLAY，且action refs与Outcome COMPLETE必需；从已有小输入/保存证据追踪动作事实→presentation purpose→Host capability→默认policy，确认是否有实际遗漏或合理无工具结论。不得强制造cue/降引用门/重跑Jev或将旧native A5作为前置，有可复现缺口才修改。
+
 ## 已交付验证：独立进程 desktop Agent API 的 SQLite 恢复
 
 - ID desktop-process-checkpoint-resume；基线d43d5c3已push/clean，真实7f2b复用，旧owners RELEASE。目标：真实desktop Agent POST的runtimeFor/getSqliteCheckpointSaver初始化经不同Node PID写入→退出→重连，补上同进程重建和MEMORY页面重载未覆盖的边界。

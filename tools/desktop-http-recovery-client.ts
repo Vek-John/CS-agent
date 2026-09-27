@@ -1,0 +1,148 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { createRemoteCoachAgentDispatchEnvelope, parseRemoteCoachAgentDispatchResponse, checkpointThreadIdForSession, SessionRecoveryRecordSchema,
+  type CoachAgentEvent, type CoachAgentResult } from "../libs/coach-agent/src/remote-dispatch-client";
+export interface HttpClient {
+  json(path: string, init?: RequestInit): Promise<unknown>;
+  importDemo(bytes: Uint8Array): Promise<{ demoId: string; contentHash: string }>;
+}
+const post = (value: unknown): RequestInit => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(value) });
+function dispatcher(http: HttpClient, events: CoachAgentEvent[]) {
+  return async (event: CoachAgentEvent): Promise<CoachAgentResult> => {
+    const result = parseRemoteCoachAgentDispatchResponse(await http.json("/api/coaching/agent", post(createRemoteCoachAgentDispatchEnvelope(event))));
+    assert.equal(result.checkpoint.backend, "SQLITE"); assert.equal(result.checkpoint.recoverableAfterRefresh, true); events.push(event); return result;
+  };
+}
+export async function probe(http: HttpClient) {
+  const result = await dispatcher(http, [])({ version: "coach-agent-event.v2", type: "OBSERVE_SEGMENT", eventId: "http-probe-observe",
+    identity: { sessionId: "http-probe-session", runId: "http-probe-run", demoId: "synthetic", demoContentHash: "a".repeat(64), selectedPlayerId: "synthetic", routeId: "http-probe-route", routeHash: "probe-hash" },
+    segmentId: "probe-ordinary", segmentIndex: 0, mode: "BRIEF", currentSessionPhase: "PLAYING" });
+  return { backend: result.checkpoint.backend, recoverableAfterRefresh: result.checkpoint.recoverableAfterRefresh };
+}
+
+import { buildCs2dAnalysisBundle } from "../libs/cs2d-analysis-adapter/src/index";
+import { buildCoachingPackage, buildOutcomePackage, deterministicNarrationBundle } from "../libs/review-planner/src/index";
+import { createCoachingSession, reduceCoachingSession } from "../libs/session/src/index";
+import type { CoachingSessionState, ReviewPlan, NarrationBundle } from "../libs/contracts/src/index";
+import { twoCueViewerReplay, twoCueViewerPlayer } from "./cs2d-host/viewer-two-cue-fixture";
+import { HistoryRestoreController, type ReviewHistoryDetail } from "../apps/web/lib/review-history/history-restore-controller";
+import { buildInitialCoachingRouteState, createReviewPreparationOrchestrator } from "../apps/web/lib/coaching/cs2d-route-integration";
+import { CoachAgentStage3Controller } from "../apps/web/lib/coaching/coach-agent-stage3-controller";
+import { CoachAgentStage3HostAdapter, type Stage3IdentityInput } from "../apps/web/lib/coaching/coach-agent-stage3-host-adapter";
+import { guidedPlaybackDirective } from "../apps/web/lib/coaching/cs2d-guided-session";
+import { createRecoverySessionIdentity, buildCheckpointedRecoveryRecord, buildReconnectReplayEvent, restoreRecoveryArtifacts, normalizeRecoveryAnalysis,
+  validateStoredReviewArtifacts, createRecoveryReviewPreparationDependencies } from "../apps/web/lib/recovery/cs2d-session-recovery";
+function reachCue(plan: ReviewPlan, initial: CoachingSessionState, cueId: string) {
+  let session = initial;
+  for (let n = 0; n < plan.segments.length * 3; n++) {
+    if (session.phase === "PAUSED_FOR_COACHING" && session.current_cue_id === cueId) return session;
+    const segment = plan.segments[session.current_segment_index], cue = plan.cues.find(item => item.id === session.current_cue_id);
+    assert(segment, "CUE_NOT_REACHED");
+    const directive = guidedPlaybackDirective(plan, session);
+    session = reduceCoachingSession(plan, session, directive.automaticAction ?? { type: "TICK", tick: cue?.outcome_end_tick ?? segment.end_tick });
+  }
+  throw Error("CUE_NOT_REACHED");
+}
+function diagnosticInput(identity: Stage3IdentityInput, session: CoachingSessionState, narration: NarrationBundle) {
+  const analysis = identity.analysis as ReturnType<typeof buildCs2dAnalysisBundle>;
+  const cue = identity.plan.cues.find(item => item.id === session.current_cue_id);
+  if (!cue || session.phase !== "PAUSED_FOR_COACHING" || !session.outcome_completion) throw Error("OUTCOME_GATE_MISSING");
+  return { ...identity, cue, narration, generation: 1, tickRate: analysis.match_timeline.tick_rate, currentSessionPhase: session.phase, outcomeGate: session.outcome_completion,
+    evidence: { candidate: analysis.candidate_set.candidates.find(item => item.candidateId === cue.candidate_id), material: analysis.candidate_set.materials.find(item => item.candidateId === cue.candidate_id), winProbabilityTimeline: analysis.win_probability_timeline } };
+}
+async function waitUntil(predicate: () => boolean) {
+  for (let n = 0; n < 2000; n++) { if (predicate()) return; await new Promise(resolve => setTimeout(resolve, 5)); }
+  throw Error("OBSERVER_DEADLINE");
+}
+export async function seed(http: HttpClient) {
+  let stage = "SEED_IMPORT";
+  const events: CoachAgentEvent[] = [];
+  const send = dispatcher(http, events);
+  const bytes = Buffer.from("PBDEMS2\0", "binary"), hash = createHash("sha256").update(bytes).digest("hex");
+  const imported = await http.importDemo(bytes);
+  assert.equal(imported.contentHash, hash);
+  const analysis = buildCs2dAnalysisBundle({ replay: twoCueViewerReplay(), selectedSteamId: twoCueViewerPlayer, demoId: imported.demoId, demoContentHash: hash }), plan = analysis.review_plan;
+  assert.equal(plan.cues.length, 2);
+  const narrationByCue = Object.fromEntries(plan.cues.map(cue => [cue.id, deterministicNarrationBundle(buildCoachingPackage(cue, analysis.candidate_set, analysis.observation_evidence), buildOutcomePackage(cue, analysis.candidate_set))]));
+  const routeState = buildInitialCoachingRouteState(plan, { narrationByCue }), recoveryIdentity = createRecoverySessionIdentity();
+  const identity = { analysis, plan, routeState, demoContentHash: hash, selectedPlayerId: twoCueViewerPlayer, sessionId: recoveryIdentity.sessionId, runId: recoveryIdentity.runId };
+  let latest: CoachAgentResult | undefined;
+  const controller = new CoachAgentStage3Controller({ adapter: new CoachAgentStage3HostAdapter(), dispatch: async event => { latest = await send(event); return latest; }, post: () => { throw Error("TOOL_NOT_EXPECTED"); }, bridgeAvailable: () => true, isLive: () => true });
+  try {
+    stage = "SEED_GRAPH";
+    let session = reachCue(plan, reduceCoachingSession(plan, createCoachingSession(plan, identity.sessionId, routeState), { type: "START" }), plan.cues[0].id);
+    await controller.synchronizeDiagnosis(diagnosticInput(identity, session, narrationByCue[plan.cues[0].id]));
+    session = reduceCoachingSession(plan, session, { type: "CUE_PRESENTED", cueId: plan.cues[0].id });
+    session = reduceCoachingSession(plan, session, { type: "ADVANCE_SEGMENT" });
+    for (let n = 0; n < plan.segments.length; n++) {
+      const segment = plan.segments[session.current_segment_index];
+      controller.observeSegment(identity, segment.id, session.current_segment_index, segment.mode === "SKIP" ? "SKIP" : segment.mode === "BRIEF" ? "BRIEF" : "OBSERVE", session.phase === "SKIPPING" ? "SKIPPING" : "PLAYING");
+      await waitUntil(() => latest?.state.routeCursor === session.current_segment_index);
+      if (session.phase === "PLAYING" && segment.cue_ids.length === 0) break;
+      const directive = guidedPlaybackDirective(plan, session);
+      session = reduceCoachingSession(plan, session, directive.automaticAction ?? { type: "TICK", tick: segment.end_tick });
+    }
+    assert(latest?.checkpoint.checkpointId);
+    const record = buildCheckpointedRecoveryRecord({ identity: recoveryIdentity, analysis, plan, routeState, narrationByCue, session, demoContentHash: hash, selectedPlayerId: twoCueViewerPlayer, agentCheckpointId: null, boundaryKind: "ORDINARY_SEGMENT" }, { ...latest.state, checkpointId: latest.checkpoint.checkpointId });
+    assert(record?.boundary.kind === "ORDINARY_SEGMENT");
+    stage = "SEED_ARTIFACTS";
+    const review = await http.json("/api/review-history", post({ demoId: imported.demoId, selectedPlayerId: twoCueViewerPlayer, selectedPlayerName: "Synthetic", title: "HTTP recovery" })) as { reviewId: string };
+    const revision = await http.json(`/api/review-history/${review.reviewId}/revisions`, post({ mode: "SELECT_PLAYER", analysisVersion: analysis.metadata.adapter_version,
+      graphVersion: latest.state.graphVersion, promptVersion: plan.generation_manifest.prompt_version, modelMetadata: {}, routeId: plan.id, routeHash: routeState.routeFingerprint })) as { revisionId: string };
+    const append = async (artifactType: string, artifactKey: string, schemaVersion: string, payload: unknown) => {
+      await http.json(`/api/review-history/${review.reviewId}/artifacts`, post({ revisionId: revision.revisionId, artifactType, artifactKey, artifactRevision: 1,
+        schemaVersion, payload, idempotencyKey: `${artifactType}:${artifactKey}` }));
+    };
+    await append("ANALYSIS_BUNDLE", "analysis", "cs2d-analysis-bundle.v1", analysis);
+    await append("CANDIDATE_SET", analysis.candidate_set.id, "candidate-set.v1", analysis.candidate_set);
+    await append("REVIEW_PLAN", plan.id, "review-plan.v1", plan);
+    for (const [cue, narration] of Object.entries(narrationByCue)) await append("NARRATION_BUNDLE", cue, "narration-bundle.v1", narration);
+    await append("SESSION_RECOVERY", "ordinary", "session-recovery-record.v2", record);
+    const head = { reviewId: review.reviewId, reviewRevisionId: revision.revisionId, expectedRecoveryArtifactId: null, recoveryArtifactKey: "ordinary", recoveryArtifactRevision: 1,
+      sessionId: record.sessionId, runId: record.runId, demoId: imported.demoId, demoContentHash: hash, selectedPlayerId: twoCueViewerPlayer, routeId: plan.id, routeHash: record.routeHash,
+      recoveryBoundary: "ORDINARY_SEGMENT", defaultRouteCursor: record.boundary.segmentIndex, completedCueCount: 1, totalCueCount: 2,
+      checkpointThreadId: checkpointThreadIdForSession(record.sessionId), checkpointNamespace: "", checkpointId: record.agentCheckpointId!, stableProgress: record.cueProgress };
+    stage = "SEED_HEAD";
+    await http.json(`/api/review-history/${review.reviewId}/runtime-head`, { ...post(head), method: "PUT" });
+    return { reviewId: review.reviewId, summary: { stage, backend: latest.checkpoint.backend, recoverableAfterRefresh: latest.checkpoint.recoverableAfterRefresh,
+      consumedCues: 1, graphEvents: events.map(event => event.type), generatedAnalysis: 1, generatedNarration: 2 } };
+
+  } finally { controller.dispose(); }
+}
+export async function resume(http: HttpClient, reviewId: string) {
+  const events: CoachAgentEvent[] = [], send = dispatcher(http, events);
+  const before = await http.json(`/api/review-history/${reviewId}`) as ReviewHistoryDetail;
+  let viewerCalls = 0;
+  const history = new HistoryRestoreController({ loadDetail: async id => await http.json(`/api/review-history/${id}`) as ReviewHistoryDetail,
+    requestViewerSource: async () => { viewerCalls++; throw Error("VIEWER_NOT_EXPECTED"); }, loadManagedDemo: () => { viewerCalls++; } });
+  let controller: CoachAgentStage3Controller | undefined;
+  let preparation: ReturnType<typeof createReviewPreparationOrchestrator> | undefined;
+  try {
+    const opened = await history.open(reviewId), record = SessionRecoveryRecordSchema.parse(opened.recoverySnapshot);
+    const validated = validateStoredReviewArtifacts({ ...opened, selectedPlayerId: record.selectedPlayerId, demoContentHash: record.demoContentHash });
+    const analysis = normalizeRecoveryAnalysis(validated.analysis, record), restored = restoreRecoveryArtifacts(record), plan = restored.plan;
+    assert.equal(record.boundary.kind, "ORDINARY_SEGMENT");
+    const saved = { ...restored.narrationByCue, ...validated.narrationByCue }, routeState = buildInitialCoachingRouteState(plan, { narrationByCue: saved });
+    const deps = createRecoveryReviewPreparationDependencies(analysis, record);
+    let narrationRequests = 0, routeValidations = 0;
+    preparation = createReviewPreparationOrchestrator("process-resume", plan, { narrationByCue: saved, readiness: routeState.readiness }, { prepareRoute: async input => { routeValidations++; return deps.prepareRoute(input); }, prepareNarration: async () => { narrationRequests++; throw Error("REGENERATION_FORBIDDEN"); } });
+    const preparationEvents: string[] = []; await preparation.run(event => preparationEvents.push(event.type));
+    assert(preparationEvents.includes("READY_TO_START")); assert.equal(narrationRequests, 0);
+    const adapter = new CoachAgentStage3HostAdapter();
+    controller = new CoachAgentStage3Controller({ adapter, dispatch: send, post: () => { throw Error("TOOL_NOT_EXPECTED"); }, bridgeAvailable: () => true, isLive: () => true });
+    const event = buildReconnectReplayEvent(record), result = await controller.reconnect(event);
+    assert.equal(result.restored, "MATCHED"); assert(controller.adoptRecoveredOrdinary(event, result));
+    const nextSession = reachCue(plan, restored.session, plan.cues[1].id);
+    const identity = { analysis, plan, routeState, demoContentHash: record.demoContentHash, selectedPlayerId: record.selectedPlayerId, sessionId: record.sessionId, runId: record.runId };
+    const next = await controller.synchronizeDiagnosis(diagnosticInput(identity, nextSession, saved[plan.cues[1].id]));
+    assert.equal(next?.state.activeCueId, plan.cues[1].id); assert.equal(adapter.lifecycleDegraded, false);
+    assert.deepEqual(events.filter(event => event.type === "START_CUE").map(event => event.cueId), [plan.cues[1].id]);
+    assert(events.filter(event => event.type === "OBSERVE_SEGMENT").every(event => event.segmentIndex > record.boundary.segmentIndex));
+    const after = await http.json(`/api/review-history/${reviewId}`) as ReviewHistoryDetail;
+    assert.deepEqual(after.artifacts, before.artifacts); assert.deepEqual(after.runtimeHead, before.runtimeHead); assert.equal(viewerCalls, 0);
+    return { backend: result.checkpoint.backend, recoverableAfterRefresh: result.checkpoint.recoverableAfterRefresh, restored: result.restored,
+      consumedCues: restored.session.consumed_cue_ids.length, graphEvents: events.map(event => event.type), savedAnalysisAndNarrationReused: true,
+      routeValidations, narrationRequests, viewerCalls, artifactsAndHeadUnchanged: true };
+
+  } finally { preparation?.cancel(); controller?.dispose(); history.cancel(); }
+}

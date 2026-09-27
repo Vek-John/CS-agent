@@ -1,0 +1,1 @@
+{"extends":"./desktop-process-recovery.tsconfig.json","include":["desktop-http-recovery-client.ts","../apps/web/next-env.d.ts"]}
