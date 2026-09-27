@@ -8,6 +8,15 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：本人致盲发生事实进入实际带看
+
+- 决策：消费新版Parser的完整来源字段，只输出本人、近10秒最多3条、LIVE回合/决策严格之前且当前状态新鲜存活的事件；全raw集合重复ID均排除。snapshot仅source/sourceRef/tick，不传投掷者或报告时长。旧/缺/非法字段不变成“没有致盲”。
+- 时间与引用：拒绝为复用state事实而增加event<=sample门，因为采样之后、决策之前仍可能有有效事件。新增独立DECISION_CONTEXT事实，available_at_tick为事件最大tick；显式selfBlindEvidenceRefs绑定唯一当前候选事实，Bundle检查round/窗口/引用/正文，View依赖该接收门并再核当前cue、非未来新鲜状态、observer snapshot及已叙述全文/引用。保存material不含原Replay，不能冒称恢复时重验raw sourceRefs。
+- 呈现：既有六事实可能被第七条挤掉C4/时钟，故仅Narrator cap6→7，仍保留原顺序、1600字符与完整句/引用门，manifest1.3；其他工具/question上限未放大。Adapter/signals1.14兼容1.13，旧narration原样复用。默认Panel与基础Host段落显示同一限定句，不声称当前失明/具体视野/结束时间或战术错误。
+- 验证：新链1红→绿，新增38项及5文件179相关测试、工具2文件7项、专项TS/工具构建4.47s、两端TS及正式production build通过。root实际diff/日志核实，独审无未关闭must-fix；View未来state差值为负的边界已显式补门，未扩大旧模块审计。
+- 实际IAB：可选合成输入在真实Host自动准备后首cue暂停；默认诊断显示blind事实，点击原“跳过”进入baseline后仍显示，快捷“当时有哪些已知事实”复述同句与来源。Analysis/route各1、Narration2、Graph请求4、外部/provider0、console错误0；仅合成时间/186帧，无Parser/模型/正式Demo或用户库。root关闭tab26及58558服务，保留本地截图/有界摘要。[验收](validation/DECISION_PRIOR_SELF_BLIND_RESULT.json)。
+- 限制与下一步：旧恢复仅合成旧shape与保存讲解回归，不是用户历史DB实测；post-sample正例由实际snapshot函数验证，GUI走自然未修改cue。下一有限目标核实真实数据中新版事件的覆盖：先复用已有匿名摘要，不足再制定唯一事件级读取预算，仅计数/来源/可解析身份，不重建整份Replay、不跑模型或重复拒判集；缺失保持unknown，不以覆盖率推专业判断改善。
+
 ## 2026-09-27：致盲事件必须按wire类型解析当前Controller
 
 - 一手结论：[固定DemoFile.NET生成器](https://github.com/saul/demofile-net/blob/fd59701a998cf30a46adc4942e063d90de73c07a/src/DemoFile.Source1EventGen/Program.cs#L239)按type9的ValShort低8位加1得到Controller实体索引，65535为无效；[枚举](https://github.com/saul/demofile-net/blob/fd59701a998cf30a46adc4942e063d90de73c07a/src/DemoFile/Model/GameEventKeyType.cs)区分type8 StrictEHandle。CSS GetPlayer经native只是转调引擎virtual，不能用它另一个GetPlayerFromUserid辅助函数替代Demo wire证据。

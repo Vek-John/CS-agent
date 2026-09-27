@@ -1,4 +1,5 @@
 import { isGroundSampleEvidence, groundSampleText, type GroundSampleEvidence } from "@cs-coach/contracts";
+import { decisionSelfBlindText, type Cs2dBlindEvent } from "./decision-self-blind";
 import { decisionSelfFireText } from "./decision-self-fire";
 import { verifiedGrenadeKinds } from "./grenade-kinds";
 import { normalizeWeaponAmmo, type Cs2dWeaponAmmo } from "./weapon-ammo";
@@ -95,10 +96,10 @@ function parserVersion(replay: Cs2dReplay): string {
   return known ? `${base}/${known.join("/")}` : base;
 }
 
-export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.13.0" as const;
+export const CS2D_ADAPTER_VERSION = "cs2d-analysis-adapter/1.14.0" as const;
 export const CS2D_TIMELINE_VERSION = "zenojunior/cs2d@dbbe698c9b9c91f9a14cecea92374b4114bf60ec/timeline/1.2.0" as const;
 export const CS2D_OBSERVATION_VERSION = "cs2d-analysis-adapter/1.7.0/internal-observation" as const;
-export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.13.0/signals" as const;
+export const CS2D_SIGNAL_VERSION = "cs2d-analysis-adapter/1.14.0/signals" as const;
 export const CS2D_PLANNER_VERSION = "cs2d-analysis-adapter/1.6.0/planner" as const;
 
 /** MVP pacing target: a full match should feel coached, not interrupted. */
@@ -222,6 +223,7 @@ export interface Cs2dGrenadePath {
 
 /** Minimal structural subset of a cs2d Round. */
 export interface Cs2dRound {
+  readonly blinds?: readonly Cs2dBlindEvent[];
   readonly hurtEvents?: readonly Cs2dHurtEvent[];
   readonly number: number;
   readonly freezeStartTick: number;
@@ -284,7 +286,7 @@ export interface Cs2dExcludedRound {
 }
 
 export interface Cs2dAnalysisMetadata {
-  readonly adapter_version: typeof CS2D_ADAPTER_VERSION | "cs2d-analysis-adapter/1.12.0" | "cs2d-analysis-adapter/1.11.0" | "cs2d-analysis-adapter/1.10.0" | "cs2d-analysis-adapter/1.9.0" | "cs2d-analysis-adapter/1.8.0" | "cs2d-analysis-adapter/1.7.0" | "cs2d-analysis-adapter/1.6.1" | "cs2d-analysis-adapter/1.6.0" | "cs2d-analysis-adapter/1.5.2" | "cs2d-analysis-adapter/1.5.1" | "cs2d-analysis-adapter/1.5.0" | "cs2d-analysis-adapter/1.4.0";
+  readonly adapter_version: typeof CS2D_ADAPTER_VERSION | "cs2d-analysis-adapter/1.13.0" | "cs2d-analysis-adapter/1.12.0" | "cs2d-analysis-adapter/1.11.0" | "cs2d-analysis-adapter/1.10.0" | "cs2d-analysis-adapter/1.9.0" | "cs2d-analysis-adapter/1.8.0" | "cs2d-analysis-adapter/1.7.0" | "cs2d-analysis-adapter/1.6.1" | "cs2d-analysis-adapter/1.6.0" | "cs2d-analysis-adapter/1.5.2" | "cs2d-analysis-adapter/1.5.1" | "cs2d-analysis-adapter/1.5.0" | "cs2d-analysis-adapter/1.4.0";
   readonly source: Cs2dReplaySourceMetadata;
   readonly input_map: string;
   readonly selected_steam_id: string;
@@ -983,6 +985,7 @@ function buildCanonicalGeneratorInput(
     const sourceSnapshot = buildDecisionSnapshot({ round: raw.round.source, selectedPlayerId: selectedSteamId, decisionTick: raw.decisionTick, tickRate, snapshotId: `snapshot-${raw.sourceRef}`, rosterIds });
     const stateFactId = `fact-${raw.sourceRef}-state`;
     const decisionSnapshot = { ...sourceSnapshot,
+      ...(sourceSnapshot.selfBlindEvents?.length ? { selfBlindEvidenceRefs: [`fact-${raw.sourceRef}-self-blind`] } : {}),
       // These already-generated facts are the candidate-owned public evidence.
       // Keep their original sourceRefs on the facts, not as dangling model refs.
       selectedPlayer: { ...sourceSnapshot.selectedPlayer, evidenceRefs: sourceSnapshot.selectedPlayer.value && raw.state ? [stateFactId] : [] },
@@ -1018,6 +1021,7 @@ function buildCanonicalGeneratorInput(
     // One bounded statement, with all source references: repeated events do not amplify prose.
     if (sourceSnapshot.selfHurtEvents?.length) addPublicFact("self-hurt", selfHurtFactText(),
       sourceSnapshot.selfHurtEvents.map(event => event.sourceRef), Math.max(...sourceSnapshot.selfHurtEvents.map(event => event.tick)), ["damage_source", "damage_direction", "actual_hp_loss"]);
+    if (sourceSnapshot.selfBlindEvents?.length) addPublicFact("self-blind", decisionSelfBlindText(), sourceSnapshot.selfBlindEvents.map(event => event.sourceRef), Math.max(...sourceSnapshot.selfBlindEvents.map(event => event.tick)), ["current_blindness", "visible_scene"]);
     const sampledAt = decisionSnapshot.sampledAtTick ?? raw.decisionTick;
     const counts = decisionSnapshot.aliveCounts.value;
     if (counts) addPublicFact("alive-counts", `当时己方 ${counts.allies} 人存活${decisionSnapshot.selectedPlayer.value?.alive ? "（包括你）" : ""}，对方 ${counts.enemies} 人存活。`, sourceSnapshot.aliveCounts.evidenceRefs, sampledAt);
@@ -1546,6 +1550,15 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
     assertDecisionSnapshot(material.decisionSnapshot);
     const candidate = bundle.candidate_set.candidates.find((item) => item.candidateId === material.candidateId);
     if (!candidate || material.decisionSnapshot.decisionTick !== candidate.decisionTick || material.decisionSnapshot.roundNumber !== candidate.roundNumber || material.decisionSnapshot.selectedPlayerId !== bundle.selected_steam_id) throw new Error("DecisionSnapshot candidate binding is invalid.");
+    const blindEvents = material.decisionSnapshot.selfBlindEvents;
+    if (blindEvents?.length) {
+      const snapshot = material.decisionSnapshot, refs = snapshot.selfBlindEvidenceRefs;
+      const round = bundle.match_timeline.rounds.find(item => item.round_number === snapshot.roundNumber);
+      if (!round || snapshot.decisionTick < round.freeze_end_tick || snapshot.decisionTick >= (round.decided_tick ?? round.end_tick) || !refs || refs.length !== 1 || !candidate.factRefs.includes(refs[0]) || !Number.isFinite(bundle.match_timeline.tick_rate) || bundle.match_timeline.tick_rate <= 0 || snapshot.sampledAtTick === null || snapshot.decisionTick - snapshot.sampledAtTick > Math.ceil(bundle.match_timeline.tick_rate / 2) ||
+        blindEvents.some(event => event.tick < round.freeze_end_tick || event.tick < snapshot.decisionTick - 10 * bundle.match_timeline.tick_rate)) throw new Error("Decision self-blind binding or freshness is invalid.");
+      const facts = material.decisionFacts.filter(fact => fact.id === refs[0]);
+      if (facts.length !== 1 || facts[0].source !== "DEMO" || facts[0].availability !== "DECISION" || !facts[0].observed_by_player || facts[0].available_at_tick !== Math.max(...blindEvents.map(event => event.tick)) || facts[0].text !== decisionSelfBlindText()) throw new Error("Decision self-blind fact differs from its source projection.");
+    }
     const context = material.observableContext;
     if (context && (!hasExactKeys(context as unknown as Record<string, unknown>, ["version", "boundary", "state", "snapshotId", "source", "publicFacts", "freshness", "confidence", "missingFields", "limitations"]) || context.version !== "observable-decision-context.v1" || context.source !== "DEMO_OBSERVER_EVIDENCE" || JSON.stringify(context.publicFacts) !== JSON.stringify(buildObservableDecisionContext(material.decisionSnapshot, context.state).publicFacts))) throw new Error("ObservableDecisionContext public projection is invalid.");
     if (context && (context.boundary !== "OBSERVABLE" || context.snapshotId !== material.decisionSnapshot.snapshotId || context.state.at_tick > candidate.decisionTick || context.state.claims.some((claim) => claim.evidence_tick > candidate.decisionTick || claim.available_from_tick > candidate.decisionTick || (claim.expires_at_tick !== undefined && claim.expires_at_tick <= candidate.decisionTick)))) throw new Error("ObservableDecisionContext contains future or expired evidence.");
@@ -1600,7 +1613,7 @@ function assertValidBundle(value: unknown): asserts value is Cs2dAnalysisBundle 
     throw new Error("cs2d win-probability contract is invalid.");
   }
   if (
-    ![CS2D_ADAPTER_VERSION, "cs2d-analysis-adapter/1.12.0", "cs2d-analysis-adapter/1.11.0", "cs2d-analysis-adapter/1.10.0", "cs2d-analysis-adapter/1.9.0", "cs2d-analysis-adapter/1.8.0", "cs2d-analysis-adapter/1.7.0", "cs2d-analysis-adapter/1.6.1", "cs2d-analysis-adapter/1.6.0", "cs2d-analysis-adapter/1.5.2", "cs2d-analysis-adapter/1.5.1", "cs2d-analysis-adapter/1.5.0", "cs2d-analysis-adapter/1.4.0"].includes(bundle.metadata.adapter_version) ||
+    ![CS2D_ADAPTER_VERSION, "cs2d-analysis-adapter/1.13.0", "cs2d-analysis-adapter/1.12.0", "cs2d-analysis-adapter/1.11.0", "cs2d-analysis-adapter/1.10.0", "cs2d-analysis-adapter/1.9.0", "cs2d-analysis-adapter/1.8.0", "cs2d-analysis-adapter/1.7.0", "cs2d-analysis-adapter/1.6.1", "cs2d-analysis-adapter/1.6.0", "cs2d-analysis-adapter/1.5.2", "cs2d-analysis-adapter/1.5.1", "cs2d-analysis-adapter/1.5.0", "cs2d-analysis-adapter/1.4.0"].includes(bundle.metadata.adapter_version) ||
     bundle.metadata.source.repository !== CS2D_SOURCE.repository ||
     bundle.metadata.source.commit !== CS2D_SOURCE.commit ||
     bundle.metadata.renderer_input !== false ||

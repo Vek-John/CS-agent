@@ -32,3 +32,18 @@ it('uses increasing real Viewer frame times and natural compiled action capabili
  }
  expect(seen).toEqual(plan.cues.map(c=>c.id));
 });
+
+
+it('carries the optional synthetic self-blind occurrence through the actual first teaching package',()=>{
+ const replay=twoCueViewerReplay({priorSelfBlind:true});
+ const analysis=buildCs2dAnalysisBundle({replay,selectedSteamId:twoCueViewerPlayer,demoId:'synthetic-prior-blind'});
+ const cue=analysis.review_plan.cues[0],material=analysis.candidate_set.materials.find(m=>m.candidateId===cue.candidate_id);
+ expect(material.decisionSnapshot.selfBlindEvents).toEqual([{source:'DEMO_PLAYER_BLIND',sourceRef:'cs2d-blind-1300-1',tick:1300}]);
+ const pack=buildCoachingPackage(cue,analysis.candidate_set,analysis.observation_evidence);
+ const fact=pack.decisionContext.facts.find(f=>material.decisionSnapshot.selfBlindEvidenceRefs.includes(f.id));
+ expect(fact.available_at_tick).toBe(1300);
+ const narration=deterministicNarrationBundle(pack,buildOutcomePackage(cue,analysis.candidate_set));
+ expect(narration.currentSituation.text).toContain(fact.text);
+ expect(narration.currentSituation.refs).toContain(fact.id);
+ expect(twoCueViewerReplay().rounds[0].blinds).toEqual([]);
+});

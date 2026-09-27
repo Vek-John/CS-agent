@@ -45,7 +45,7 @@ it("keeps the first three facts and makes the legitimate fifth clock fact visibl
   expect(result.bundle.currentSituation.text).toContain("约110秒");
   expect(result.bundle.currentSituation.text.length).toBeLessThanOrEqual(1600);
   expect(result.bundle.currentSituation.refs).toEqual(facts.map(fact => fact.id));
-  expect(result.manifest).toMatchObject({ provider: "DETERMINISTIC", promptVersion: "review-planner/deterministic-narration/1.2.0", reason: "CLOSED_SEMANTIC_PROJECTION" });
+  expect(result.manifest).toMatchObject({ provider: "DETERMINISTIC", promptVersion: "review-planner/deterministic-narration/1.3.0", reason: "CLOSED_SEMANTIC_PROJECTION" });
   expect(f.cue.assessment?.kind).toBe("INSUFFICIENT_EVIDENCE");
   expect(result.bundle.currentSituation.text).not.toMatch(/可以等|应该等|C4.*秒|接敌/);
   expect(fetcher).not.toHaveBeenCalled();
@@ -60,14 +60,14 @@ it.each(["unknown", "paused", "planted"] as const)("does not invent a countdown 
   expect(fetcher).not.toHaveBeenCalled();
 });
 
-it("presents no more than six decision facts without inspecting IDs or text categories", () => {
+it("presents no more than seven decision facts without inspecting IDs or text categories", () => {
   const f = fixture();
-  f.coaching.decisionContext.facts = Array.from({ length: 7 }, (_, i) => ({ ...f.coaching.decisionContext.facts[0], id: `arbitrary-${i}`, text: `合成已知事实${i}。` }));
+  f.coaching.decisionContext.facts = Array.from({ length: 8 }, (_, i) => ({ ...f.coaching.decisionContext.facts[0], id: `arbitrary-${i}`, text: `合成已知事实${i}。` }));
   f.coaching.allowedRefs.decision = f.coaching.decisionContext.facts.map(fact => fact.id);
   const result = deterministicNarrationBundle(f.coaching, f.outcome);
-  expect(result.currentSituation.text).toBe(f.coaching.decisionContext.facts.slice(0, 6).map(fact => fact.text).join(" "));
-  expect(result.currentSituation.text).not.toContain("事实6");
-  expect(result.currentSituation.refs).toEqual(f.coaching.decisionContext.facts.slice(0, 6).map(fact => fact.id));
+  expect(result.currentSituation.text).toBe(f.coaching.decisionContext.facts.slice(0, 7).map(fact => fact.text).join(" "));
+  expect(result.currentSituation.text).not.toContain("事实7");
+  expect(result.currentSituation.refs).toEqual(f.coaching.decisionContext.facts.slice(0, 7).map(fact => fact.id));
 });
 
 it("keeps fitting fourth/fifth facts when the sixth exceeds the limit, without cutting a sentence", () => {

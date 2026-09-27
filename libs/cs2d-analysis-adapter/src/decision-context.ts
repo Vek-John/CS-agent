@@ -1,4 +1,5 @@
 import { isGroundSampleEvidence } from "@cs-coach/contracts";
+import { decisionSelfBlindEvents, decisionSelfBlindText, MAX_SELF_BLIND_EVENTS } from "./decision-self-blind";
 import { decisionSelfFireEvents, MAX_DECISION_SELF_FIRE_EVENTS } from "./decision-self-fire";
 import { verifiedGrenadeKinds } from "./grenade-kinds";
 import { decisionSelfHurtEvents, selfHurtFactText, MAX_SELF_HURT_EVENTS } from "./self-hurt";
@@ -82,8 +83,10 @@ export function buildDecisionSnapshot(input: {
   const clock = readRoundClock(round, frame, decisionTick, tickRate);
   const hasRoundClock = typeof clock.value?.remainingSeconds === "number";
   if (!hasRoundClock) missingFields.push("round_timer");
+  const selfBlindEvents = decisionSelfBlindEvents({ round, selectedPlayerId, decisionTick, sampledAtTick: frame?.tick ?? null, tickRate, alive: Boolean(fresh && selected?.alive === true && Number.isFinite(selected.health) && selected.health > 0) });
   const snapshot: DecisionSnapshot = {
     version: "decision-snapshot.v1", snapshotId, roundNumber: round.number, selectedPlayerId, decisionTick, sampledAtTick: frame?.tick ?? null,
+    ...(selfBlindEvents.length ? { selfBlindEvents } : {}),
     selfFireEvents: decisionSelfFireEvents({ round, selectedPlayerId, decisionTick, sampledAtTick: frame?.tick ?? null, tickRate, alive: Boolean(fresh && selected?.alive === true && selected.health > 0) }),
     ...(Array.isArray(round.hurtEvents) ? { selfHurtEvents: decisionSelfHurtEvents(round, selectedPlayerId, decisionTick, tickRate, Boolean(fresh && selected?.alive === true)) } : {}),
     selectedPlayer: value(fresh && selected ? { side, alive: boolOrNull(selected.alive), health: numberOrNull(selected.health), armor: numberOrNull(selected.armor), helmet: boolOrNull(selected.helmet), weapon: textOrNull(selected.weapon), grenades: grenadeKinds ?? null, money: numberOrNull(selected.money), equipmentValue: numberOrNull(selected.equipValue), hasDefuseKit: boolOrNull(selected.defuser), callout: mirageChineseCallout(selected.lastPlaceName) ?? null, ...(selected.groundEvidence === undefined ? {} : { groundEvidence: { ...selected.groundEvidence, value: selected.alive === true && numberOrNull(selected.health) !== null && selected.health > 0 ? selected.groundEvidence.value : null } }) } : null, "OBSERVABLE", fresh ? [] : ["决策前缺少足够新的玩家状态。"]),
@@ -106,6 +109,7 @@ export function buildObservableDecisionContext(snapshot: DecisionSnapshot, state
   const claims = state.claims.filter((claim) => claim.evidence_tick <= snapshot.decisionTick && claim.available_from_tick <= snapshot.decisionTick && (claim.expires_at_tick === undefined || snapshot.decisionTick < claim.expires_at_tick));
   const publicFacts: string[] = [];
   if (snapshot.selfHurtEvents?.length) publicFacts.push(selfHurtFactText());
+  if (snapshot.selfBlindEvents?.length) publicFacts.push(decisionSelfBlindText());
   const self = snapshot.selectedPlayer.value;
   if (self) publicFacts.push(`你的血量${self.health === null ? "未知" : `为 ${self.health}`}，护甲${self.armor === null ? "未知" : `为 ${self.armor}`}，手持${self.weapon ?? "未知"}。`);
   if (snapshot.aliveCounts.value) publicFacts.push(`当时己方 ${snapshot.aliveCounts.value.allies} 人存活${self?.alive ? "（包括你）" : ""}，对方 ${snapshot.aliveCounts.value.enemies} 人存活。`);
@@ -137,7 +141,7 @@ function exactKeys(value: unknown, keys: readonly string[], label: string): asse
 
 /** Validate nested information boundaries before accepting a persisted or worker packet. */
 export function assertDecisionContextShape(snapshot: DecisionSnapshot): void {
-  exactKeys(snapshot, ["version", "snapshotId", "roundNumber", "selectedPlayerId", "decisionTick", "sampledAtTick", "selectedPlayer", "aliveCounts", "players", "score", "clock", "bomb", "supportChecks", "pressureChecks", "spatialChecks", "missingFields", "limitations", ...(snapshot.selfHurtEvents === undefined ? [] : ["selfHurtEvents"]), ...(snapshot.selfFireEvents === undefined ? [] : ["selfFireEvents"])], "DecisionSnapshot");
+  exactKeys(snapshot, ["version", "snapshotId", "roundNumber", "selectedPlayerId", "decisionTick", "sampledAtTick", "selectedPlayer", "aliveCounts", "players", "score", "clock", "bomb", "supportChecks", "pressureChecks", "spatialChecks", "missingFields", "limitations", ...(snapshot.selfHurtEvents === undefined ? [] : ["selfHurtEvents"]), ...(snapshot.selfFireEvents === undefined ? [] : ["selfFireEvents"]), ...(snapshot.selfBlindEvents === undefined ? [] : ["selfBlindEvents"]), ...(snapshot.selfBlindEvidenceRefs === undefined ? [] : ["selfBlindEvidenceRefs"])], "DecisionSnapshot");
   if (typeof snapshot.snapshotId !== "string" || typeof snapshot.selectedPlayerId !== "string" || !Number.isSafeInteger(snapshot.roundNumber)) throw new Error("DecisionSnapshot identity is invalid.");
   const values: [DecisionValue<unknown>, readonly string[]][] = [
     [snapshot.selectedPlayer, ["side", "alive", "health", "armor", "helmet", "weapon", "grenades", "money", "equipmentValue", "hasDefuseKit", "callout", ...(snapshot.selectedPlayer.value?.groundEvidence === undefined ? [] : ["groundEvidence"])]],
@@ -151,6 +155,17 @@ export function assertDecisionContextShape(snapshot: DecisionSnapshot): void {
     if (field.value !== null) exactKeys(field.value, keys, "DecisionValue payload");
     assertStrings(field.evidenceRefs); assertStrings(field.limitations);
   }
+  if (snapshot.selfBlindEvents !== undefined) {
+    if (!Array.isArray(snapshot.selfBlindEvents) || snapshot.selfBlindEvents.length > MAX_SELF_BLIND_EVENTS) throw new Error("Decision self-blind evidence is unbounded.");
+    for (const event of snapshot.selfBlindEvents) {
+      exactKeys(event, ["source", "sourceRef", "tick"], "Decision self-blind event");
+      if (event.source !== "DEMO_PLAYER_BLIND" || typeof event.sourceRef !== "string" || event.sourceRef.length > 160 || typeof event.tick !== "number" || !Number.isSafeInteger(event.tick) || event.tick < 0 || event.tick >= snapshot.decisionTick ||
+        !new RegExp(`^cs2d-blind-${event.tick}-[1-9][0-9]*$`).test(event.sourceRef)) throw new Error("Decision self-blind event has invalid or non-prior evidence.");
+    }
+    if (new Set(snapshot.selfBlindEvents.map(event => event.sourceRef)).size !== snapshot.selfBlindEvents.length) throw new Error("Decision self-blind evidence is duplicated.");
+    if (snapshot.selfBlindEvents.length && (snapshot.sampledAtTick === null || snapshot.selectedPlayer.boundary !== "OBSERVABLE" || snapshot.selectedPlayer.value?.alive !== true || !Number.isFinite(snapshot.selectedPlayer.value.health) || !(snapshot.selectedPlayer.value.health! > 0))) throw new Error("Decision self-blind evidence requires a live selected player.");
+  }
+  if (snapshot.selfBlindEvidenceRefs !== undefined && (!Array.isArray(snapshot.selfBlindEvidenceRefs) || snapshot.selfBlindEvidenceRefs.length !== 1 || !snapshot.selfBlindEvents?.length || snapshot.selfBlindEvidenceRefs.some(ref => typeof ref !== "string" || !ref.trim() || ref.length > 160))) throw new Error("Decision self-blind canonical binding is invalid.");
   if (snapshot.selfFireEvents !== undefined) {
     if (!Array.isArray(snapshot.selfFireEvents) || snapshot.selfFireEvents.length > MAX_DECISION_SELF_FIRE_EVENTS || new Set(snapshot.selfFireEvents.map(event => event.sourceRef)).size !== snapshot.selfFireEvents.length) throw new Error("Decision self-fire evidence is unbounded or duplicated.");
     for (const event of snapshot.selfFireEvents) {

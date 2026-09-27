@@ -104,7 +104,7 @@ Adapter只取不晚于decisionTick、同回合且最多半秒旧的样本，不�
 时钟公开事实拥有当时采样来源与可用时间，不能单独批准等待、接敌或路线建议；`objectiveAllowsDelay`和缺LOS的RETURN_AND_FIRE判断门不因此放宽。模型不自行补数或复刻HUD取整。Viewer生产构建必须包含当前parser源码补丁编译的WASM，不能只更新Rust源码而使用旧parser二进制。
 
 
-确定性Narrator的当前情况说明保留原前三条决策事实，再按原顺序增补至最多六条；每次增补后正文不得超过1600字符，超限即停止，不截断事实句子。这样当前Adapter的有限状态/受击/人数/比分/时钟/C4事实可在短文内完整呈现，不因任意前三条截断而遗漏已知时钟。仅消费已有合法决策事实，不从ID或文本猜测时钟、不重新计算秒数，不改变引用/建议/专业判断门。原前三条本身超长时保留既有本地fallback契约；旧保存讲解直接复用，新生成本地投影以deterministic-narration/1.2.0标识。当前情况有事实正文时，只引用实际选入的事实；因数量/长度未选入的事实及未呈现的claims不挂到该字段。没有事实而只有claims时保留既有“当前可用决策事实有限”回退。其他讲解字段的依据集合独立，旧保存引用不重写。
+确定性Narrator的当前情况说明保留原前三条决策事实，再按原顺序增补至最多七条；每次增补后正文不得超过1600字符，超限即停止，不截断事实句子。这样当前Adapter的有限状态/受击/人数/比分/时钟/C4事实可在短文内完整呈现，不因任意前三条截断而遗漏已知时钟。仅消费已有合法决策事实，不从ID或文本猜测时钟、不重新计算秒数，不改变引用/建议/专业判断门。原前三条本身超长时保留既有本地fallback契约；旧保存讲解直接复用，新生成本地投影以deterministic-narration/1.3.0标识。当前情况有事实正文时，只引用实际选入的事实；因数量/长度未选入的事实及未呈现的claims不挂到该字段。没有事实而只有claims时保留既有“当前可用决策事实有限”回退。其他讲解字段的依据集合独立，旧保存引用不重写。
 
 ### 2.4.2 逐次本人受击事实
 
@@ -198,7 +198,11 @@ Parser追加grenade-inventory.v1，Adapter/Signal 1.11.0、Timeline1.2.0标记�
 
 受害者与可空投掷者在事件时冻结。既有`Round.blinds`仍只输出已解析受害者、经过同样类型/存在门验证的type2有限正报告时长和有效事件tick的记录，按回合半开窗口分配；空数组不证明没有致盲。旧展示`t/duration`保持0.1秒取整，新产物附`id`、原始canonical `tick`、`blindEvidenceVersion:1`和未取整的`reportedDuration`。旧Replay可缺这些字段，不反推tick、不补版本；Parser generatedBy追加blind-identity.v1，版本间引用不互换。
 
-这一层只修复Replay事实来源；Adapter仅登记完整Parser版本链，不消费致盲字段，DecisionSnapshot/教学尚未接入。报告时长不是精确屏幕遮挡、视野或事件结束证明；投掷者身份属于全知Replay，不自动成为本人知识。未来若消费，只能另经严格决策前、本人、回合/死亡/新鲜度及来源引用验证，不能由Viewer白色衰减直接形成专业判断。
+Adapter只消费`blindEvidenceVersion:1`且id、原tick、有限正reportedDuration、本人身份完整的事件。同raw集合的重复/冲突ID全部排除；仅当前回合LIVE窗口（从startTick至decidedTick之前）、决策严格之前10秒内最多3条，在新鲜且存活/生命有效的本人快照和死亡边界下投影为可选`selfBlindEvents[{source:"DEMO_PLAYER_BLIND",sourceRef,tick}]`。无新来源字段的旧数据保持未知，不从t反推，也不把无可用事件说成未受闪光。投掷者和报告时长不进入Agent/DecisionSnapshot。
+
+发生事实独立于状态采样：允许事件在最近状态sample之后、decision之前，独立DECISION_CONTEXT fact以保留事件最大tick为available_at_tick。Canonical阶段将可选`selfBlindEvidenceRefs`绑定到唯一该fact，并保留全部原事件sourceRefs；不得将事件伪称sample时已有状态。持久Bundle校验绑定，View还需当前cue/玩家、原始新鲜存活状态、唯一合法DEMO/DECISION/observed事实、完整已叙述正文和唯一引用一致才显示。Narrator按原顺序最多七条/1600字符保留state/hurt/blind/counts/score/clock/C4，不能加事实后静默挤掉旧公开事实。
+
+报告时长不是精确屏幕遮挡、视野或事件结束证明；投掷者身份属于全知Replay，不自动成为本人知识。当前只呈现决策前的事件发生，不推断当时仍失明、具体视野或战术错误，不改变候选/路线/Outcome/建议门。Adapter/signals 1.14读取1.13及旧兼容产物，旧保存的snapshot/narration原样恢复，不回填或再生成。
 
 ### 2.5 事实、推断、建议分层
 

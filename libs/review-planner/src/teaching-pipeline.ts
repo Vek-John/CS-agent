@@ -787,11 +787,11 @@ export function deterministicNarrationBundle(
   const adviceRefs = packageInput.advice.map((advice) => advice.id).filter((ref) => adviceNamespace.has(ref));
   const evidenceRefs = packageInput.evidence.map((evidence) => evidence.id).filter((ref) => evidenceNamespace.has(ref));
   const outcomeRefs = unique([...outcome.outcomeFacts.map((fact) => fact.id), ...outcome.deathKillHpRefs, ...outcome.measurementRefs]);
-  // Preserve the original three facts. Current Adapter context has at most six
+  // Preserve the original three facts. Current Adapter context has at most seven
   // bounded facts; add complete statements only while they fit the wire budget.
   const presentedFacts = packageInput.decisionContext.facts.slice(0, 3);
   let first = presentedFacts.map((fact) => fact.text).join(" ") || "当前可用决策事实有限";
-  for (const fact of packageInput.decisionContext.facts.slice(3, 6)) {
+  for (const fact of packageInput.decisionContext.facts.slice(3, 7)) {
     if (!decisionNamespace.has(fact.id)) continue;
     const expanded = `${first} ${fact.text}`;
     if (expanded.length > 1600) break;

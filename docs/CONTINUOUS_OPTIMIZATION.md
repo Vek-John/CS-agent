@@ -12,6 +12,21 @@
 
 
 
+## 已交付：决策前本人致盲事件消费（2026-09-27）
+
+- ID decision-prior-self-blind，82c5ba4已push/clean，7f2b复用；partial_revision_restore默认配置先只读A1查selfHurt路径与全部接收边界，root docs/ARCH/接口与最终集成/提交；A1仅.local-data/decision-prior-self-blind，A2批准后明确生产所有权。
+- 目标/流程：新版可靠blind事件→本人严格决策前snapshot/observable→带来源的教学事实→实际CoachingPackage/Narrator/View。验收新版本/id/tick/finite报告/主体/回合/死亡/新鲜度/有界窗口与去重，旧metadata缺失unknown；不携带raw投掷者/时长、不给当前失明或战术错误断言、不新增候选/修改Outcome。
+- 风险预检：多处runtime exactKeys/恢复版本及当前Narrator六事实门可能漏字段或挤掉旧clock/C4；先查生产实际消费再定最小接口，不堆字符串镜像tests。A1五分钟、实现15-25分钟，单test<60秒，同设施两败简化；两端TS及正式cs2d:build/Web build单owner，必要GUI仅root小合成单controller，关闭自建页/服务；无正式Demo/用户库/模型/外部LLM/安装部署，结束RELEASE后root真实diff审查及push。
+
+- A1实证当前完整公开事实可达到6条。root否决以“仅取sample之前事件”来合并state避开上限：会漏sample之后/decision之前的有效事件。改为独立blind fact、tick=max原事件、显式selfBlindEvidenceRefs单一canonical绑定，Narrator cap7/1600保持顺序/完整句与引用，旧保存内容不重写。
+- A2生产owner partial_revision_restore：contracts/Adapter raw门、snapshot/runtime/版本1.14、教学事实和引用；review-planner Narrator cap7；web manifest1.3、CoachingView/Host既有段落及必要真实消费tests。root ARCH/docs/最终集成；prior_fire_boundary_review仅只读独审。默认诊断Panel前三state/hurt/blind真实呈现，baseline通过新priorSelfBlind段落；不只测helper，也不扩大旧工具/question cap。
+
+- root独占工具补充：two-cue fixture/其test及react-host-smoke parent/child仅增加可选`selfBlind=1`合成入口，原默认fixture保留；首轮一个合成事件1300，186帧仍留child。生产稳定后单origin真实Host首cue默认诊断→跳过baseline显示验证，root从launch到tab/server清理负责，不开启Parser/模型/正式Demo或全场循环。tool构建在生产owner写入结束后执行。
+
+- 交付：新版来源通过完整门进入snapshot、独立canonical事实、包/Narrator与默认Panel、基础View；持久绑定及View非未来/observer归属门闭合，旧产物原样。新增38项、5文件179相关测试、工具2文件7项/专项TS、两端TS与正式production build通过，独立审查无must-fix，两owner已RELEASE。
+- 真实GUI验证：小合成场景首cue自动暂停，默认诊断显示受限致盲事实；原“跳过”后baseline仍显示，当前已知事实问答亦复述同句并注明来源。准备1/2、Graph4，外部/provider0、错误0；root实际源码/日志/UI核实，tab26/58558已关，无正式Demo/模型/用户库。[有界证据](validation/DECISION_PRIOR_SELF_BLIND_RESULT.json)。
+- 下一有限目标 self-blind-real-coverage-preflight：核实新来源在实际数据中的可用覆盖，优先已有匿名摘要；必要的新读取先定单次事件级、时长/内存/清理预算，不重建Replay或模型。结果只判断字段/身份与可用事件，不推当前失明或专业判断改善；不重复合成拒绝用例或因native A5停工。
+
 ## 已交付：致盲事件Controller身份与原始时间修复（2026-09-27）
 
 - ID blind-controller-identity-preflight，8c0d8f0已push/clean，复用7f2b；partial_revision_restore默认配置独占CSS GetPlayer/native一手来源与.local-data/blind-controller-identity-preflight外部证据，root独占本地event descriptor/实体链检查与docs，A1不改产品。

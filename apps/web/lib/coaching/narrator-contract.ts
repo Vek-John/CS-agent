@@ -213,7 +213,7 @@ function fallbackResult(context: NarratorRequestContext, reason: string): Narrat
     status: "FALLBACK",
     provider: "DETERMINISTIC",
     reason,
-    promptVersion: "review-planner/deterministic-narration/1.2.0",
+    promptVersion: "review-planner/deterministic-narration/1.3.0",
     limitations: [reason]
   };
   return { status: "FALLBACK", bundle, manifest };
@@ -248,7 +248,7 @@ export async function requestNarrationBundle(
       bundle,
       manifest: {
         status: "DISABLED", provider: "DETERMINISTIC", reason: "CLOSED_SEMANTIC_PROJECTION",
-        promptVersion: "review-planner/deterministic-narration/1.2.0", limitations: [],
+        promptVersion: "review-planner/deterministic-narration/1.3.0", limitations: [],
       },
     };
   }

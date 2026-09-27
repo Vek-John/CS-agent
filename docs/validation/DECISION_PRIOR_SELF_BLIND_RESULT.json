@@ -1,0 +1,86 @@
+{
+  "scope": "Synthetic evidence only; no Demo/model/DB/browser run by implementer",
+  "baseline": "82c5ba4",
+  "red": {
+    "test": "new actual Adapter/package prior-blind chain",
+    "failed": 1
+  },
+  "green": {
+    "newTests": 38,
+    "relatedFiles": 5,
+    "relatedTests": 179
+  },
+  "contracts": [
+    "Adapter/signals1.14 accepts old1.13",
+    "selfBlindEvents and one canonical selfBlindEvidenceRefs; no raw duration/thrower",
+    "independent DECISION_CONTEXT time=max prior events, never sampled state time",
+    "Narrator at most7 complete facts under1600chars; manifest1.3",
+    "same-cue cited View and real Panel SSR"
+  ],
+  "checks": {
+    "webTypecheck": 0,
+    "webBuild": 0,
+    "viewerTypecheck": 0,
+    "productionCs2dBuild": 0
+  },
+  "limits": [
+    "View depends on prior Bundle round/candidate validation; it cannot independently reconstruct Replay",
+    "Raw duplicate IDs excluded within the supplied round blinds collection",
+    "Legacy compatibility is a synthetic old shape and saved-narration recovery; not a real historical DB run",
+    "Event-after-sample relationship tested through actual buildDecisionSnapshot; natural Adapter full chain uses its own unmodified cue decision",
+    "No current blindness, severity, thrower knowledge, end time or coaching judgement claim"
+  ],
+  "cleanup": "All owned test/build processes exited; no services or persistent temporary DB/worker created",
+  "toolsChecks": {
+    "tests": 7,
+    "files": 2,
+    "typecheckExitCode": 0,
+    "buildSeconds": 4.47
+  },
+  "ui": {
+    "mounted": true,
+    "childReady": true,
+    "stageReady": 1,
+    "replayReady": 1,
+    "selected": 1,
+    "analysisReady": 1,
+    "prepareRoute": 1,
+    "prepareNarration": 2,
+    "agentRequests": 4,
+    "forbiddenFetches": 0,
+    "providerFetches": 0,
+    "playbackReports": 386,
+    "playing": false,
+    "tick": 1400,
+    "acks": 0,
+    "errors": [],
+    "selfBlindFixture": true,
+    "syntheticIdentity": true,
+    "parserEnabled": false,
+    "modelEnabled": false,
+    "diagnostics": true,
+    "realLifecycle": null
+  },
+  "uiAssertions": {
+    "defaultPanelOccurrenceVisible": true,
+    "existingSkipToBaselineOccurrenceVisible": true,
+    "currentKnownFactsAnswerRepeatsSameStatement": true,
+    "consoleWarningsOrErrors": 0,
+    "input": "186 synthetic frames; no measured Demo time",
+    "cleanup": "tab26 closed; owned node PID28214 on58558 stopped; session exit0"
+  },
+  "independentReview": {
+    "mustFix": 0,
+    "scope": "read actual diff/tests; did not independently execute them"
+  },
+  "commands": [
+    "pnpm exec vitest run apps/web/lib/coaching/decision-prior-self-blind.test.ts apps/web/lib/coaching/baseline-prior-fire-presentation.test.ts apps/web/lib/coaching/narration-clock-coverage.test.ts apps/web/lib/coaching/cs2d-coaching-view.test.ts libs/cs2d-analysis-adapter/src/index.test.ts",
+    "pnpm exec vitest run tools/cs2d-host/viewer-two-cue-fixture.test.mjs tools/cs2d-host/react-host-smoke.test.mjs",
+    "pnpm exec tsc --noEmit -p tools/cs2d-host/react-host-smoke.tsconfig.json",
+    "node tools/cs2d-host/react-host-smoke.mjs --diagnostics",
+    "pnpm typecheck",
+    "pnpm build",
+    "pnpm cs2d:typecheck",
+    "CARGO_NET_OFFLINE=true pnpm cs2d:build"
+  ]
+}

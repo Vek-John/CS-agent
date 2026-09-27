@@ -3399,6 +3399,7 @@ export function Cs2dPlaybackHost({
                   {threeStageCoaching.currentState.chips.length > 0 ? (
                     <CoachingStatusList chips={threeStageCoaching.currentState.chips} catalog={gameAssetCatalog} />
                   ) : <p>{threeStageCoaching.currentState.fallbackText}</p>}
+                  {threeStageCoaching.currentState.priorSelfBlind ? <p>{threeStageCoaching.currentState.priorSelfBlind.text}</p> : null}
                   {threeStageCoaching.currentState.priorSelfFire ? <p>{threeStageCoaching.currentState.priorSelfFire.text}</p> : null}
                   {threeStageCoaching.currentState.sampledGround ? <p>{threeStageCoaching.currentState.sampledGround.text}</p> : null}
                   {threeStageCoaching.currentState.limitations.map((limitation) => <p key={limitation}>{limitation}</p>)}
