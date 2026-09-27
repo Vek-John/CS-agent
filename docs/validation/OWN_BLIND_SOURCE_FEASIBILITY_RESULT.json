@@ -1,0 +1,120 @@
+{
+  "decision": "Do not consume legacy blinds as teaching evidence. First validate current controller identity decoding, then preserve exact event tick in Parser.",
+  "baseline": "f8c4916",
+  "localSources": [
+    {
+      "path": ".local-data/upstream/cs2d/packages/parser/src/collector.rs",
+      "lines": [
+        140,
+        188,
+        542,
+        734
+      ],
+      "claim": "Blind retains userid until assembly; map is first-write-only and is fed through the older index/cache resolver. Attacker is resolved at event time using that map."
+    },
+    {
+      "path": ".local-data/upstream/cs2d/packages/parser/src/props.rs",
+      "lines": [
+        13,
+        176,
+        180,
+        270
+      ],
+      "claim": "round1 is 0.1 precision; ev_f32 only accepts Float, defaults missing/wrong type to zero; verified_event_pawn is a separate native-pawn/current-owner path and is not used for blind."
+    },
+    {
+      "path": ".local-data/upstream/cs2d/packages/parser/src/assemble.rs",
+      "lines": [
+        279,
+        478,
+        484
+      ],
+      "claim": "Half-open round assignment; victim looked up in final first-write map; event tick exported only as rounded relative t; reported duration rounded and not clamped to round."
+    },
+    {
+      "path": ".local-data/upstream/cs2d/packages/parser/src/schema.rs",
+      "lines": [
+        310
+      ],
+      "claim": "Blind serialization has t/duration/steamId/flasherSteamId, no canonical tick."
+    },
+    {
+      "path": "vendor/source2-demo/src/event/value.rs",
+      "lines": [
+        100,
+        116
+      ],
+      "claim": "Float conversion is strict variant conversion; no finite-value guard."
+    },
+    {
+      "path": "vendor/source2-demo/src/event/mod.rs",
+      "lines": [
+        95,
+        137
+      ],
+      "claim": "Runtime descriptors supply key names/types. This source does not statically establish player_blind-specific keys."
+    },
+    {
+      "path": "libs/cs2d-analysis-adapter/src/index.ts",
+      "lines": [
+        223,
+        1159
+      ],
+      "claim": "Current Cs2dRound/selected match-event conversion has no blind input/consumer."
+    }
+  ],
+  "externalSources": [
+    {
+      "url": "https://raw.githubusercontent.com/roflmuffin/CounterStrikeSharp/main/managed/CounterStrikeSharp.API/Generated/GameEvents/EventPlayerBlind.g.cs",
+      "lines": [
+        13,
+        15,
+        18,
+        20,
+        30,
+        32
+      ],
+      "claim": "Project-generated API declares recipient and attacker as nullable CCSPlayerController and blind_duration as float; no pawn accessor in this class. Does not prove how source2-demo numeric wire values bind to current controllers. GetPlayer native conversion was not investigated this round.",
+      "revision": "mutable main, read 2026-09-27; GitHub commit API lookup was unavailable through web tool; no pinned hash claimed"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/markus-wa/demoinfocs-golang/v4.5.1/pkg/demoinfocs/game_events.go",
+      "lines": [
+        239,
+        512,
+        516,
+        529
+      ],
+      "claim": "Pinned v4.5.1 playerBlind legacy handler is bypassed in default Source2 mimic mode; it uses userid player lookup and lastFlash attribution. It does not establish our raw attacker/pawn semantics."
+    }
+  ],
+  "probe": {
+    "command": "python3 .local-data/own-blind-source-feasibility/probe.py",
+    "exitCode": 0,
+    "durationSeconds": 1.85,
+    "source": "Extract actual collector branches, assembly loop, round selection, props readers and include actual vendor EventValue; only owner resolver is a controlled stub.",
+    "resultFile": "result.json",
+    "limitations": "No real Demo, entity generation decoder or actual blind wire descriptor validated. Synthetic conditions prove code behavior, not incidence in recorded matches. Binary removed; source and compact result retained."
+  },
+  "nextLimitedTask": "Trace CounterStrikeSharp GetPlayer/native userid handling and current source2 event descriptors; validate a unique current controller+SteamID+verified pawn binding using a small native fixture or separately authorized bounded event-only probe. Missing or ambiguous role must remain unknown, never use a future map entry or assume userid is userid_pawn. Only then design a Parser-only tick/source/recipient contract and replay-preserving tests.",
+  "futureConsumptionBoundary": "Own recipient only; exact canonical tick strictly before decision, same live round, current alive/fresh state and death boundaries. Begin with occurrence fact only. Do not reconstruct canonical tick from rounded t. Duration unit and termination/fade/overlap semantics remain insufficient for current blindness or full-screen occlusion claims. No event is not proof of no flash.",
+  "userBenefit": "After reliable producer identity/time exists, a short prior self-flash occurrence statement can restore missing context without claiming complete blindness, exact view, intent or tactical error.",
+  "mechanismResults": {
+    "actualCollectorAndAssembly": true,
+    "actualVendorEventValue": true,
+    "futureMappingBackfill": true,
+    "firstMappingSurvivesRebind": true,
+    "missingWrongTypeZeroNegativeNanDropped": 5,
+    "positiveInfinityAccepted": true,
+    "positiveDurationRoundedToZero": true,
+    "canonicalTickCannotRoundTrip": true,
+    "halfOpenRoundBoundary": true,
+    "durationNotRoundClamped": true
+  },
+  "rootVerification": {
+    "sourceReviewed": true,
+    "rerunExitCode": 0,
+    "productChanges": false,
+    "binaryRemoved": true
+  }
+}

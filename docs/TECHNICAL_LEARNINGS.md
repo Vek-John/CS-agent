@@ -8,6 +8,19 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：致盲展示数据尚不能直接作为决策事实
+
+- 结论：先修复事实来源，再考虑教学接线。当前仅保留旧`round.blinds`的既有可视化兼容，不将其用于新增教学断言，不能从其秒数反推精确Demo tick，也不能把空数组解释为未致盲、把`duration`解释为完全不可见。
+- 身份证据：当前受控cs2d的`collector.rs:542`仅首次填充`userid_to_steam`，`:734`将受害者userid延后保存在`blinds_raw`；`assemble.rs:480`在全场组装时用该映射补身份。于是后来的首次绑定可回填更早事件，userid复用又可能沿用旧首次身份；这不是“最后一次身份覆盖”的机制。投掷者虽在事件时查询，也依赖同一缓存。`schema.rs:315`的attacker pawn注释与collector实现不一致，不能拿注释证明事件字段类型。
+- 时间证据：事件进入collector时有`ctx.tick()`，但`Blind`输出仅`t/duration/steamId/flasherSteamId`。`assemble.rs:485`按64Hz计算相对回合秒数，然后时间与持续时长均经`props.rs:13`的`round1`取到0.1秒；相邻事件可落同一展示时间。ViewerMap按t至t+duration作线性白色叠层，是渲染规则，不是精确玩家视觉或受影响强度测量。
+- 当前接线：`libs/cs2d-analysis-adapter/src/index.ts:223`的最小Cs2dRound不消费blinds，DecisionSnapshot也没有该字段，故不存在可直接开启的隐藏教学能力。可复用自身受击的严格决策前、选手身份、死亡/回合边界及有界引用模式，但不能复制其伤害语义。
+- 外部交叉核实：[CounterStrikeSharp生成的EventPlayerBlind](https://github.com/roflmuffin/CounterStrikeSharp/blob/main/managed/CounterStrikeSharp.API/Generated/GameEvents/EventPlayerBlind.g.cs)将userid/attacker暴露为CCSPlayerController，blind_duration为float（本轮读取版本）。这只证实其API类型，不能独自证明本项目source2-demo原始整数的Controller映射，更不能假设存在userid_pawn。没有直接采用未验证映射。
+- 缺失语义：旧空blinds可能来自未记录事件、duration缺失或过滤、userid缺失/类型不符、未解析到SteamID，不能区分“没有受影响”和“没有可用证据”。报告duration不直接提供完整屏幕遮挡程度，且当前展示计时未按死亡/回合裁剪；教学先用事件事实，持续状态需另有来源证据。
+- 离线实证：probe抽取实际collector/cache feed/assemble/round_of、ev_i32/ev_f32/round1，并编译真实vendor EventValue；只在实体resolver边界注入身份。未来首次映射回填、首次映射跨重绑保留均复现；缺失/错误类型/0/负数/NaN五类时长被丢弃，正Infinity被接受，0.04秒变0，合成事件101相对回合100的展示秒数变0，无法反推原始值。分回合为半开区间，duration没有截在回合末。这些是机制验证，不是真实Demo发生频率，也未把合成时间称为测得tick。
+- 下一最小边界：Parser保留事件canonical tick、稳定事件标识、事件时可靠受害者身份或显式未知、原始有限非负报告时长（缺失/非法为null）与来源版本；身份只用经核实的事件字段和当时绑定，禁止事后userid缓存补归属。Adapter只消费新来源且仅选中玩家本人、严格早于decisionTick的有限事件，旧数据缺失保持未知；先描述“决策前记录到本人致盲事件”，不据此判断当时仍失明、知道谁投掷、敌人受影响或决策错误。Controller与pawn字段不可混用，先验证原始事件值到当前Controller的映射才实施此边界。
+- 验证与交付：执行者及root独立运行`python3 .local-data/own-blind-source-feasibility/probe.py`均exit0；root读生成Rust与真实分支，临时binary已清理。匿名[来源与结果](validation/OWN_BLIND_SOURCE_FEASIBILITY_RESULT.json)记录baseline与剩余限制。本轮仅学习日志/任务板/证据，产品和工具未变，沿用f8c4916两端TS/build结果，不重复全量构建。无正式Demo、用户库、模型、GUI或安装操作。
+- 下一有限任务 `blind-controller-identity-preflight`：追踪CSS GetPlayer/native userid编码与本项目runtime descriptor，先用当前实体的小fixture验证唯一Controller/SteamID及生命周期；若原始字段缺失或仍无法证明身份，保持未知而不从旧缓存回填。确认后才进入Parser-only tick/身份/报告值保真改动；不直接扩到教练或重跑整场模型。
+
 ## 2026-09-27：Parser错误不能一律归为文件损坏
 
 - 问题：真实8B入口显示底层英文“Supports only Source 2 replays”；源码WrongMagic同时涵盖短于16字节与magic不符，不能由这条错误推断游戏类型或损坏原因。

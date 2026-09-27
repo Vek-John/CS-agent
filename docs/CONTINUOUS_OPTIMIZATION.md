@@ -12,6 +12,16 @@
 
 
 
+## 已交付学习：自身致盲事实来源可行性（2026-09-27）
+
+- ID own-blind-source-feasibility，基线f8c4916已push/clean，7f2b顺序复用。partial_revision_restore默认配置独占只读源码调查和.local-data/own-blind-source-feasibility小证据，root docs/结论与后续接口决策；当前不改生产代码。
+- 目标/流程：当前player_blind事件→recipient/tick/duration来源与转换→严格决策前可知信息→明确接入、先修Parser或暂缓。A1五分钟定位真实源/已有tests及冲突，A2小离线核实身份与缺失，不以注释代替证据，A3可行动结论和证据文档。只记录已证明事实，不等同精确视觉遮挡或错误决策。
+- 风险/边界：当前collector称attacker为userid、schema注释称pawn，身份缓存可能晚解析；重点核实recipient，不扩展敌方可知性。无正式Demo/用户库/模型/浏览器/server/安装或网络大文件；需要外部知识仅一手源码/官方材料。15分钟有限调查、单probe<60秒，同设施两败简化；agent清自建临时目录并RELEASE，root审证据后再授权产品实现，交付学习结论无需反复全量build。
+
+- 结论：当前旧blinds不直接进入教学，先修事实来源。真实代码抽取Rust probe证实未来首次映射回填、首次身份跨重绑保留、0.1秒取整丢tick、非法duration过滤与Infinity遗漏；root复跑exit0。空集合不证明未受闪光，Viewer白色衰减不是视觉测量。
+- 一手CSS API把userid/attacker声明为Controller，native数值映射仍未核实，不直接复用pawn helper。root核实真实diff/源码/probe，owner RELEASE，二进制清理；仅docs学习与匿名[证据](validation/OWN_BLIND_SOURCE_FEASIBILITY_RESULT.json)，产品不改、无正式Demo/用户库/模型/GUI，f8c4916既有两端TS/build仍对应相同产品源码。
+- 下一有限目标 blind-controller-identity-preflight：沿CSS GetPlayer/native与source2 runtime descriptor追当前Controller身份映射，用小fixture查重绑/缺失/歧义。确认后再定Parser-only原tick/来源/身份边界，不直接进入教学；缺失保持未知，不因A5或单一映射未知停所有项目工作。
+
 ## 已交付：无效Demo解析错误反馈（2026-09-27）
 
 - ID parser-file-error-feedback，cb61684 clean/push、7f2b顺序复用。partial_revision_restore默认配置独占A1错误来源核实，批准后新0034受控Viewer patch/registry及实际composable小tests；root docs/唯一小UI-controller/最终diff/checks/push。
