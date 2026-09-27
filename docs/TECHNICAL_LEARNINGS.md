@@ -8,6 +8,14 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：零教学点产物可在没有讲解artifact时恢复
+
+- 问题：上一轮真实Host已完成零cue路线，但既有恢复helper强制cue>0，未证明无Narration产物通过SQLite/恢复边界。该限制是测试夹具假设，不能当作产品失败。
+- 决策：helper新增可选expectedCueCount；未提供仍要求>0，零cue测试显式严格=0并核保存的Narration artifact数。沿用同一自然Replay与生产Adapter，不删cue、不改hash或放松保存校验。
+- 验证：真实临时SQLite保存、关闭重开、GET/HistoryRestoreController、准备READY，恢复plan与原plan一致且7段完整；从恢复INTRO用实际Session/directive完成。verify后分析/讲解/网络/Viewer调用0，数据库artifact/head保持原样。新单例与ammo/inventory/ground共4文件16项、两端TS及Web/正式Viewer build通过；root复查完整diff，临时库/进程清理。[结果](validation/EMPTY_CUE_HISTORY_RESTORE_RESULT.json)。
+- 限制：保存的是ROUTE_START，之后在内存走到COMPLETED；不是完成checkpoint恢复，也没重新验证Graph/Viewer冷启动或GUI。两玩家合成输入、header型受管Demo、无正式Parser/模型/用户库。产品源码未改。
+- 下一项ordinary-progress-recovery-preflight：Host稳定保存仅接CUE_PAUSED/WRAP_UP，普通PLAYING/SKIPPING不形成新稳定record；对没有教学点或首点前较长的路线，可能带来退出重看成本。先检验已有head/checkpoint/落位机制和小样本回退范围，再决定是否新增最小普通段边界，避免未经证实直接扩大持久契约。
+
 ## 2026-09-27：零教学点也应走完整场并正常结束
 
 - 缺口：已有首点、双点和完整总结证据，尚无自然零cue路线的完整Host验收。新输入仅移除合成原始事件、保持生命/存活稳定，保留两回合尾段和采样；没有删除冻结cue或放宽候选门。实际Adapter得到0候选/0cue/7连续完整片段，plan COMPLETE且startable。

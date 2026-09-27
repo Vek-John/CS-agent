@@ -49,8 +49,10 @@ export interface TeachingHistoryRestoreMeasurement {
 }
 
 /** Real SQLite lifecycle and GET handler; only parser/Viewer transport remain outside this fixture. */
-export async function withReopenedTeachingHistory({ replay, transformAnalysis, beforeAnalysisSave, verify, onMeasurement }: {
+export async function withReopenedTeachingHistory({ replay, expectedCueCount, transformAnalysis, beforeAnalysisSave, verify, onMeasurement }: {
   replay: adapter.Cs2dReplay;
+  /** Explicit opt-in for route cardinality tests; existing callers still require teaching cues. */
+  expectedCueCount?: number;
   onMeasurement?: (value: TeachingHistoryRestoreMeasurement) => void;
   transformAnalysis?: (analysis: adapter.Cs2dAnalysisBundle) => adapter.Cs2dAnalysisBundle;
   beforeAnalysisSave?: (input: { analysis: adapter.Cs2dAnalysisBundle; validate: (payload: unknown) => void }) => void;
@@ -86,7 +88,8 @@ export async function withReopenedTeachingHistory({ replay, transformAnalysis, b
       times.analysisSerializeMs = performance.now() - started;
     }
     const plan = analysis.review_plan;
-    expect(plan.cues.length).toBeGreaterThan(0);
+    if (expectedCueCount === undefined) expect(plan.cues.length).toBeGreaterThan(0);
+    else expect(plan.cues).toHaveLength(expectedCueCount);
     const narrationByCue = Object.fromEntries(plan.cues.map(cue => {
       const impact = planner.buildOutcomeImpactForCue(cue, analysis.candidate_set, analysis.win_probability_timeline, analysis.match_timeline, self);
       return [cue.id, planner.deterministicNarrationBundle(planner.buildCoachingPackage(cue, analysis.candidate_set, analysis.observation_evidence), planner.buildOutcomePackage(cue, analysis.candidate_set, impact))];
@@ -124,6 +127,7 @@ export async function withReopenedTeachingHistory({ replay, transformAnalysis, b
     const committed = await library.commitRuntimeHead(head);
     if (times) times.saveToHeadMs = performance.now() - saveStarted;
     const savedArtifacts = (await library.loadReview(review.reviewId, { materializeExternalArtifacts: true })).artifacts;
+    if (expectedCueCount !== undefined) expect(savedArtifacts.filter(artifact => artifact.artifactType === "NARRATION_BUNDLE")).toHaveLength(expectedCueCount);
     await owner.close(); owner = undefined;
 
     owner = new SqliteDatabaseOwner({ path });

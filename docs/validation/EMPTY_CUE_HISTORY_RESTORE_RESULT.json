@@ -1,0 +1,42 @@
+{
+  "taskId": "empty-cue-history-restore",
+  "baseline": "315570e",
+  "productCodeChanged": false,
+  "source": "same natural quiet synthetic Replay from guided-empty-cue-route",
+  "savedBoundary": "ROUTE_START",
+  "recoveredPhase": "INTRO",
+  "route": {
+    "candidates": 0,
+    "cues": 0,
+    "segments": 7,
+    "narrationArtifacts": 0,
+    "startable": true,
+    "fullCoverageAfterResume": true
+  },
+  "afterRestoreConsumption": {
+    "sessionPhase": "COMPLETED",
+    "analysisGeneration": 0,
+    "narrationGeneration": 0,
+    "networkCalls": 0,
+    "viewerCalls": 0,
+    "storedArtifactsUnchanged": true,
+    "storedHeadUnchanged": true
+  },
+  "validation": {
+    "newCases": 1,
+    "relatedFiles": 4,
+    "relatedPassed": 16,
+    "webTypecheck": "PASS",
+    "viewerTypecheck": "PASS",
+    "webBuild": "PASS",
+    "formalViewerBuild": "PASS",
+    "rootDiffReview": "no must-fix"
+  },
+  "cleanup": "Temporary SQLite owner closed and directory removed; Controller/preparation canceled; no remaining test processes",
+  "limitations": [
+    "Recovered ROUTE_START then completed in memory, not saved-completed checkpoint restore",
+    "No Graph/Viewer startup or new GUI verification",
+    "Synthetic two-player Replay and header-only managed Demo, no formal Parser/model/user database"
+  ],
+  "nextTask": "ordinary-progress-recovery-preflight"
+}

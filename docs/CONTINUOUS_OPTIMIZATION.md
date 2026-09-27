@@ -12,6 +12,16 @@
 
 
 
+## 已交付验证：零教学点路线的历史重开（2026-09-27）
+
+- ID empty-cue-history-restore，基线315570e已push/clean，7f2b复用，owners RELEASE。partial_revision_restore默认配置独占共享恢复helper的显式零cue契约与新empty-cue-restore.integration.test.ts；root docs/真实diff审阅/两端TS/正式build/提交。
+- 目标/流程：同一自然emptyCueViewerReplay→实际Adapter→隔离SQLite保存关闭重开→GET/Controller→READY与恢复Session完整结束；没有Narration artifact仍可用，恢复消费后零分析/讲解/网络/Viewer再生成，冻结产物/head不变。
+- 验收/风险：helper现>0是测试假设，新增显式选项严格=0且保留原调用>0，不能放松产品校验或手改plan/hash。先单例5分钟、每test60秒，总10分钟；现有finally清临时库、测试进程。相关正cue恢复回归一次，产品故障先证据再定fix。仅ROUTE_START重开，不冒称完成checkpoint/Graph恢复；不重做上一轮UI或读取用户库、正式Demo、模型/安装部署。
+
+- 交付：新增expectedCueCount仅显式调用严格=0，既有调用继续>0，并核实保存Narration artifact为0。自然0candidate/0cue/7段经真实临时SQLite close/reopen、GET/Controller、READY，恢复INTRO后真实Session/directive覆盖全段到WRAP_UP/COMPLETED；产物/head不变，消费后分析/讲解/网络/Viewer均0。
+- 检查：新单例+ammo/inventory/ground共4文件16项，最终两端TS及Web/正式Viewer build通过；root读完整diff，无产品源码变更，owner RELEASE、临时库/进程已清。[证据](validation/EMPTY_CUE_HISTORY_RESTORE_RESULT.json)。仅ROUTE_START恢复后内存完成，未恢复完成checkpoint、Graph或Viewer冷启动，不重新声明UI通过。
+- 下一有限目标 ordinary-progress-recovery-preflight：实际Host currentStableRecoveryRecord只接受完整CUE_PAUSED或WRAP_UP，普通PLAYING/SKIPPING不保存稳定边界；零cue/长普通前缀可能从ROUTE_START重看。先小源链验证持久head/Graph checkpoint是否确实不能复用该进度、量化回退范围，再提出有收益且保留播放/副作用边界的最小方案；不直接增加持久schema或修改用户库。
+
 ## 已交付验证：自然零教学点路线的全场完成（2026-09-27）
 
 - ID guided-empty-cue-route，基线d9a580b已push/clean，7f2b复用，owners RELEASE。partial_revision_restore默认配置独占新无桌面integration及A1临时证据；root文档、tools可选Host输入、最终UI/checks/push。产品修改须先证实并明确owner。
