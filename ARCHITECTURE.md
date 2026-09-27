@@ -116,6 +116,8 @@ DecisionSnapshot可选`selfHurtEvents`只投影所选玩家受击的source/sourc
 
 Timeline新增精确DAMAGE发生事实，不携带攻击者或报告数值；若精确事件覆盖健康采样区间，则抑制该区间重复DAMAGE并预留旧me编号，保留其它引用稳定。缺新字段的旧Replay继续使用区间事实，旧历史按保存产物恢复而不重算。Parser generatedBy标记hurt-events.v1，Adapter/Observation/Signal 1.7.0与Timeline 1.1.0记录新派生语义；读取兼容1.6.1及原有历史版本。
 
+受击的四个报告数值仅在descriptor与wire类型一致、payload确实存在且是type3/4整数或可表示为u8的type5字节时保存；精确读取Int/Byte，不把Float截断、U64或handle/controller类型当作报告数值。缺值、错型及越界字节保持null，明确报告0保留0；不因单个报告未知而删除受击发生记录。source2-demo的旧EventValue/get_value转换兼容不变，validated_value_type对type5额外拒绝无法表示的原字节，已有blind type2/9调用不受影响。Parser追加hurt-payload.v1；旧保存数值缺少原wire信息，不能事后判定其0是真实还是默认值，因此不改写或重算旧产物。此来源修复不修改ADR、本人身份门或Adapter现有死亡否决规则。
+
 ### 2.4.3 射击的即时身份与几何来源
 
 `weapon_fire`的native pawn handle必须先转换为network packed形式，核对事件当时当前CCSPlayerPawn的class/index/可见低10位serial和唯一controller完整packed绑定。射击坐标、yaw与可空shooterSteamId使用同一个验证过的pawn，不读tick_start的index→SteamID缓存。有效pawn但owner缺失/无效/冲突时保留几何而actor为null；pawn本身无效、非pawn或serial不匹配时不生成shot，不能使用索引复用后的错误位置。此机制与hurt共享，其他事件及network字段的handle解析不自动迁移。

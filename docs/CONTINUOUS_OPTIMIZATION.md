@@ -12,6 +12,20 @@
 
 
 
+## 已交付：受击报告的payload存在性（2026-09-27）
+
+- ID hurt-payload-presence，基线566de64已push/clean，7f2b复用，既有owners RELEASE。partial_revision_restore默认配置熟悉真实wire工具，A1独占新probe/fixture及.local-data/hurt-payload-presence；root独占docs/ARCH/Adapter来源登记与消费tests/最终集成提交。A2生产patch/registry须root确认后单owner。
+- 目标/流程：小真实source2-demo解码→实际collector数值提取→区分缺payload/报告0/合法正值/错型→避免将缺值或float截断伪造成死亡报告。A1先证实，A2只修本人hurt报告的数值来源门，A3来源与消费回归/旧来源兼容、native/WASM、两端TS/正式build后push。
+- 风险：仅mock GameEvent不能证明默认值、Byte强转折返、descriptor/wire类型失配与provenance丢失。先5分钟小smoke、cargo offline/locked编译180秒/运行30秒，单实现20分钟；同设施两败先简化。无正式Demo/模型/GUI/用户库/安装部署，不扩ADR或其他event。owner清随机例程/binary/process，target缓存保留，root读真实diff/日志后交付。
+- 窄独审：prior_fire_boundary_review默认配置，只读source2-demo数值转换及hurt门，五分钟；特别核实Byte越界折返0与既有validated_value_type调用范围，不跑工具或写文件。
+
+- A1实证：1480B合成Demo经真实Parser14个回调，四字段type3/4/5缺payload、错descriptor、Float0.5、type9、Byte±256均被旧ev_i32转成0；原合法0/40保持。下游带已知本人身份的小fixture证明伪0压掉selfHurt/priorFire/priorBlind，null不触发死亡否决（不称真实样本发生过）。
+- A2批准：owner增为vendor event/mod.rs（保持CRLF）、0036/registry/新小source probe和受控上游props/collector/lib；root仍独占Adapter manifest/consumer tests/docs。type5 validated元数据需原payload可表示u8，旧get_value不动；hurt helper精确匹配3/4 Int或5 Byte，四reported字段外不改，marker hurt-payload.v1。独审核实旧生产API仅blind 9/2调用，收紧5无行为漂移；15分钟有限，root统一正式build。
+
+- 交付：0036仅四reported字段严格读取；type5元数据范围门、合法0保留、缺payload/错型/越界为null。helper先验证后访问值，整keys缺失安全。最终18回调1866B逐字段断言通过；Parser12/vendor37/registry19、Adapter教学129项、两端TS及正式Web/Viewer(WASM) build通过。root及独审读实际diff无must-fix；执行/审查owner RELEASE，临时资源清理。
+- 限制/证据：A1原result被首次green覆盖，已明确记录为已观察输出摘要；runner拒覆盖已实际验证。无正式Demo/GUI/用户库/模型/部署安装，不估算实战发生率、不重写旧保存0。[结果](validation/HURT_PAYLOAD_PRESENCE_RESULT.json)。
+- 下一有限目标 baseline-armor-question：源码确认baseline已显示护甲chip，但问答只有health/clock/utilityKinds匹配，护甲仍须诊断measurement。先实际View/context小复现，再按同身份/采样/事实/显示来源窄接线，保留0/未知和头盔独立语义；不依赖桌面、不改判断或模型。
+
 ## 已交付：七事实讲解的已知事实追问（2026-09-27）
 
 - ID known-facts-seven-context，基线0f1b4db已push/clean；真实worktree为7f2b，既有执行者均RELEASE。root单独负责current-cue-questions.ts、现有blind链测试及文档，无新委派。

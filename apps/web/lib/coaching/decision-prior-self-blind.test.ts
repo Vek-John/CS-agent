@@ -194,3 +194,14 @@ it("invalidates the old question source when the displayed seventh fact disappea
   expect(updateCurrentCueQuestions(state, old.key, next, { type: "ASK", question: "当时有哪些已知事实？" })).toBe(state);
   expect(updateCurrentCueQuestions(state, next.key, next, { type: "ASK", question: "当时有哪些已知事实？" })!.turns[0].answer.items.flatMap(f => f.refs)).not.toContain(last.id);
 });
+
+it.each([null, undefined, 40, 0])("preserves unknown hurt health separately from an explicit fatal zero: %s", reportedHealthAfter => {
+  const f = fixture();
+  const round = { ...f.replay.rounds[0], hurtEvents: [{ id: "synthetic-reported-health", tick: 1390, victimSteamId: self, reportedHealthAfter }] };
+  const snapshot = buildDecisionSnapshot({ round, selectedPlayerId: self, decisionTick: 1400, tickRate: 64,
+    snapshotId: "synthetic-payload-consumer", rosterIds: f.replay.players.map(p => p.steamId) });
+  expect(snapshot.selfHurtEvents).toHaveLength(reportedHealthAfter === 0 ? 0 : 1);
+  expect(snapshot.selfBlindEvents ?? []).toHaveLength(reportedHealthAfter === 0 ? 0 : 1);
+  expect(snapshot.selectedPlayer.value?.health).toBe(f.material.decisionSnapshot!.selectedPlayer.value?.health);
+  expect(JSON.stringify({ hurt: snapshot.selfHurtEvents, blind: snapshot.selfBlindEvents })).not.toContain("reportedHealthAfter");
+});

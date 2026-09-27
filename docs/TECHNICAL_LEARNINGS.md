@@ -8,6 +8,15 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：缺失受击数值不能成为死亡报告
+
+- 实证：1480B有效合成Demo经真实Parser解码14个player_hurt回调，实际collector四字段表达式/ev_i32把type3/4/5缺payload、错descriptor、Float0.5、type9及byte±256均转成0。不是手写GameEvent模拟。随后实际Adapter小fixture提供已知本人身份，将该缺值0与null分别输入，selfHurt/priorFire/priorBlind从0条变1条；说明伪零可误触发死亡否决，不代表真实Demo中已发现相同事件。
+- 决策：新0036仅四个reported字段采用ev_hurt_report_i32，先validated元数据，再精确匹配3/4 Int、5 Byte；type5元数据核验原payload可表示u8，旧EventValue/get_value和ADR不动。合法0、40、255保留；缺值/错型/Float/U64/handle/controller/越界byte为None→null，不删除受击事件。整keys缺失必须在访问旧索引前返回None，实际新增case证明不panic。原始数值仍只是报告，不宣称实际扣血量。
+- 兼容：Parser新增hurt-payload.v1且Adapter保留完整来源链，原版本仍可读取；已有保存0缺少原wire信息，不修改其数值或重算历史。下游死亡门保持，当前合法新来源不再制造伪零。当前validated_value_type其他生产消费者仅blind type2/9，不受type5范围门影响。
+- 验证：最终1866B/18种真实回调、每例四字段expected断言通过；Parser12、vendor37、registry19及相关Adapter/教学129项通过。0036隔离apply/reverse/reapply与current reuse通过，两端TS、Web及正式Viewer/WASM构建通过，root真实diff与独立窄审无must-fix。[结果](validation/HURT_PAYLOAD_PRESENCE_RESULT.json)。
+- 工具与限制：首个green运行覆盖了A1本地result，已如实保留从已观察tool输出整理的摘要，不能冒称原文件。runner现在拒绝已有result（实际exit1验证），独立最终结果保留；root补examples目录创建并语法检查。所有临时例程/binary/自有进程退出，无正式Demo/GUI/模型/用户库/部署安装操作，不估算实战发生频率或专业判断改善。
+- 下一有限目标 baseline-armor-question：当前baseline实际可显示护甲chip，但current-cue-resource-source仅有baseline health/clock/utilityKinds来源匹配，护甲问法仍只接受诊断measurement。先小生产View/context验证这一可见信息的消费缺口，再按现有health模式绑定同本人/采样/事实与实际显示；已知0与未知、头盔语义分别保留，不借字符串猜护甲、不新增战术判断。
+
 ## 2026-09-27：已知事实追问对齐七事实讲解，同时核对正文
 
 - 问题：生产Adapter/CoachingPackage/Narrator的小合成七事实包已含“C4 状态：携带中”，合法Session完成后追问却仅返回前六条。另一个红例证明旧三事实正文配较宽refs会让追问复述未呈现内容，引用存在不等于已经展示。

@@ -1,0 +1,171 @@
+{
+  "taskId": "hurt-payload-presence",
+  "baseline": "566de64",
+  "parserMarker": "hurt-payload.v1",
+  "before": {
+    "evidence": "Recorded from observed A1 tool output before green runner replaced result.json; this is a summary, not the original full result file",
+    "synthetic": true,
+    "actualCallbacks": 14,
+    "inputBytes": 1480,
+    "legalIntegerTypes": [
+      3,
+      4,
+      5
+    ],
+    "missingPayload": {
+      "evI32": 0,
+      "validatedType": null
+    },
+    "descriptorMismatch": {
+      "evI32": 0,
+      "validatedType": null
+    },
+    "floatHalf": {
+      "evI32": 0,
+      "validatedType": 2
+    },
+    "controllerZero": {
+      "evI32": 0,
+      "validatedType": 9
+    },
+    "byte256AndNegative256": {
+      "evI32": 0,
+      "validatedType": 5
+    },
+    "positive40": 40,
+    "legitimateZero": 0
+  },
+  "after": {
+    "synthetic": true,
+    "inputBytes": 1866,
+    "actualDecodedCallbacks": 18,
+    "assertionScope": "All four production collector report expressions and actual helper are extracted, run via real source2-demo protobuf decoding; victim identity is not provided by this packet.",
+    "cases": [
+      {
+        "case": "long-zero",
+        "reportedHealthAfter": 0
+      },
+      {
+        "case": "long-positive",
+        "reportedHealthAfter": 40
+      },
+      {
+        "case": "long-missing",
+        "reportedHealthAfter": null
+      },
+      {
+        "case": "short-zero",
+        "reportedHealthAfter": 0
+      },
+      {
+        "case": "short-positive",
+        "reportedHealthAfter": 40
+      },
+      {
+        "case": "short-missing",
+        "reportedHealthAfter": null
+      },
+      {
+        "case": "byte-zero",
+        "reportedHealthAfter": 0
+      },
+      {
+        "case": "byte-positive",
+        "reportedHealthAfter": 40
+      },
+      {
+        "case": "byte-missing",
+        "reportedHealthAfter": null
+      },
+      {
+        "case": "descriptor-mismatch",
+        "reportedHealthAfter": null
+      },
+      {
+        "case": "float-truncation",
+        "reportedHealthAfter": null
+      },
+      {
+        "case": "controller-as-number",
+        "reportedHealthAfter": null
+      },
+      {
+        "case": "wide-as-number",
+        "reportedHealthAfter": null
+      },
+      {
+        "case": "handle-as-number",
+        "reportedHealthAfter": null
+      },
+      {
+        "case": "byte-max",
+        "reportedHealthAfter": 255
+      },
+      {
+        "case": "byte-overflow",
+        "reportedHealthAfter": null
+      },
+      {
+        "case": "byte-negative",
+        "reportedHealthAfter": null
+      },
+      {
+        "case": "missing-keys",
+        "reportedHealthAfter": null
+      }
+    ]
+  },
+  "consumerProbe": {
+    "synthetic": true,
+    "knownVictimSuppliedByFixture": true,
+    "sourceMissingHealthDecodedByActualRust": 0,
+    "cases": [
+      {
+        "name": "missingWireDecodedZero",
+        "hurtFacts": 0,
+        "priorFire": 0,
+        "priorBlind": 0
+      },
+      {
+        "name": "missingPreservedUnknown",
+        "hurtFacts": 1,
+        "priorFire": 1,
+        "priorBlind": 1
+      },
+      {
+        "name": "legitimateReportedZero",
+        "hurtFacts": 0,
+        "priorFire": 0,
+        "priorBlind": 0
+      },
+      {
+        "name": "legitimatePositive",
+        "hurtFacts": 1,
+        "priorFire": 1,
+        "priorBlind": 1
+      }
+    ]
+  },
+  "validation": {
+    "parserTests": 12,
+    "vendorTests": 37,
+    "patchRegistryTests": 19,
+    "adapterAndCoachingTests": 129,
+    "tailApplyReverseReapply": "PASS",
+    "currentReuse": "PASS",
+    "webTypecheck": "PASS",
+    "viewerTypecheck": "PASS",
+    "webProductionBuild": "PASS",
+    "formalViewerProductionBuildIncludingWasm": "PASS",
+    "independentReadOnlyReview": "no must-fix",
+    "toolOverwriteRefusal": "exit 1 RESULT_EXISTS",
+    "temporaryExamplesAndBinariesRemoved": true
+  },
+  "limitations": [
+    "Synthetic source and consumer evidence; no real Demo incidence or coverage measurement.",
+    "The old A1 result file was overwritten by the first green run; before is an explicit summary of already observed tool output, not an original raw file. Runner now refuses existing results.",
+    "Legacy saved zeros cannot be traced back to absent wire payloads and are not rewritten.",
+    "No GUI, model, user database, installation or deployment."
+  ],
+  "next": "baseline-armor-question"
+}

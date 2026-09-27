@@ -100,7 +100,7 @@ impl<'a> GameEvent<'a> {
                 2 => key.val_float.is_some(),
                 3 | 8 => key.val_long.is_some(),
                 4 | 9 => key.val_short.is_some(),
-                5 => key.val_byte.is_some(),
+                5 => key.val_byte.and_then(|value| u8::try_from(value).ok()).is_some(),
                 6 => key.val_bool.is_some(),
                 7 => key.val_uint64.is_some(),
                 _ => false,
@@ -160,7 +160,7 @@ impl<'a> GameEvent<'a> {
     }
 
     /// Wire type only when its value is present and agrees with the event descriptor.
-    /// Missing keys, missing type/value payloads, or mismatches remain unknown.
+    /// Missing keys, missing type/value payloads, mismatches, or unrepresentable bytes remain unknown.
     pub fn validated_value_type(&self, name: &str) -> Option<i32> {
         let definition = self.list.list.get(&self.id)?;
         let key = definition.name_to_key.get(name)?;
@@ -241,6 +241,17 @@ mod wire_type_tests {
         let wrong = definition(Some(9));
         let ge = GameEvent::new(&wrong, CSvcMsgGameEvent { eventid: Some(1), keys: vec![csvc_msg_game_event::KeyT { r#type: Some(2), val_float: Some(0.04), ..Default::default() }], ..Default::default() });
         assert_eq!(ge.validated_value_type("userid"), None);
+    }
+
+    #[test] fn byte_validation_rejects_lossy_wrapping_without_changing_legacy_values() {
+        let list = definition(Some(5));
+        for value in [None, Some(-256), Some(256), Some(0), Some(40), Some(255)] {
+            let ge = GameEvent::new(&list, CSvcMsgGameEvent { eventid: Some(1), keys: vec![csvc_msg_game_event::KeyT { r#type: Some(5), val_byte: value, ..Default::default() }], ..Default::default() });
+            let valid = value.and_then(|v| u8::try_from(v).ok()).map(|_| 5);
+            assert_eq!(ge.validated_value_type("userid"), valid);
+            let legacy: i32 = ge.get_value("userid").unwrap().try_into().unwrap();
+            assert_eq!(legacy, value.unwrap_or(0) as u8 as i32);
+        }
     }
 
 }

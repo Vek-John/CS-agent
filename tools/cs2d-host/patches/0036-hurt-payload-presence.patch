@@ -1,0 +1,48 @@
+diff --git a/packages/parser/src/collector.rs b/packages/parser/src/collector.rs
+--- a/packages/parser/src/collector.rs
++++ b/packages/parser/src/collector.rs
+@@ -595,10 +595,10 @@
+                     self.hurt_events.push(HurtEvent {
+                         id: format!("cs2d-hurt-{}-{}", tick, self.hurt_events.len() + 1), tick,
+                         victim_steam_id: hurt_victim_steam(ctx, ev_i32(ge, "userid_pawn")),
+-                        reported_health_damage: ev_i32(ge, "dmg_health"),
+-                        reported_armor_damage: ev_i32(ge, "dmg_armor"),
+-                        reported_health_after: ev_i32(ge, "health"),
+-                        reported_armor_after: ev_i32(ge, "armor"),
++                        reported_health_damage: ev_hurt_report_i32(ge, "dmg_health"),
++                        reported_armor_damage: ev_hurt_report_i32(ge, "dmg_armor"),
++                        reported_health_after: ev_hurt_report_i32(ge, "health"),
++                        reported_armor_after: ev_hurt_report_i32(ge, "armor"),
+                     });
+                 }
+                 let dmg = ev_i32(ge, "dmg_health").unwrap_or(0);
+diff --git a/packages/parser/src/lib.rs b/packages/parser/src/lib.rs
+--- a/packages/parser/src/lib.rs
++++ b/packages/parser/src/lib.rs
+@@ -23,7 +23,7 @@
+ use collector::Collector;
+ 
+ const DEMO_TICK_RATE: f64 = 64.0;
+-const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1.active-weapon-identity.v1.grenade-inventory.v1.primary-weapon.v1.sampled-ground.v1.blind-identity.v1";
++const GENERATED_BY: &str = "cs2-demo-parser-wasm@0.0.0+cs-coach.hurt-events.v1.shot-identity.v2.ammo-clip.v2.bomb-identity.v1.death-identity.v1.frame-identity.v1.active-weapon-identity.v1.grenade-inventory.v1.primary-weapon.v1.sampled-ground.v1.blind-identity.v1.hurt-payload.v1";
+ 
+ /// Parses the bytes of a `.dem` in a single pass and returns `(Replay JSON, voice
+ /// blob)`. The `Replay` matches `replay-schema 2D`; the blob follows the `CLV2`
+diff --git a/packages/parser/src/props.rs b/packages/parser/src/props.rs
+--- a/packages/parser/src/props.rs
++++ b/packages/parser/src/props.rs
+@@ -334,3 +334,14 @@
+     };
+     Some(steam.to_string())
+ }
++
++/// Optional hurt reports require matching descriptor/wire integer metadata and
++/// an actual representable payload. Never coerce floats, handles or missing values.
++pub(crate) fn ev_hurt_report_i32(ge: &GameEvent, key: &str) -> Option<i32> {
++    let kind = ge.validated_value_type(key)?;
++    match (kind, ge.get_value(key).ok()?) {
++        (3 | 4, EventValue::Int(value)) => Some(*value),
++        (5, EventValue::Byte(value)) => Some(i32::from(*value)),
++        _ => None,
++    }
++}
