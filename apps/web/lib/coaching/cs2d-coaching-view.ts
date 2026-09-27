@@ -96,15 +96,24 @@ export function buildThreeStageCoachingView(input: {
   if (input.callout && !playerStateUnknown) chips.push({ kind: "location", text: input.callout });
   if (state) {
     const snapshot = input.semantics?.decisionSnapshot;
-    const healthMissing = [...state.missing_fields, ...(snapshot?.missingFields ?? [])]
-      .some(field => field === "health" || field.startsWith("health.") || field.startsWith("health["));
-    const healthKnown = !healthMissing && Number.isInteger(state.health) && state.health >= 0 && state.health <= 100 &&
+    const missingFields = [...state.missing_fields, ...(snapshot?.missingFields ?? [])];
+    const missing = (key: string) => missingFields.some(field => field === key || field.startsWith(`${key}.`) || field.startsWith(`${key}[`));
+    const healthKnown = !missing("health") && Number.isInteger(state.health) && state.health >= 0 && state.health <= 100 &&
       (!snapshot || snapshot.selectedPlayer.value?.health === state.health);
     chips.push({ kind: "health", text: healthKnown ? `${state.health} HP` : "血量未知" });
-    chips.push({
-      kind: "armor",
-      text: state.armor <= 0 ? "没甲" : state.has_helmet ? `${state.armor} 头甲` : `${state.armor} 甲`
-    });
+    const armorKnown = !missing("armor") && Number.isInteger(state.armor) && state.armor >= 0 && state.armor <= 100 &&
+      (!snapshot || snapshot.selectedPlayer.value?.armor === state.armor);
+    const helmetKnown = !missing("helmet") && !missing("has_helmet") && typeof state.has_helmet === "boolean" &&
+      (!snapshot || snapshot.selectedPlayer.value?.helmet === state.has_helmet);
+    let armorText = armorKnown ? `${state.armor} 甲` : "护甲未知";
+    if (armorKnown && helmetKnown) {
+      if (state.armor === 0 && !state.has_helmet) armorText = "没甲";
+      else if (state.armor > 0 && state.has_helmet) armorText = `${state.armor} 头甲`;
+      else if (state.has_helmet) armorText += " · 有头盔";
+    } else {
+      armorText += ` · ${helmetKnown ? state.has_helmet ? "有头盔" : "无头盔" : "头盔未知"}`;
+    }
+    chips.push({ kind: "armor", text: armorText });
     const activeIsC4 = Boolean(state.active_item && (state.active_item.item_class.toUpperCase() === "BOMB" || /(?:^|_)c4$/.test(state.active_item.item_id)));
     if (state.active_item) chips.push({ kind: activeIsC4 ? "objective" : "weapon", text: activeIsC4 ? "C4" : state.active_item.item_id, item: state.active_item });
     const { utilityCount: grenades } = projectDecisionUtilityCount(state);

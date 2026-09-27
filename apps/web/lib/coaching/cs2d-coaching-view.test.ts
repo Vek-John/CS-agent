@@ -239,3 +239,49 @@ it("keeps verified zero health distinct from unknown, including legacy state-onl
   legacy.decisionState.missing_fields = [...legacy.decisionState.missing_fields, "health"];
   expect(buildThreeStageCoachingView(legacy).currentState.chips.find(chip => chip.kind === "health")?.text).toBe("血量未知");
 });
+
+
+it.each([
+  ["armor-unknown", "护甲未知 · 有头盔"],
+  ["armor-conflict", "护甲未知 · 有头盔"],
+  ["armor-missing", "护甲未知 · 有头盔"],
+  ["armor-invalid", "护甲未知 · 有头盔"],
+  ["helmet-unknown", "100 甲 · 头盔未知"],
+  ["helmet-conflict", "100 甲 · 头盔未知"],
+  ["helmet-missing", "100 甲 · 头盔未知"],
+  ["helmet-alias-missing", "100 甲 · 头盔未知"],
+  ["both-unknown", "护甲未知 · 头盔未知"],
+  ["zero-unknown-helmet", "0 甲 · 头盔未知"],
+  ["zero-with-helmet", "0 甲 · 有头盔"],
+] as const)("keeps armor and helmet knowledge independent: %s", (mode, expected) => {
+  const input = inventoryViewInput(), baseline = buildThreeStageCoachingView(input);
+  const state = input.decisionState, snapshot = input.semantics.decisionSnapshot!, player = snapshot.selectedPlayer.value!;
+  if (mode === "armor-unknown" || mode === "both-unknown") player.armor = null;
+  if (mode === "armor-conflict") player.armor = 50;
+  if (mode === "armor-missing") state.missing_fields = [...state.missing_fields, "armor"];
+  if (mode === "armor-invalid") { state.armor = -1; player.armor = -1; }
+  if (mode === "helmet-unknown" || mode === "both-unknown" || mode === "zero-unknown-helmet") player.helmet = null;
+  if (mode === "helmet-conflict") player.helmet = false;
+  if (mode === "helmet-missing") snapshot.missingFields = [...snapshot.missingFields, "helmet"];
+  if (mode === "helmet-alias-missing") state.missing_fields = [...state.missing_fields, "has_helmet"];
+  if (mode.startsWith("zero-")) { state.armor = 0; player.armor = 0; }
+  const view = buildThreeStageCoachingView(input);
+  expect(view.currentState.chips.find(chip => chip.kind === "armor")?.text).toBe(expected);
+  expect(view.currentState.chips.filter(chip => chip.kind !== "armor")).toEqual(baseline.currentState.chips.filter(chip => chip.kind !== "armor"));
+  expect(renderToStaticMarkup(createElement(CoachingStatusList, { chips: view.currentState.chips }))).toContain(expected);
+});
+
+it("preserves known empty and legacy armor while respecting independent missing flags", () => {
+  const input = inventoryViewInput(), state = input.decisionState, player = input.semantics.decisionSnapshot!.selectedPlayer.value!;
+  state.armor = 0; player.armor = 0; state.has_helmet = false; player.helmet = false;
+  const armor = (value: Parameters<typeof buildThreeStageCoachingView>[0]) => buildThreeStageCoachingView(value).currentState.chips.find(chip => chip.kind === "armor")?.text;
+  expect(armor(input)).toBe("没甲");
+  const legacy = { ...input, semantics: undefined };
+  expect(armor(legacy)).toBe("没甲");
+  state.armor = 70;
+  expect(armor(legacy)).toBe("70 甲");
+  state.missing_fields = [...state.missing_fields, "has_helmet"];
+  expect(armor(legacy)).toBe("70 甲 · 头盔未知");
+  state.missing_fields = [...state.missing_fields, "armor"];
+  expect(armor(legacy)).toBe("护甲未知 · 头盔未知");
+});

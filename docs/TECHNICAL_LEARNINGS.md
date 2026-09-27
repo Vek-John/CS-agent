@@ -2596,3 +2596,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决策：仅health增加整数0–100、缺失标志、现代snapshot数值一致门；未知显示“血量未知”，不挤掉其他合法chips。旧无snapshot的有效值仍显示，明确0 HP保留，不修改问答门/Parser/讲解正文。
 - 验证：7红→绿，4文件112tests及两端TypeScript/production build通过。真实CoachingStatusList SSR与生产status CSS在IAB的340px内容容器显示40 HP/血量未知/0 HP，图标文字清楚，其他chips相同；临时tab与loopback4323服务已关闭。仅小合成状态，不是完整Host或原生A5；临时SSR入口补React绑定后成功，产品未因此改动。日志与静态验证页留.local-data/baseline-health-display。
 - 下一步：同一View中护甲仍直接按raw armor/has_helmet生成“没甲/头甲/甲”，需一次性核实护甲值与头盔已知性组合，再决定窄修，避免逐字段反复全量验收。此处尚未验证为实际缺陷，不把健康显示修复外推至所有资源。
+
+
+## 2026-09-27：护甲与头盔保留各自的已知性
+
+- 问题：实际View对raw armor/has_helmet直接组合，snapshot未知/冲突或缺失标记未参与；护甲零值还会抹去独立头盔信息。12个组合回归先红，证明不是仅理论上的命名问题。
+- 决策：分别检查护甲整数0–100和头盔boolean、各自缺失标记及现代snapshot一致性，未知明确表达，保留另一已知字段；仅0甲且无头盔显示“没甲”。不改其他chips、Parser、专业判断或问答权限，legacy有效字段保留。
+- 验证：12红→绿、4文件124tests，两端TypeScript/production build通过；真实StatusList SSR+生产status CSS的IAB小页显示五类组合，340px内容容器较长文案自然换行，其它值保持。tab与4323服务退出，日志/静态页.local-data/baseline-armor-display。非完整Host/native A5，无Demo/模型/用户库操作。
+- 下一行动：问答面板现有固定提示列出血量/护甲/道具数量/弹匣，但当前context可能只具备部分合法来源。下一项基于已存在context核实并调整可问提示，不扩大问题理解或制造新数值资格，避免用户按界面提示问完仍遭无来源拒答。

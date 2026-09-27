@@ -9,6 +9,16 @@
 
 
 
+
+## 已交付：护甲与头盔未知显示（2026-09-27）
+
+- ID baseline-armor-display，基线c6d9c58 clean/7f2b，root单写View/相关tests/docs及构建push，其他owner均RELEASE。A1用同一实际三段View验证护甲数值和头盔已知性组合；A2各字段独立校验/表达，保留已知部分与其他chips；A3真实0、legacy、SSR及复用小IAB页/相关tests/两端TS/build。
+- 已读PRD/MVP/架构与emil/apple/Next客户端边界，沿既有chip组件无布局/动画改变。15分钟有限任务，小合成状态不冒称Demo，零Parser/模型/用户库/安装发布；单root server/tab owner，结束清理。只这一组显示，不扩问答/其他资源或整场UI矩阵。
+
+
+- 交付：12个组合回归红→绿，护甲/头盔独立表达，未知不再默认为无，保留known 0和legacy；4文件124tests、两端TS/build通过。root集中diff复核；真实组件SSR+生产status CSS在IAB340px内容容器验证五类组合及正常换行，tab/server/build全部退出，无数据/模型操作，不冒称完整Host/native A5。
+- 下一有限目标 question-availability-hints：实际CurrentCueQuestionsPanel固定提示血量/护甲/道具数量/弹匣，context.resources却按来源分别决定是否可答。先核对可用context与提示是否矛盾，再只据已有合法来源给可问提示；不扩任意语义理解，不替未知造数，不再逐字段展开资源矩阵。
+
 ## 已交付：基础血量未知显示（2026-09-27）
 
 - ID baseline-health-display，基线a79bc81 clean，7f2b真实树；root独占View/窄测试/docs/验证与push，无委派，其他owner均RELEASE。A1重建真实三段View核对snapshot未知/冲突和missing字段；A2成立则仅health数值可知门，未知明确展示“血量未知”，保留其他chips；A3已知0与legacy、SSR真实StatusList及相关tests/两端TS/build后push。

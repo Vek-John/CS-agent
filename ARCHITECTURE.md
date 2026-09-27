@@ -1680,6 +1680,9 @@ DiagnosticResult/hinge的条件级SUPPORTED、PARTIALLY_SUPPORTED或CONTRADICTED
 
 基础状态栏的health数值必须为0至100的整数，样本与现代snapshot均未标记health缺失，且现代snapshot的health与样本一致；否则显示“血量未知”，不能把负值钳成0或从未知快照复用旧数字。整体状态绑定门仍先执行，单个health不可知不隐藏其他合法chips。旧无snapshot的状态仍接受有效且未标记缺失的health；明确已知0保持“0 HP”，不同于未知。
 
+
+同一状态栏中护甲数值与头盔持有分别校验：护甲须为0至100整数且无缺失标记，现代snapshot数值与样本相同；头盔须为boolean，无helmet/has_helmet缺失标记且现代snapshot一致。未知一项不抹去另一项：例如“100 甲 · 头盔未知”“护甲未知 · 有头盔”。只有已知0护甲且明确无头盔才显示“没甲”；0护甲但头盔已知存在则分别陈述，不由护甲值推导头盔。旧无snapshot输入仍按各字段自身有效性显示。此规则不改变诊断/追问资格或其他chips。
+
 基础血量追问仅复述当前实际显示的health chip。Host传入显示文本，cache同时要求既有currentDiagnosisResources的合法health、View原同采样绑定、raw state与当前Snapshot数值一致、selectedPlayer canonical事实引用在cue/material中唯一且正文/来源/可用性/observed/时间一致，并属于当前observable refs；原始state ID不作为讲解引用。来源文本与实际chip完全相等才可回答，文本本身不授予权限。来源标签明确当前状态，缺失/冲突/陈旧/死亡/未知/换源仍拒绝，诊断不能借baseline chip绕过measurement门；不扩展护甲、弹匣或道具数量的baseline资格。
 
 职业案例未接入检索时不编造，语音/战术补充只作为未验证假设，不回写事实或改判；错误前提不被接受，不明确/越界问法给具体可问范围。文本不触发seek、工具、推进或回看，控制沿用已有明确按钮。提问不发送Reflection/Disagreement/Graph/Memory事件，不消耗诊断attempt，不新增模型请求。
