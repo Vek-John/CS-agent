@@ -12,13 +12,14 @@ import { requestNarrationBundle } from "../../apps/web/lib/coaching/narrator-con
 import "../../apps/web/app/globals.css";
 
 const ordinaryRecovery = new URLSearchParams(location.search).get("ordinaryRecovery") === "1";
+const ordinaryCued = ordinaryRecovery && new URLSearchParams(location.search).get("ordinaryCued") === "1";
 const realDemo = new URLSearchParams(location.search).get("realDemo") === "1";
-const emptyRoute = !realDemo && (ordinaryRecovery || new URLSearchParams(location.search).get("emptyRoute") === "1");
+const emptyRoute = !realDemo && ((ordinaryRecovery && !ordinaryCued) || new URLSearchParams(location.search).get("emptyRoute") === "1");
 const ammo = !realDemo && !emptyRoute && new URLSearchParams(location.search).get("ammo") === "1";
 const selfBlind = !realDemo && !emptyRoute && new URLSearchParams(location.search).get("selfBlind") === "1";
 const summary = document.querySelector<HTMLPreElement>("#summary")!, load = document.querySelector<HTMLButtonElement>("#load")!;
 const reloadButton = document.querySelector<HTMLButtonElement>("#reload-recovery");
-const recovery = { enabled: ordinaryRecovery, reload: false, ordinaryCommits: 0, targetTick: null as number | null,
+const recovery = { enabled: ordinaryRecovery, cued: ordinaryCued, reload: false, ordinaryCommits: 0, targetTick: null as number | null,
   armed: false, reconnectRequests: 0, reconnectMatched: false, resumedAfterReconnect: false,
   firstRun: null as SyntheticRecoveryMarker["firstRun"] | null, trace: [] as Array<{ event: string; tick?: number; playing?: boolean }> };
 let marker: SyntheticRecoveryMarker | undefined;
@@ -108,7 +109,7 @@ async function mount() {
   if (ordinaryRecovery) {
     if (realDemo) { fail("RECOVERY_REQUIRES_SYNTHETIC_MODE"); return; }
     const info = await (await window.fetch("/smoke-run.json")).json();
-    if (info.ordinaryRecovery !== true) { fail("RECOVERY_SERVER_MODE_REQUIRED"); return; }
+    if (info.ordinaryRecovery !== true || Boolean(info.ordinaryCued) !== ordinaryCued || (ordinaryCued && emptyRoute)) { fail("RECOVERY_SERVER_MODE_REQUIRED"); return; }
     const stored = sessionStorage.getItem(markerKey);
     marker = stored ? JSON.parse(stored) : undefined;
     const admission = syntheticRecoveryAdmission(info.nonce, marker, databases, Object.keys(localStorage));
@@ -132,8 +133,11 @@ async function mount() {
       const segment = record.frozenReviewPlan.segments[record.boundary.segmentIndex] as { start_tick: number; round_number: number };
       // A later round forces a real cold seek, rather than the initial freeze-skip position.
       if (segment.round_number !== 2) return;
+      if (ordinaryCued && (record.frozenReviewPlan.cues.length !== 2 || record.cueProgress.consumedCueIds.length !== 1)) {
+        fail("CUED_RECOVERY_PROGRESS_NOT_READY"); return;
+      }
       marker.captured = true; marker.targetTick = segment.start_tick; marker.localKeys = Object.keys(localStorage);
-      marker.firstRun = { analysisReady: state.analysisReady, prepareRoute: state.prepareRoute, prepareNarration: state.prepareNarration };
+      marker.firstRun = { analysisReady: state.analysisReady, prepareRoute: state.prepareRoute, prepareNarration: state.prepareNarration, savedNarrationCount: record.narrationArtifacts.length, consumedCueCount: record.cueProgress.consumedCueIds.length };
       sessionStorage.setItem(markerKey, JSON.stringify(marker)); recovery.ordinaryCommits++; recovery.targetTick = segment.start_tick;
       trace("ordinary-transaction-committed", segment.start_tick); render();
       // Explicitly armed test action: reload after the real commit, never fake a pause or ACK.

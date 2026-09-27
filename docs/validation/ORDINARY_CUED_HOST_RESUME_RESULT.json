@@ -1,0 +1,208 @@
+{
+  "schemaVersion": "ordinary-cued-host-resume-result.v1",
+  "baseline": "8a05217",
+  "productChanged": false,
+  "synthetic": true,
+  "browser": {
+    "summary": {
+      "recovery": {
+        "enabled": true,
+        "cued": true,
+        "reload": true,
+        "ordinaryCommits": 1,
+        "targetTick": 2264,
+        "armed": false,
+        "reconnectRequests": 1,
+        "reconnectMatched": true,
+        "resumedAfterReconnect": true,
+        "firstRun": {
+          "analysisReady": 1,
+          "prepareRoute": 1,
+          "prepareNarration": 2,
+          "savedNarrationCount": 1,
+          "consumedCueCount": 1
+        },
+        "trace": [
+          {
+            "event": "command-pause"
+          },
+          {
+            "event": "command-seekCanonicalTick",
+            "tick": 2264
+          },
+          {
+            "event": "paused-at-boundary",
+            "tick": 2264,
+            "playing": false
+          },
+          {
+            "event": "reconnect-request"
+          },
+          {
+            "event": "reconnect-matched"
+          },
+          {
+            "event": "command-seekCanonicalTick",
+            "tick": 2264
+          },
+          {
+            "event": "command-play"
+          },
+          {
+            "event": "playing-after-reload",
+            "tick": 2264,
+            "playing": true
+          },
+          {
+            "event": "command-seekCanonicalTick",
+            "tick": 2536
+          },
+          {
+            "event": "command-play"
+          },
+          {
+            "event": "command-seekCanonicalTick",
+            "tick": 2600
+          },
+          {
+            "event": "command-play"
+          },
+          {
+            "event": "command-pause"
+          },
+          {
+            "event": "command-seekCanonicalTick",
+            "tick": 2600
+          },
+          {
+            "event": "command-seekCanonicalTick",
+            "tick": 2864
+          },
+          {
+            "event": "command-play"
+          },
+          {
+            "event": "command-pause"
+          },
+          {
+            "event": "command-seekCanonicalTick",
+            "tick": 3001
+          },
+          {
+            "event": "command-pause"
+          },
+          {
+            "event": "command-seekCanonicalTick",
+            "tick": 3001
+          },
+          {
+            "event": "command-pause"
+          },
+          {
+            "event": "command-seekCanonicalTick",
+            "tick": 3001
+          }
+        ]
+      },
+      "mounted": true,
+      "childReady": true,
+      "stageReady": 1,
+      "replayReady": 1,
+      "selected": 1,
+      "analysisReady": 1,
+      "prepareRoute": 0,
+      "prepareNarration": 0,
+      "agentRequests": 6,
+      "forbiddenFetches": 0,
+      "providerFetches": 0,
+      "playbackReports": 740,
+      "playing": false,
+      "tick": 3000,
+      "acks": 1,
+      "errors": [],
+      "emptyRouteFixture": false,
+      "candidateCount": 3,
+      "cueCount": 2,
+      "segmentCount": 11,
+      "selfBlindFixture": false,
+      "ammoFixture": false,
+      "syntheticIdentity": true,
+      "parserEnabled": false,
+      "modelEnabled": false,
+      "diagnostics": false,
+      "realLifecycle": null
+    },
+    "logs": []
+  },
+  "runtime": {
+    "starts": [
+      {
+        "routeCursor": 2,
+        "phase": "PAUSED_FOR_COACHING",
+        "outcomeGate": "COMPLETE",
+        "afterReconnect": false
+      },
+      {
+        "routeCursor": 8,
+        "phase": "PAUSED_FOR_COACHING",
+        "outcomeGate": "COMPLETE",
+        "afterReconnect": true
+      }
+    ],
+    "transportRequests": 15,
+    "reflectionAttempts": 0,
+    "injectedFailures": 0,
+    "dispatches": 15,
+    "events": {
+      "OBSERVE_SEGMENT": 9,
+      "START_CUE": 2,
+      "RESUME_TOOL": 2,
+      "RECONNECT_REPLAY": 1,
+      "COMPLETE_SESSION": 1
+    },
+    "externalFetches": 0,
+    "reconnects": [
+      {
+        "restored": "MATCHED",
+        "status": "COMPLETED",
+        "routeCursor": 7,
+        "checkpointBackend": "MEMORY"
+      }
+    ],
+    "completions": [
+      {
+        "runStatus": "COMPLETED",
+        "sessionStatus": "COMPLETED",
+        "routeCursor": 11,
+        "completedCueCount": 2,
+        "graphCaseCount": 0,
+        "summaryCompletedCueCount": 1,
+        "summaryThemeCount": 1,
+        "checkpointBackend": "MEMORY"
+      }
+    ],
+    "reflections": []
+  },
+  "checks": {
+    "relatedTests": 12,
+    "harnessTypecheck": "passed",
+    "harnessBuild": "passed",
+    "typecheck": "passed",
+    "viewerTypecheck": "passed",
+    "webProductionBuild": "passed",
+    "formalViewerProductionBuild": "passed"
+  },
+  "cleanup": {
+    "tab": 35,
+    "port": 49835,
+    "closed": true
+  },
+  "screenshot": ".local-data/ordinary-cued-host-resume/completed.png",
+  "limitations": [
+    "Synthetic 2-player Replay; no Parser, real Demo or provider.",
+    "MEMORY Graph survives browser reload; not process or SQLite restart.",
+    "Analysis rebuilt once after legacy re-selection; Route/Narrator reused.",
+    "Full-page stitched screenshot rejected as proof; native final screenshot and actual UI/bridge metrics retained."
+  ],
+  "next": "desktop-process-checkpoint-resume"
+}

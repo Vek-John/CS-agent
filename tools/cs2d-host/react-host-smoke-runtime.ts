@@ -1,7 +1,7 @@
 import { createCoachAgentRuntime } from "../../libs/coach-agent/src/index";
 import { parseRemoteCoachAgentDispatchEnvelope, parseRemoteCoachAgentDispatchResponse } from "../../libs/coach-agent/src/remote-dispatch-client";
 const runtimes = new Map<string, ReturnType<typeof createCoachAgentRuntime>>();
-export const metrics = { transportRequests: 0, reflectionAttempts: 0, injectedFailures: 0, dispatches: 0, events: {} as Record<string, number>, externalFetches: 0, reconnects: [] as Array<{ restored: string; status: string; routeCursor: number; checkpointBackend: string }>, completions: [] as Array<{ runStatus: string; sessionStatus: string; routeCursor: number; completedCueCount: number; graphCaseCount: number; summaryCompletedCueCount: number; summaryThemeCount: number; checkpointBackend: string }>, reflections: [] as Array<{ response: string; caseStatus: string | null; verdict: string | null; diagnostic: string | null; evidenceRefCount: number; learningThreadCount: number }> };
+export const metrics = { starts: [] as Array<{ routeCursor: number; phase: string; outcomeGate: string; afterReconnect: boolean }>, transportRequests: 0, reflectionAttempts: 0, injectedFailures: 0, dispatches: 0, events: {} as Record<string, number>, externalFetches: 0, reconnects: [] as Array<{ restored: string; status: string; routeCursor: number; checkpointBackend: string }>, completions: [] as Array<{ runStatus: string; sessionStatus: string; routeCursor: number; completedCueCount: number; graphCaseCount: number; summaryCompletedCueCount: number; summaryThemeCount: number; checkpointBackend: string }>, reflections: [] as Array<{ response: string; caseStatus: string | null; verdict: string | null; diagnostic: string | null; evidenceRefCount: number; learningThreadCount: number }> };
 globalThis.fetch = async () => { metrics.externalFetches++; throw Error("SMOKE_EXTERNAL_NETWORK_FORBIDDEN"); };
 export async function dispatch(value: unknown) {
   const envelope = parseRemoteCoachAgentDispatchEnvelope(value);
@@ -13,6 +13,11 @@ export async function dispatch(value: unknown) {
   if (envelope.event.type === "RECONNECT_REPLAY") {
     metrics.reconnects.push({ restored: result.restored, status: result.status, routeCursor: result.state.routeCursor, checkpointBackend: result.checkpoint.backend });
     metrics.reconnects = metrics.reconnects.slice(-4);
+  }
+  if (envelope.event.type === "START_CUE") {
+    metrics.starts.push({ routeCursor: result.state.routeCursor, phase: envelope.event.currentSessionPhase,
+      outcomeGate: envelope.event.outcomeGateStatus, afterReconnect: metrics.reconnects.length > 0 });
+    metrics.starts = metrics.starts.slice(-8);
   }
   if (envelope.event.type === "SUBMIT_REFLECTION") {
     const cueId = envelope.event.cueId;

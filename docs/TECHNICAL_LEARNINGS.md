@@ -8,6 +8,15 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：普通段重载后继续下一教学点与复用讲解
+
+- 目标/工具：上轮真实Viewer只覆盖自然零cue。本轮新增--ordinary-recovery-with-cues，使用同一自然双cue输入；保留server nonce/一次own capture门，捕获R2 ordinary时严格要求plan2cue且已消费1cue，记录保存的Narration数量。仅工具和验证变更，没有降低候选/引用门或修改产品行为。
+- 真实体验：第1回合结果看完、回到决策点并点击继续；普通段保存中已消费1cue、保留后续1条讲解。重载后实际seek合成2264→暂停落位→MATCHED→play，随后第2回合先看结果再回合成决策位置2600，教学卡显示“处理看完了”“关键动作回放已完成”。点击继续与完成后，终结Session记2cue、cursor11。
+- 成本/顺序：初次Analysis1/Route1/Narration2；重载Analysis重建1/Route0/Narration0。Graph全程OBSERVE9/START2/RESUME_TOOL2/RECONNECT1/COMPLETE1；两次START均PAUSED_FOR_COACHING+Outcome COMPLETE，只有第二次在reconnect之后。实际provider/外部请求和console错误均0；没有恢复后重讲第一cue。
+- 结果解释：Graph summaryCompletedCueCount为1而completedCueCount为2；读completeSessionState证实前者按选中主题只取一个代表，并非恢复漏掉一条教学。没有因此改总结算法或制造专业判断改善。
+- 验证/限制：相关3文件12项、harness TS/build、两端TS与Web/正式Viewer build通过。root单controller负责tab35/49835服务并关闭；无Parser/真实Demo/模型/用户SQLite。MEMORY Graph跨页面保留，非进程重启。full-page截图出现拼接重影，未用作验收图；最终使用原生截图及实际AX/bridge/Graph摘要，未把工具截图问题当产品布局缺陷。
+- 下一项 desktop-process-checkpoint-resume：现有SQLite冷链在同Node进程内重建对象，Viewer链保留MEMORY服务；实际apps/web/app/api/coaching/agent/route.ts在desktop形态调用getSqliteCheckpointSaver。先在临时数据根、独立子进程与真实handler验证关闭/新进程exact reconnect和后续cue，不读用户库/密钥，不安装桌面包；明确进程、输出与超时所有权。
+
 ## 2026-09-27：普通段恢复必须使用 Session 的落位目标
 
 - 实证：第一轮IAB从真实IndexedDB ordinary提交后重载，Session保存目标是合成1064，但Host本地targetTickForRecovery只有旧三kind分支，ordinary回退首段1000。Viewer freeze-skip到1064，Host等待错误1000而10秒超时，Graph reconnect为0；控制面测试正确不能代表播放器接线正确。

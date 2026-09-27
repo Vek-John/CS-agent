@@ -26,7 +26,7 @@ export interface SyntheticRecoveryMarker {
   recoveryId?: string;
   targetTick?: number;
   localKeys: string[];
-  firstRun?: { analysisReady: number; prepareRoute: number; prepareNarration: number };
+  firstRun?: { analysisReady: number; prepareRoute: number; prepareNarration: number; savedNarrationCount?: number; consumedCueCount?: number };
 }
 /** Test-only reload permission. No recovery records are read or removed here. */
 export function syntheticRecoveryAdmission(nonce: string, marker: SyntheticRecoveryMarker | undefined, databases: readonly string[], localKeys: readonly string[]): "FRESH" | "RELOAD" | "REJECT" {

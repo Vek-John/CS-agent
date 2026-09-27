@@ -12,6 +12,16 @@
 
 
 
+## 已交付验证：有教学点的普通段恢复（2026-09-27）
+
+- ID ordinary-cued-host-resume；8a05217已push/clean，真实7f2b复用、旧owners RELEASE。root独占可选harness cued模式/计数、docs与唯一browser/server；必要产品修复先证据，独审按需派发，默认配置。
+- 流程/验收：自然双cue Replay→实际首cue结果播放/决策暂停/继续→R2普通段真实保存且已消费1cue、保存后续Narration→单次重载→实际seek/paused/MATCHED/play→第二cue Outcome COMPLETE门与决策暂停→总结完成。恢复Route/Narration0、允许legacy小Analysis重建1，无外部模型。不得手造cue、Session/ACK或降低证据门。
+- 风险/阶段：首cue尚未消费、恢复窗口未含下一讲解、Graph保留前activeCueId；先工具小test/TS/build，root新port/tab、阶段90秒，总15分钟检查，同设施两败简化，自有tab/server结束清理。默认guard保持、nonce本次一次reload；不真实Demo/Parser/用户库/安装部署，不复用native A5等待。沿emil/apple现有UI，无新增动画。相关tests/两端TS/Web及正式Viewer build后commit push并衔接下一有限目标。
+
+- 交付：新可选cued恢复harness自然3candidate/2cue/11段，保存时消费1cue且保留后续1Narration；真实重载后R2段首paused→MATCHED→play，第二cue结果完成后回决策画面，再完成全场。两START分别cursor2/8、均PAUSED_FOR_COACHING+COMPLETE；只第二个在重连后，无首cue重复START。产品无改动，root集中审真实diff/证据。
+- 验证：初次Analysis1/Route1/Narration2，重载Analysis1/Route0/Narration0；Graph15 dispatch、外部/provider/console0，最终2completed cue/cursor11。相关12 tests、专项及两端TS/harness与正式Web/Viewer build通过。tab35/49835服务已关闭；一次AX scroll失效后改读截图，full-page拼接异常不作产品结论，保留原生最终图。[证据](validation/ORDINARY_CUED_HOST_RESUME_RESULT.json)。仅合成/服务端MEMORY跨页面，未做SQLite/应用进程重启。
+- 下一有限目标 desktop-process-checkpoint-resume：已定位实际desktop Agent API通过getSqliteCheckpointSaver选后端；以隔离临时数据根和独立子进程验证真实handler的写入→退出→新进程exact reconnect/下一cue，先小smoke、明确origin/身份/生命周期、无用户DB/密钥/安装。补上既有同进程SQLite测试未覆盖的生产初始化边界，不重复此UI路线。
+
 ## 已交付：普通段实际 Host/Viewer 冷载入落位（2026-09-27）
 
 - ID ordinary-host-cold-landing；基线18e6c1c已push/clean，真实7f2b复用，全部旧owner RELEASE。目标：真实React Host持久保存ordinary后页面重载，实际Vue Viewer seek到冻结段首，精确Graph握手后继续带看；不伪造Session/Graph/ACK，不将合成时间声称Demo tick。

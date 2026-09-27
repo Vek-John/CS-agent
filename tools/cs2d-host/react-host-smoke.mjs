@@ -10,7 +10,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const app = resolve(root, '.local-data/upstream/cs2d/apps/app'), web = resolve(root, 'apps/web')
 const dependency = createRequire(resolve(app, 'package.json')), webDependency = createRequire(resolve(web, 'package.json'))
 const args = process.argv.slice(2), realDemo = args.includes('--real-demo'), output = resolve(root, realDemo ? '.local-data/real-demo-host-entry-preflight' : '.local-data/guided-react-host-smoke'), generated = resolve(output, 'src'), dist = resolve(output, 'dist')
-const ordinaryRecovery = args.includes('--ordinary-recovery')
+const ordinaryCued = args.includes('--ordinary-recovery-with-cues')
+const ordinaryRecovery = args.includes('--ordinary-recovery') || ordinaryCued
 if (ordinaryRecovery && realDemo) throw Error('RECOVERY_REQUIRES_SYNTHETIC_MODE')
 const runNonce = randomBytes(16).toString('hex')
 const failFirstReflection = args.includes('--fail-first-reflection')
@@ -60,7 +61,7 @@ if (args.includes('--serve') || args.includes('--serve-only')) {
         const result = await transport(JSON.parse(Buffer.concat(chunks).toString('utf8')))
         res.writeHead(result.status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(result.payload)); return
       }
-      if (pathname === '/smoke-run.json') { res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify({ ordinaryRecovery, nonce: runNonce })); return }
+      if (pathname === '/smoke-run.json') { res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify({ ordinaryRecovery, ordinaryCued, nonce: runNonce })); return }
       if (pathname === '/smoke-metrics.json') { res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(runtime.metrics)); return }
       if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return }
       const parts = pathname.split('/').filter(Boolean), fixedRealFile = realDemo && realFiles.has(parts.join('/')), assetRoot = roots[parts[0]], base = fixedRealFile ? resolve(app, 'public') : assetRoot || dist
@@ -70,7 +71,7 @@ if (args.includes('--serve') || args.includes('--serve-only')) {
     } catch { if (!res.headersSent) res.writeHead(400); res.end('SMOKE_REQUEST_REJECTED') }
   })
   await new Promise((done, fail) => { server.once('error', fail); server.listen(port, '127.0.0.1', done) })
-  console.log(JSON.stringify({ url: `http://127.0.0.1:${server.address().port}/${realDemo ? '?realDemo=1' : ordinaryRecovery ? '?ordinaryRecovery=1&emptyRoute=1&teachingDiagnostics=off' : diagnostics ? '' : '?teachingDiagnostics=off'}`, realDemo, diagnostics, failFirstReflection, ordinaryRecovery, stop: 'SIGINT or SIGTERM', rawReplay: 'child page only', runtime: 'MEMORY' }))
+  console.log(JSON.stringify({ url: `http://127.0.0.1:${server.address().port}/${realDemo ? '?realDemo=1' : ordinaryRecovery ? `?ordinaryRecovery=1&${ordinaryCued ? 'ordinaryCued=1' : 'emptyRoute=1'}&teachingDiagnostics=off` : diagnostics ? '' : '?teachingDiagnostics=off'}`, realDemo, diagnostics, failFirstReflection, ordinaryRecovery, stop: 'SIGINT or SIGTERM', rawReplay: 'child page only', runtime: 'MEMORY' }))
   const stop = () => { server.close(); server.closeAllConnections() }
   process.once('SIGINT', stop); process.once('SIGTERM', stop)
 }
