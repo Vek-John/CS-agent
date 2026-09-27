@@ -265,8 +265,10 @@ export class SqliteCheckpointSaver extends BaseCheckpointSaver {
       const keep = prepared.completed
         ? this.completedRetention
         : this.retention;
+      // A durable head owns its exact checkpoint (and cascading pending writes)
+      // until that head moves or is deleted. Keep these outside the recent budget.
       db.prepare(
-        "DELETE FROM agent_checkpoints WHERE thread_id=? AND checkpoint_ns=? AND created_seq NOT IN (SELECT created_seq FROM agent_checkpoints WHERE thread_id=? AND checkpoint_ns=? ORDER BY created_seq DESC LIMIT ?)",
+        "DELETE FROM agent_checkpoints WHERE thread_id=? AND checkpoint_ns=? AND created_seq NOT IN (SELECT created_seq FROM agent_checkpoints WHERE thread_id=? AND checkpoint_ns=? ORDER BY created_seq DESC LIMIT ?) AND NOT EXISTS (SELECT 1 FROM review_runtime_heads h WHERE h.checkpoint_thread_id=agent_checkpoints.thread_id AND h.checkpoint_namespace=agent_checkpoints.checkpoint_ns AND h.checkpoint_id=agent_checkpoints.checkpoint_id)",
       ).run(threadId, ns, threadId, ns, keep);
     });
     return {

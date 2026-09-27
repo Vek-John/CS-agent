@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "checkpoint-head-retention-preflight.v1",
+  "synthetic": true,
+  "actualSaver": true,
+  "actualDALHeadCommit": true,
+  "productionDefaultRetention": 20,
+  "newCheckpoints": 20,
+  "confirmedHeadUnchanged": true,
+  "headCheckpointId": "head-checkpoint",
+  "exactTupleBefore": true,
+  "exactTupleAfter": false,
+  "latestTupleId": "later-20",
+  "retainedCheckpointCount": {
+    "n": 20
+  },
+  "foreignKeyViolations": 0,
+  "limitation": "Minimal DAL-legal relational artifacts and synthetic agent state; not an HTTP domain-validation or real Demo/Graph scenario.",
+  "ownerClosed": true,
+  "temporaryDatabaseRemoved": true
+}

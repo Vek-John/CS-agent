@@ -12,6 +12,19 @@
 
 
 
+## 已交付：普通段 SQLite 冷重开续接（2026-09-27）
+
+- ID ordinary-recovery-cold-start；4920bbf已push/clean、真实7f2b复用，旧owners已RELEASE。主目标：把上轮分离的真实Graph重连与SQLite重开合成一条生产链，避免合成checkpoint状态掩盖持久化不兼容。
+- 流程/验收：A1真实Graph+SqliteSaver完成前cue并观察ordinary→合法artifact/head；A2关闭owner/丢弃runtime/controller→新owner/Graph→GET/HistoryRestoreController/Session→exact reconnect/adopt→只启动下一cue；A3保存失败保留原head及exact checkpoint，恢复阶段零分析/讲解/Director再生成。无Viewer/Parser/模型/用户库，临时Demo容器不解析且合成时间不称真实Demo tick。
+- 所有权：partial_revision_restore默认配置独占新ordinary-cold-start.integration.test.ts/必要独有helper；产品源码先只读、有实证失败再协调。root任务板/证据/学习/集成检查与push。prior_fire_boundary_review默认配置只读checkpoint清理链及.local-data下有界retention预检，验证head引用是否被常规淘汰，不改主任务文件。
+- 风险/阶段：旧runtime/saver复用假冷启动、Graph完成与Session消费不同步、临时环境跨测试污染；先5分钟smoke，单test60秒/阶段15分钟，owner close/Controller dispose/临时目录finally清理，同基础设施两败简化。retention候选先小证据不预设产品修改；相关tests、两端TS、Web/正式Viewer build后交付，不安装部署、不等待native A5。
+
+- 新实证：实际SqliteSaver默认20条、DAL确认ordinary head后，再写20条，head整行不变但原exact getTuple消失，FK检查仍0。说明“head未变”不足以保证可恢复，A3必须连同checkpoint可读一起验收。prior扩展独占checkpoint.ts及新head-retention.test，正常清理排除head精确三元组；仍保留20/3窗口，head替换/移除后旧pin可清，禁止latest回退。root已读脚本/JSON，合成DAL关系限制明确。
+
+- 交付：真实Graph+SQLite闭库重开→GET/Controller/Session→exact MATCHED→仅下一cue，恢复后生成/外部调用0。新head在真实Graph推进后CAS409，旧head/exact tuple仍可用；16→21行。独立retention红例证明原DELETE会丢head依赖，3行窄修保护精确引用；旧pin释放与pending writes/跨scope测试通过。
+- 验收：相关5文件63项、两端TS、Web/正式Viewer build通过，root实读代码/日志、核心owner独审剪枝无must-fix，全部RELEASE/临时资源清理。无真实Demo/Parser/模型/GUI，cold指同Node进程中新owner/saver/runtime/controller，不是应用重启。[结果](validation/ORDINARY_COLD_START_RESULT.json)；[原剪枝红例](validation/ORDINARY_COLD_START_RETENTION_PREFLIGHT.json)。
+- 下一有限目标 ordinary-host-cold-landing：控制面真持久恢复已贯通，实际Viewer冷载入/seek/握手后播放尚缺验证。先查现有隔离Host harness的恢复入口，用自有新origin与小合成输入补单次冷载入链，明确数据/Graph与浏览器生命周期，避免修改用户存储或重复真实Demo解析；若工具阻塞，继续无桌面落位/取消验证，不把native A5当项目阻塞。
+
 ## 已交付：普通片段段首恢复（2026-09-27）
 
 - ID ordinary-segment-recovery；基线508bcb8已push，复用7f2b。目标：普通回合进度可保存并从冻结段首继续，减少无cue区间退回路线起点；只无cue BRIEF/OBSERVE、每回合成功确认最多一次，无任意tick。

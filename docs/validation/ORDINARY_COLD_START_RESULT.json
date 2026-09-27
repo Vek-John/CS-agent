@@ -1,0 +1,50 @@
+{
+  "synthetic": true,
+  "cues": 2,
+  "restoredConsumedCues": 1,
+  "restored": "MATCHED",
+  "checkpointBackend": "SQLITE",
+  "graphEventsAfterReopen": [
+    "RECONNECT_REPLAY",
+    "OBSERVE_SEGMENT",
+    "OBSERVE_SEGMENT",
+    "OBSERVE_SEGMENT",
+    "OBSERVE_SEGMENT",
+    "START_CUE"
+  ],
+  "analysisCallsAfterReopen": 0,
+  "narrationCallsAfterReopen": 0,
+  "routeCompilationCallsAfterReopen": 0,
+  "externalRequests": 0,
+  "rejectedHeadStatus": 409,
+  "rejectedHeadCode": "RUNTIME_HEAD_CONFLICT",
+  "exactConfirmedCheckpointRetained": true,
+  "checkpointRowsBeforeClose": 16,
+  "checkpointRowsAfterNextCue": 21,
+  "limitations": [
+    "Synthetic Replay and header-only managed bytes; Parser and Viewer omitted.",
+    "Actual Graph/Saver/API handlers and temporary SQLite close/reopen; same Node test process.",
+    "Next cue uses the normal local diagnosis synchronization path; no external model."
+  ],
+  "schemaVersion": "ordinary-cold-start-result.v1",
+  "baseline": "4920bbf",
+  "checks": {
+    "relatedTests": {
+      "files": 5,
+      "passed": 63
+    },
+    "typecheck": "passed",
+    "viewerTypecheck": "passed",
+    "webProductionBuild": "passed",
+    "formalViewerProductionBuild": "passed"
+  },
+  "retentionFix": {
+    "normalRecentWindow": 20,
+    "completedRecentWindow": 3,
+    "protect": "exact current RuntimeHead thread/namespace/checkpoint plus pending writes",
+    "release": "head changes/removal; next normal put",
+    "noLatestFallback": true
+  },
+  "cleanup": "temporary SQLite removed; owners closed; controllers/preparation cancelled",
+  "next": "ordinary-host-cold-landing"
+}

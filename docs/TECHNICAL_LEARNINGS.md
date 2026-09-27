@@ -8,6 +8,15 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：真实 SQLite 续接暴露保存点被常规清理的问题
+
+- 问题：已确认RuntimeHead未变不等于仍能恢复。真实Saver默认保留20条，DAL确认普通段head后写入20个新checkpoint，原exact tuple消失而head仍指原id，外键检查也不报警；head没有checkpoint外键，不能依赖FK检查发现。最小红例仅DAL合法合成关系，不冒称真实比赛。
+- 决策：正常retention DELETE增加NOT EXISTS，排除当前RuntimeHead精确thread/namespace/checkpoint引用；保留原20/完成3条最近窗口，受引用保存点及其级联pending writes额外保留。head移动或移除后，下次正常put可回收旧pin；跨thread/ns同id不误保护，不加迁移/提高窗口或latest回退，显式deleteThread语义不改。
+- 真实消费：真实Graph/SqliteSaver完成前cue、观察ordinary→实际HTTP handler保存artifact/head→关闭owner并丢弃runtime/controller→新owner/saver/runtime/controller→GET/HistoryRestoreController/Session→MATCHED/adopt→4个前方OBSERVE及仅第二cue START。保存过的Analysis/Narration/路线不重生成，外部请求0。
+- 失败证据：冷链Graph推进后原测试head保存请求返回500；当时未直接输出exact tuple，不能单凭该日志断定根因。最小独立红例已直接证明淘汰机制，修剪枝后同一冷链返回预期409/RUNTIME_HEAD_CONFLICT且旧head/tuple保持；行数16→21（20最近+1保护），不依赖“最新”来补恢复。
+- 验证：新5个retention用例覆盖普通/完成压力、pending writes、关闭重开、head移动/移除与scope隔离；真实冷重开1条，相关5文件63项通过，最终两端TS、Web/正式Viewer build通过。root读真实代码/红例与冷链；另一owner独立审剪枝无must-fix，临时库/Controller/队列进程finally清理。
+- 限制/下一步：合成Replay与仅header托管容器，无Parser/Viewer/实际模型；关闭重开在同一Node测试进程内，对象全部新建但非应用进程重启。下一项ordinary-host-cold-landing先核实隔离Host harness的恢复入口，把已验证控制面接到实际Viewer seek/落位/握手放行；先小合成单controller，遇基础设施两败简化，不依赖native A5。
+
 ## 2026-09-27：普通片段段首恢复与 Controller 进度接管
 
 - 问题：只有教学点/起点/终点可恢复时，无cue回合会退回过早的位置。Graph观察进度本身不能代替已确认的历史head。
