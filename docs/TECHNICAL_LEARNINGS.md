@@ -8,6 +8,16 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：零教学点也应走完整场并正常结束
+
+- 缺口：已有首点、双点和完整总结证据，尚无自然零cue路线的完整Host验收。新输入仅移除合成原始事件、保持生命/存活稳定，保留两回合尾段和采样；没有删除冻结cue或放宽候选门。实际Adapter得到0候选/0cue/7连续完整片段，plan COMPLETE且startable。
+- 决策：增加可选emptyRoute测试输入及有界candidate/cue/segment计数，不改默认双cue/真实Demo路径。生产未发现缺陷，因此不改产品或做额外重构。沿emil/apple既有反馈、原生完成按钮及reduced样式，无新增动画。
+- 实际IAB：真实React Host、Vue Viewer与默认Graph在选人后自动4倍带过普通段，完整到第二回合结尾/100%，进入无重复习惯总结；点“完成本次复盘”后显示“复盘完成”。Analysis1/Route1/Narration0/Agent8/ACK0，provider及外部fetch0，console无warn/error。
+- 服务端摘要：OBSERVE_SEGMENT7、COMPLETE_SESSION1；run/session COMPLETED，routeCursor7、completedCue/GraphCase/summaryTheme均0。root仅取可见摘要和自有服务匿名metrics，bulk留child；tab31与63601服务已关闭，原始可见截图保存。[结果](validation/GUIDED_EMPTY_CUE_ROUTE_RESULT.json)。
+- 回归/交付：新2个生产集成验证准备编译、实际Session/Controller/Graph与总结seam，7段完整覆盖/重复完成去重；相关2文件30项及工具2文件9项通过，harness TS/build、两端TS与Web/正式Viewer build通过。测试导入路径和将循环序号误当段索引的问题已修，按真实AUTO_FREEZE_TIME事件计覆盖，未据测试误期改产品。
+- 限制：合成186帧/2玩家/2回合，Parser和模型关闭，合成选人替代DemoAnalyzer入口，Graph checkpoint为MEMORY；不是原生A5、真实Demo覆盖或SQLite历史重开。本轮UI与无桌面回归互补，不能把模拟TICK单独当真实播放。
+- 下一有限目标 empty-cue-history-restore：现有teaching-history-restore-fixture强制cue>0，尚未验证这个自然零cue路线经SQLite关闭重开/GET/Controller后的可启动和零再生成。只用隔离临时库，显式零cuefixture合同，不改产品cue门或读取用户库；先小保存/恢复再查实际失败。
+
 ## 2026-09-27：胜率波动背景不能沿用开局阵营
 
 - 问题：buildWinProbabilityTimeline用Replay Player.startSide填写victimSide及所选玩家economy，找不到所选玩家还默认CT。完整十人两回合红例证明：R1 CT/FULL，R2换T/PISTOL后仍错误标CT/FULL。这不是概率模型计算问题。

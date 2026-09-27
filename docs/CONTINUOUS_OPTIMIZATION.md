@@ -12,6 +12,17 @@
 
 
 
+## 已交付验证：自然零教学点路线的全场完成（2026-09-27）
+
+- ID guided-empty-cue-route，基线d9a580b已push/clean，7f2b复用，owners RELEASE。partial_revision_restore默认配置独占新无桌面integration及A1临时证据；root文档、tools可选Host输入、最终UI/checks/push。产品修改须先证实并明确owner。
+- 目标/流程：无显著事件/稳定状态的小合法Replay→真实Adapter自然零cue完整plan→实际准备/Session/Graph→总结与完成。不能手删cue或降低候选门；验证完整timeline和普通段落显式覆盖、不等cue/诊断或多余讲解、零模型/重复分析。
+- 风险/阶段：fixture尾段不全、手造plan绕契约、fake clock被误称真实播放。A1五分钟、单test60秒，总15分钟；先生产无桌面链，有必要才root单browser/controller新origin、小数据留page、每阶段90秒、退出关自有tab/server。沿已应用emil/apple、保留reduced样式；无正式Demo/Parser/模型/用户库/安装部署，不接旧native A5，同设施两败简化。
+
+- 交付：可选emptyRoute raw输入自然0candidate/0cue/7段连续完整覆盖；新2个无桌面生产集成与route相关2文件30项、工具2文件9项、harness TS/build、两端TS与Web/正式Viewer build通过。产品未改；root读实际test/diff，所有owner RELEASE。
+- IAB：真实Host/Session/默认Graph/Vue自动带看至末尾，点完成显示“复盘完成”；Analysis1/Route1/Narration0/Agent8/ACK0，外部/provider0、console空。Graph观察7次/终结1次，run/session COMPLETED cursor7、cue/case/theme均0；tab31/63601服务关闭，保存原始截图。[证据](validation/GUIDED_EMPTY_CUE_ROUTE_RESULT.json)。
+- 限制：2玩家/2回合合成输入、Parser/模型关闭、合成选人、MEMORY checkpoint；不是native A5或SQLite重开。无桌面测试假时钟与UI实际播放明确区分。测试首轮路径导入和循环段索引误期已修，不是产品失败；START自动跳过freeze通过真实日志计入覆盖。
+- 下一有限目标 empty-cue-history-restore：现有隔离恢复helper强制cue>0，缺少自然零cue产物的SQLite保存关闭重开/GET/Controller证据。显式新增零cue夹具合同，验证恢复startable/完整路线及零再生成，不改产品cue门、不读用户库，先小链有实际失败才修。
+
 ## 已交付：胜率波动的当回合阵营背景（2026-09-27）
 
 - ID winrate-round-side-context；08323b6已push/clean，7f2b复用，owners RELEASE。partial_revision_restore默认配置独占cs-net-winrate index及窄测试；root文档、下游保存消费验证、TS/正式build/统一push。无UI/Parser/Demo/模型/数据库操作。

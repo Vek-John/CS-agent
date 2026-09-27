@@ -60,3 +60,15 @@ it('keeps optional synthetic ammo at a strictly prior tick for both natural teac
  }
  expect(twoCueViewerReplay().rounds[0].frames[0].players[0].weaponAmmo).toBeUndefined();
 });
+
+it('naturally compiles a complete zero-cue route from a quiet synthetic match',async()=>{
+ const {emptyCueViewerReplay}=await import('./viewer-two-cue-fixture.ts');
+ const replay=emptyCueViewerReplay();
+ const analysis=buildCs2dAnalysisBundle({replay,selectedSteamId:twoCueViewerPlayer,demoId:'synthetic-empty-cue-viewer'});
+ assertValidReviewPlan(analysis.match_timeline,analysis.review_plan);
+ expect(analysis.candidate_set.candidates).toHaveLength(0);
+ expect(analysis.review_plan.cues).toHaveLength(0);
+ expect(analysis.review_plan.status).toBe('COMPLETE');
+ expect(analysis.review_plan.segments.length).toBeGreaterThan(0);
+ expect(()=>serializeCs2dAnalysisBundle(analysis)).not.toThrow();
+});

@@ -1,0 +1,97 @@
+{
+  "taskId": "guided-empty-cue-route",
+  "baseline": "d9a580b",
+  "productCodeChanged": false,
+  "input": "Quiet synthetic raw Replay; events removed and health/alive stable, no compiled plan edits",
+  "ui": {
+    "mounted": true,
+    "childReady": true,
+    "stageReady": 1,
+    "replayReady": 1,
+    "selected": 1,
+    "analysisReady": 1,
+    "prepareRoute": 1,
+    "prepareNarration": 0,
+    "agentRequests": 8,
+    "forbiddenFetches": 0,
+    "providerFetches": 0,
+    "playbackReports": 321,
+    "playing": false,
+    "tick": 3000,
+    "acks": 0,
+    "errors": [],
+    "emptyRouteFixture": true,
+    "candidateCount": 0,
+    "cueCount": 0,
+    "segmentCount": 7,
+    "selfBlindFixture": false,
+    "ammoFixture": false,
+    "syntheticIdentity": true,
+    "parserEnabled": false,
+    "modelEnabled": false,
+    "diagnostics": true,
+    "realLifecycle": null
+  },
+  "runtime": {
+    "transportRequests": 8,
+    "reflectionAttempts": 0,
+    "injectedFailures": 0,
+    "dispatches": 8,
+    "events": {
+      "OBSERVE_SEGMENT": 7,
+      "COMPLETE_SESSION": 1
+    },
+    "externalFetches": 0,
+    "completions": [
+      {
+        "runStatus": "COMPLETED",
+        "sessionStatus": "COMPLETED",
+        "routeCursor": 7,
+        "completedCueCount": 0,
+        "graphCaseCount": 0,
+        "summaryCompletedCueCount": 0,
+        "summaryThemeCount": 0,
+        "checkpointBackend": "MEMORY"
+      }
+    ],
+    "reflections": []
+  },
+  "interaction": [
+    "load synthetic match",
+    "select Synthetic T",
+    "automatic ordinary-segment playback",
+    "WRAP_UP at full timeline end",
+    "click Complete review",
+    "heading Review completed"
+  ],
+  "consoleWarningsOrErrors": [],
+  "validation": {
+    "fixtureTests": 4,
+    "toolRelatedPassed": 9,
+    "harnessTypecheck": "PASS",
+    "harnessBuild": "PASS",
+    "webTypecheck": "PASS after final integration",
+    "viewerTypecheck": "PASS",
+    "webBuild": "PASS",
+    "formalViewerBuild": "PASS",
+    "domainIntegration": {
+      "newCases": 2,
+      "relatedFiles": 2,
+      "relatedPassed": 30,
+      "zeroCueComplete": "PASS",
+      "repeatCompletionNoNewEvent": "PASS"
+    }
+  },
+  "proofScreenshot": ".local-data/guided-empty-cue/completed.png",
+  "cleanup": {
+    "tab": "31 closed",
+    "server": "63601 stopped exit0"
+  },
+  "limitations": [
+    "Synthetic, not parsed Demo ticks",
+    "Parser/model disabled",
+    "Synthetic selection substitutes DemoAnalyzer entry",
+    "Memory Graph, not SQLite restore/native A5"
+  ],
+  "nextTask": "empty-cue-history-restore"
+}

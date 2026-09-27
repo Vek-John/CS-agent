@@ -33,3 +33,15 @@ export function twoCueViewerReplay(options: { priorSelfBlind?: boolean; priorWea
   return { ...first, players, rounds, generatedBy: "synthetic-two-cue-viewer-no-demo", finalScoreCt: 2, finalScoreT: 0, finalCtName: "Synthetic CT", finalTName: "Synthetic T" };
 }
 export const twoCueViewerPlayer = self;
+
+/** Natural zero-candidate input; no compiled plan or cue is edited. */
+export function emptyCueViewerReplay() {
+  const replay = twoCueViewerReplay();
+  return { ...replay, generatedBy: "synthetic-empty-cue-viewer-no-demo",
+    rounds: replay.rounds.map(round => ({ ...round, events: [],
+      frames: round.frames.map(frame => ({ ...frame,
+        players: frame.players.map(player => ({ ...player, alive: true, health: 100 })),
+      })),
+    })),
+  };
+}

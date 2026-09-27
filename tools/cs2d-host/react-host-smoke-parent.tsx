@@ -10,12 +10,13 @@ import { requestNarrationBundle } from "../../apps/web/lib/coaching/narrator-con
 import "../../apps/web/app/globals.css";
 
 const realDemo = new URLSearchParams(location.search).get("realDemo") === "1";
-const ammo = !realDemo && new URLSearchParams(location.search).get("ammo") === "1";
-const selfBlind = !realDemo && new URLSearchParams(location.search).get("selfBlind") === "1";
+const emptyRoute = !realDemo && new URLSearchParams(location.search).get("emptyRoute") === "1";
+const ammo = !realDemo && !emptyRoute && new URLSearchParams(location.search).get("ammo") === "1";
+const selfBlind = !realDemo && !emptyRoute && new URLSearchParams(location.search).get("selfBlind") === "1";
 const summary = document.querySelector<HTMLPreElement>("#summary")!, load = document.querySelector<HTMLButtonElement>("#load")!;
 const state = { mounted: false, childReady: false, stageReady: 0 as number | null, replayReady: 0, selected: 0, analysisReady: 0, prepareRoute: 0, prepareNarration: 0,
   agentRequests: 0, forbiddenFetches: 0, providerFetches: 0, playbackReports: 0, playing: false, tick: 0, acks: 0,
-  errors: [] as string[], selfBlindFixture: selfBlind, ammoFixture: ammo, syntheticIdentity: true, parserEnabled: false, modelEnabled: false, diagnostics: teachingDiagnosticsEnabled(location.search), realLifecycle: null as Record<string, unknown> | null };
+  errors: [] as string[], emptyRouteFixture: emptyRoute, candidateCount: null as number | null, cueCount: null as number | null, segmentCount: null as number | null, selfBlindFixture: selfBlind, ammoFixture: ammo, syntheticIdentity: true, parserEnabled: false, modelEnabled: false, diagnostics: teachingDiagnosticsEnabled(location.search), realLifecycle: null as Record<string, unknown> | null };
 if (realDemo) { load.hidden = true; state.syntheticIdentity = false; state.parserEnabled = true; state.modelEnabled = true; state.stageReady = null; }
 const render = () => { summary.textContent = JSON.stringify(state, null, 2); };
 const fail = (code: string) => { if (!state.errors.includes(code)) state.errors.push(code); render(); };
@@ -52,6 +53,7 @@ window.addEventListener("message", event => {
   if (payload.type === "ANALYSIS_READY") {
     state.analysisReady++;
     const analysis = deserializeCs2dAnalysisBundle(payload.bundleJson);
+    state.candidateCount = analysis.candidate_set.candidates.length; state.cueCount = analysis.review_plan.cues.length; state.segmentCount = analysis.review_plan.segments.length;
     dependencies = createCs2dReviewPreparationDependencies({ candidateSet: analysis.candidate_set, observationEvidence: analysis.observation_evidence,
       matchTimeline: analysis.match_timeline, winProbabilityTimeline: analysis.win_probability_timeline, selectedPlayerId: analysis.selected_steam_id }, {
       assessDecisions: async candidateSet => ({ candidateSet, run: { version: "decision-assessment-run.v1", mode: "RULE_BASELINE", calls: 0, accepted: 0, records: [] } }),
@@ -68,7 +70,7 @@ async function mount() {
   // Stop before BOOT if an origin is not isolated. Never read or erase existing recovery records.
   if (!indexedDB.databases || (await indexedDB.databases()).length || localStorage.length) { fail("ORIGIN_NOT_EMPTY_USE_NEW_PORT"); return; }
   const root = createRoot(document.querySelector("#host")!);
-  root.render(<Cs2dPlaybackHost viewerUrl={`${location.origin}/child.html?parentOrigin=${encodeURIComponent(location.origin)}${selfBlind ? "&selfBlind=1" : ""}${ammo ? "&ammo=1" : ""}`} parentOrigin={location.origin} deployTarget="localhost" reviewPreparationDependencies={input} />);
+  root.render(<Cs2dPlaybackHost viewerUrl={`${location.origin}/child.html?parentOrigin=${encodeURIComponent(location.origin)}${selfBlind ? "&selfBlind=1" : ""}${ammo ? "&ammo=1" : ""}${emptyRoute ? "&emptyRoute=1" : ""}`} parentOrigin={location.origin} deployTarget="localhost" reviewPreparationDependencies={input} />);
   state.mounted = true; render(); window.addEventListener("pagehide", () => root.unmount(), { once: true });
 }
 void mount().catch(() => fail("MOUNT_PREFLIGHT_FAILED")); render();
