@@ -8,6 +8,15 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：真实存活采样中确实存在明确没有装备的记录
+
+- 现有资料只显示四个正式cue资源中helmet=true，不能代表false覆盖。复用有界native执行监测，新增匿名装备observer：TICK_START/8步长、与生产相同controller侧别/Steam/current pawn/玩家侧别门，直接使用当前props optional reader。四态分类只保留固定计数，另以明确lifeState0且健康正数形成strictAlive子集，计数不齐/reader冲突/零合格样本不标成功。
+- 先34B合法合成Demo验证2次真实回调、分类及缺属性门，清楚标注无实体；root读取最终源码后，唯一正式只读扫描此前授权的60601900B Demo。合格样本72273：helmet true29208/false43065，defuser true4533/false67740；strictAlive53749中helmet true29208/false24541，defuser true4533/false49216。两字段合格样本均无missing/wrong-type，197次无效pawn绑定不纳入。
+- 行动结论：上轮保留known false确实补回真实采样中原本会被serde省略的信息；继续采用optional Boolean，不恢复false省略优化，也不为获得数值而放松身份门。这里未计算正式教学点资格，不能把采样次数当新增教学点或专业判断改善。
+- 成本/边界：native读取1449ms、wait4自有child峰90472448B、输出696B；45秒/512MiB监测/输入128MiB硬限/输出32KiB，Cargo单独编译不计此峰值。包含warmup及重复玩家采样，strictAlive子集明确区分；不是网络属性每tick更新频率。[匿名结果](validation/EQUIPMENT_BOOLEAN_REAL_COVERAGE_RESULT.json)。
+- 未构建Replay、未调用模型/GUI/用户库，临时例程/binary由finally清理。产品源码未变；相关2文件69测试、两端TS、Web及正式Viewer build通过。
+- 下一项winrate-round-side-context：源码仍以全局startSide解释某回合victimSide及所选玩家经济，缺玩家还默认CT。先两回合换边小复现，若确认再按同回合实际侧别修复，不改概率值或引入模型调用；避免继续重复装备覆盖扫描。
+
 ## 2026-09-27：明确没有装备与缺失来源必须分别序列化
 
 - A1修正初步判断：prop_bool对缺属性/错类型返回false，但schema的is_false又省略false，所以完整Parser JSON并未证明会把缺失伪成已知false。实际缺陷是可靠false与未知都输出空字段，下游无法识别明确没有头盔/拆弹器。真实Entity::default验证缺属性，明确值/错类型等五态使用真实FieldValue加受控lookup；抽取实际reader、collector表达式和serde字段，不冒称正式Demo数据。

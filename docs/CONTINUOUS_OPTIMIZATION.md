@@ -12,6 +12,16 @@
 
 
 
+## 已交付验证：真实装备布尔来源覆盖（2026-09-27）
+
+- ID equipment-boolean-real-coverage，基线333fd25已push/clean，7f2b复用、owners RELEASE。现有REAL_CUE_RESOURCE_CONSUMPTION只有四点helmet=true，无两字段整体分布；已授权test_demo为60601900B。partial_revision_restore默认配置独占新observer/runner及smoke；root审工具、唯一正式读取、docs/checks/提交，agent不读正式文件。
+- 目标/流程：小有效合成Demo smoke→tick_start/8步长与生产相同身份门的匿名装备统计→一次正式只读→行动结论。统计true/false/missing/wrong-type并同实际optional reader交叉核对；不保存Replay/帧/身份，不把所有采样含warmup当正式round或教学点数量。
+- 风险/阶段：属性路径/阶段偏离、零样本假通过、输出/内存无界。复用已验证execute：128MiB native读取硬限含增长、45秒、512MiB自有child监测、输出32KiB，cargooffline180秒单独计。先5–10分钟smoke，root确认后正式仅一次；自有example/binary/process finally清理，同设施两败简化。无模型/GUI/用户库/安装部署，后续checks按模板，结果不证明判断质量。
+
+- 实证：最终34B合成Demo完整解析/两个tick_start且明确零实体覆盖；root审最终源码后唯一正式扫描。72273个合格玩家采样，helmet true29208/false43065，defuser true4533/false67740；strictAlive53749中helmet false24541、defuser false49216。合格采样缺/错类型均0，197次pawn绑定无效被排除；计数及实际optional reader一致。
+- 结果：读取1449ms、原生owned child峰90472448B、输出696B，无Replay/模型/GUI/用户库。可靠false并非纯夹具情形，上轮来源修复有真实输入收益；次数含重复采样/warmup，不是新增教学点或判断质量。相关2文件69测试、两端TS和Web/正式Viewer build通过。新runner复用原execute，无重复正式扫描；自有临时example/binary/process清理。[证据](validation/EQUIPMENT_BOOLEAN_REAL_COVERAGE_RESULT.json)。
+- 下一有限目标 winrate-round-side-context：实际buildWinProbabilityTimeline仍用Player.startSide填写victimSide及所选玩家economy，并将找不到玩家默认CT；换边后可能取错阵营背景。先用两回合换边小夹具复现，再按同回合/时点状态窄修与unknown语义验证，保留既有概率和模型调用，不依赖桌面或重读Demo。
+
 ## 已交付：装备布尔属性的缺值语义（2026-09-27）
 
 - ID equipment-boolean-source-presence，基线 f41204d 已push/clean；7f2b复用、原owners RELEASE。partial_revision_restore默认配置独占A1新原生source runner/fixture，A2待实际证据后限定0037/registry/受控Parser；root独占Adapter版本登记/消费测试、docs/ARCH/集成提交。prior_fire_boundary_review默认配置只读Option/omit类型兼容与字段路径。

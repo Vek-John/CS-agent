@@ -1,0 +1,107 @@
+{
+  "taskId": "equipment-boolean-real-coverage",
+  "baseline": "333fd25",
+  "observedInputBytesBeforeRead": 60601900,
+  "formalInputReads": 1,
+  "productCodeChanged": false,
+  "smoke": {
+    "exitCode": 0,
+    "stopReason": null,
+    "elapsedMs": 844,
+    "sampledPeakRssBytes": 32768,
+    "ownedChildMaxRssBytes": 2670592,
+    "outputBytes": 684,
+    "runtimeRssBudgetBytes": 536870912,
+    "runtimeDeadlineSeconds": 45,
+    "inputCapBytes": 134217728,
+    "coverage": {
+      "assertionsPassed": true,
+      "classificationAssertions": 4,
+      "inputBytes": 34,
+      "observerScan": {
+        "complete": true,
+        "counts": {
+          "scheduledSamples": 2,
+          "tickStartCallbacks": 2
+        },
+        "coverageStatus": "NO_ELIGIBLE_PLAYER_SAMPLES",
+        "defuser": {},
+        "helmet": {},
+        "partitionAndReaderChecksPassed": true,
+        "phase": "TICK_START",
+        "scope": "All eligible sampled players, including any warmup/dead samples; not formal round assembly, teaching eligibility or current-tick network-update frequency",
+        "strictAliveDefuser": {},
+        "strictAliveHelmet": {},
+        "tickStride": 8
+      },
+      "realEntityMissingProperties": 2,
+      "scope": "Valid synthetic Demo verifies callback attachment, intentionally has no entities; not real equipment coverage",
+      "synthetic": true
+    },
+    "mode": "SYNTHETIC_SMOKE"
+  },
+  "real": {
+    "exitCode": 0,
+    "stopReason": null,
+    "elapsedMs": 1449,
+    "sampledPeakRssBytes": 72417280,
+    "ownedChildMaxRssBytes": 90472448,
+    "outputBytes": 696,
+    "runtimeRssBudgetBytes": 536870912,
+    "runtimeDeadlineSeconds": 45,
+    "inputCapBytes": 134217728,
+    "coverage": {
+      "complete": true,
+      "counts": {
+        "controllerObservations": 79717,
+        "ctSamples": 36038,
+        "eligiblePlayerSamples": 72273,
+        "invalidPawnBinding": 197,
+        "nonPlayingController": 7247,
+        "scheduledSamples": 7248,
+        "strictAliveSamples": 53749,
+        "tSamples": 36235,
+        "tickStartCallbacks": 57970
+      },
+      "coverageStatus": "OBSERVED",
+      "defuser": {
+        "FALSE": 67740,
+        "TRUE": 4533
+      },
+      "helmet": {
+        "FALSE": 43065,
+        "TRUE": 29208
+      },
+      "partitionAndReaderChecksPassed": true,
+      "phase": "TICK_START",
+      "scope": "All eligible sampled players, including any warmup/dead samples; not formal round assembly, teaching eligibility or current-tick network-update frequency",
+      "strictAliveDefuser": {
+        "FALSE": 49216,
+        "TRUE": 4533
+      },
+      "strictAliveHelmet": {
+        "FALSE": 24541,
+        "TRUE": 29208
+      },
+      "tickStride": 8
+    },
+    "mode": "EXPLICIT_SINGLE_INPUT"
+  },
+  "conclusion": "Known false appears in strictly alive real samples and would have been omitted by the old serde; preserve the new optional-Boolean contract. Missing and wrong types were zero among this observer eligible sample population only.",
+  "limitations": [
+    "Counts are repeated player samples, not unique players or coaching cues",
+    "Includes any warmup/dead samples; strictAlive is a separate observed subset",
+    "Not current-tick network update frequency or professional judgment quality",
+    "No Replay construction, model, browser, user database or installation",
+    "Runtime memory covers owned native child; Cargo excluded; RSS enforcement is monitored, not an OS hard limit"
+  ],
+  "validation": {
+    "consumerTests": 69,
+    "consumerFiles": 2,
+    "webTypecheck": "PASS",
+    "viewerTypecheck": "PASS",
+    "webBuild": "PASS",
+    "formalViewerBuild": "PASS"
+  },
+  "nextTask": "winrate-round-side-context"
+}
