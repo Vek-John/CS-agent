@@ -8,6 +8,14 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：普通播放进度与可恢复保存点目前并不相同
+
+- 实证：自然quiet合成路线0cue/7段，第2回合普通段index5中点，真实Controller/Graph已有6次OBSERVE和cursor5/有效checkpoint；生产Session builder拒绝将该PLAYING状态伪装成ROUTE_START、CUE_PAUSED或WRAP_UP。ROUTE_START不会绑定新Graph checkpoint，restore回INTRO/index0；这是当前三种稳定边界合同的限制，不是SQLite丢数据。
+- 成本：该合成样本从保存点到中断的时间线跨度24.71875秒，重新START自动跳过1秒freeze；5完整段+1部分段中4段跳过、2段播放，按生产directive默认速率估算纯重播3.7265625秒。不含解析、seek、运输和用户时间，不外推实战。既有REAL_CUE_RESOURCE_CONSUMPTION匿名报告有9round/4cue、首cue在R3，可说明首两回合没有cue暂停保存点；没有重新解析或据此算实际重看秒数。
+- 约束：Host currentStableRecoveryRecord只选合法cue暂停/末尾；mirror观察checkpoint不等于head ACK；Session从冻结plan派生位置，不能塞任意tick。SQLite review_runtime_heads CHECK也只接受三kind，不能只改TypeScript。Graph OBSERVE保留上一activeCueId，后续普通边界不能机械要求其为null；必须确认无未结工具、当前普通段/阶段/身份与checkpoint完全匹配。
+- 行动：进入ordinary-segment-recovery实现，先在内存验证普通段首落位和Graph重连，再贯通Session/Record/schema兼容、SQLite约束迁移、Artifact→head确认、Host保存/恢复。首版只无cue BRIEF/OBSERVE且每round最多一次，避免每帧或每段重复写完整冻结record；落位与handshake完成前禁止播放，完成后沿现有带看行为继续。所有层接通并验证才称恢复功能可用；旧记录不回填。
+- 验证：可复现新test默认仅断言，显式CS_COACH_ORDINARY_PROGRESS_OUTPUT以wx写新结果；新1项+现有恢复共2文件26项、两端TS及Web/正式Viewer build通过。root复查源链与真实数值，无产品修改、SQLite/head写、模型/GUI/正式Demo或用户库操作。[结果](validation/ORDINARY_PROGRESS_RECOVERY_PREFLIGHT_RESULT.json)。
+
 ## 2026-09-27：零教学点产物可在没有讲解artifact时恢复
 
 - 问题：上一轮真实Host已完成零cue路线，但既有恢复helper强制cue>0，未证明无Narration产物通过SQLite/恢复边界。该限制是测试夹具假设，不能当作产品失败。

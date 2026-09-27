@@ -12,6 +12,16 @@
 
 
 
+## 已交付预检：普通片段恢复成本（2026-09-27）
+
+- ID ordinary-progress-recovery-preflight，基线4ae17e2已push/clean，7f2b复用，owners RELEASE。partial_revision_restore默认配置独占新ordinary-progress-preflight.test.ts和本地证据；所有产品只读。root源链/最小方案判断、docs/checks/提交；不先加持久kind或修改用户库。
+- 目标/流程：同一自然quiet路线→真实Session/Controller/Graph普通段进度→旧合法record恢复→量化回退段数、合成Demo时间及按默认速率估算重看；核实不能凭latest checkpoint提升持久head。A1五分钟，单test60秒/整体10分钟，memory checkpoint明确不等同新SQLite实验。
+- 风险：非法手造Session制造失败、Graph已保存就误称head已确认、播放头跨度当实际walltime。使用生产builder/恢复与真实checkpoint meta；计入自动FREEZE跳过，结果只适用于小合成输入。无模型/Parser/Demo/GUI/DB/安装部署，自有进程清理；输出可行动最小方案及不变边界，相关tests/两端TS/正式build按模板。
+
+- 实证：实际Session在第2回合普通段index5中点，Graph已cursor5/6次OBSERVE且有checkpoint，三种旧boundary对该Session均拒绝，ROUTE_START明确不绑定该checkpoint。恢复回INTRO/index0；回退5完整段+1部分段，合成时间跨度24.71875秒；计入4次跳过、2段实际播放后默认速率重看估算3.7265625秒，不是测量墙钟或实战估计。
+- 结论：不能把latest Graph当持久head。现有真实匿名报告（未重新解析）9round/4cue，首cue在R3，说明缺稳定点可能跨回合，但缺完整段速率不能估算实际等待。产品不改；新1项+恢复相关2文件26项、两端TS/Web/正式Viewer build通过，root读真实test/result/source，owner RELEASE，自有资源已清。[证据](validation/ORDINARY_PROGRESS_RECOVERY_PREFLIGHT_RESULT.json)。
+- 下一有限目标 ordinary-segment-recovery：实现可验证的普通段首恢复，先内存落位/Graph重连验证再贯通持久化。仅冻结plan的无cue BRIEF/OBSERVE段首，无任意tick，首版每round最多一次；Session/Record校验、精确checkpoint+head ACK、SQLite CHECK及兼容、Host保存和落位全部接通才交付。保留pending工具/手动visit/接管/旧owner拒绝门；不误拒Graph保留的上一activeCue，不按latest补head，不在handshake前播放，不改旧记录。
+
 ## 已交付验证：零教学点路线的历史重开（2026-09-27）
 
 - ID empty-cue-history-restore，基线315570e已push/clean，7f2b复用，owners RELEASE。partial_revision_restore默认配置独占共享恢复helper的显式零cue契约与新empty-cue-restore.integration.test.ts；root docs/真实diff审阅/两端TS/正式build/提交。

@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "ordinary-progress-preflight.v1",
+  "synthetic": true,
+  "players": 2,
+  "rounds": 2,
+  "candidates": 0,
+  "cues": 0,
+  "routeSegments": 7,
+  "interruptedSegmentIndex": 5,
+  "graphRouteCursor": 5,
+  "graphObserverCalls": 6,
+  "observedSessionPhases": [
+    "PLAYING",
+    "SKIPPING"
+  ],
+  "recoveredBoundary": "ROUTE_START",
+  "checkpointPromoted": false,
+  "fullyTraversedSegments": 5,
+  "partiallyTraversedSegments": 1,
+  "syntheticTimelineSecondsFromSavedBoundary": 24.71875,
+  "automaticInitialSkipSeconds": 1,
+  "repeatedPlaybackSegments": 2,
+  "repeatedSkippedSegments": 4,
+  "estimatedReplayPlaybackSeconds": 3.7265625,
+  "limitations": [
+    "Two-player synthetic times, not parsed Demo ticks or a real-match estimate.",
+    "Fake playback reports; real Session/directives/Controller/memory Graph.",
+    "Estimate excludes loading, seeking, transport and user delays; no SQLite/head write is executed."
+  ],
+  "taskId": "ordinary-progress-recovery-preflight",
+  "baseline": "4ae17e2",
+  "productCodeChanged": false,
+  "priorRealReport": {
+    "source": "REAL_CUE_RESOURCE_CONSUMPTION.json",
+    "newDemoReads": 0,
+    "reportedRounds": 9,
+    "reportedCueRounds": [
+      3,
+      5,
+      7,
+      7
+    ],
+    "limitation": "Historical report only; no current route or playback cost recomputation"
+  },
+  "validation": {
+    "newCases": 1,
+    "relatedFiles": 2,
+    "relatedPassed": 26,
+    "webTypecheck": "PASS",
+    "viewerTypecheck": "PASS",
+    "webBuild": "PASS",
+    "formalViewerBuild": "PASS",
+    "rootSourceAndResultReview": "PASS"
+  },
+  "decision": "Proceed to bounded ordinary-segment recovery implementation, with memory landing/reconnect proof before persistent wiring",
+  "constraints": [
+    "Frozen-plan cue-free BRIEF/OBSERVE segment start only; no arbitrary tick",
+    "Initial Host policy at most one save per round",
+    "Exact matched checkpoint and confirmed artifact/head, never latest checkpoint",
+    "SQLite CHECK/schema compatibility must be handled",
+    "Reject unsettled tool/manual/takeover/stale owner; previous activeCue alone is not invalid",
+    "Playback only after landing/handshake; preserve existing saved records"
+  ],
+  "nextTask": "ordinary-segment-recovery"
+}
