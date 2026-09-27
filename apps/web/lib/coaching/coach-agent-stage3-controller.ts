@@ -309,7 +309,9 @@ export class CoachAgentStage3Controller {
     token: number,
   ): Promise<boolean> {
     if (this.adapter.lifecycleDegraded) return false;
-    const last = Math.max(this.adapter.lifecycleCursor, this.adapter.lifecycleQueueCursor);
+    // observerTail is serial: only confirmed progress survives a superseding cue token.
+    // A reserved cursor may belong to cancelled work whose Graph response is still in flight.
+    const last = this.adapter.lifecycleCursor;
     const endExclusive = includeTarget ? targetIndex + 1 : targetIndex;
     if (endExclusive <= last + 1) return true;
     this.adapter.reserveLifecycleCursor(endExclusive - 1);
@@ -639,11 +641,11 @@ export class CoachAgentStage3Controller {
       ? this.queueObserversUntil(identityInput, targetIndex, false, "PLAYING")
       : Promise.resolve(true);
     void observerReady.then((ready) => {
+      if (!this.isCurrent(input, token)) return undefined;
       if (!ready) {
         this.setState({ status: "RECOVERY_REQUIRED", cueId: input.cue.id, error: "前置回放段未能同步到 Agent；基础回放仍可继续，请恢复 Agent 状态后重试。" });
         return undefined;
       }
-      if (!this.isCurrent(input, token)) return undefined;
       return this.dispatchSerial(prepared.event);
     }).then((result) => {
       if (!result || !this.isCurrent(input, token)) return;

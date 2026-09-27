@@ -8,6 +8,15 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：预留观察位置不能当作已确认路线进度
+
+- 验证目标：176帧小合成双回合自然生成3候选/2cue，贯通真实Adapter、编译、叙述、Session/transport/seek gate、默认Graph/Stage3与显式继续，未修改冻结plan。两个相同DEATH最初只选1cue，按真实重复压缩改原始第二场景为HP_CHANGE；初始候选数断言过严按实际3候选收口，不强造选点。
+- 实际问题：快速推进时observe预留queuedCursor但未confirm，start增加token使旧work取消，新work取max(cursor,queued)漏前段。deferred真实Runtime响应/mirror与reset后旧响应3个红例表明不是单纯fake clock问题：真实慢响应也可发生路线顺序拒绝或旧失败覆盖新run。
+- 决策：串行observer只从confirmed lifecycleCursor继续，同run已处理未确认事件复用稳定eventId，Runtime既有processedEventIds幂等；不把PENDING提为CONFIRMED、不删token/跨identity清理。start的observerReady先验证owner再处理false，旧取消不写新RECOVERY_REQUIRED。生产仅这两处修正。
+- 证据：规范双cue及旧ACK2例、竞态3例均通过；每规范例START_CUE2/RESUME_TOOL2/工具命令2，Presented与consumed各一次，11个segment完整覆盖，9个普通段（含尾段）实际OBSERVE序列对应plan，Graph cursor到末段，完成前不显示讲解。衔接期间额外分析/叙述生成及fetch均0。相关5文件78tests通过，新测试类型收窄修复后5例与TS复验通过，两端TypeScript/production build及diff检查通过。[验证](validation/GUIDED_TWO_CUE_HANDOFF.md)。
+- 独立只读审查确认最小diff和去重/取消边界，无must-fix；未冒称审查者自行跑测试。测试中的iframe clock/ACK是fake输入，完整React Host和真实Viewer未挂载，不能当实际连续画面或整场Demo验收。没有真实Parser/模型/用户库/安装部署，controller/timer均finally清理。
+- 后继：复用既有Viewer小页，把自然双cue接真实iframe的播放/返回/ACK链；单owner有限小数据，先smoke再执行，不重启旧native锁屏路径、不重新解析正式Demo。
+
 ## 2026-09-27：文件选择命令必须有常驻DOM目标
 
 - 问题：失败后选人锁保留原主体，同/异player重复选择不再build；真正恢复路径应走新Demo或已有历史显式重新分析。原input却位于landing v-else，真实Vue编译SSR确认done状态file input从1变0，requestDemoPicker因空ref无法工作。

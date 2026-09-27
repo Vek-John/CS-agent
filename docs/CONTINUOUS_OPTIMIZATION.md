@@ -12,6 +12,21 @@
 
 
 
+## 已交付：双教学点衔接与观察队列竞态修复（2026-09-27）
+
+- ID guided-two-cue-handoff，基线444e5f3已push/clean，实际7f2b复用，前owner RELEASE。partial_revision_restore默认配置（熟悉实际Adapter/Host边界）独占新integration test及必要test fixture/probe；生产变更先报root确认。root独占docs/契约/最终review/浏览器及checks/push。
+- 目标：自然小合成双回合经实际Adapter/编译/叙述/Session/默认Stage3，验证第1cue结果完成→回decision暂停与讲解→显式继续→第2cue。A1五分钟确认两自然cue，不改冻结plan/hash；A2真实guidedPlaybackDirective、gate/Presented终态生产seam、完整segments与每cue引用/ACK归属、一次继续/消费计数、首cue迟到ACK不完成次cue；A3相关tests/两端TS/build后push。若无产品缺口只交可靠新证据。
+- 风险：手工harness跳过gate/相位、fake clock与真实Viewer混称、控制器跨cue迟到归属。小Replay<1000帧/2回合，单test<60秒，5分钟smoke/20分钟有限任务；禁止直接写Session phase或手造冻结cue。先无桌面小链，必要IAB仅root单controller，不唤醒旧native A5；无真实Demo/Parser/模型/Jev/用户库/安装部署，所有资源由owner清理，同设施两敗先简化。
+
+- A1：相同DEATH回合自然压缩成1cue，改原始第二回合为HP_CHANGE后得到3候选/2自然cue（round1/2），未改冻结plan。完整链发现observe预留游标但未确认时，start新token取消旧工作，而新队列以预留游标跳段，Graph报ROUTE_ORDER_MISMATCH。root读真实controller后要求延迟OBSERVE响应复现，不能仅让测试等receipt掩盖真实慢响应风险。
+- 增补所有权：partial_revision_restore获准独占controller最小修及新回归，先报告方案，保持顺序/取消/幂等；prior_fire_boundary_review默认配置只读5–10分钟审查这一竞态与修法，不扩全Host。root docs/接口/集成，原资源预算和用户数据保护不变。
+
+- 独立预检确认竞态可达：observerTail已串行，但queuedCursor不是已确认位置。批准dispatchObserversUntil仅从lifecycleCursor继续；已入Graph但未confirm的稳定eventId按原Runtime幂等重放，跨identity/token守卫保持。另start的observerReady旧回调须先isCurrent再写RECOVERY_REQUIRED，防取消污染新owner；仅此同边界收口，不扩状态机重构。
+
+- 交付验收：两处controller最小fix经deferred Runtime响应/mirror及reset旧owner3例红→绿。规范双cue含迟到首ACK两例通过，11段覆盖、9普通段实际observer序列匹配并到末cursor，工具2/START2/RESUME2、呈现与消费每cue一次、额外分析/叙述/fetch0。相关5文件78tests通过，测试类型收窄后5例与TS复验通过，两端TS/production build及diff检查通过；独立最终只读审查无must-fix。
+- 限制：fake iframe clock/ACK，未挂载完整React/真实Viewer，不把命令意图说成连续画面。无真实Demo/Parser/模型/用户库/GUI/安装部署；控制器timer finally清理，执行/审查owner RELEASE，root读真实diff/log。[验证](validation/GUIDED_TWO_CUE_HANDOFF.md)。
+- 下一有限目标 guided-two-cue-viewer-playback：复用既有小Viewer页，把双cue衔接接到实际iframe/自然时钟与ACK，只取摘要；先小smoke、单browser/server controller、明确60–90秒阶段限，不重parse正式Demo或唤醒旧native A5。保留实际Runtime与页面边界说明，不把多次独立证据相加冒称完整端到端。
+
 ## 已交付：分析失败后的实际恢复入口（2026-09-27）
 
 - ID analysis-failure-retry-entry，基线31d4089已push/clean，实际7f2b复用，前owner RELEASE。partial_revision_restore默认配置独占小复现/入口tests，生产Host/helper/受控patch待root确认；root docs/最终review/浏览器控制与checks/push。
