@@ -9,7 +9,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const app = resolve(root, '.local-data/upstream/cs2d/apps/app'), web = resolve(root, 'apps/web')
 const dependency = createRequire(resolve(app, 'package.json')), webDependency = createRequire(resolve(web, 'package.json'))
 const args = process.argv.slice(2), output = resolve(root, '.local-data/guided-react-host-smoke'), generated = resolve(output, 'src'), dist = resolve(output, 'dist')
-const diagnostics = args.includes('--diagnostics')
+const failFirstReflection = args.includes('--fail-first-reflection')
+const diagnostics = args.includes('--diagnostics') || failFirstReflection
 const port = Number(args.find(arg => arg.startsWith('--port='))?.slice(7) ?? 4324)
 if (!Number.isInteger(port) || port < 0 || port > 65535) throw Error('INVALID_LOOPBACK_PORT')
 if (!args.includes('--serve-only')) {
@@ -34,6 +35,7 @@ if (!args.includes('--serve-only')) {
 }
 if (args.includes('--serve') || args.includes('--serve-only')) {
   const runtime = createRequire(import.meta.url)(resolve(output, 'runtime.cjs'))
+  const transport = runtime.createSmokeTransport({ failFirstReflection })
   const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.json': 'application/json' }
   const roots = { maps: resolve(app, 'public/maps'), weapons: resolve(app, 'public/weapons'), teams: resolve(app, 'public/teams') }
   const server = createServer(async (req, res) => {
@@ -45,8 +47,8 @@ if (args.includes('--serve') || args.includes('--serve-only')) {
         if (req.method !== 'POST' || req.headers.origin !== origin || !req.headers['content-type']?.startsWith('application/json')) { res.writeHead(403); res.end(); return }
         const chunks = []; let size = 0
         for await (const chunk of req) { size += chunk.length; if (size > 65536) { res.writeHead(413); res.end(); return } chunks.push(chunk) }
-        const result = await runtime.dispatch(JSON.parse(Buffer.concat(chunks).toString('utf8')))
-        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(result)); return
+        const result = await transport(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+        res.writeHead(result.status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(result.payload)); return
       }
       if (pathname === '/smoke-metrics.json') { res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(runtime.metrics)); return }
       if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return }
@@ -57,7 +59,7 @@ if (args.includes('--serve') || args.includes('--serve-only')) {
     } catch { if (!res.headersSent) res.writeHead(400); res.end('SMOKE_REQUEST_REJECTED') }
   })
   await new Promise((done, fail) => { server.once('error', fail); server.listen(port, '127.0.0.1', done) })
-  console.log(JSON.stringify({ url: `http://127.0.0.1:${server.address().port}/${diagnostics ? "" : "?teachingDiagnostics=off"}`, diagnostics, stop: 'SIGINT or SIGTERM', rawReplay: 'child page only', runtime: 'MEMORY' }))
+  console.log(JSON.stringify({ url: `http://127.0.0.1:${server.address().port}/${diagnostics ? "" : "?teachingDiagnostics=off"}`, diagnostics, failFirstReflection, stop: 'SIGINT or SIGTERM', rawReplay: 'child page only', runtime: 'MEMORY' }))
   const stop = () => { server.close(); server.closeAllConnections() }
   process.once('SIGINT', stop); process.once('SIGTERM', stop)
 }

@@ -78,10 +78,10 @@ function completeResourceDiagnosis() {
   }).cueCase;
 }
 
-function renderResourcePanel(cueCase = completeResourceDiagnosis(), trusted = true) {
+function renderResourcePanel(cueCase = completeResourceDiagnosis(), trusted = true, error?: string) {
   return renderToStaticMarkup(createElement(TeachingDiagnosisPanel, {
     cue: { id: cueCase.cueId, title: "处理复盘", question: "你的目标是什么？" }, decisionFacts: [], cueCase,
-    hasTrustedDecisionContext: trusted, onSubmit() {}, onSkip() {}, onConfirm() {}, onDisagree() {}, onReplay() {},
+    hasTrustedDecisionContext: trusted, error: error ? { cueId: cueCase.cueId, message: error } : undefined, onSubmit() {}, onSkip() {}, onConfirm() {}, onDisagree() {}, onReplay() {},
   }));
 }
 
@@ -153,4 +153,38 @@ it("omits an empty measurement list while retaining diagnosis actions", () => {
   const html = renderResourcePanel(cueCase);
   expect(html).not.toContain('aria-label="诊断数值证据"');
   for (const label of ["懂了，继续", "再看一遍", "我不同意这个结论"]) expect(html).toContain(label);
+});
+
+
+it.each(["complete", "fallback", "history"] as const)("retains transport fallback feedback on the %s surface without changing saved diagnosis", (surface) => {
+  const cueCase = completeResourceDiagnosis();
+  if (surface === "fallback") cueCase.status = "FALLBACK";
+  const before = JSON.stringify(cueCase);
+  const error = "智能讲解暂不可用，已根据现有证据继续检查。";
+  const html = renderResourcePanel(cueCase, surface !== "history", error);
+  expect(html).toContain(error);
+  expect(html).toContain('role="alert"');
+  expect(html).toContain(surface === "complete" ? "懂了，继续" : "看完了，继续下一段");
+  const withoutError = renderResourcePanel(cueCase, surface !== "history");
+  expect(withoutError).not.toContain(error);
+  expect(withoutError).not.toContain('role="alert"');
+  expect(JSON.stringify(cueCase)).toBe(before);
+});
+
+
+it("does not carry the previous cue's feedback into the next reflection or completed diagnosis", () => {
+  const first = completeResourceDiagnosis();
+  const error = { cueId: first.cueId, message: "智能讲解暂不可用，已根据现有证据继续检查。" };
+  const second = diagnoseTeachingCue({ cueId: "cue-next", reflection: { cueId: "cue-next", selectedGoal: "GET_INFO", response: "ANSWERED", source: "USER", limitations: [] }, decisionFacts: [], playerActionFacts: [], outcomeFacts: [] }).cueCase;
+  const render = (cueId: string, cueCase?: typeof first) => renderToStaticMarkup(createElement(TeachingDiagnosisPanel, {
+    cue: { id: cueId, title: "处理复盘", question: "你的目标是什么？" }, decisionFacts: [], cueCase, error, hasTrustedDecisionContext: true,
+    onSubmit() {}, onSkip() {}, onConfirm() {}, onDisagree() {},
+  }));
+  expect(render(first.cueId, first)).toContain(error.message);
+  for (const html of [render(second.cueId), render(second.cueId, second)]) {
+    expect(html).not.toContain(error.message);
+    expect(html).not.toContain('role="alert"');
+  }
+  expect(render(second.cueId)).toContain("先说说你的思路");
+  expect(render(second.cueId, second)).toContain("诊断完成");
 });

@@ -1,7 +1,7 @@
 import { createCoachAgentRuntime } from "../../libs/coach-agent/src/index";
 import { parseRemoteCoachAgentDispatchEnvelope, parseRemoteCoachAgentDispatchResponse } from "../../libs/coach-agent/src/remote-dispatch-client";
 const runtimes = new Map<string, ReturnType<typeof createCoachAgentRuntime>>();
-export const metrics = { dispatches: 0, events: {} as Record<string, number>, externalFetches: 0, reflections: [] as Array<{ response: string; caseStatus: string | null; verdict: string | null; diagnostic: string | null; evidenceRefCount: number; learningThreadCount: number }> };
+export const metrics = { transportRequests: 0, reflectionAttempts: 0, injectedFailures: 0, dispatches: 0, events: {} as Record<string, number>, externalFetches: 0, reflections: [] as Array<{ response: string; caseStatus: string | null; verdict: string | null; diagnostic: string | null; evidenceRefCount: number; learningThreadCount: number }> };
 globalThis.fetch = async () => { metrics.externalFetches++; throw Error("SMOKE_EXTERNAL_NETWORK_FORBIDDEN"); };
 export async function dispatch(value: unknown) {
   const envelope = parseRemoteCoachAgentDispatchEnvelope(value);
@@ -20,4 +20,22 @@ export async function dispatch(value: unknown) {
     metrics.reflections = metrics.reflections.slice(-8);
   }
   return result;
+}
+
+/** Test-only transport fault: validation precedes injection, and a rejected request never reaches Runtime. */
+export function createSmokeTransport(options: { failFirstReflection?: boolean } = {}) {
+  let pendingFailure = options.failFirstReflection === true;
+  return async (value: unknown) => {
+    const envelope = parseRemoteCoachAgentDispatchEnvelope(value);
+    metrics.transportRequests++;
+    if (envelope.event.type === "SUBMIT_REFLECTION") {
+      metrics.reflectionAttempts++;
+      if (pendingFailure) {
+        pendingFailure = false;
+        metrics.injectedFailures++;
+        return { status: 503, payload: { code: "SYNTHETIC_REFLECTION_TRANSPORT_FAILURE" } };
+      }
+    }
+    return { status: 200, payload: await dispatch(envelope) };
+  };
 }

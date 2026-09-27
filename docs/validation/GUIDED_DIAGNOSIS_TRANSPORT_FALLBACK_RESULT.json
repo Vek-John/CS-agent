@@ -1,0 +1,64 @@
+{
+  "baseline": "8907c0d",
+  "fault": "One HTTP 503 after strict envelope validation and before Runtime SUBMIT_REFLECTION",
+  "browser": "Codex IAB",
+  "runtime": {
+    "transportRequests": 11,
+    "reflectionAttempts": 2,
+    "injectedFailures": 1,
+    "dispatches": 10,
+    "events": {
+      "OBSERVE_SEGMENT": 7,
+      "START_CUE": 2,
+      "SUBMIT_REFLECTION": 1
+    },
+    "externalFetches": 0,
+    "reflections": [
+      {
+        "response": "ANSWERED",
+        "caseStatus": "AWAITING_CONFIRMATION",
+        "verdict": "INCONCLUSIVE",
+        "diagnostic": "UNVERIFIABLE",
+        "evidenceRefCount": 5,
+        "learningThreadCount": 1
+      }
+    ]
+  },
+  "browserSummary": {
+    "mounted": true,
+    "childReady": true,
+    "stageReady": 1,
+    "replayReady": 1,
+    "selected": 1,
+    "analysisReady": 1,
+    "prepareRoute": 1,
+    "prepareNarration": 2,
+    "agentRequests": 11,
+    "forbiddenFetches": 0,
+    "providerFetches": 0,
+    "playbackReports": 788,
+    "playing": false,
+    "tick": 2600,
+    "acks": 0,
+    "errors": [],
+    "syntheticIdentity": true,
+    "parser": false,
+    "model": false,
+    "diagnostics": true
+  },
+  "visibleChecks": {
+    "firstCueUserTextPreserved": true,
+    "firstCueLocalDiagnosisRetained": true,
+    "firstCueFallbackMessageVisible": true,
+    "nextCueStaleMessageCount": 0,
+    "nextCueGraphDiagnosisShown": true,
+    "continueAvailable": true
+  },
+  "limitations": [
+    "Synthetic Replay and selection",
+    "No real Demo/Parser/model/user database",
+    "Immediate HTTP error only; not timeout or lost response after commit",
+    "Memory Graph; no history/restart durability claim",
+    "No full-match wrap-up validation in this run"
+  ]
+}

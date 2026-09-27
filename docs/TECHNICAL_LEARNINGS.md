@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：回退反馈既要保留，也要绑定当前教学点
+
+- 实证：只在合法SUBMIT_REFLECTION进入Runtime前返回一次503。真实Host能用本地诊断保留USER输入并继续，第二cue也可正常Graph提交；但完整结果Panel没有显示既有错误，而全局字符串错误随后串到第二cue反思页。
+- 决策：Host错误捕获cueId，Panel同步匹配当前cue；完整/基础/历史分支保留现有反馈。无需新模块、effect延迟清理、改变诊断或重算/重试/保存合同。单次故障gate只存在测试工具，默认不启用。
+- 验证：修前真实UI与SSR3红，最终UI首cue回退提示和原文同时存在，次cue旧提示0且Graph成功；transport11/Runtime10、反思尝试2/注入故障1，route1/narration2、外网0。最终48相关tests、专项和两端TS/build通过，自建页面/服务清理。[证据与复跑](validation/GUIDED_DIAGNOSIS_TRANSPORT_FALLBACK.md)。
+- 限制与后继：一次立即HTTP503不能代表超时或服务提交后响应丢失，也没验证SQLite恢复。下轮转向真实完整Host收尾与总结消费，不无限扩故障矩阵。
+
 ## 2026-09-27：默认诊断要区分Graph结果、显式跳过与本地回退
 
 - 问题：上一轮真实Host验收显式关闭diagnostics，不能外推默认教学。当前默认模式先完成处理结果再询问目标，提交后才做条件诊断，基础慢放工具被明确禁用。

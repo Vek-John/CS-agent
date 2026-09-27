@@ -47,6 +47,11 @@ const DISAGREEMENT_OPTIONS = [
   "时间压力更大",
 ] as const;
 
+export interface TeachingDiagnosisError {
+  readonly cueId: string;
+  readonly message: string;
+}
+
 export interface TeachingDiagnosisPanelProps {
   cue: Pick<CoachCue, "id" | "title" | "question">;
   decisionFacts: readonly Fact[];
@@ -55,7 +60,7 @@ export interface TeachingDiagnosisPanelProps {
   hasTrustedDecisionContext?: boolean;
   learningThread?: LearningThread;
   busy?: boolean;
-  error?: string;
+  error?: TeachingDiagnosisError;
   onSubmit: (reflection: UserReflection) => void | Promise<void>;
   onSkip: () => void | Promise<void>;
   onConfirm: () => void;
@@ -129,7 +134,7 @@ export function TeachingDiagnosisPanel({
   hasTrustedDecisionContext = false,
   learningThread,
   busy = false,
-  error,
+  error: scopedError,
   onSubmit,
   onSkip,
   onConfirm,
@@ -143,11 +148,13 @@ export function TeachingDiagnosisPanel({
   const [disagreement, setDisagreement] = useState("");
   const [disagreementGoal, setDisagreementGoal] = useState<ReflectionGoal>();
   const question = useMemo(() => reflectionQuestion(cue), [cue]);
+  const error = scopedError?.cueId === cue.id ? scopedError.message : undefined;
 
   if (cueCase && !hasTrustedDecisionContext) {
     return (
       <section className={styles.panel} aria-live="polite">
         <h3>已恢复你的思路记录</h3>
+        {error ? <p className={styles.error} role="alert">{error}</p> : null}
         <p className={styles.lede}>这段历史复盘尚未核实当时的完整局面，因此暂不采用旧的判断和建议。你的记录与播放进度仍会保留。</p>
         <button type="button" className={styles.primary} disabled={busy} onClick={onConfirm}>看完了，继续下一段</button>
       </section>
@@ -208,6 +215,7 @@ export function TeachingDiagnosisPanel({
           <span className={styles.counter}>已降级</span>
         </div>
         <h3>这次先不做自适应诊断</h3>
+        {error ? <p className={styles.error} role="alert">{error}</p> : null}
         <p className={styles.lede}>保留原有的事实和讲解，你仍然可以继续回放。</p>
         <Limitations values={cueCase.limitations} />
         <button type="button" className={styles.primary} onClick={onConfirm}>看完了，继续下一段</button>
@@ -226,6 +234,7 @@ export function TeachingDiagnosisPanel({
         <span className={styles.counter}>2 / 2</span>
       </div>
       <h3 id={`${cue.id}-diagnosis-title`}>诊断完成</h3>
+      {error ? <p className={styles.error} role="alert">{error}</p> : null}
       <div className={styles.claimBox}>
         <span>你的思路</span>
         <p>{cueCase.reflection?.rawText || GOALS.find((goal) => goal.value === cueCase.reflection?.selectedGoal)?.label || "你没有提供具体目标"}</p>

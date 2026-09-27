@@ -12,6 +12,20 @@
 
 
 
+## 已交付：诊断故障反馈保留与教学点隔离（2026-09-27）
+
+- ID guided-diagnosis-transport-fallback，8907c0d clean/push，7f2b顺序复用；partial_revision_restore默认配置独占既有react-host-smoke故障模式/必要小tests，root docs/真实UI单controller与最终checks/push。生产变更先证实、报告、再定范围。
+- 目标/流程：真实Host首cue用户提交→一次SUBMIT_REFLECTION运输失败（Runtime不执行该次）→明确本地回退/USER意图保留→继续第二cue并正常诊断/跳过，不能重复准备/假报保存。A1五分钟查真实catch/Graph游标与小test，A2限定可选单次故障及匿名计数，A3一次新origin实操/截图、相关tests/专项TS/两端TS/build。
+- 风险：失败落点在同步后提交前，不能误伤START/OBSERVE或虚构Graph成功；186帧留child、无正式Demo/Parser/模型/用户DB/Memory/.env。15分钟任务，单build<60秒，同设施两败先简化；owner不启browser/server，root仅自身页面/loopback服务全生命周期，结束清理RELEASE，不安装部署/force push。
+
+- 实际故障定位：首cue提交返回一次503，Runtime未执行（transport4/dispatch3、reflections空）；Host本地诊断保留合成原文，继续实际进第二回合。但Panel完整case分支不渲染既有diagnosticError，回退提示缺失。已授权owner独占Panel窄显示修复与真实SSR回归，root保存修前截图，修后仅必要复验；不改诊断/Graph/持久化。
+
+- 同次进一步实证：首cue错误在第二cue尚未提交的Reflection Gate反而显示，随后第二cue正常Graph提交成功。批准Host错误按cue归属过滤（非effect事后清理），既有generation/迟到请求guard保留；Panel结果分支显示原反馈。首run transport11/dispatch10、两reflection尝试仅一次进入Runtime，route1/narration2、外网0。修后一次首故障→次cue无旧错提示→提交复验。
+
+- 交付：首cue503后本地诊断/USER原文保留且回退提示可见；继续至第二cue旧提示DOM数0，第二提交真实Graph成功。transport11/dispatch10、reflection2/故障1、route1/narration2，外网/模型/视觉ACK0。生产仅Host错误附cueId与Panel同步过滤/结果分支显示；不改判断/Graph/保存合同。[验证](validation/GUIDED_DIAGNOSIS_TRANSPORT_FALLBACK.md)。
+- 工具6tests、Panel三红到绿与最终5文件48tests、专项TS/语法/工具build、两端TS/build通过（最终生产改动Web复验）；root读真实diff/UI/计数，执行者RELEASE，自建tab18/19和两服务已关闭。立即503不冒称超时/提交后丢响应/持久化恢复通过。
+- 下一有限目标 guided-default-session-wrap-up：当前首点/后续点已连贯，完整Host最终收尾未验证；从最新7f2b实现先核实completeStage3SessionWrapUp/provider边界，再用单小场景贯通末段/终结暂停/本地与Graph教学共同形成受限总结/完成入口。沿单controller/隔离origin，无模型/Parser/用户数据，不继续无收益故障矩阵。
+
 ## 已交付：默认诊断教学真实Host验收与假等待修复（2026-09-27）
 
 - ID guided-react-host-default-teaching，1c46d29 clean/push基线，复用7f2b；partial_revision_restore默认配置独占既有react-host-smoke工具和小tests，root docs/最终review/checks/push及唯一browser/server生命周期。生产缺口先证实再确认修复范围。

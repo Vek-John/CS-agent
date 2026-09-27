@@ -136,7 +136,7 @@ import type { OutcomeReplayTarget } from "@cs-coach/session";
 import { availableCurrentCueResourceQuestions, buildCurrentCueQuestionContext, currentCueQuestionState, updateCurrentCueQuestions, type CurrentCueQuestionState } from "../../lib/coaching/current-cue-questions";
 import { CurrentCueQuestionsPanel } from "./current-cue-questions-panel";
 import { CurrentCueResourceCache } from "../../lib/coaching/current-cue-resource-source";
-import { TeachingDiagnosisPanel } from "./teaching-diagnosis-panel";
+import { TeachingDiagnosisPanel, type TeachingDiagnosisError } from "./teaching-diagnosis-panel";
 import { skipReflectionToBaseline } from "../../lib/coaching/skip-reflection-flow";
 import {
   baselineCueCase,
@@ -390,7 +390,7 @@ export function Cs2dPlaybackHost({
   const [cueQuestions, setCueQuestions] = useState<CurrentCueQuestionState>();
   const questionResourceCacheRef = useRef(new CurrentCueResourceCache());
   const [diagnosticBusyCueId, setDiagnosticBusyCueId] = useState<string>();
-  const [diagnosticError, setDiagnosticError] = useState<string>();
+  const [diagnosticError, setDiagnosticError] = useState<TeachingDiagnosisError>();
   const [diagnosticsEnabled, setDiagnosticsEnabled] = useState(true);
   const teachingCasesRef = useRef<Readonly<Record<string, CueCase>>>({});
   const teachingThreadsRef = useRef<readonly LearningThread[]>([]);
@@ -2486,7 +2486,7 @@ export function Cs2dPlaybackHost({
     const context = diagnosisContext();
     if (!context) {
       const currentCue = liveCueRef.current ?? cue;
-      setDiagnosticError("当前讲解状态已变化，已保留基础讲解；你仍可以继续回放。");
+      setDiagnosticError({ cueId: reflection.cueId, message: "当前讲解状态已变化，已保留基础讲解；你仍可以继续回放。" });
       // If the cue changed between the click and this callback, do not attach
       // the old reflection to the new cue. Otherwise keep the user's input in
       // a Baseline case so a missing context never becomes a silent no-op.
@@ -2540,7 +2540,7 @@ export function Cs2dPlaybackHost({
           const graphThread = result.state.learningThreads?.find((thread) => thread.evidenceCueIds.includes(reflection.cueId));
           if (graphCase && graphThread) output = { cueCase: graphCase, learningThread: graphThread };
         } catch (error) {
-          if (requestIsLive()) setDiagnosticError(error instanceof Error ? "智能讲解暂不可用，已根据现有证据继续检查。" : "智能讲解暂不可用，已根据现有证据继续检查。");
+          if (requestIsLive()) setDiagnosticError({ cueId: reflection.cueId, message: "智能讲解暂不可用，已根据现有证据继续检查。" });
         }
       }
       if (!requestIsLive()) return;
@@ -2558,7 +2558,7 @@ export function Cs2dPlaybackHost({
       }
     } catch (error) {
       if (!requestIsLive()) return;
-      setDiagnosticError("这次思路检查暂时未完成，已保留基础讲解。");
+      setDiagnosticError({ cueId: context.cue.id, message: "这次思路检查暂时未完成，已保留基础讲解。" });
       // Keep the submitted USER reflection attached to the fallback case so a
       // provider/schema failure cannot silently erase what the player said.
       const fallback = {
@@ -2649,7 +2649,7 @@ export function Cs2dPlaybackHost({
           if (!graphCase) return undefined;
           return { cueCase: graphCase, mirror: () => mirrorAgentResult(event, result) };
         } catch {
-          if (requestIsLive()) setDiagnosticError("暂时未能同步跳过操作，已显示基础讲解。");
+          if (requestIsLive()) setDiagnosticError({ cueId: currentCue.id, message: "暂时未能同步跳过操作，已显示基础讲解。" });
           return undefined;
         }
       },
@@ -2754,7 +2754,7 @@ export function Cs2dPlaybackHost({
           const graphThread = result.state.learningThreads?.find((thread) => thread.evidenceCueIds.includes(currentCue.id));
           if (graphCase && graphThread) output = { cueCase: graphCase, learningThread: graphThread };
         } catch {
-          if (requestIsLive()) setDiagnosticError("智能讲解暂时未能重新检查，已根据本地证据继续。");
+          if (requestIsLive()) setDiagnosticError({ cueId: requestCueId, message: "智能讲解暂时未能重新检查，已根据本地证据继续。" });
         }
       }
       if (!requestIsLive()) return;
@@ -2781,7 +2781,7 @@ export function Cs2dPlaybackHost({
       }
     } catch (error) {
       if (!requestIsLive()) return;
-      setDiagnosticError("补充信息暂时未能应用，当前结论会保留不确定性。");
+      setDiagnosticError({ cueId: requestCueId, message: "补充信息暂时未能应用，当前结论会保留不确定性。" });
     } finally {
       if (diagnosisRequestEpochRef.current === requestEpoch) setDiagnosticBusyCueId(undefined);
     }
