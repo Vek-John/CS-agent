@@ -1,0 +1,89 @@
+{
+  "taskId": "baseline-ammo-display-and-question",
+  "baseline": "b18c064",
+  "source": "existing guarded currentDiagnosisResources plus actual displayed snapshot/weapon/state binding",
+  "references": "independent tick-end ammo refs, not canonical state facts",
+  "tests": {
+    "new": 13,
+    "relatedFiles": 10,
+    "relatedPassed": 239,
+    "toolFiles": 2,
+    "toolPassed": 8,
+    "harnessTypecheck": "PASS",
+    "harnessBuildSeconds": 4.57,
+    "webTypecheck": "PASS",
+    "viewerTypecheck": "PASS",
+    "webBuild": "PASS",
+    "formalViewerBuild": "PASS",
+    "readOnlySourceReview": "no must-fix"
+  },
+  "ui": {
+    "before": {
+      "mounted": true,
+      "childReady": true,
+      "stageReady": 1,
+      "replayReady": 1,
+      "selected": 1,
+      "analysisReady": 1,
+      "prepareRoute": 1,
+      "prepareNarration": 2,
+      "agentRequests": 4,
+      "forbiddenFetches": 0,
+      "providerFetches": 0,
+      "playbackReports": 715,
+      "playing": false,
+      "tick": 1400,
+      "acks": 1,
+      "errors": [],
+      "selfBlindFixture": false,
+      "ammoFixture": true,
+      "syntheticIdentity": true,
+      "parserEnabled": false,
+      "modelEnabled": false,
+      "diagnostics": false,
+      "realLifecycle": null
+    },
+    "after": {
+      "mounted": true,
+      "childReady": true,
+      "stageReady": 1,
+      "replayReady": 1,
+      "selected": 1,
+      "analysisReady": 1,
+      "prepareRoute": 1,
+      "prepareNarration": 2,
+      "agentRequests": 4,
+      "forbiddenFetches": 0,
+      "providerFetches": 0,
+      "playbackReports": 715,
+      "playing": false,
+      "tick": 1400,
+      "acks": 1,
+      "errors": [],
+      "selfBlindFixture": false,
+      "ammoFixture": true,
+      "syntheticIdentity": true,
+      "parserEnabled": false,
+      "modelEnabled": false,
+      "diagnostics": false,
+      "realLifecycle": null
+    },
+    "console": []
+  },
+  "uiObserved": {
+    "display": "AK-47 · 7 发, recent pre-decision record with reserve unknown and precision limitations",
+    "answer": "same displayed record and independent weapon-sample source",
+    "screenshots": [
+      ".local-data/baseline-ammo-display/display.png",
+      ".local-data/baseline-ammo-display/answer.png"
+    ],
+    "closedTab": "30",
+    "stoppedServerPort": 61637
+  },
+  "limitations": [
+    "Synthetic v2 GUI case only; zero and unknown verified in production-function tests",
+    "No formal Demo, Parser, model, user database, installation or deployment",
+    "No instantaneous-ammo, complete event coverage, professional judgment improvement or native A5 claim"
+  ],
+  "next": "baseline-ammo-history-restore"
+}

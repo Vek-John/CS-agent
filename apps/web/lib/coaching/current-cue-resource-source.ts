@@ -1,4 +1,4 @@
-import { projectArmorChip, buildCoachingCueView, playerStateAtOrBefore } from "./cs2d-coaching-view";
+import { baselineAmmoText, type BaselineAmmoDisplay, projectArmorChip, buildCoachingCueView, playerStateAtOrBefore } from "./cs2d-coaching-view";
 import { matchesDecisionState, verifiedDisplayedUtilityEvidence } from "./utility-kind-evidence";
 import type { CoachCue, DecisionResources, DiagnosticMeasurement, ReviewPlan, TeachingDiagnosisInput } from "@cs-coach/contracts";
 import type { TeachingDiagnosisHostContext } from "./teaching-diagnosis-host";
@@ -8,7 +8,7 @@ import { currentDiagnosisSnapshot, currentDiagnosisResources, currentDiagnosisWi
 
 /** Opaque, page-local provenance: a saved/labelled measurement cannot manufacture this source. */
 export interface CurrentCueResourceSource { readonly revision: number }
-const sources = new WeakMap<CurrentCueResourceSource, { plan: ReviewPlan; cue: CoachCue; resources?: DecisionResources; clock?: TeachingDiagnosisInput["decisionClock"]; clockFact?: VerifiedResourceText; health?: VerifiedResourceText; armor?: VerifiedResourceText & { displayedText: string }; utilityKinds?: VerifiedResourceText }>();
+const sources = new WeakMap<CurrentCueResourceSource, { plan: ReviewPlan; cue: CoachCue; resources?: DecisionResources; clock?: TeachingDiagnosisInput["decisionClock"]; clockFact?: VerifiedResourceText; health?: VerifiedResourceText; armor?: VerifiedResourceText & { displayedText: string }; utilityKinds?: VerifiedResourceText; baselineAmmo?: BaselineAmmoDisplay }>();
 
 /** One immutable source entry per Host. Typing/replay do not rescan the timeline. */
 export class CurrentCueResourceCache {
@@ -46,7 +46,8 @@ export class CurrentCueResourceCache {
       ? { text: fact.text, refs: [fact.id] } : undefined;
     // Match the baseline View's precedence and fact surface, while requiring current freshness.
     const semantics = { ...material, ...cue };
-    const displayedSnapshot = currentDiagnosisSnapshot({ ...context, material: undefined, cue: { ...cue, decisionSnapshot: semantics.decisionSnapshot } }, window);
+    const displayedContext = { ...context, material: undefined, cue: { ...cue, decisionSnapshot: semantics.decisionSnapshot } };
+    const displayedSnapshot = currentDiagnosisSnapshot(displayedContext, window);
     const state = belongs && displayedSnapshot ? playerStateAtOrBefore(timeline?.player_state_tracks ?? [], selectedPlayerId, cue.decision_tick) : undefined;
     const viewFacts = buildCoachingCueView(cue, false).decisionFacts;
     const utilityKinds = state ? verifiedDisplayedUtilityEvidence(state, semantics, cue.decision_tick, viewFacts) : undefined;
@@ -67,8 +68,19 @@ export class CurrentCueResourceCache {
       state.armor === resources.armor && displayedSnapshot?.selectedPlayer.value?.armor === resources.armor &&
       matchesDecisionState(state, semantics, cue.decision_tick, viewFacts)
       ? { text: `${resources.armor} 甲`, refs: [...stateRefs], displayedText: armorChip.text } : undefined;
+    // Most cues inherit their material snapshot, so do not rescan the timeline.
+    // A cue-owned override must also pass the existing complete resource guards.
+    const displayedResources = displayedSnapshot === snapshot ? resources : currentDiagnosisResources(displayedContext, window);
+    const ammo = resources?.weaponAmmo, shownAmmo = displayedResources?.weaponAmmo;
+    const baselineAmmo = state && ammo && shownAmmo && validStateRefs && matchesDecisionState(state, semantics, cue.decision_tick, viewFacts) &&
+      ammo.weapon === shownAmmo.weapon && ammo.clip === shownAmmo.clip && ammo.weapon === state.active_item?.item_id &&
+      ammo.weapon === displayedSnapshot?.selectedPlayer.value?.weapon && ammo.evidenceRefs.length > 0 && ammo.evidenceRefs.length <= 8 &&
+      new Set(ammo.evidenceRefs).size === ammo.evidenceRefs.length && ammo.evidenceRefs.length === shownAmmo.evidenceRefs.length &&
+      ammo.evidenceRefs.every(ref => shownAmmo.evidenceRefs.includes(ref))
+      ? { cueId: cue.id, candidateId: cue.candidate_id, decisionTick: cue.decision_tick, weapon: ammo.weapon, clip: ammo.clip,
+          text: baselineAmmoText(ammo.weapon, ammo.clip), refs: [...ammo.evidenceRefs] } : undefined;
     const source = Object.freeze({ revision: ++this.revision });
-    sources.set(source, { plan, cue, resources, clock, clockFact, health, armor, utilityKinds });
+    sources.set(source, { plan, cue, resources, clock, clockFact, health, armor, utilityKinds, baselineAmmo });
     this.last = { context: { ...context }, source };
     return source;
   }
@@ -137,4 +149,16 @@ export function matchDisplayedBaselineArmor(source: CurrentCueResourceSource | u
   const origin = source && sources.get(source);
   return origin && origin.plan === plan && origin.cue === cue && origin.armor && origin.armor.displayedText === displayedText
     ? { text: origin.armor.text, refs: [...origin.armor.refs] } : undefined;
+}
+
+/** Host-only display projection; object identity scopes it to the same current plan/cue. */
+export function getBaselineCueAmmo(source: CurrentCueResourceSource | undefined, plan: ReviewPlan | undefined, cue: CoachCue | undefined): BaselineAmmoDisplay | undefined {
+  const origin = source && sources.get(source);
+  return origin && origin.plan === plan && origin.cue === cue && origin.baselineAmmo
+    ? { ...origin.baselineAmmo, refs: [...origin.baselineAmmo.refs] } : undefined;
+}
+
+export function matchDisplayedBaselineAmmo(source: CurrentCueResourceSource | undefined, plan: ReviewPlan, cue: CoachCue, displayedText: string | undefined): VerifiedResourceText | undefined {
+  const ammo = getBaselineCueAmmo(source, plan, cue);
+  return ammo && ammo.text === displayedText ? { text: ammo.text, refs: [...ammo.refs] } : undefined;
 }

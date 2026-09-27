@@ -1,7 +1,7 @@
 import { fireReplay, self } from "../../libs/cs2d-analysis-adapter/src/window-self-fire-fixtures";
 
 /** Synthetic coordinates and time, never a parsed Demo. Generated inside each page, not transported. */
-export function twoCueViewerReplay(options: { priorSelfBlind?: boolean } = {}) {
+export function twoCueViewerReplay(options: { priorSelfBlind?: boolean; priorWeaponAmmo?: boolean } = {}) {
   const first = fireReplay("DEATH");
   const players = [{ steamId: self, name: "Synthetic T", startSide: "T" as const }, { steamId: "other", name: "Synthetic CT", startSide: "CT" as const }];
   const rounds = [0, 1].map(index => {
@@ -21,7 +21,10 @@ export function twoCueViewerReplay(options: { priorSelfBlind?: boolean } = {}) {
       freezeStartTick: source.freezeStartTick + offset, startTick: source.startTick + offset,
       decidedTick: source.decidedTick + offset, endTick: source.endTick + offset, postEndTick: frames.at(-1)!.tick + offset + 1,
       frames: frames.map(frame => ({ ...frame, tick: frame.tick + offset, t: (frame.tick - source.freezeStartTick) / 64,
-        players: [{ ...frame.players[0], ...position(frame.tick), primary: "AK-47", weapon: "AK-47" },
+        players: [{ ...frame.players[0], ...position(frame.tick), primary: "AK-47", weapon: "AK-47",
+          ...(options.priorWeaponAmmo ? { activeWeaponHandle: 114697, ammoSamplingVersion: 2 as const,
+            weaponAmmo: { source: "SOURCE2_ACTIVE_WEAPON" as const, phase: "TICK_END" as const, version: 2 as const,
+              sampledAtTick: frame.tick + offset - 1, weapon: "AK-47", weaponHandle: 114697, clip: 7 } } : {}) },
           { ...frame.players[0], steamId: "other", side: "CT" as const, alive: true, health: 100, ...position(frame.tick), x: -400, primary: "AK-47", weapon: "AK-47" }],
       })),
       events: source.events.map(event => ({ ...event, ...position(event.tick), tick: event.tick + offset, t: (event.tick - source.freezeStartTick) / 64 })),

@@ -12,6 +12,17 @@
 
 
 
+## 已交付：基础讲解最近弹匣展示与追问（2026-09-27）
+
+- ID baseline-ammo-display-and-question，基线b18c064已push/clean，7f2b复用，原owners RELEASE。partial_revision_restore默认配置独占cache/View/QA/Host窄接线及新baseline-ammo-question测试；root docs/ARCH/tools可选GUI小fixture/统一checks与push。
+- 目标/流程：既有strict-prior来源→同当前View Snapshot/武器/状态绑定→Host取受限projection传View独立段落→显示文本与opaque source一致才可追问。显示最近弹匣/武器/数量及备弹未知、非瞬间精确；canonical state refs只绑定状态，ammo refs独立。不扩Narrator/cue facts/判断/旧产物，不读取同tick结束信息。
+- 验收：自然cue正常7与0/合法完成Session，最新缺失与已知动作/实体时间/半秒门、cue覆盖Snapshot冲突、失效source/旧cue投影、诊断measurement隔离；相关tests/两端TS/正式build与一次小IAB实际显示及快捷问答。
+- 风险/边界：cache已依赖View，View不得反向import；共享显示投影只传有界字段，Host提前read同一source并复用。沿emil/apple已有段落/按钮与reduced样式，不加动画。A1五分钟最小链、实现15–25分钟，单test60秒；root单UI/controller新origin阶段90秒、结束关tab/server。无正式Demo/Parser/模型/用户库/安装部署，同设施两败简化。
+
+- 交付：原strict-prior资源经实际显示状态绑定，Host一次read/受限projection→View独立段落→完整文本匹配后QA，ammo refs不入canonical facts，0保留/未知不显示。13新case、10文件239相关、工具8项/专项TS/harness build、两端TS与正式production build通过；root+独立源码审查无must-fix，执行者均RELEASE。
+- IAB：可选合成ammo=1首cue自然完成后显示AK-47最近7发，快捷回答同一记录并保留备弹/采样限制；Analysis1/Route1/Narration2/Agent4前后不变，外部/provider0、console空。tab30/61637服务已关闭，非正式Demo/native A5，0/unknown仅局部测试。[证据](validation/BASELINE_AMMO_DISPLAY_RESULT.json)。
+- 下一有限目标 baseline-ammo-history-restore：已有teaching-history-restore-fixture可复用，隔离SQLite关闭重开经真实GET/Controller到cache/View/QA验证7/0/无来源及零再生成；保留原独立refs/时间门，先小样本、不读用户库或正式Demo、不重做全场GUI。
+
 ## 已交付预检：基础讲解弹匣来源（2026-09-27）
 
 - ID baseline-ammo-source-preflight，基线69a2b64已push/clean，7f2b复用，既有owners RELEASE。partial_revision_restore默认配置只读产品，独占.local-data小probe/必要独立验证工具；root docs/接口判断/最终审阅与交付，不预授权产品变更。

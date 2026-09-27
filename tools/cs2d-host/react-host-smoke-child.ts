@@ -5,7 +5,7 @@ import { replayReadyMessage, emitPlaybackEvent } from "@/viewer/player/hostBridg
 import { createSyntheticHostSelection } from "./react-host-smoke-selection";
 import { isPlaybackCommandEnvelope } from "../../libs/contracts/src/playback-bridge";
 import { twoCueViewerReplay, twoCueViewerPlayer } from "./viewer-two-cue-fixture";
-const replay = twoCueViewerReplay({ priorSelfBlind: new URLSearchParams(location.search).get("selfBlind") === "1" });
+const replay = twoCueViewerReplay({ priorSelfBlind: new URLSearchParams(location.search).get("selfBlind") === "1", priorWeaponAmmo: new URLSearchParams(location.search).get("ammo") === "1" });
 const origin = new URL(location.href).searchParams.get("parentOrigin");
 if (origin !== location.origin) throw Error("INVALID_PARENT_ORIGIN");
 const report = (type: string) => parent.postMessage({ channel: "react-host-smoke", type }, origin);

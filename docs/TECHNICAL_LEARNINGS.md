@@ -8,6 +8,21 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：基础讲解显示严格决策前的最近弹匣记录
+
+- 实现：cache复用原currentDiagnosisResources，只在同一当前View状态/cue覆盖Snapshot/武器/规范状态事实归属通过后形成有界显示；有Snapshot覆盖时再走原资源校验并比对独立ammo引用。Host提前read同一source、取投影传View和问答，避免View反向依赖cache。独立refs不成为cue事实，不扩Narrator或改持久产物。
+
+| Before | After | Why |
+| --- | --- | --- |
+| 基础讲解只显示武器，弹匣仅在诊断measurement可用 | 当前状态区独立显示最近弹匣、备弹未知和采样限制 | 用户可核对已有记录，仍不称决策瞬间精确余量 |
+| baseline弹匣问法无已显示来源 | 完整显示文本与opaque source一致才回答，自动出现既有快捷按钮 | 不借保存标签或隐藏诊断提权，0与未知分开 |
+
+- 验证：正常7/0生产链2红→绿，新13项/10文件239相关tests通过，覆盖最新v2缺失、同tick开火、实体冲突、View Snapshot覆盖、旧source/cue、FALLBACK/diagnostic隔离及cache重复读取不增加轨迹访问。独立只读源码审查无must-fix，root读真实diff/测试/输出。
+- 实际IAB：新增可选synthetic ammo夹具不改默认输入，两个自然cue工具验证严格prior记录；首cue实际带看/演示完成后显示AK-47最近7发，点击弹匣快捷按钮返回同句与独立采样来源。问答前后Analysis1/Route1/Narration2/Agent4不变，provider/外部0、console空，保存可见段落/答案截图。root关闭tab30/61637服务，无Parser/模型/正式Demo或用户库。
+- 交付门：工具2文件8tests、harness专项TS及构建4.57秒、两端TS、Web与正式Viewer production build、diff检查通过。[结果](validation/BASELINE_AMMO_DISPLAY_RESULT.json)。
+- 限制：GUI只走合成7发场景，0与unknown由生产函数测试覆盖；不称实战覆盖提升、专业判断改善或native A5完成。独立来源仍不能证明两端间武器持续不变，备弹未知；旧无可信数据不补值。输出含cue/decision身份与原refs，但不新增原始ammo sampleTick或handle字段。
+- 下一有限目标 baseline-ammo-history-restore：复用已存在teaching-history-restore-fixture的隔离SQLite关闭重开→真实GET/恢复Controller，验证7/0/缺来源经恢复cache到新View/问答并保持零再生成；不读用户库或重解析正式Demo。该恢复路径尚未被本轮新UI测试替代。
+
 ## 2026-09-27：弹匣可以复用独立来源，不能冒充当前状态事实
 
 - 实证：可复现[工具](../tools/baseline-ammo-source-preflight.test.mjs)用实际Adapter生成自然DEATH cue、包/Narrator、完成结果门的Session及诊断。v2合成container/decision1400携带此前1399的tick-end弹匣，7发和0发均进入实际诊断measurement及问答；baseline目前仅显示AK-47且无弹匣答案。decision同tick开火、最新v2缺失、handle不一致均未知，不回退旧容器，网络调用0。

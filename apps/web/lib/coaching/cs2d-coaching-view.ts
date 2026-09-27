@@ -33,10 +33,25 @@ export interface CoachingStatusChip {
   item?: ActiveItem;
 }
 
+/** Page-local, cache-verified resource display; never loaded from a saved narration. */
+export interface BaselineAmmoDisplay {
+  cueId: string;
+  candidateId?: string;
+  decisionTick: number;
+  weapon: string;
+  clip: number;
+  text: string;
+  refs: readonly string[];
+}
+export function baselineAmmoText(weapon: string, clip: number): string {
+  return `决策前最近弹匣记录：${weapon} · ${clip} 发。备弹未知；不代表决策瞬间的精确余量，采样后的换枪或换弹仍可能未知。`;
+}
+
 export interface ThreeStageCoachingView {
   currentState: {
     chips: readonly CoachingStatusChip[];
     fallbackText?: string;
+    priorWeaponAmmo?: { text: string; refs: readonly string[] };
     priorSelfBlind?: { text: string; refs: readonly string[] };
     priorSelfFire?: { text: string; refs: readonly string[] };
     sampledGround?: { text: string; refs: readonly string[] };
@@ -206,6 +221,7 @@ export function projectArmorChip(state: PlayerStateSample, snapshot?: TrustedDec
 export function buildThreeStageCoachingView(input: {
   narration: NarrationBundle;
   decisionState?: PlayerStateSample;
+  baselineAmmo?: BaselineAmmoDisplay;
   decisionTick?: number;
   tickRate?: number;
   cue?: CoachCue;
@@ -239,6 +255,17 @@ export function buildThreeStageCoachingView(input: {
     if (state.money !== undefined) chips.push({ kind: "money", text: `$${Math.max(0, state.money).toLocaleString("en-US")}` });
   }
 
+  // The Host supplies this only through the current opaque source. Keep its cue
+  // scope and visible weapon aligned without relabelling ammo refs as state facts.
+  const ammo = input.baselineAmmo;
+  const priorWeaponAmmo = state && ammo && input.cue && ammo.cueId === input.cue.id && ammo.candidateId === input.cue.candidate_id &&
+    ammo.decisionTick === input.decisionTick && ammo.decisionTick === input.cue.decision_tick &&
+    input.narration.cueId === input.cue.id && input.narration.candidateId === input.cue.candidate_id &&
+    ammo.weapon === state.active_item?.item_id && ammo.weapon === input.semantics?.decisionSnapshot?.selectedPlayer.value?.weapon &&
+    Number.isSafeInteger(ammo.clip) && ammo.clip >= 0 && ammo.clip <= 255 && ammo.text === baselineAmmoText(ammo.weapon, ammo.clip) &&
+    ammo.refs.length > 0 && ammo.refs.length <= 8 && new Set(ammo.refs).size === ammo.refs.length && ammo.refs.every(ref => typeof ref === "string" && ref.trim() && ref.length <= 160)
+    ? { text: ammo.text, refs: [...ammo.refs] } : undefined;
+
   const situation = observableSituation(input.semantics ?? {});
   if (situation.allies !== null && situation.enemies !== null) chips.push({ kind: "situation", text: `我方 ${situation.allies} 人 · 对方 ${situation.enemies} 人存活` });
   if (situation.remainingSeconds !== null) chips.push({ kind: "clock", text: `最近采样：回合剩余约 ${Math.max(0, Math.ceil(situation.remainingSeconds))} 秒` });
@@ -268,6 +295,7 @@ export function buildThreeStageCoachingView(input: {
   return {
     currentState: {
       chips,
+      priorWeaponAmmo,
       priorSelfBlind: priorSelfBlindForView(input, state),
       priorSelfFire: priorSelfFireForView(input, state),
       sampledGround: sampledGroundForView(input, state),

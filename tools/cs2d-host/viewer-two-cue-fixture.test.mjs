@@ -47,3 +47,16 @@ it('carries the optional synthetic self-blind occurrence through the actual firs
  expect(narration.currentSituation.refs).toContain(fact.id);
  expect(twoCueViewerReplay().rounds[0].blinds).toEqual([]);
 });
+
+it('keeps optional synthetic ammo at a strictly prior tick for both natural teaching cues', async()=>{
+ const {currentDiagnosisResources,currentDiagnosisWindow}=await import('../../apps/web/lib/coaching/diagnosis-decision-state.ts');
+ const replay=twoCueViewerReplay({priorWeaponAmmo:true});
+ const analysis=buildCs2dAnalysisBundle({replay,selectedSteamId:twoCueViewerPlayer,demoId:'synthetic-prior-ammo'});
+ expect(analysis.review_plan.cues).toHaveLength(2);
+ for(const cue of analysis.review_plan.cues){
+  const context={plan:analysis.review_plan,cue,material:analysis.candidate_set.materials.find(m=>m.candidateId===cue.candidate_id),timeline:analysis.match_timeline,selectedPlayerId:twoCueViewerPlayer};
+  const ammo=currentDiagnosisResources(context,currentDiagnosisWindow(context))?.weaponAmmo;
+  expect(ammo?.clip).toBe(7);expect(ammo?.evidenceRefs[0]).toContain(`weapon-ammo-end-at-${cue.decision_tick-1}`);
+ }
+ expect(twoCueViewerReplay().rounds[0].frames[0].players[0].weaponAmmo).toBeUndefined();
+});

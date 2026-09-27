@@ -135,7 +135,7 @@ import { requestCurrentOutcomeReplay, HostOutcomeReplayGuard, outcomeReplayInter
 import type { OutcomeReplayTarget } from "@cs-coach/session";
 import { availableCurrentCueResourceQuestions, buildCurrentCueQuestionContext, currentCueQuestionState, updateCurrentCueQuestions, type CurrentCueQuestionState } from "../../lib/coaching/current-cue-questions";
 import { CurrentCueQuestionsPanel } from "./current-cue-questions-panel";
-import { CurrentCueResourceCache } from "../../lib/coaching/current-cue-resource-source";
+import { CurrentCueResourceCache, getBaselineCueAmmo } from "../../lib/coaching/current-cue-resource-source";
 import { TeachingDiagnosisPanel, type TeachingDiagnosisError } from "./teaching-diagnosis-panel";
 import { skipReflectionToBaseline } from "../../lib/coaching/skip-reflection-flow";
 import {
@@ -2223,11 +2223,17 @@ export function Cs2dPlaybackHost({
   const decisionPlayerState = cue && selected
     ? playerStateAtOrBefore(bundle?.match_timeline.player_state_tracks ?? [], selected.playerId, cue.decision_tick)
     : undefined;
+  const currentCueResourceSource = questionResourceCacheRef.current.read(activePlan && cue && bundle ? {
+      plan: activePlan, cue, material: candidateMaterial, timeline: bundle.match_timeline,
+      selectedPlayerId: selected?.playerId ?? activePlan.player_id,
+    } : undefined);
+  const baselineAmmo = getBaselineCueAmmo(currentCueResourceSource, activePlan, cue);
   const threeStageCoaching = presentableNarration && coachingView
     ? buildThreeStageCoachingView({
         narration: presentableNarration,
         semantics: { ...candidateMaterial, ...cue },
         decisionState: decisionPlayerState,
+        baselineAmmo,
         decisionTick: cue?.decision_tick,
         tickRate: bundle?.match_timeline.tick_rate,
         cue,
@@ -2356,10 +2362,8 @@ export function Cs2dPlaybackHost({
     displayedUtilityText: threeStageCoaching?.currentState.chips.find(chip => chip.kind === "utility")?.text,
     displayedHealthText: threeStageCoaching?.currentState.chips.find(chip => chip.kind === "health")?.text,
     displayedArmorText: threeStageCoaching?.currentState.chips.find(chip => chip.kind === "armor")?.text,
-    resourceSource: questionResourceCacheRef.current.read(activePlan && cue && bundle ? {
-      plan: activePlan, cue, material: candidateMaterial, timeline: bundle.match_timeline,
-      selectedPlayerId: selected?.playerId ?? activePlan.player_id,
-    } : undefined),
+    displayedAmmoText: threeStageCoaching?.currentState.priorWeaponAmmo?.text,
+    resourceSource: currentCueResourceSource,
   };
   const questionInputRef = useRef(questionInput);
   questionInputRef.current = questionInput;
@@ -3400,6 +3404,7 @@ export function Cs2dPlaybackHost({
                   {threeStageCoaching.currentState.chips.length > 0 ? (
                     <CoachingStatusList chips={threeStageCoaching.currentState.chips} catalog={gameAssetCatalog} />
                   ) : <p>{threeStageCoaching.currentState.fallbackText}</p>}
+                  {threeStageCoaching.currentState.priorWeaponAmmo ? <p>{threeStageCoaching.currentState.priorWeaponAmmo.text}</p> : null}
                   {threeStageCoaching.currentState.priorSelfBlind ? <p>{threeStageCoaching.currentState.priorSelfBlind.text}</p> : null}
                   {threeStageCoaching.currentState.priorSelfFire ? <p>{threeStageCoaching.currentState.priorSelfFire.text}</p> : null}
                   {threeStageCoaching.currentState.sampledGround ? <p>{threeStageCoaching.currentState.sampledGround.text}</p> : null}
