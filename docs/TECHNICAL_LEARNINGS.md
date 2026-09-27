@@ -8,6 +8,15 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：真实播放完成要等回报，夹具尾帧也必须覆盖目标
+
+- 交付：旧viewer-action-smoke新增--two-cue模式，实际Adapter自然双cue、Session/HostAdapter/呈现门接真实ViewerStage自然时钟和ACK；受控driver选合法Replay能力，没有Graph Runtime或完整React Host。旧single模式保留，Replay由各页面本地生成，不跨工具传bulk。
+- 观察：两个cue各1次成功ACK，工具播放合成1336–1663/2536–2863，回1400/2600暂停后显示当前讲解；显式继续各1，Presented/consumed均2。最终目标3001/实际3000/playingfalse、终结暂停确认true、complete=true、errors=[]。[证据](validation/GUIDED_TWO_CUE_VIEWER_PLAYBACK.md)。
+- 验收修正：首run在发送最终pause后过早complete，改为必须真实seek落点与暂停回报。第二run暴露原合成末帧2960但postEnd3000，真实useReplay离线确认被clamp到2960且已暂停；父页2902/playingtrue是门拒绝后的旧值，不能误判播放器未暂停。
+- 数据修正：只补原始合成post-round帧到1800/3000并设半开1801/3001，不动原事件/official end/自然cue，不降目标或放宽容差。末轮规则来自实际assemble.rs的max(last_tick,end_tick)+1，非末轮真实Parser用下一freeze start；fixture仍有合成间隔，不冒称完整Parser输出或真实Demo尾部均可达。离线3001→3000通过后才最终复验，前两run证据保留。
+- 验证：2文件6tests，修正后fixture1项复验；独立Vite build/专项TS/语法、两端TS/production build通过。root实际IAB点击观察地图/HUD/逐cue与终结状态并保存截图；两位owner均释放，tab12/4321唯一服务及全部test/build退出，零真实Demo/模型/用户库/安装部署。
+- 后继：沿已存在viewerUrl/parentOrigin/reviewPreparationDependencies seam，先验证真实React Host准备接线与当前Viewer兼容；逐项标明stub，不把本轮测试driver当完整应用或专业判断改善。
+
 ## 2026-09-27：预留观察位置不能当作已确认路线进度
 
 - 验证目标：176帧小合成双回合自然生成3候选/2cue，贯通真实Adapter、编译、叙述、Session/transport/seek gate、默认Graph/Stage3与显式继续，未修改冻结plan。两个相同DEATH最初只选1cue，按真实重复压缩改原始第二场景为HP_CHANGE；初始候选数断言过严按实际3候选收口，不强造选点。

@@ -5,15 +5,17 @@ import { dirname, resolve, extname, sep } from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { mkdir, writeFile, readFile, realpath, stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
+import { writeTwoCueHarness } from './viewer-two-cue-harness.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const upstream = resolve(process.env.CS2D_UPSTREAM_DIR || resolve(root, '.local-data/upstream/cs2d'))
 const app = resolve(upstream, 'apps/app')
-const output = resolve(root, '.local-data/basic-route-viewer-action')
+const args = process.argv.slice(2)
+const twoCue = args.includes('--two-cue')
+const output = resolve(root, twoCue ? '.local-data/guided-two-cue-viewer-playback' : '.local-data/basic-route-viewer-action')
 const generated = resolve(output, 'src')
 const dist = resolve(output, 'dist')
 const dependency = createRequire(resolve(app, 'package.json'))
-const args = process.argv.slice(2)
 const serve = args.includes('--serve') || args.includes('--serve-only')
 const port = Number(args.find(value => value.startsWith('--port='))?.slice(7) ?? 4321)
 if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invalid localhost port')
@@ -82,6 +84,7 @@ window.addEventListener('error',event=>report('error',event.message));
 app.use(i18n).mount('#app');
 window.addEventListener('pagehide',()=>app.unmount(),{once:true});
 `)
+  if (twoCue) await writeTwoCueHarness({ root, generated })
   const { build } = await import(pathToFileURL(dependency.resolve('vite')).href)
   const { default: vue } = await import(pathToFileURL(dependency.resolve('@vitejs/plugin-vue')).href)
   const { default: tailwind } = await import(pathToFileURL(dependency.resolve('@tailwindcss/vite')).href)

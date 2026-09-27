@@ -12,6 +12,17 @@
 
 
 
+## 已交付验证：双教学点的真实Viewer播放（2026-09-27）
+
+- ID guided-two-cue-viewer-playback，基线39fdf23已push/clean，7f2b复用，前owner RELEASE。partial_revision_restore默认配置独占既有viewer-action-smoke的双cue模式/必要fixture；root独占docs、IAB tab12及loopback server从启动到清理、最终review/checks/push。IAB已实际打开，旧native A5不唤醒。
+- A1五分钟确认复用架构/小构建；A2合法原始合成双回合（<1000帧，正确Viewer时间/地图位置）自然Adapter编译，真实Session/directive/呈现门接实际Viewer时钟/ACK，两cue分别播放、返回decision暂停，用户显式继续才进第二段；A3root实际点击/截图/有界摘要、相关tests/两端TS/build后push。若浏览器不适合完整Graph，使用明确的测试driver与生产HostAdapter合法能力，不能冒称完整Runtime/Next E2E。
+- 风险预检：浏览器bundle依赖、Tailwind忽略目录及canvas尺寸、失效ACK、长时等待；沿已有效旧harness的@source/固定画布/静态白名单服务，先smoke，总90秒阶段界，bulk留page，root只取摘要。单build<60秒/准备约20分钟，同设施两败简化；零真实Demo/Parser/模型/Jev/用户库/安装部署。执行者不启server/browser，结束RELEASE；root关闭自建tab/server/timer，不清用户资源。
+
+- 实际IAB两cue各ACK1/SUCCEEDED，回合成1400/2600暂停后讲解可见，继续各1；最终WRAP_UP目标3001/实际3000/paused，complete=true、Presented/consumed2、errors[]。受控合法工具driver，没有Graph Runtime/完整React Host，地图/HUD实际观察并保存截图。[验证](validation/GUIDED_TWO_CUE_VIEWER_PLAYBACK.md)。
+- 首版harness过早complete已修正；真实回报复验暴露原fixture声明postEnd3000却只有2960末帧。暂停整链定位，用实际useReplay离线确认clamp，再只补原始合成尾帧（186帧）/末轮半开端点，不降目标/放宽门/改产品。最后一次必要UI复验通过，旧失败证据保留。
+- 2文件6tests和最终fixture1项复验、独立build/专项TS/语法、两端TS/build通过。root审实际diff/来源/日志，agent RELEASE；tab12与4321唯一服务已关，无真实Demo/Parser/模型/用户库/安装部署。未读取canvas尺寸，不声称性能基准或完整应用E2E。
+- 下一有限目标 guided-react-host-smoke：真实Cs2dPlaybackHost现有viewerUrl/parentOrigin/reviewPreparationDependencies seam可用；先小挂载/准备入口验证，再按实际runtime依赖接双cue。优先当前实现，明确stub，保持单controller/小数据，不重测Renderer或唤醒旧native A5。
+
 ## 已交付：双教学点衔接与观察队列竞态修复（2026-09-27）
 
 - ID guided-two-cue-handoff，基线444e5f3已push/clean，实际7f2b复用，前owner RELEASE。partial_revision_restore默认配置（熟悉实际Adapter/Host边界）独占新integration test及必要test fixture/probe；生产变更先报root确认。root独占docs/契约/最终review/浏览器及checks/push。

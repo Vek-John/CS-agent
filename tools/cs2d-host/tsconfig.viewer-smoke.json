@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.typecheck.json",
+  "include": ["viewer-two-cue-fixture.ts", "viewer-two-cue-parent.ts"],
+  "exclude": ["../../node_modules", "../../apps/web/.next"]
+}
