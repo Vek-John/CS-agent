@@ -12,6 +12,16 @@
 
 
 
+## 已交付验证：采样地面元数据的历史详情成本（2026-09-27）
+
+- ID ground-detail-cost-smoke，基线2ef2901已push/clean，7f2b复用；已核实原owner RELEASE。partial_revision_restore沿用默认模型/推理（熟悉真实恢复harness），独占有界measurement probe及test-only fixture必要遥测；root独占docs/最终diff/checks/push。无生产修改预授权，发现瓶颈先定接口。
+- 目标/流程：合法合成Replay有无ground两组分别经实际Adapter→冻结产物→隔离SQLite关闭重开→GET JSON→Controller/recovery，测增量字节与分段延迟；不修改生成后的哈希或时间线。A1小规模smoke核实来源保留和计时，A2一个有限放大规模（至多10玩家×10000帧）成对测量，A3原恢复回归/TS/production build后提交证据；没有明确瓶颈不制造优化。
+- 风险预检：planner扩大、反复保存校验、mock持有bulk；先小验证，单过程2GiB/正式120秒/输出32KiB界，bulk归执行者；5分钟A1/15分钟有限任务，同设施两败简化。零真实Demo/Parser/模型/Jev/GUI/用户库/网络服务/安装发布。执行者finally关闭controller/orchestrator/SQLite，删除自建mkdtemp并结束进程后RELEASE。结果只代表合成单次成本，不外推真实整场SLA；root验真实代码与日志。
+
+- A1/A2完成：88帧smoke后唯一10000帧×10玩家成对运行，实际只保留10000本人采样；9998存活、ground SET7998/UNSET1500/null502。Analysis 4291484→5810894B、Detail 4419082→5939268B；open到READY119.47→125.70ms，恢复再生成/网络/Viewer请求0。生产16MiB门通过，未发现需立即优化的瓶颈，保留生产逻辑。[测量证据](validation/GROUND_DETAIL_COST.md)。
+- root读实际helper/新probe/serializer/GET/Controller与日志；10项原恢复回归、两端TS/production build及diff检查通过，执行者RELEASE。单有序pair不作SLA/显著差异推断，原始10玩家不扩成历史十倍采样；JSON字节不当磁盘gzip字节，fixture保留对象不当产品内存。正常finally清临时库，runner后续清理补强仅语法检查；不重复正式测量。
+- 下一有限目标 analysis-capacity-feedback：已核实serializer16MiB失败→Viewer ANALYSIS_FAILED.message→Host统一“请重新选择比赛或玩家”。用有界夹具确认确定性容量错误的实际反馈，若成立只接准确容量提示与现有恢复入口，不削时间线/引用、不抬上限、不重跑大样本/真实Demo；原A5继续只等待明确native环境条件。
+
 ## 已交付：历史详情读取等待与可重试反馈（2026-09-27）
 
 - ID history-detail-load-recovery，基线b5bb727已push/clean，7f2b复用；partial_revision_restore默认配置独占api.detail/最小Host反馈/helper/tests，root docs/接口决策/最终checks/push。前owner RELEASE。

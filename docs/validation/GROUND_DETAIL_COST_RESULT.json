@@ -1,0 +1,166 @@
+{
+  "baseline": "2ef2901",
+  "environment": {
+    "node": "v22.17.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M1",
+    "totalMemoryGiB": 8
+  },
+  "smoke": {
+    "kind": "SYNTHETIC_GROUND_DETAIL_COST",
+    "mode": "smoke",
+    "inputFrames": 88,
+    "playersPerFrame": 10,
+    "results": [
+      {
+        "analysisBuildMs": 20.498333000000002,
+        "analysisSerializeMs": 2.4531659999998965,
+        "saveToHeadMs": 44.98729100000003,
+        "getResponseMs": 18.16341699999998,
+        "responseJsonMs": 1.5320829999999432,
+        "controllerOpenMs": 20.088833000000022,
+        "recoveryPreparationMs": 3.8876670000000786,
+        "openToReadyMs": 24.398541000000023,
+        "analysisBytes": 141164,
+        "detailBytes": 268470,
+        "sampleCount": 88,
+        "groundSampleCount": 0,
+        "restoredAnalysisCalls": 0,
+        "restoredNarrationCalls": 0,
+        "restoredNetworkCalls": 0,
+        "restoredViewerCalls": 0,
+        "aliveSamples": 86,
+        "set": 0,
+        "unset": 0,
+        "unknown": 0,
+        "cueCount": 1,
+        "withGround": false
+      },
+      {
+        "analysisBuildMs": 3.7990829999998823,
+        "analysisSerializeMs": 1.8515420000001086,
+        "saveToHeadMs": 38.17537500000003,
+        "getResponseMs": 2.6951669999998558,
+        "responseJsonMs": 1.1482079999998405,
+        "controllerOpenMs": 3.918292000000065,
+        "recoveryPreparationMs": 3.94991600000003,
+        "openToReadyMs": 7.933667000000014,
+        "analysisBytes": 154986,
+        "detailBytes": 283088,
+        "sampleCount": 88,
+        "groundSampleCount": 88,
+        "restoredAnalysisCalls": 0,
+        "restoredNarrationCalls": 0,
+        "restoredNetworkCalls": 0,
+        "restoredViewerCalls": 0,
+        "aliveSamples": 86,
+        "set": 68,
+        "unset": 13,
+        "unknown": 7,
+        "cueCount": 1,
+        "withGround": true
+      }
+    ],
+    "delta": {
+      "analysisBytes": 13822,
+      "detailBytes": 14618,
+      "openToReadyMs": -16.46487400000001
+    },
+    "limitations": [
+      "Single ordered pair: no SLA, confidence interval or real Demo performance claim.",
+      "One synthetic round and few cues; selected-player tracks only are persisted.",
+      "Controller open includes GET response construction and response.json; open-to-ready includes Controller open and recovery preparation. Do not sum inclusive timings.",
+      "Detail bytes are parsed DTO re-encoded as compact UTF8 JSON; no HTTP headers/compression/network transfer measured.",
+      "Size calculation, Fixture verification, final artifact equality checks and cleanup are outside open-to-ready timing.",
+      "Control-plane recovery only; Viewer cold parse/hydrate not measured.",
+      "--max-old-space-size=2048 is per V8 process old-space, not total RSS or a 2 GiB cap over the process tree."
+    ]
+  },
+  "bounded": {
+    "kind": "SYNTHETIC_GROUND_DETAIL_COST",
+    "mode": "bounded",
+    "inputFrames": 10000,
+    "playersPerFrame": 10,
+    "results": [
+      {
+        "analysisBuildMs": 57.54429199999993,
+        "analysisSerializeMs": 21.195165999999972,
+        "saveToHeadMs": 408.46625000000006,
+        "getResponseMs": 64.52141700000016,
+        "responseJsonMs": 19.654708000000028,
+        "controllerOpenMs": 84.67870900000003,
+        "recoveryPreparationMs": 34.25725000000011,
+        "openToReadyMs": 119.470417,
+        "analysisBytes": 4291484,
+        "detailBytes": 4419082,
+        "sampleCount": 10000,
+        "groundSampleCount": 0,
+        "restoredAnalysisCalls": 0,
+        "restoredNarrationCalls": 0,
+        "restoredNetworkCalls": 0,
+        "restoredViewerCalls": 0,
+        "aliveSamples": 9998,
+        "set": 0,
+        "unset": 0,
+        "unknown": 0,
+        "cueCount": 1,
+        "withGround": false
+      },
+      {
+        "analysisBuildMs": 47.315374999999904,
+        "analysisSerializeMs": 25.463416999999936,
+        "saveToHeadMs": 526.2212499999998,
+        "getResponseMs": 58.72833300000002,
+        "responseJsonMs": 19.609958000000006,
+        "controllerOpenMs": 78.74241699999993,
+        "recoveryPreparationMs": 46.870166000000154,
+        "openToReadyMs": 125.70237499999985,
+        "analysisBytes": 5810894,
+        "detailBytes": 5939268,
+        "sampleCount": 10000,
+        "groundSampleCount": 10000,
+        "restoredAnalysisCalls": 0,
+        "restoredNarrationCalls": 0,
+        "restoredNetworkCalls": 0,
+        "restoredViewerCalls": 0,
+        "aliveSamples": 9998,
+        "set": 7998,
+        "unset": 1500,
+        "unknown": 502,
+        "cueCount": 1,
+        "withGround": true
+      }
+    ],
+    "delta": {
+      "analysisBytes": 1519410,
+      "detailBytes": 1520186,
+      "openToReadyMs": 6.23195799999985
+    },
+    "limitations": [
+      "Single ordered pair: no SLA, confidence interval or real Demo performance claim.",
+      "One synthetic round and few cues; selected-player tracks only are persisted.",
+      "Controller open includes GET response construction and response.json; open-to-ready includes Controller open and recovery preparation. Do not sum inclusive timings.",
+      "Detail bytes are parsed DTO re-encoded as compact UTF8 JSON; no HTTP headers/compression/network transfer measured.",
+      "Size calculation, Fixture verification, final artifact equality checks and cleanup are outside open-to-ready timing.",
+      "Control-plane recovery only; Viewer cold parse/hydrate not measured.",
+      "--max-old-space-size=2048 is per V8 process old-space, not total RSS or a 2 GiB cap over the process tree."
+    ]
+  },
+  "processes": {
+    "smoke": {
+      "exitCode": 0,
+      "stopReason": null,
+      "wallMs": 1402,
+      "outputBytes": 397,
+      "testWorkerMaxOldSpaceMiB": 2048
+    },
+    "bounded": {
+      "exitCode": 0,
+      "stopReason": null,
+      "wallMs": 2842,
+      "outputBytes": 397,
+      "testWorkerMaxOldSpaceMiB": 2048
+    }
+  }
+}

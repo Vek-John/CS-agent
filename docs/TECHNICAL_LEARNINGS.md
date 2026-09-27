@@ -8,6 +8,15 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：先测采样来源增量，不凭字段数量优化
+
+- 问题：每条地面来源重复保存身份、采样阶段和时间，尚无实际历史详情增量证据。实际collectStates只保留选中玩家，不能把原始10玩家帧数直接当历史轨迹数量。
+- 方法：88帧smoke后唯一一次10000帧×10玩家合成成对运行，原始输入有无ground分别经生产Adapter/16MiB serializer、隔离SQLite关闭重开、实际GET/JSON/Controller/恢复准备。没有篡改冻结产物、重读正式Demo或抬高门；单回合单cue，不冒称整场。
+- 结果：10000本人samples的Analysis由4291484增至5810894B，Detail由4419082增至5939268B，约新增152B/sample；open到READY约119.47→125.70ms。9998存活，ground SET7998/UNSET1500/null502，恢复分析/讲解生成、网络与Viewer请求均0。[完整方法和匿名结果](validation/GROUND_DETAIL_COST.md)。
+- 决策：本次没有生产优化的充分依据，保留schema、时间线完整性、16MiB和120秒策略。GET后组更快、smoke首组偏慢显示冷暖/初始化影响，不能将单对差值称性能提升或稳定开销；未测gzip磁盘占用、真实HTTP、浏览器主线程、Viewer冷启动或内存峰值。计时排除fixture最终深比较和计量用重序列化；Controller/open到READY是包含性指标，不能重复相加。
+- 验证：smoke及bounded两个显式probe均退出0，原库存/ground恢复2文件10tests、两端TypeScript和production build全部通过。runner后补独占TMPDIR/信号清理只做语法检查，未重复正式测量；每V8 old-space2048MiB不等于总RSS界。所有子进程/临时库已清理，执行者RELEASE，root读实际diff/结果。
+- 后继：serializer容量失败被Viewer发送为ANALYSIS_FAILED.message，Host却统一建议重选比赛/玩家。下一有限任务先验证这种确定性失败反馈是否会引导无效重试，再据证据处理反馈；不再扩大本次样本或改变容量门。
+
 ## 2026-09-27：历史详情读取失败不能要求重新分析
 
 - 问题：detail直接fetch+response.json，响应头或正文停滞可无限等待；Host同一catch把读取失败称为身份/版本校验失败。两个fake-time红例确认120秒后仍未结算。

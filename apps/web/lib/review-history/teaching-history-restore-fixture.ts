@@ -29,13 +29,35 @@ const BYTES = Buffer.concat([Buffer.from("PBDEMS2\0", "binary"), Buffer.alloc(64
 const HASH = createHash("sha256").update(BYTES).digest("hex");
 export const cleanupRestoredHistoryFixture = () => { installDesktopReviewLibrary(undefined); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); };
 
+export interface TeachingHistoryRestoreMeasurement {
+  analysisBytes: number;
+  detailBytes: number;
+  sampleCount: number;
+  groundSampleCount: number;
+  analysisBuildMs: number;
+  analysisSerializeMs: number;
+  saveToHeadMs: number;
+  getResponseMs: number;
+  responseJsonMs: number;
+  controllerOpenMs: number;
+  recoveryPreparationMs: number;
+  openToReadyMs: number;
+  restoredAnalysisCalls: number;
+  restoredNarrationCalls: number;
+  restoredNetworkCalls: number;
+  restoredViewerCalls: number;
+}
+
 /** Real SQLite lifecycle and GET handler; only parser/Viewer transport remain outside this fixture. */
-export async function withReopenedTeachingHistory({ replay, transformAnalysis, beforeAnalysisSave, verify }: {
+export async function withReopenedTeachingHistory({ replay, transformAnalysis, beforeAnalysisSave, verify, onMeasurement }: {
   replay: adapter.Cs2dReplay;
+  onMeasurement?: (value: TeachingHistoryRestoreMeasurement) => void;
   transformAnalysis?: (analysis: adapter.Cs2dAnalysisBundle) => adapter.Cs2dAnalysisBundle;
   beforeAnalysisSave?: (input: { analysis: adapter.Cs2dAnalysisBundle; validate: (payload: unknown) => void }) => void;
   verify: (result: { analysis: adapter.Cs2dAnalysisBundle; normalized: adapter.Cs2dAnalysisBundle; recovered: ReturnType<typeof restoreRecoveryArtifacts>; savedNarration: Record<string, NarrationBundle> }) => void | Promise<void>;
 }): Promise<void> {
+  const times = onMeasurement ? { analysisBuildMs: 0, analysisSerializeMs: 0, saveToHeadMs: 0, getResponseMs: 0, responseJsonMs: 0, controllerOpenMs: 0, recoveryPreparationMs: 0, openToReadyMs: 0 } : undefined;
+  let analysisBytes = 0;
   const root = await mkdtemp(join(tmpdir(), "cs-agent-teaching-restore-"));
   const path = join(root, "history.sqlite3");
   let owner: SqliteDatabaseOwner | undefined;
@@ -51,11 +73,18 @@ export async function withReopenedTeachingHistory({ replay, transformAnalysis, b
     const review = await library.createReview({ demoId: imported.demo.demoId, selectedPlayerId: self, selectedPlayerName: "Synthetic", title: "Inventory persistence" });
     const generateAnalysis = vi.spyOn(adapter, "buildCs2dAnalysisBundle");
     const generateNarration = vi.spyOn(planner, "deterministicNarrationBundle");
+    const analysisStarted = performance.now();
     const current = adapter.buildCs2dAnalysisBundle({ replay, selectedSteamId: self, demoId: "synthetic-history-parser", demoContentHash: HASH });
+    if (times) times.analysisBuildMs = performance.now() - analysisStarted;
     expect(current.metadata.adapter_version).toBe(adapter.CS2D_ADAPTER_VERSION);
     const analysis = transformAnalysis ? transformAnalysis(current) : current;
     expect(analysis.match_timeline.timeline_version).toBe(adapter.CS2D_TIMELINE_VERSION);
     expect(analysis.match_timeline.timeline_version).toMatch(/\/timeline\/1\.2\.0$/);
+    if (times) {
+      const started = performance.now();
+      analysisBytes = Buffer.byteLength(adapter.serializeCs2dAnalysisBundle(analysis), "utf8");
+      times.analysisSerializeMs = performance.now() - started;
+    }
     const plan = analysis.review_plan;
     expect(plan.cues.length).toBeGreaterThan(0);
     const narrationByCue = Object.fromEntries(plan.cues.map(cue => {
@@ -67,6 +96,7 @@ export async function withReopenedTeachingHistory({ replay, transformAnalysis, b
     const session = createCoachingSession(plan, identity.sessionId, route);
     const record = buildSessionRecoveryRecord({ identity, demoContentHash: HASH, selectedPlayerId: self, plan, routeState: route, session,
       boundaryKind: "ROUTE_START", narrationByCue, analysis, agentCheckpointId: null });
+    const saveStarted = performance.now();
     const revision = await library.startRevision({ reviewId: review.reviewId, analysisVersion: analysis.metadata.adapter_version, graphVersion: "coach-agent-graph.v3", promptVersion: plan.generation_manifest.prompt_version,
       modelMetadata: {}, routeId: plan.id, routeHash: route.routeFingerprint });
     const append = async (artifactType: AppendArtifactInput["artifactType"], artifactKey: string, schemaVersion: string, payload: unknown) => {
@@ -92,6 +122,7 @@ export async function withReopenedTeachingHistory({ replay, transformAnalysis, b
       recoveryBoundary: "ROUTE_START", defaultRouteCursor: 0, completedCueCount: 0, totalCueCount: plan.cues.length, stableProgress: record.cueProgress };
     validateReadyRevisionArtifacts(await library.loadReview(review.reviewId, { materializeExternalArtifacts: true, reviewRevisionId: revision.reviewRevisionId }), head);
     const committed = await library.commitRuntimeHead(head);
+    if (times) times.saveToHeadMs = performance.now() - saveStarted;
     const savedArtifacts = (await library.loadReview(review.reviewId, { materializeExternalArtifacts: true })).artifacts;
     await owner.close(); owner = undefined;
 
@@ -103,14 +134,23 @@ export async function withReopenedTeachingHistory({ replay, transformAnalysis, b
     vi.stubGlobal("fetch", forbiddenTransport);
     generateAnalysis.mockClear(); generateNarration.mockClear();
     const loadDetail = vi.fn(async (id: string) => {
+      const started = performance.now();
       const response = await GET(new Request(`${ORIGIN}/api/review-history/${id}`, { headers: { [DESKTOP_APP_ORIGIN_HEADER]: ORIGIN } }), { params: Promise.resolve({ id }) });
-      expect(response.status).toBe(200); return await response.json() as ReviewHistoryDetail;
+      if (times) times.getResponseMs = performance.now() - started;
+      expect(response.status).toBe(200);
+      const bodyStarted = performance.now();
+      const detail = await response.json() as ReviewHistoryDetail;
+      if (times) times.responseJsonMs = performance.now() - bodyStarted;
+      return detail;
     });
     const requestViewerSource = vi.fn(async () => { throw new Error("CONTROL_PLANE_MUST_NOT_REQUEST_DEMO_PARSE"); });
     const loadManagedDemo = vi.fn();
     controller = new HistoryRestoreController({ loadDetail, requestViewerSource, loadManagedDemo });
+    const openStarted = performance.now();
     const restored = await controller.open(review.reviewId);
+    if (times) times.controllerOpenMs = performance.now() - openStarted;
     expect(restored.missingArtifacts).toEqual([]); expect(restored.detail.runtimeHead).toEqual(committed);
+    const recoveryStarted = performance.now();
     const validated = validateStoredReviewArtifacts({ ...restored, selectedPlayerId: self, demoContentHash: HASH, routeId: plan.id, routeHash: route.routeFingerprint });
     const recovery = SessionRecoveryRecordSchema.parse(restored.recoverySnapshot);
     const normalized = normalizeRecoveryAnalysis(validated.analysis, recovery);
@@ -122,6 +162,7 @@ export async function withReopenedTeachingHistory({ replay, transformAnalysis, b
     const prepareNarration = vi.fn(deps.prepareNarration);
     preparation = createReviewPreparationOrchestrator("teaching-reopen", recovered.plan, { narrationByCue: savedNarration, readiness: restoredRoute.readiness }, { ...deps, prepareRoute, prepareNarration });
     const events: string[] = []; await preparation.run(event => events.push(event.type));
+    if (times) { times.recoveryPreparationMs = performance.now() - recoveryStarted; times.openToReadyMs = performance.now() - openStarted; }
     expect(events).toContain("READY_TO_START"); expect(events).not.toContain("NARRATION_UPDATE");
     expect(prepareRoute).toHaveBeenCalledOnce(); // Frozen route validation, not a new Director call.
     expect(prepareNarration).not.toHaveBeenCalled(); expect(generateNarration).not.toHaveBeenCalled(); expect(generateAnalysis).not.toHaveBeenCalled();
@@ -131,6 +172,15 @@ export async function withReopenedTeachingHistory({ replay, transformAnalysis, b
     const reopened = await library.loadReview(review.reviewId, { materializeExternalArtifacts: true });
     expect(reopened.artifacts).toEqual(savedArtifacts); // No repair/regeneration/append during restore.
     expect(reopened.runtimeHead).toEqual(committed);
+    if (times && onMeasurement) onMeasurement({ ...times, analysisBytes,
+      // Response.json's parsed DTO re-encodes to the same compact JSON representation; no second body clone.
+      detailBytes: Buffer.byteLength(JSON.stringify(restored.detail), "utf8"),
+      sampleCount: analysis.match_timeline.player_state_tracks?.length ?? 0,
+      groundSampleCount: analysis.match_timeline.player_state_tracks?.filter(row => row.ground_evidence !== undefined).length ?? 0,
+      restoredAnalysisCalls: generateAnalysis.mock.calls.length, restoredNarrationCalls: generateNarration.mock.calls.length,
+      restoredNetworkCalls: forbiddenTransport.mock.calls.length,
+      restoredViewerCalls: requestViewerSource.mock.calls.length + loadManagedDemo.mock.calls.length,
+    });
   } finally {
     preparation?.cancel(); controller?.cancel(); installDesktopReviewLibrary(undefined);
     if (owner) await owner.close();
