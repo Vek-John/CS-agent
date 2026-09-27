@@ -12,6 +12,17 @@
 
 
 
+## 已交付：可答资源快捷提问（2026-09-27）
+
+- ID resource-question-shortcuts，基线e0c8c3c已push/clean，7f2b复用，全部先前owners RELEASE。root单owner负责现有Panel/availability测试及docs；改动小不新委派。
+- 目标/流程：合法context已有resourceQuestions→原生button→现有onAsk/live来源复核→即时有据回答；当前输入草稿不被快捷问法覆盖。验收仅当前可答项、点击/键盘Enter、重复提问不叠加、旧来源/完整门失效不作答；无新问法/模型/数据权限。
+- 设计沿emil/apple现有secondary/quickGrid，原生按钮与现有reduced motion/transparency样式，不新增动画。相关tests、两端TS/正式build，新origin既有小React Host场景完成后键盘问一次，原始可见截图留证；root单browser/server lifecycle并清理。
+- 风险：快捷按钮误提交草稿或旧context权限、按钮挤压阅读区；先已有生产fixture+回调验证，再单GUI检查。单test60秒/UI阶段90秒，约15分钟有限，同设施两败简化；无正式Demo/Parser/模型/用户库/部署安装，不接旧native A5。
+
+- 交付：Panel资源提示改原生按钮，既有canonical问法/onAsk/live来源门保持；新增生产fixture实际callback回归，3文件81tests、两端TS/正式build及harness构建通过。root集中复查，无新委派。
+- IAB：独立草稿→Shift+Tab护甲button→Enter两次，仅一条100甲答案、草稿保留，焦点可见。Analysis1/Route1/Narration2/Agent4前后不变，外部/provider0与console空；原始可见截图保存，tab29/60699服务关闭。仅小合成GUI，不扩大native A5或全六资源布局结论。[验收](validation/RESOURCE_QUESTION_SHORTCUTS_RESULT.json)。
+- 下一有限目标 baseline-ammo-source-preflight：currentDiagnosisResources已有strict-prior weaponAmmo/证据并供诊断measurement，基础View未显示弹匣。用既有小fixture先核实当前cue绑定与来源引用，再定可用展示/追问接线；不放松时间/换枪/换弹/新鲜度、不重parse正式Demo、不声称专业判断改善。
+
 ## 已交付：基础讲解的已显示护甲追问（2026-09-27）
 
 - ID baseline-armor-question，基线e0b008e已push/clean，7f2b复用，原owners RELEASE。root docs/ARCH/集成/最终checks与push；partial_revision_restore默认配置独占资源来源/问答/Host窄接线和新armor测试，先小复现后实现。

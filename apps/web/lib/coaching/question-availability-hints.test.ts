@@ -7,11 +7,11 @@ import { buildCoachingCueView, buildThreeStageCoachingView, playerStateAtOrBefor
 import { CurrentCueResourceCache } from "./current-cue-resource-source";
 import { buildTeachingDiagnosisInput } from "./teaching-diagnosis-host";
 
-import { createElement } from "react";
+import { createElement, isValidElement, type ReactNode, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
 import { CurrentCueQuestionsPanel } from "../../components/playback/current-cue-questions-panel";
-import { availableCurrentCueResourceQuestions, answerGroundedCueQuestion, buildCurrentCueQuestionContext, CURRENT_CUE_QUESTIONS } from "./current-cue-questions";
+import { availableCurrentCueResourceQuestions, answerGroundedCueQuestion, buildCurrentCueQuestionContext, currentCueQuestionState, updateCurrentCueQuestions, CURRENT_CUE_QUESTIONS } from "./current-cue-questions";
 
 it("does not advertise unavailable resources when no current resource questions are supplied", () => {
   const html = renderToStaticMarkup(createElement(CurrentCueQuestionsPanel, { state: { key: "empty", draft: "", turns: [] }, onDraft() {}, onAsk() {} }));
@@ -95,4 +95,40 @@ it("removes hints when provenance expires, the source belongs elsewhere, or the 
   expect(availableCurrentCueResourceQuestions(expired)).toEqual([]); expect(panel(expired)).not.toContain("也可问");
   expect(availableCurrentCueResourceQuestions(buildCurrentCueQuestionContext({ ...f.input, busy: true }))).toEqual([]);
   expect(availableCurrentCueResourceQuestions(undefined)).toEqual([]);
+});
+
+function elements(tree: ReactNode): ReactElement<Record<string, unknown>>[] {
+  if (Array.isArray(tree)) return tree.flatMap(elements);
+  if (!isValidElement<Record<string, unknown>>(tree)) return [];
+  return [tree, ...elements(tree.props.children as ReactNode)];
+}
+
+it("resource button callbacks answer through live context while preserving the draft and rejecting expired sources", () => {
+  const f = fixture(true), context = buildCurrentCueQuestionContext(f.input)!;
+  const before = JSON.stringify(f.origin);
+  let state = updateCurrentCueQuestions(undefined, context.key, context, { type: "DRAFT", text: "还没写完的独立问题" });
+  const tree = CurrentCueQuestionsPanel({ state: currentCueQuestionState(state, context), resourceQuestions: availableCurrentCueResourceQuestions(context),
+    onDraft() {}, onAsk: question => { state = updateCurrentCueQuestions(state, context.key, buildCurrentCueQuestionContext(f.input), { type: "ASK", question }); } });
+  const group = elements(tree).find(node => node.props["aria-label"] === "当前可核对资源的快捷问题")!;
+  expect(group).toBeDefined();
+  const buttons = elements(group).filter(node => node.type === "button");
+  expect(buttons.map(button => button.props.children)).toEqual(availableCurrentCueResourceQuestions(context));
+  for (const button of buttons) {
+    expect(button.props.type).toBe("button");
+    const click = button.props.onClick as () => void;
+    click(); click();
+    expect(state!.draft).toBe("还没写完的独立问题");
+    const turns = state!.turns.filter(turn => turn.question === button.props.children);
+    expect(turns).toHaveLength(1);
+    expect(turns[0].answer.items.length).toBeGreaterThan(0);
+  }
+  expect(JSON.stringify(f.origin)).toBe(before);
+  const answered = state;
+  f.cache.read(undefined);
+  (buttons[0].props.onClick as () => void)();
+  expect(state).toBe(answered);
+  const expired = buildCurrentCueQuestionContext(f.input)!;
+  expect(currentCueQuestionState(state, expired).turns).toEqual([]);
+  const empty = renderToStaticMarkup(createElement(CurrentCueQuestionsPanel, { state: currentCueQuestionState(state, expired), resourceQuestions: availableCurrentCueResourceQuestions(expired), onDraft() {}, onAsk() {} }));
+  expect(empty).not.toContain("当前可核对资源的快捷问题");
 });

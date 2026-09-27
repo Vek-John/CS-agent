@@ -1,0 +1,77 @@
+{
+  "taskId": "resource-question-shortcuts",
+  "baseline": "e0c8c3c",
+  "scope": "Panel resource shortcuts only; same question routing and live source validation",
+  "tests": {
+    "files": 3,
+    "passed": 81,
+    "webTypecheck": "PASS",
+    "viewerTypecheck": "PASS",
+    "webBuild": "PASS",
+    "formalViewerBuild": "PASS",
+    "harnessBuild": "PASS"
+  },
+  "ui": {
+    "before": {
+      "mounted": true,
+      "childReady": true,
+      "stageReady": 1,
+      "replayReady": 1,
+      "selected": 1,
+      "analysisReady": 1,
+      "prepareRoute": 1,
+      "prepareNarration": 2,
+      "agentRequests": 4,
+      "forbiddenFetches": 0,
+      "providerFetches": 0,
+      "playbackReports": 713,
+      "playing": false,
+      "tick": 1400,
+      "acks": 1,
+      "errors": [],
+      "selfBlindFixture": false,
+      "syntheticIdentity": true,
+      "parserEnabled": false,
+      "modelEnabled": false,
+      "diagnostics": false,
+      "realLifecycle": null
+    },
+    "after": {
+      "mounted": true,
+      "childReady": true,
+      "stageReady": 1,
+      "replayReady": 1,
+      "selected": 1,
+      "analysisReady": 1,
+      "prepareRoute": 1,
+      "prepareNarration": 2,
+      "agentRequests": 4,
+      "forbiddenFetches": 0,
+      "providerFetches": 0,
+      "playbackReports": 713,
+      "playing": false,
+      "tick": 1400,
+      "acks": 1,
+      "errors": [],
+      "selfBlindFixture": false,
+      "syntheticIdentity": true,
+      "parserEnabled": false,
+      "modelEnabled": false,
+      "diagnostics": false,
+      "realLifecycle": null
+    },
+    "interaction": "textarea draft → Shift+Tab focuses armor button → Enter twice; draft retained and one answer remains",
+    "console": []
+  },
+  "proof": ".local-data/resource-question-shortcuts/keyboard-answer.png",
+  "cleanup": {
+    "tab": "29 closed",
+    "server": "60699 stopped"
+  },
+  "limitations": [
+    "Synthetic fixture and current health/armor layout only",
+    "No native A5 or all-six-resource layout claim",
+    "No real Demo, Parser, model, user database, installation or deployment"
+  ],
+  "next": "baseline-ammo-source-preflight"
+}

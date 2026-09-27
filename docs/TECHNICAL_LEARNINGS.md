@@ -8,6 +8,21 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：已核实资源可以直接快捷提问
+
+- 问题：实际页面已告知血量/护甲问题可答，但资源问法只有静态文字，用户仍需手输。来源匹配与有限问法已存在，缺口只是可操作入口。
+- 实现与复查：
+
+| Before | After | Why |
+| --- | --- | --- |
+| 当前可答资源仅作文字提示 | 使用现有secondary/quickGrid原生type=button，独立资源group | 可点选和键盘聚焦，沿现有样式及reduced motion/transparency，不新增能力或动画 |
+| 用户需把提示重新输入 | 原onAsk(question)提交并复查实时context | 保留独立草稿，过期来源与完整结果门仍拒绝，重复问题仍去重 |
+
+- 验证：生产fixture生成提示→实际Panel按钮callback→live context回答，一项集成回归覆盖全部当前提示、重复点击、草稿/领域输入不变、来源过期拒旧回调并隐藏按钮。相关3文件81tests、两端TS、Web/正式Viewer build及harness构建通过。
+- 实际IAB：小合成场景完成现有动作演示后，输入独立草稿，Shift+Tab焦点到护甲button，Enter两次得到唯一100甲答案，草稿仍在，焦点轮廓可见。Analysis1/Route1/Narration2/Agent4在操作前后不变，外部/provider0、console空；tab29和60699服务已关闭。[证据](validation/RESOURCE_QUESTION_SHORTCUTS_RESULT.json)。
+- 限制：GUI只验当前可答血量/护甲布局与护甲键盘执行，不称全资源六按钮响应布局或native A5通过；其他来源由相关既有测试覆盖。无真实Demo/Parser/模型/用户库/安装部署，本轮root单owner小变更集中审查。
+- 下一有限目标 baseline-ammo-source-preflight：源码确认严格决策前weaponAmmo已存在于currentDiagnosisResources且用于诊断measurement，但基础View没有弹匣显示入口。先用现有小ammo fixture核实值/武器实体/原证据引用能否安全绑定当前cue，再确定最小展示/追问方案；不从同tick结束信息取值、不把最近记录说成瞬间精确余量、不重新解析正式Demo，也不降低来源门。
+
 ## 2026-09-27：基础护甲问答复用实际显示与数值资格
 
 - 问题：实际Adapter/View/完整Session链已显示“100 头甲”，但基础讲解的护甲问法返回空来源。旧cache只为baseline开放health/clock/utilityKinds；诊断measurement路径独立有效。

@@ -24,7 +24,9 @@ export function CurrentCueQuestionsPanel({ state, canRepeatAdvice = false, resou
         {CURRENT_CUE_QUESTIONS.map(question => <button key={question} className={styles.secondary} type="button" onClick={() => onAsk(question)}>{question}</button>)}
         {canRepeatAdvice ? <button className={styles.secondary} type="button" onClick={() => onAsk(CURRENT_CUE_ADVICE_QUESTION)}>{CURRENT_CUE_ADVICE_QUESTION}</button> : null}
       </div>
-      {resourceQuestions.length > 0 ? <p className={styles.muted}>也可问：{resourceQuestions.slice(0, 6).map(question => `“${question}”`).join("、")}</p> : null}
+      {resourceQuestions.length > 0 ? <div className={styles.quickGrid} role="group" aria-label="当前可核对资源的快捷问题">
+        {resourceQuestions.slice(0, 6).map(question => <button key={question} className={styles.secondary} type="button" onClick={() => onAsk(question)}>{question}</button>)}
+      </div> : null}
       <form onSubmit={event => { event.preventDefault(); onAsk(); }}>
         <label className={styles.label} htmlFor="current-cue-question">你的问题（最多300字）</label>
         <textarea id="current-cue-question" value={state.draft} maxLength={MAX_CUE_QUESTION_LENGTH} rows={2}
