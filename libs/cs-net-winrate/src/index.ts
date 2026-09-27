@@ -464,8 +464,46 @@ export function sigmoidTemperature(logit: number, temperature = CS_NET_SOURCE.te
   return 1 / (1 + Math.exp(-Math.max(-40, Math.min(40, scaled))));
 }
 
+function economyFrame(round: CsNetRound): CsNetFrame | undefined {
+  return round.frames.find((frame) => frame.tick >= round.startTick) ?? round.frames[0];
+}
+
+function frameWithinRound(round: CsNetRound, frame: CsNetFrame, atTick: number): boolean {
+  return Number.isSafeInteger(atTick) && Number.isSafeInteger(frame.tick) &&
+    Number.isSafeInteger(round.freezeStartTick) && Number.isSafeInteger(round.postEndTick) &&
+    round.freezeStartTick <= atTick && atTick < round.postEndTick &&
+    frame.tick >= round.freezeStartTick && frame.tick < round.postEndTick && frame.tick <= atTick;
+}
+
+function uniquePlayerSide(frame: CsNetFrame | undefined, playerId: string | undefined): "CT" | "T" | undefined {
+  if (!frame || !playerId?.trim()) return;
+  const players = frame.players.filter((player) => player.steamId === playerId);
+  return players.length === 1 && (players[0].side === "CT" || players[0].side === "T") ? players[0].side : undefined;
+}
+
+/** Full-world signal metadata, not an ObservableClaim. Never backfill a missing latest player. */
+function currentRoundPlayerSide(round: CsNetRound | undefined, playerId: string | undefined, atTick: number): "CT" | "T" | undefined {
+  if (!round) return;
+  let latest: CsNetFrame | undefined;
+  let ambiguous = false;
+  for (const frame of round.frames) {
+    if (!frameWithinRound(round, frame, atTick)) continue;
+    if (!latest || frame.tick > latest.tick) { latest = frame; ambiguous = false; }
+    else if (frame.tick === latest.tick) ambiguous = true;
+  }
+  return ambiguous ? undefined : uniquePlayerSide(latest, playerId);
+}
+
+/** Match the exact existing economic sample, without reading it before its time. */
+function economyPlayerSide(round: CsNetRound | undefined, playerId: string | undefined, atTick: number): "CT" | "T" | undefined {
+  if (!round) return;
+  const frame = economyFrame(round);
+  if (!frame || !frameWithinRound(round, frame, atTick) || round.frames.filter((candidate) => candidate.tick === frame.tick).length !== 1) return;
+  return uniquePlayerSide(frame, playerId);
+}
+
 export function classifyRoundEconomy(round: CsNetRound): WinProbabilityEconomy {
-  const first = round.frames.find((frame) => frame.tick >= round.startTick) ?? round.frames[0];
+  const first = economyFrame(round);
   const ct = first ? classifyEconomy(first.players, "CT") : { kind: "UNKNOWN" as const, value: 0 };
   const t = first ? classifyEconomy(first.players, "T") : { kind: "UNKNOWN" as const, value: 0 };
   return { ct: ct.kind, t: t.kind, ctValue: ct.value, tValue: t.value };
@@ -493,8 +531,10 @@ export function buildWinProbabilityTimeline(args: {
     for (let index = 1; index < roundSamples.length; index += 1) {
       const before = roundSamples[index - 1]; const after = roundSamples[index]; const delta = after.probability - before.probability;
       if (Math.abs(delta) < 0.12) continue;
-      const kill = args.replay.rounds.find((candidate) => candidate.number === round.roundNumber)?.events.find((event) => event.type === "kill" && Math.abs(event.tick - after.tick) <= Math.max(1, args.replay.demoTickRate / 2));
-      swings.push({ id: `swing-${round.roundNumber}-${after.tick}`, tick: after.tick, before: before.probability, after: after.probability, delta, direction: delta > 0 ? "UP" : "DOWN", cause: kill ? "PLAYER_DEATH" : "ROUND_RESULT", victimSide: kill ? args.replay.players.find((player) => player.steamId === kill.victimSteamId)?.startSide : undefined, selectedPlayerDeath: Boolean(kill?.victimSteamId && kill.victimSteamId === args.selectedPlayerId), economy: round.economy[args.replay.players.find((player) => player.steamId === args.selectedPlayerId)?.startSide === "T" ? "t" : "ct"] });
+      const sourceRound = args.replay.rounds.find((candidate) => candidate.number === round.roundNumber);
+      const kill = sourceRound?.events.find((event) => event.type === "kill" && Math.abs(event.tick - after.tick) <= Math.max(1, args.replay.demoTickRate / 2));
+      const selectedEconomySide = economyPlayerSide(sourceRound, args.selectedPlayerId, after.tick);
+      swings.push({ id: `swing-${round.roundNumber}-${after.tick}`, tick: after.tick, before: before.probability, after: after.probability, delta, direction: delta > 0 ? "UP" : "DOWN", cause: kill ? "PLAYER_DEATH" : "ROUND_RESULT", victimSide: kill ? currentRoundPlayerSide(sourceRound, kill.victimSteamId, kill.tick) : undefined, selectedPlayerDeath: Boolean(kill?.victimSteamId && kill.victimSteamId === args.selectedPlayerId), economy: selectedEconomySide ? round.economy[selectedEconomySide === "T" ? "t" : "ct"] : "UNKNOWN" });
     }
   }
   return { version: CS_NET_TIMELINE_VERSION, status: "AVAILABLE", model, tickRate: args.replay.demoTickRate, rounds, swings, limitations: ["Full-match signal is model evidence, not an ObservableClaim.", "Yaw/pitch visibility and velocity are absent from the pinned cs2d frame schema and are zero/derived conservatively.", "Terminal points use canonical round winner metadata and are not model samples."] };

@@ -12,6 +12,16 @@
 
 
 
+## 已交付：胜率波动的当回合阵营背景（2026-09-27）
+
+- ID winrate-round-side-context；08323b6已push/clean，7f2b复用，owners RELEASE。partial_revision_restore默认配置独占cs-net-winrate index及窄测试；root文档、下游保存消费验证、TS/正式build/统一push。无UI/Parser/Demo/模型/数据库操作。
+- 目标/流程：两回合换边小Replay+既定logits→实际timeline红例→同回合/时点来源投影→victimSide与所选economy正确、缺玩家不默认CT。A1先5分钟，单test60秒/实现15分钟；概率/模型输入/kill选择/terminal/selectedDeath及旧保存物保持，合成时间不称Demo tick。
+- 风险：借前回合/未来采样、重复玩家、经济归属与经济采样不一致；最新合法采样缺玩家不能退旧值，未知不补阵营。不扩大原因归因或全局schema/feature版本，相关runtime/消费检查后交付，自有进程清理。已有主要候选消费按当前state另取round economy，不能将元数据修复夸大为既有结论重判。
+
+- 实证/交付：完整十人红例中所选受害者由R1 CT/FULL换至R2 T/PISTOL，旧代码仍CT/FULL；新11case及相关3文件24通过。root独立反向换边例经实际Adapter与Bundle保存/读取保持CT/FULL，消费3文件76通过；合计100项、两端TS与Web/正式Viewer build通过。
+- victimSide取同回合≤kill的最新唯一帧/唯一玩家；economy绑定原economic frame且≤swing，缺/重复/未来保持unknown；原概率/特征/终局/事件选择不变。root+独审无must-fix，执行者RELEASE。初始root两玩家fixture无法代表5人经济分级，已补完整10人先断言双方分类；不是新增产品缺陷。[证据](validation/WINRATE_ROUND_SIDE_CONTEXT_RESULT.json)。
+- 下一有限目标 guided-empty-cue-route：现有完整Host证据为双cue，未找到自然零cue路线的整场完成证据。先让实际Adapter从无显著事件的小Replay生成路线，核实完整timeline覆盖、Session自动推进及Graph/总结完成；不得手删cue/降低候选门制造情形。无桌面小链先行，若需UI复用单controller有界Host harness；不重复模型或Demo解析。
+
 ## 已交付验证：真实装备布尔来源覆盖（2026-09-27）
 
 - ID equipment-boolean-real-coverage，基线333fd25已push/clean，7f2b复用、owners RELEASE。现有REAL_CUE_RESOURCE_CONSUMPTION只有四点helmet=true，无两字段整体分布；已授权test_demo为60601900B。partial_revision_restore默认配置独占新observer/runner及smoke；root审工具、唯一正式读取、docs/checks/提交，agent不读正式文件。

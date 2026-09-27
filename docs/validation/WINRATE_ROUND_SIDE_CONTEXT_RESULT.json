@@ -1,0 +1,52 @@
+{
+  "taskId": "winrate-round-side-context",
+  "baseline": "08323b6",
+  "reproduction": {
+    "players": 10,
+    "rounds": 2,
+    "round1Expected": [
+      "CT",
+      "FULL"
+    ],
+    "round2Old": [
+      "CT",
+      "FULL"
+    ],
+    "round2Expected": [
+      "T",
+      "PISTOL"
+    ],
+    "synthetic": true
+  },
+  "changes": [
+    "victim side from latest unique same-round sample at or before associated kill",
+    "selected economy side from exact original economic sample no later than swing",
+    "missing or ambiguous selected economy UNKNOWN; no startSide/default CT fallback"
+  ],
+  "unchanged": [
+    "model inputs and probabilities",
+    "sample order and terminal",
+    "kill proximity selection and selectedPlayerDeath",
+    "saved artifacts and v1/feature version"
+  ],
+  "validation": {
+    "newSourceCases": 11,
+    "newAdapterRoundtrip": 1,
+    "sourceRelatedFiles": 3,
+    "sourceRelatedPassed": 24,
+    "consumerFiles": 3,
+    "consumerPassed": 76,
+    "webTypecheck": "PASS",
+    "viewerTypecheck": "PASS",
+    "webBuild": "PASS",
+    "formalViewerBuild": "PASS",
+    "rootAndIndependentReview": "no must-fix"
+  },
+  "limitations": [
+    "Synthetic source/projection tests, no actual model/Demo/GUI",
+    "Existing event-cause proximity heuristic unchanged",
+    "Primary candidate economy already independently projects current state; no claim of professional judgment improvement"
+  ],
+  "cleanup": "No services created; tests/build processes exited",
+  "nextTask": "guided-empty-cue-route"
+}

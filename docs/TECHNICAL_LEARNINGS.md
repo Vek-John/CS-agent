@@ -8,6 +8,14 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：胜率波动背景不能沿用开局阵营
+
+- 问题：buildWinProbabilityTimeline用Replay Player.startSide填写victimSide及所选玩家economy，找不到所选玩家还默认CT。完整十人两回合红例证明：R1 CT/FULL，R2换T/PISTOL后仍错误标CT/FULL。这不是概率模型计算问题。
+- 决策：victimSide只取本回合、截至关联kill时点的最新唯一采样及唯一玩家侧别；最新帧缺目标不退旧帧，重复/非法/未来/跨回合均unknown。经济侧别从classifyRoundEconomy原来选的同一经济帧取，检查本回合/≤swing，不能从更晚的玩家状态或startSide补。缺少合法侧别显式UNKNOWN，原经济分类方法不改。
+- 验证：11新case覆盖双向换边、metadata缺/冲突、缺所选玩家、最新帧/玩家重复、未来源与固定概率/输入/terminal。相关3文件24通过；root新增实际Adapter序列化往返及消费回归3文件76通过。初始root import别名未配置改为相对路径，随后两玩家fixture不能证明团队FULL预期，改完整十人先断言ctFULL/tPISTOL；未误改生产classifier。两端TS、Web/正式Viewer build通过，root与独审无must-fix。[结果](validation/WINRATE_ROUND_SIDE_CONTEXT_RESULT.json)。
+- 边界：新增判断只修全知信号元数据；不改变模型输入、概率、选中死亡标记、已有kill临近关联算法或终局点，不运行模型/Parser/正式Demo，不读写用户库。已有主要候选按当前state和round economy独立取背景，因此不夸称本次重判教学结论。v1形状/feature版本不变，旧保存产物不重算。
+- 下一项guided-empty-cue-route：已有双cue完整Host证据，零cue的自然完整路线尚无对应证据。实际Adapter小无显著事件输入先验证完整覆盖和正常完成；不要手改冻结plan或为了通过而增加/删除教学点，再决定是否需要有限实现或UI验收。
+
 ## 2026-09-27：真实存活采样中确实存在明确没有装备的记录
 
 - 现有资料只显示四个正式cue资源中helmet=true，不能代表false覆盖。复用有界native执行监测，新增匿名装备observer：TICK_START/8步长、与生产相同controller侧别/Steam/current pawn/玩家侧别门，直接使用当前props optional reader。四态分类只保留固定计数，另以明确lifeState0且健康正数形成strictAlive子集，计数不齐/reader冲突/零合格样本不标成功。

@@ -976,6 +976,8 @@ Adapter 输入是固定 commit 的结构化 Replay 端口，输出不包含 fram
 
 `WinProbabilityTimelineV1` 是来自固定 cs-net win-rate head 的整场分析信号。它覆盖所有正式回合和播放头之后的时间，和唯一整场时间轴共用 canonical tick 横坐标；Host 不按当前 tick、cue 或决策/结果边界裁剪它。曲线可以显示回合边界、50% 中线、死亡/明显摆动和双方独立的 `PISTOL`、`ECO`、`FORCE`、`FULL`、`UNKNOWN` 经济分类，但不冒充 `ObservableState`，也不改变决策侧未来信息边界。换边时由当前选手在 Replay 中的回合状态派生“你方胜率”。
 
+胜率波动的`victimSide`从关联击杀所在回合、击杀时点之前或同点的最新唯一采样读取唯一受害者侧别；最新帧缺玩家、重复帧/玩家、非法侧别或只有未来/其它回合样本时保持未知，不借Player.startSide补值。所选玩家的波动`economy`只按原回合经济分类使用的同一采样帧决定侧别；该帧须在本回合窗口内且不晚于波动，玩家缺失/歧义则为UNKNOWN，不默认CT。模型输入、概率、终局点和既有击杀临近关联算法不受此背景修复影响；这些字段是全知分析信号，不成为ObservableClaim。旧保存timeline不重写，v1形状及模型feature版本保持。
+
 cs-net 的特征适配器只读取同一份 cs2d 结构化 Replay：31 个 token（10 名玩家、C4、20 个投掷物），模型在 cs2d iframe 的独立 Web Worker 中以 ONNX Runtime Web/WebGPU FP16 为默认、INT8 WASM 为失败回退执行。模型 revision、checkpoint/config/tokenizer/feature-builder SHA、temperature、量化类型、资产 SHA 和大小必须记录在 `WinProbabilityModelManifest`；发布资产同时包含固定 INT8 weight-only ONNX 与 19.45 MB 的 FP16 ONNX，均低于 Cloudflare Worker Static Assets 25 MiB 单文件限额。下载与分块推理必须报告真实进度；模型失败只产生 `UNAVAILABLE`，继续使用确定性 Director/ReviewPlan 回退，不阻塞基础回放。浏览器可以按 revision/SHA 缓存模型，但不把 raw Replay、`.dem` 或模型输入发给 Next/LLM。
 
 Runtime 的长期契约是“能力证明后才启用优化”：只有顶层文档和 `/cs2d/` iframe 同时满足 `crossOriginIsolated`、`SharedArrayBuffer` 与共享 WASM memory probe，才允许显式的 2/4-thread candidate；否则 Worker 以单线程运行并在结构化 telemetry 中记录 fallback reason。`ort.env.wasm.proxy` 固定为 `false`，线程数和 SIMD 资产在该 Worker 第一次 ORT backend/session 初始化前设置。切换线程 candidate 必须终止并重建 Worker/session，session cache key 至少包含 model URL、revision、SIMD 和 resolved thread count；`auto` 使用已完成的同输入浏览器矩阵测得的稳定候选（当前基线为 4 threads × batch 16），不把设置值冒充实测线程数；无隔离能力时始终回退到单线程。
