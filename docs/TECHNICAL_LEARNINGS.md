@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：真实文件入口必须计入缓存与模型等待
+
+- 决策：前序合成Host链已通，本轮复用实际DemoAnalyzer/原文件与选人UI，单次已授权小Demo；新origin保护用户存储，self CSP限制Worker外网，已有WASM/INT8/ORT资产不下载。解析与cache、选择后的pipeline分开120秒界，bulk留page/Worker。
+- 实证：8B无效样本42ms失败且Worker释放，随后正式60.6MB仅一次parse/cache8428ms，9回合10人。单线程INT8本地模型启动，观察45%后通过原“先用基础路线”中止，整个选人pipeline91330ms；它不是纯推理耗时、默认GPU性能或模型成功证明。
+- 结果：真实Bundle→route1/narration2→自动播放→首点暂停/反思门，最近地面采样限定、决策前开火与资源未知项真实可见。两套工具TS/8tests/real build及两端TS/build通过，原文件与用户库未变，自建页/服务退出，测试origin cache保留。[证据](validation/REAL_DEMO_HOST_ENTRY.md)。
+- 行动：缓存不是零成本，启用/启动模型也不等于完成。默认GPU旧测量已有，不根据显式单线程一次运行调默认策略。下一项仅改本次小无效文件暴露的底层英文错误反馈，保持诚实归因/可重选；不再用正式Demo反复失败测试。
+
 ## 2026-09-27：整场完成需要分别验证播放、Graph和总结
 
 - 问题与决策：首点/继续通过不能代替收尾。本轮复用已验证的小场景走实际Host完整流程，当前总结默认本地closed projection，无需增加HTTP/provider。保留本地与Graph两类病例输入，但其用途是约束修订支持，不把INCONCLUSIVE拼成错误习惯。

@@ -9,10 +9,12 @@ import { teachingDiagnosticsEnabled } from "../../apps/web/lib/playback/cs2d-pla
 import { requestNarrationBundle } from "../../apps/web/lib/coaching/narrator-contract";
 import "../../apps/web/app/globals.css";
 
+const realDemo = new URLSearchParams(location.search).get("realDemo") === "1";
 const summary = document.querySelector<HTMLPreElement>("#summary")!, load = document.querySelector<HTMLButtonElement>("#load")!;
-const state = { mounted: false, childReady: false, stageReady: 0, replayReady: 0, selected: 0, analysisReady: 0, prepareRoute: 0, prepareNarration: 0,
+const state = { mounted: false, childReady: false, stageReady: 0 as number | null, replayReady: 0, selected: 0, analysisReady: 0, prepareRoute: 0, prepareNarration: 0,
   agentRequests: 0, forbiddenFetches: 0, providerFetches: 0, playbackReports: 0, playing: false, tick: 0, acks: 0,
-  errors: [] as string[], syntheticIdentity: true, parser: false, model: false, diagnostics: teachingDiagnosticsEnabled(location.search) };
+  errors: [] as string[], syntheticIdentity: true, parserEnabled: false, modelEnabled: false, diagnostics: teachingDiagnosticsEnabled(location.search), realLifecycle: null as Record<string, unknown> | null };
+if (realDemo) { load.hidden = true; state.syntheticIdentity = false; state.parserEnabled = true; state.modelEnabled = true; state.stageReady = null; }
 const render = () => { summary.textContent = JSON.stringify(state, null, 2); };
 const fail = (code: string) => { if (!state.errors.includes(code)) state.errors.push(code); render(); };
 const nativeFetch = window.fetch.bind(window);
@@ -33,8 +35,9 @@ const iframe = () => document.querySelector<HTMLIFrameElement>("#host iframe");
 window.addEventListener("message", event => {
   if (event.origin !== location.origin || event.source !== iframe()?.contentWindow) return;
   if (event.data?.channel === "react-host-smoke") {
+    if (realDemo && event.data.type === "real-lifecycle") { state.realLifecycle = event.data.summary; state.childReady = true; }
     if (event.data.type === "shell-ready") { state.childReady = true; load.disabled = false; }
-    if (event.data.type === "stage-ready") state.stageReady++;
+    if (event.data.type === "stage-ready") state.stageReady = (state.stageReady ?? 0) + 1;
     if (event.data.type === "error") fail("CHILD_ERROR"); render(); return;
   }
   if (!isPlaybackEventEnvelope(event.data)) return;
@@ -43,6 +46,7 @@ window.addEventListener("message", event => {
   if (payload.type === "PLAYER_SELECTED") state.selected++;
   if (payload.type === "PLAYBACK_STATE") { state.playbackReports++; state.tick = payload.canonicalTick; state.playing = payload.playing; }
   if (payload.type === "TEACHING_TOOL_ACK") state.acks++;
+  if (realDemo && (payload.type === "ANALYSIS_READY" || payload.type === "ANALYSIS_FAILED")) iframe()?.contentWindow?.postMessage({ channel: "real-demo-smoke", type: payload.type === "ANALYSIS_READY" ? "analysis-delivered" : "analysis-failed" }, location.origin);
   if (payload.type === "ANALYSIS_READY") {
     state.analysisReady++;
     const analysis = deserializeCs2dAnalysisBundle(payload.bundleJson);

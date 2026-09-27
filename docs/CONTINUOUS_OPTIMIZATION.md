@@ -12,6 +12,17 @@
 
 
 
+## 已交付验证：真实Demo入口与基础路线带看（2026-09-27）
+
+- ID real-demo-host-entry-preflight，4f774c3 clean/push、7f2b顺序复用；partial_revision_restore默认配置先只读真实DemoAnalyzer/Router/Parser Worker/WASM/cs-net/存储边界，A2经root批准才独占tools真实入口模式。root docs/正式输入决策/唯一browser-server生命周期/最终checks/push。
+- 目标：替换合成文件/选人入口，复用真实DemoAnalyzer；先小挂载验证生命周期与本地资产，条件具备时唯一一次已授权test_demo（原指定povergo）有界入口验收。A1五分钟报告网络/内存/Worker/缓存风险，A2合法真实入口无假事件，A3实际观测、测试/两端TS/build及push。生产缺口先证实再定范围。
+- 风险预检：正式输入60.6MB/上限128MiB、处理120秒界、bulk留child/Worker，仅匿名摘要回传；禁止子代理读取/解析正式Demo或启server/browser。cs-net默认推理必须核实已有资产与预算，不擅自下载模型/安装、不载.env/用户库/Memory。20分钟有限、build<60秒，同设施两败先简化。root自建新origin，清理自己页面/worker/server，保留用户文件和旧证据，不唤醒native A5。
+
+- 真实入口成果：原DemoAnalyzer/原filechooser/原玩家选择已挂当前React Host，self CSP与固定已有模型/ORT/WASM资产，无外网/新依赖。8B小样本真实PARSER_ERROR后Worker0；随后唯一60.6MB正式parse/cache8428ms、9回合10人，原指定玩家选择成功。[验收](validation/REAL_DEMO_HOST_ENTRY.md)。
+- wasm-int8/单线程实际启动，但在观察进度45%后root选择现有基础路线；选人pipeline91330ms后ANALYSIS_READY、Worker0。此配置为资源预检，不代表默认GPU性能或模型完成。真实Host route1/narration2、自动带看至首Reflection Gate，地面来源/先前开火/资源未知限定可见；无用户意图虚构或再解析。
+- 3文件8tests、两套专项TS/语法/real build及两端TS/build通过，root实际diff/源码/日志/UI核验，agentRELEASE；tab21/22与对应服务已关，新origin cache保留，原Demo/SQLite/Memory/密钥未改。只工具变更，零外部LLM/部署；没有验证完整真实模型/整场/native恢复。
+- 下一有限目标 parser-file-error-feedback：真实8B入口现在原样展示“Supports only Source 2 replays”，对无法识别/截断文件缺少可行动说明。先核实worker错误来源/既有验证分类，用极小输入明确反馈和重选，不改Parser事实、不再解析正式Demo、不把所有失败一概称损坏。已有默认WebGPU等待测量已核实，不因这次显式单线程长等待擅改默认Provider或重跑大benchmark。
+
 ## 已交付验证：真实Host默认带看收尾（2026-09-27）
 
 - ID guided-default-session-wrap-up，a0be7cf clean/push，7f2b顺序复用；partial_revision_restore默认配置独占既有harness必要工具接线/小tests，root独占docs/真实UI与服务生命周期/最终checks/push。生产缺口先实证、再确认范围。

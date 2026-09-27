@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "incremental": false,
+    "types": [],
+    "paths": {
+      "vue": ["../../.local-data/upstream/cs2d/apps/app/node_modules/vue"],
+      "vue-router": ["../../.local-data/upstream/cs2d/apps/app/node_modules/vue-router"],
+      "@/*": ["../../.local-data/upstream/cs2d/apps/app/src/*"]
+    }
+  },
+  "include": ["./react-host-smoke-real-child.ts", "./react-host-smoke-real-lifecycle.ts", "./react-host-smoke-vue.d.ts", "../../.local-data/upstream/cs2d/apps/app/src/vite-env.d.ts"]
+}
