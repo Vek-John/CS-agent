@@ -5,13 +5,14 @@ import { deserializeCs2dAnalysisBundle } from "../../libs/cs2d-analysis-adapter/
 import { deterministicDirectorFallback } from "../../libs/review-planner/src/index";
 import { isPlaybackEventEnvelope } from "../../libs/contracts/src/playback-bridge";
 import { createCs2dReviewPreparationDependencies, type ReviewPreparationDependencies } from "../../apps/web/lib/coaching/cs2d-route-integration";
+import { teachingDiagnosticsEnabled } from "../../apps/web/lib/playback/cs2d-playback-host";
 import { requestNarrationBundle } from "../../apps/web/lib/coaching/narrator-contract";
 import "../../apps/web/app/globals.css";
 
 const summary = document.querySelector<HTMLPreElement>("#summary")!, load = document.querySelector<HTMLButtonElement>("#load")!;
 const state = { mounted: false, childReady: false, stageReady: 0, replayReady: 0, selected: 0, analysisReady: 0, prepareRoute: 0, prepareNarration: 0,
   agentRequests: 0, forbiddenFetches: 0, providerFetches: 0, playbackReports: 0, playing: false, tick: 0, acks: 0,
-  errors: [] as string[], syntheticIdentity: true, parser: false, model: false, diagnostics: false };
+  errors: [] as string[], syntheticIdentity: true, parser: false, model: false, diagnostics: teachingDiagnosticsEnabled(location.search) };
 const render = () => { summary.textContent = JSON.stringify(state, null, 2); };
 const fail = (code: string) => { if (!state.errors.includes(code)) state.errors.push(code); render(); };
 const nativeFetch = window.fetch.bind(window);

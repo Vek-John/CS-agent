@@ -9,6 +9,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const app = resolve(root, '.local-data/upstream/cs2d/apps/app'), web = resolve(root, 'apps/web')
 const dependency = createRequire(resolve(app, 'package.json')), webDependency = createRequire(resolve(web, 'package.json'))
 const args = process.argv.slice(2), output = resolve(root, '.local-data/guided-react-host-smoke'), generated = resolve(output, 'src'), dist = resolve(output, 'dist')
+const diagnostics = args.includes('--diagnostics')
 const port = Number(args.find(arg => arg.startsWith('--port='))?.slice(7) ?? 4324)
 if (!Number.isInteger(port) || port < 0 || port > 65535) throw Error('INVALID_LOOPBACK_PORT')
 if (!args.includes('--serve-only')) {
@@ -56,7 +57,7 @@ if (args.includes('--serve') || args.includes('--serve-only')) {
     } catch { if (!res.headersSent) res.writeHead(400); res.end('SMOKE_REQUEST_REJECTED') }
   })
   await new Promise((done, fail) => { server.once('error', fail); server.listen(port, '127.0.0.1', done) })
-  console.log(JSON.stringify({ url: `http://127.0.0.1:${server.address().port}/?teachingDiagnostics=off`, stop: 'SIGINT or SIGTERM', rawReplay: 'child page only', runtime: 'MEMORY' }))
+  console.log(JSON.stringify({ url: `http://127.0.0.1:${server.address().port}/${diagnostics ? "" : "?teachingDiagnostics=off"}`, diagnostics, stop: 'SIGINT or SIGTERM', rawReplay: 'child page only', runtime: 'MEMORY' }))
   const stop = () => { server.close(); server.closeAllConnections() }
   process.once('SIGINT', stop); process.once('SIGTERM', stop)
 }

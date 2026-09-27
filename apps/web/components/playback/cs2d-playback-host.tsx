@@ -3440,7 +3440,7 @@ export function Cs2dPlaybackHost({
                   <p>{stage2Error ?? (stage2Status === "COMPLETED" ? "证据已回到当前讲解卡；你可以继续下一段。" : "当前工具只绑定已验证的地图证据。")}</p>
                 </section>
               ) : null}
-              {stage3Mode && stage3Cue?.id === cue.id ? (
+              {!diagnosticsEnabled && stage3Mode && stage3Cue?.id === cue.id ? (
                 <section className={`cs2d-coach-card${stage3State.status === "FAILED" || stage3State.status === "CANCELLED" || stage3State.status === "RECOVERY_REQUIRED" ? " cs2d-coach-card--muted" : ""}`} role="status" aria-live="polite">
                   <small>{stage3Notice.title}</small>
                   <p>{stage3Notice.detail}</p>

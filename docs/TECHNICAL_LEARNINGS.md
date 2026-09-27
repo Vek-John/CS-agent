@@ -8,6 +8,16 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：默认诊断要区分Graph结果、显式跳过与本地回退
+
+- 问题：上一轮真实Host验收显式关闭diagnostics，不能外推默认教学。当前默认模式先完成处理结果再询问目标，提交后才做条件诊断，基础慢放工具被明确禁用。
+- 决策：沿已验证的小场景生命周期，用无flag默认值挂Host；只增加工具模式和有界匿名Runtime摘要。核对真实SUBMIT_REFLECTION及case输出，不能仅看UI出现卡片就宣称Graph成功，因为Host另有合法本地回退。显式SKIPPED保留独立含义，不记成完成诊断。
+- 真实依赖：当前Graph直接调用本地diagnoseTeachingCue，不依赖新HTTP/model。准备阶段仍为已标明的确定性provider，Runtime内存；没有真实Demo、桌面库或恢复证明。本轮最终界面与行为验证见[验收记录](validation/GUIDED_REACT_HOST_DEFAULT_TEACHING.md)。
+
+- 实际发现与修复：默认诊断跳过后，Host基础卡显示“正在准备讲解”，但视觉controller在此模式根本不启动。只给该状态卡增加!diagnosticsEnabled门；保留原基础卡、提问和继续，不改工具/诊断状态。
+- 验证：同场实际回答→条件化待核实诊断→当前建议追问→继续→第二cue跳过；Graph匿名输出区分ANSWERED与SKIPPED。修复后新origin跳过无假等待并继续第二回合。工具5tests及生产相关64tests、专项和两端TS/build通过，自建tab/服务清理，完整限制见验收记录。
+- 后继：主动跳过不是运输失败恢复；下一项限定一次诊断提交断连，核实本地回退和后续路线，不做无依据的额外重构。
+
 ## 2026-09-27：真实 Host 小场景必须保持选人和舞台的生命周期
 
 - 问题：旧双cue验证使用控制driver；本轮挂完整React Host后，测试页把Viewer名单当作选人，又把Stage提前挂载，导致无分析或准备后无新播放状态。实际DemoAnalyzer负责选人，并在选人后挂Stage，Host在REPLAY_READY时清除旧playback，自动播放须等新状态。

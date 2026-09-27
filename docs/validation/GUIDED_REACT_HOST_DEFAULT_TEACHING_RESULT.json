@@ -1,0 +1,121 @@
+{
+  "baseline": "1c46d29",
+  "scenario": "synthetic-real-host-default-teaching",
+  "diagnostics": true,
+  "firstRun": {
+    "runtime": {
+      "dispatches": 11,
+      "events": {
+        "OBSERVE_SEGMENT": 7,
+        "START_CUE": 2,
+        "SUBMIT_REFLECTION": 2
+      },
+      "externalFetches": 0,
+      "reflections": [
+        {
+          "response": "ANSWERED",
+          "caseStatus": "AWAITING_CONFIRMATION",
+          "verdict": "INCONCLUSIVE",
+          "diagnostic": "UNVERIFIABLE",
+          "evidenceRefCount": 5,
+          "learningThreadCount": 1
+        },
+        {
+          "response": "SKIPPED",
+          "caseStatus": "FALLBACK",
+          "verdict": null,
+          "diagnostic": null,
+          "evidenceRefCount": 0,
+          "learningThreadCount": 0
+        }
+      ]
+    },
+    "answered": {
+      "mounted": true,
+      "childReady": true,
+      "stageReady": 1,
+      "replayReady": 1,
+      "selected": 1,
+      "analysisReady": 1,
+      "prepareRoute": 1,
+      "prepareNarration": 2,
+      "agentRequests": 4,
+      "forbiddenFetches": 0,
+      "providerFetches": 0,
+      "playbackReports": 385,
+      "playing": false,
+      "tick": 1400,
+      "acks": 0,
+      "errors": [],
+      "syntheticIdentity": true,
+      "parser": false,
+      "model": false,
+      "diagnostics": true
+    },
+    "observed": [
+      "Reflection Gate after outcome completion",
+      "GET_INFO submits to actual Graph",
+      "User claim kept separate from Demo facts",
+      "Advice question repeats current transfer rule and limitations",
+      "Explicit continue reaches second cue",
+      "Second cue skip exposes baseline and continue",
+      "Incorrect preparing-status card reproduced"
+    ]
+  },
+  "fixedRun": {
+    "skipped": {
+      "mounted": true,
+      "childReady": true,
+      "stageReady": 1,
+      "replayReady": 1,
+      "selected": 1,
+      "analysisReady": 1,
+      "prepareRoute": 1,
+      "prepareNarration": 2,
+      "agentRequests": 4,
+      "forbiddenFetches": 0,
+      "providerFetches": 0,
+      "playbackReports": 386,
+      "playing": false,
+      "tick": 1400,
+      "acks": 0,
+      "errors": [],
+      "syntheticIdentity": true,
+      "parser": false,
+      "model": false,
+      "diagnostics": true
+    },
+    "runtime": {
+      "dispatches": 9,
+      "events": {
+        "OBSERVE_SEGMENT": 7,
+        "START_CUE": 1,
+        "SUBMIT_REFLECTION": 1
+      },
+      "externalFetches": 0,
+      "reflections": [
+        {
+          "response": "SKIPPED",
+          "caseStatus": "FALLBACK",
+          "verdict": null,
+          "diagnostic": null,
+          "evidenceRefCount": 0,
+          "learningThreadCount": 0
+        }
+      ]
+    },
+    "observed": [
+      "No visual-tool preparing card after skip",
+      "Baseline and questions remain",
+      "Continue advances to second round"
+    ]
+  },
+  "productionChange": "Hide Stage3 visual status card when diagnosticsEnabled; visual controller is not started in this mode.",
+  "limitations": [
+    "Synthetic input/selection",
+    "Deterministic preparation and local diagnosis, no model",
+    "Memory Graph, no desktop persistence or reload",
+    "No actual network-failure fallback run",
+    "No performance or professional judgment improvement claim"
+  ]
+}

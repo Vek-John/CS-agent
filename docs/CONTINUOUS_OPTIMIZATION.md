@@ -12,6 +12,18 @@
 
 
 
+## 已交付：默认诊断教学真实Host验收与假等待修复（2026-09-27）
+
+- ID guided-react-host-default-teaching，1c46d29 clean/push基线，复用7f2b；partial_revision_restore默认配置独占既有react-host-smoke工具和小tests，root docs/最终review/checks/push及唯一browser/server生命周期。生产缺口先证实再确认修复范围。
+- 流程：合成载入/选人→真实Host自动准备→默认诊断Reflection Gate→用户提交或跳过→真实内存Graph诊断/回退→继续；A1五分钟核实真实executor/HTTP依赖，A2必要有界工具接线，A3root实际操作/截图/调用摘要、相关tests/专项TS/两端TS/build。保留未来信息、引用、完整路线及幂等门。
+- 预检：沿已核实选人后Stage挂载，不重复旧设施误差；186帧留child，provider/Parser/Demo/用户库/Memory/密钥/.env不访问，独立origin/内存Runtime。15分钟实现/单build<60秒，设施同失败两次简化，owner不启server/browser；root关闭自建tab/服务，owner清测试后RELEASE，不安装部署。
+
+- 实际UI新发现并批准窄修：首cue回答经Graph显示待核实诊断，当前建议追问原文复述，继续后第二cue跳过变FALLBACK；但基础卡仍显示“正在准备讲解”。默认diagnostics effect本来不启动视觉controller，Host却继续渲染stage3状态卡。partial_revision_restore新增独占Host该卡一处门与受影响验证；root保留修前截图/真实Graph摘要，新origin仅跳过复验，不改变诊断/视觉工具合同。
+
+- 交付证据：同场首cue回答GET_INFO→真实Graph待确认/UNVERIFIABLE/INCONCLUSIVE（verdict refs5），当前建议追问原文复述，显式继续→第二cue跳过FALLBACK；零视觉ACK/模型/外网。修复后新origin首cue跳过不再假等待，继续实际进入第二回合。[验收](validation/GUIDED_REACT_HOST_DEFAULT_TEACHING.md)。
+- 生产仅Host视觉状态卡增加!diagnosticsEnabled；2文件5工具tests、窄修后5文件64相关tests、专项TS/语法/工具build及两端TS/build通过（生产变动后Web复验）。root审实际diff/UI/Graph摘要，owner RELEASE，自建tab16/17和服务已关；无用户数据/Parser/安装部署。
+- 下一有限目标 guided-diagnosis-transport-fallback：现有Host catch会本地继续诊断，但Graph事件失败与后续路线一致性尚未在真实Host验证；复用当前最新基线，先限定一次SUBMIT_REFLECTION运输失败、观察用户意图/回退提示/继续与零重复准备。先小test后单GUI，不扩大到默认服务或旧native A5，不把主动SKIPPED当故障恢复证据。
+
 ## 已交付验证：真实React Host准备入口（2026-09-27）
 
 - ID guided-react-host-smoke，基线7bf5b77已push/clean，7f2b复用，原owner RELEASE。partial_revision_restore默认配置独占tools新harness/必要fixture，生产改动须root确认；root docs/接口/最终review/checks及IAB tab13/server生命周期。用独立临时loopback origin隔离浏览器状态，不复用用户应用origin。
