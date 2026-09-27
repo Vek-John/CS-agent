@@ -12,6 +12,17 @@
 
 
 
+## 已交付验证：独立进程 desktop Agent API 的 SQLite 恢复
+
+- ID desktop-process-checkpoint-resume；基线d43d5c3已push/clean，真实7f2b复用，旧owners RELEASE。目标：真实desktop Agent POST的runtimeFor/getSqliteCheckpointSaver初始化经不同Node PID写入→退出→重连，补上同进程重建和MEMORY页面重载未覆盖的边界。
+- 验收：A1真实handler backend SQLITE/recoverableAfterRefresh；A2实际首cue完成后ordinary record与合法head入临时SQLite、写入子进程确认退出；A3新进程GET/Session/精确checkpoint MATCHED、fresh Controller只续下一cue，零外部模型及恢复再生成。处理必要真实失败，不预设产品变更；这是独立Node handler测试，不夸大为Tauri/sidecar HTTP或安装包重启。
+- 所有权：partial_revision_restore默认配置独占新增tools/desktop-process-recovery工具/test/fixture；既有产品和docs只读，有失败root协调。root任务板/实际diff与证据复核/最终checks/push；必要高风险部分独立窄审。
+- 风险/阶段：Next模块解析、默认路径/继承secret污染、进程挂起和大输出。显式临时绝对DB/dataRoot，MEMORY_ENABLED=false，env必要白名单、不读.env/用户库/密钥，外部fetch禁用；父单controller监管、每child30–60秒、输出≤64KiB摘要、finally关闭owner/终止自有child/清临时目录。同infra两败简化，5分钟A1/15分钟阶段检查，禁止安装/部署/真实Demo/浏览器，不重试native A5。
+
+- 交付：新增parent/child/集成test/工具TS配置，产品无改动。最终PID51674生产handler保存SQLite并exit0，PID51675新模块图GET/exact MATCHED后只推进第二cue；Narration请求0/路线保存物验证1/外部0，artifact/head不变。tools包入口和server-only失败后已简化为现有esbuild+Next官方服务端marker，无业务stub。
+- 验证：新跨进程1项+相关12项回归、专项TS/语法/两端TS/Web及正式Viewer build通过，root实读源码/实际CLI结果。独审的旧PID再kill和build中断响应均已修；45秒子进程/构建与64KiB输出界，finally等close后清temp，全部RELEASE。[证据](validation/DESKTOP_PROCESS_CHECKPOINT_RESUME_RESULT.json)。限制：正常退出后的独立Node handler，不是Tauri/sidecar HTTP/断电重启；无Parser/真实Demo/模型/GUI/用户库。
+- 下一有限目标 desktop-http-recovery-preflight：已读real-sidecar-smoke，现有重启覆盖Memory consent/managed Demo身份，不覆盖Agent exact checkpoint HTTP恢复。先核可用prepared资源及有限启动/鉴权/关闭方式，提炼不读正式Demo、无安装和用户库的有界HTTP验证路径；有证据才扩工具，不能因native A5阻塞停全项目。
+
 ## 已交付验证：有教学点的普通段恢复（2026-09-27）
 
 - ID ordinary-cued-host-resume；8a05217已push/clean，真实7f2b复用、旧owners RELEASE。root独占可选harness cued模式/计数、docs与唯一browser/server；必要产品修复先证据，独审按需派发，默认配置。

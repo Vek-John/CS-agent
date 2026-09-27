@@ -8,6 +8,15 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：生产 Agent handler 经独立进程恢复 SQLite
+
+- 问题：已有SQLite关闭重开仍处于同一个Node模块图；浏览器重载又保留MEMORY Graph服务，均未覆盖生产API新进程选择后端。新增独立Node parent/child验收工具，直接调用实际Agent POST的runtimeFor/getSqliteCheckpointSaver，不注入替代Runtime或checkpointer。
+- 实证：最终production seed PID51674经实际handler完成首cue并保存ordinary artifact/head，关闭owner、exit0；新PID51675经GET/HistoryRestoreController读取、exact checkpoint MATCHED、fresh Controller采纳cursor，只发4个后续OBSERVE和第二cue START。两边SQLITE/recoverableAfterRefresh=true，恢复Narration请求0、保存路线验证1、外部/Viewer请求0，原artifact/head保持。
+- 工具修正：tools根没有workspace package链接，入口采用真实源码相对路径；完整history链遇server-only marker，直接加载/条件加载两次失败后停止叠加loader，用现有esbuild单bundle并映射到已安装Next的compiled/server-only/empty.js。它仅解决服务端标记解析，不替换业务逻辑，依然不是完整Next/Tauri/sidecar HTTP启动。
+- 风险收口：env仅必要白名单，显式临时DB绝对路径、Memory关闭，无.env/用户库/密钥；子进程45秒、64KiB输出上限、512MiB V8 heap（不是RSS测量），build另45秒。parent SIGINT/TERM终止live own group并停止esbuild，已reaped PID不再发信号，等待close后清临时目录。独审指出两处中断/旧PID问题，owner与root已修，最终脚本与集成测试复验通过。
+- 验证/限制：新真实跨进程集成1项加Agent API/旧cold/retention回归12项，专项工具TS/语法、两端TS/Web/正式Viewer build通过；root读完整代码/结果，两个owner RELEASE，自有进程与临时库/control/可执行已清理。合成Replay与header容器、无Parser/实际模型/GUI；seed生成数为此夹具固定构造次数，不作性能基准。正常进程退出，不证明断电或完整安装包恢复。
+- 下一项 desktop-http-recovery-preflight：既有real-sidecar-smoke涵盖Memory consent和托管Demo身份跨重启，但未见Agent exact checkpoint HTTP重连覆盖。先核当前准备资源及可复用启动/鉴权/关闭协议，再设计只用临时数据根的最小有界Agent HTTP重启验收；不得直接重跑含真实Demo或WebKit分支、安装包或用户数据。
+
 ## 2026-09-27：普通段重载后继续下一教学点与复用讲解
 
 - 目标/工具：上轮真实Viewer只覆盖自然零cue。本轮新增--ordinary-recovery-with-cues，使用同一自然双cue输入；保留server nonce/一次own capture门，捕获R2 ordinary时严格要求plan2cue且已消费1cue，记录保存的Narration数量。仅工具和验证变更，没有降低候选/引用门或修改产品行为。

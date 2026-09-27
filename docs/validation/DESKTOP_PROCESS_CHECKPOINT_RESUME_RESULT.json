@@ -1,0 +1,81 @@
+{
+  "ok": true,
+  "handler": "apps/web/app/api/coaching/agent/route.ts POST",
+  "nodeEnvironment": "production",
+  "differentProcesses": true,
+  "children": [
+    {
+      "ok": true,
+      "phase": "seed",
+      "pid": 51674,
+      "backend": "SQLITE",
+      "recoverableAfterRefresh": true,
+      "consumedCues": 1,
+      "graphEvents": [
+        "OBSERVE_SEGMENT",
+        "OBSERVE_SEGMENT",
+        "START_CUE",
+        "OBSERVE_SEGMENT"
+      ],
+      "generatedAnalysis": 1,
+      "generatedNarration": 2,
+      "externalCalls": 0,
+      "closed": true,
+      "exitCode": 0,
+      "signal": null
+    },
+    {
+      "ok": true,
+      "phase": "resume",
+      "pid": 51675,
+      "seedPid": 51674,
+      "backend": "SQLITE",
+      "recoverableAfterRefresh": true,
+      "restored": "MATCHED",
+      "consumedCues": 1,
+      "graphEvents": [
+        "RECONNECT_REPLAY",
+        "OBSERVE_SEGMENT",
+        "OBSERVE_SEGMENT",
+        "OBSERVE_SEGMENT",
+        "OBSERVE_SEGMENT",
+        "START_CUE"
+      ],
+      "savedAnalysisAndNarrationReused": true,
+      "routeValidations": 1,
+      "narrationRequests": 0,
+      "externalCalls": 0,
+      "viewerCalls": 0,
+      "artifactsAndHeadUnchanged": true,
+      "closed": true,
+      "exitCode": 0,
+      "signal": null
+    }
+  ],
+  "limitations": [
+    "Direct production handler functions in separate Node processes; no Tauri/sidecar HTTP server.",
+    "esbuild resolves server-only to the installed Next server marker; no business/backend substitution.",
+    "Synthetic Replay/header bytes; no Parser, real Demo or model."
+  ],
+  "schemaVersion": "desktop-process-checkpoint-resume-result.v1",
+  "baseline": "d43d5c3",
+  "productChanged": false,
+  "checks": {
+    "newIntegrationTests": 1,
+    "relatedRegressionTests": 12,
+    "toolTypecheck": "passed",
+    "scriptSyntax": "passed",
+    "typecheck": "passed",
+    "viewerTypecheck": "passed",
+    "webProductionBuild": "passed",
+    "formalViewerProductionBuild": "passed"
+  },
+  "limits": {
+    "childTimeoutMs": 45000,
+    "buildTimeoutMs": 45000,
+    "stdoutAndStderrBytes": 65536,
+    "childV8HeapMiB": 512
+  },
+  "cleanup": "Parent exit0 after finally: children closed, temporary DB/control/executable removed; no browser/server",
+  "next": "desktop-http-recovery-preflight"
+}
