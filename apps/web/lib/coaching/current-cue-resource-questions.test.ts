@@ -195,7 +195,7 @@ it("renders the actual resource answer after the Panel submit callback without c
   const panel = CurrentCueQuestionsPanel({ state: currentCueQuestionState(state, context), onDraft() {}, onAsk(question) {
     state = updateCurrentCueQuestions(state, context.key, buildCurrentCueQuestionContext(input), { type: "ASK", question });
   } });
-  const form = (panel.props.children as import("react").ReactElement[]).find(node => node.type === "form")!;
+  const form = (panel.props.children as import("react").ReactElement[]).find(node => node?.type === "form")!;
   (form.props as { onSubmit: (event: { preventDefault(): void }) => void }).onSubmit({ preventDefault() {} });
   const html = renderToStaticMarkup(createElement(CurrentCueQuestionsPanel, { state: currentCueQuestionState(state, context), onDraft() {}, onAsk() {} }));
   expect(html).toContain("AK-47 决策前最近记录弹匣：0发");

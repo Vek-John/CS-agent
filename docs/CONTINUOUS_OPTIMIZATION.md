@@ -10,6 +10,17 @@
 
 
 
+
+## 已交付：追问提示与当前来源一致（2026-09-27）
+
+- ID question-availability-hints，基线76b0c8b clean，实际7f2b。partial_revision_restore默认配置独占questions helper/Panel/Host窄prop及tests，root独占docs/真实小页面验收/最终checks与push；其他owner均RELEASE。A1无来源/仅部分资源的实际context与固定提示对照；A2仅据已有resources/utilityKinds给规范问法，无来源不提示；A3每个提示经既有answer可答、来源变更、SSR/小浏览器/相关tests/两端TS/build。
+- 沿已读emil/apple与本地Next客户端指南保留原组件/键盘/减弱动画透明度路径；不增加新问法或数值资格、不借提示提权。15分钟有限任务，小fixture<60秒，无Demo/模型/DB/安装；root单owner启动/清理浏览器与loopback服务，执行者仅准备/测试后RELEASE。
+
+
+- 交付：5新增/6文件167tests及两端TS/build通过。实际baseline只提示health/clock，种类已知不推颗数，实际DELAY诊断仅提示已有clock，每个提示经原answer返回有据items；来源失效/别cue/关闭context无提示。root读真实词表/Panel/Host/tests diff，旧Panel树选择器仅改null兼容；执行者RELEASE。
+- root IAB真实Panel/CSS/问答处理器小页验证：partial提示两问、输入提交血量得到40 HP、empty隐藏资源提示和旧答案、通用按钮保留，340px内容正常。harness模拟已验证context，不冒称完整Host；同一原context回来可按旧同来源规则保留答案，未改变此语义。tab、4323server及全部test/build已退出，日志.local-data/question-availability-hints。
+- 下一有限目标 real-narration-question-consumption：近期几项改动已合成贯通，但真实Demo消费仍停在旧默认工具摘要。先复用现有有界probe/已有产物，必要唯一一次既有授权test_demo读取解析，合并验证当前自然cue的决策前开火/公开时钟呈现与基础health-clock问答/可问提示，只回传匿名计数/枚举。bulk留单child，120秒/3GiB/128MiB输入界，先小smoke，无Jev/网络模型/SQLite/整场GUI，不重复旧工具资格或哈希审计，不强制产生可答项。
+
 ## 已交付：护甲与头盔未知显示（2026-09-27）
 
 - ID baseline-armor-display，基线c6d9c58 clean/7f2b，root单写View/相关tests/docs及构建push，其他owner均RELEASE。A1用同一实际三段View验证护甲数值和头盔已知性组合；A2各字段独立校验/表达，保留已知部分与其他chips；A3真实0、legacy、SSR及复用小IAB页/相关tests/两端TS/build。

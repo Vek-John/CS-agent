@@ -9,12 +9,13 @@ import styles from "./teaching-diagnosis-panel.module.css";
 export interface CurrentCueQuestionsPanelProps {
   state: CurrentCueQuestionState;
   canRepeatAdvice?: boolean;
+  resourceQuestions?: readonly string[];
   onDraft: (text: string) => void;
   onAsk: (question?: string) => void;
 }
 
 /** Controlled by Host so a replay can unmount this surface without losing its draft or answers. */
-export function CurrentCueQuestionsPanel({ state, canRepeatAdvice = false, onDraft, onAsk }: CurrentCueQuestionsPanelProps) {
+export function CurrentCueQuestionsPanel({ state, canRepeatAdvice = false, resourceQuestions = [], onDraft, onAsk }: CurrentCueQuestionsPanelProps) {
   return (
     <section className={styles.panel} aria-labelledby="current-cue-questions-title">
       <h3 id="current-cue-questions-title">问问当前教学点</h3>
@@ -23,7 +24,7 @@ export function CurrentCueQuestionsPanel({ state, canRepeatAdvice = false, onDra
         {CURRENT_CUE_QUESTIONS.map(question => <button key={question} className={styles.secondary} type="button" onClick={() => onAsk(question)}>{question}</button>)}
         {canRepeatAdvice ? <button className={styles.secondary} type="button" onClick={() => onAsk(CURRENT_CUE_ADVICE_QUESTION)}>{CURRENT_CUE_ADVICE_QUESTION}</button> : null}
       </div>
-      <p className={styles.muted}>也可核对血量、护甲、道具数量和决策前弹匣记录，例如“我当时多少血？”。</p>
+      {resourceQuestions.length > 0 ? <p className={styles.muted}>也可问：{resourceQuestions.slice(0, 6).map(question => `“${question}”`).join("、")}</p> : null}
       <form onSubmit={event => { event.preventDefault(); onAsk(); }}>
         <label className={styles.label} htmlFor="current-cue-question">你的问题（最多300字）</label>
         <textarea id="current-cue-question" value={state.draft} maxLength={MAX_CUE_QUESTION_LENGTH} rows={2}

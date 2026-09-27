@@ -131,7 +131,7 @@ import {
 } from "../../lib/coaching/coach-agent-host-adapter";
 import { requestCurrentOutcomeReplay, HostOutcomeReplayGuard, outcomeReplayInteractionKey, newManualVisitId } from "../../lib/coaching/diagnosis-replay";
 import type { OutcomeReplayTarget } from "@cs-coach/session";
-import { buildCurrentCueQuestionContext, currentCueQuestionState, updateCurrentCueQuestions, type CurrentCueQuestionState } from "../../lib/coaching/current-cue-questions";
+import { availableCurrentCueResourceQuestions, buildCurrentCueQuestionContext, currentCueQuestionState, updateCurrentCueQuestions, type CurrentCueQuestionState } from "../../lib/coaching/current-cue-questions";
 import { CurrentCueQuestionsPanel } from "./current-cue-questions-panel";
 import { CurrentCueResourceCache } from "../../lib/coaching/current-cue-resource-source";
 import { TeachingDiagnosisPanel } from "./teaching-diagnosis-panel";
@@ -3455,6 +3455,7 @@ export function Cs2dPlaybackHost({
           ) : null}
 
           {questionContext ? <CurrentCueQuestionsPanel
+            resourceQuestions={availableCurrentCueResourceQuestions(questionContext)}
             state={currentCueQuestionState(cueQuestions, questionContext)}
             canRepeatAdvice={Boolean(questionContext.advice)}
             onDraft={text => changeCueQuestion(questionContext.key, { type: "DRAFT", text })}

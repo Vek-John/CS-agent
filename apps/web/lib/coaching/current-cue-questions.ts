@@ -8,6 +8,25 @@ export const MAX_CUE_QUESTION_LENGTH = 300;
 export const CURRENT_CUE_QUESTIONS = ["这次判断依据是什么？", "当时有哪些已知事实？", "还有哪些未知条件？"] as const;
 export const CURRENT_CUE_ADVICE_QUESTION = "下次记住什么？";
 
+// First wording is the canonical hint; the same lists route every supported resource question.
+const RESOURCE_QUESTIONS: readonly [CueResourceKind, readonly string[]][] = [
+  ["health", ["我当时多少血", "当时多少血", "当时血量是多少"]],
+  ["armor", ["当时有多少护甲", "我当时有多少护甲"]],
+  ["utility", ["当时有几颗道具", "我当时有几颗道具"]],
+  ["ammo", ["弹匣当时还有几发", "当时弹匣还有几发"]],
+  ["clock", ["当时回合还剩多久", "当时回合还剩多少秒", "当时回合剩余时间是多少"]],
+];
+const UTILITY_KIND_QUESTIONS = ["当时有什么道具", "我当时有什么道具", "当时有哪些道具"];
+
+/** Availability hints only; submissions still recheck the live question context. */
+export function availableCurrentCueResourceQuestions(context: CurrentCueQuestionContext | undefined): readonly string[] {
+  if (!context) return [];
+  return [
+    ...RESOURCE_QUESTIONS.filter(([kind]) => context.resources[kind]).map(([, questions]) => `${questions[0]}？`),
+    ...(context.utilityKinds ? [`${UTILITY_KIND_QUESTIONS[0]}？`] : []),
+  ];
+}
+
 export interface CurrentCueQuestionInput {
   plan?: ReviewPlan;
   session?: CoachingSessionState;
@@ -163,21 +182,14 @@ export function answerGroundedCueQuestion(context: CurrentCueQuestionContext, qu
       source: "当前诊断已展示的建议与适用条件（原文复述）",
     };
   }
-  if (["当时有什么道具", "我当时有什么道具", "当时有哪些道具"].includes(q)) {
+  if (UTILITY_KIND_QUESTIONS.includes(q)) {
     return context.utilityKinds ? {
       text: context.utilityKinds.text === "无道具" ? "当前已显示的库存记录确认当时无道具；这里只复述记录，不新增战术建议。"
         : "这里只复述当前已显示且来源一致的道具种类；种类数不等于持有颗数，具体数量仍未知，也不能据此判断应该使用哪种道具。",
       items: [context.utilityKinds], source: "当前状态已显示的道具与同一决策采样交叉核对",
     } : { text: "当前没有可核对的已显示道具种类，不能把未知当成无道具，也不能从隐藏内容补齐。", items: [], source: "当前道具种类的来源缺口" };
   }
-  const resourceQuestions: readonly [CueResourceKind, readonly string[]][] = [
-    ["health", ["我当时多少血", "当时多少血", "当时血量是多少"]],
-    ["armor", ["当时有多少护甲", "我当时有多少护甲"]],
-    ["utility", ["当时有几颗道具", "我当时有几颗道具"]],
-    ["ammo", ["弹匣当时还有几发", "当时弹匣还有几发"]],
-    ["clock", ["当时回合还剩多久", "当时回合还剩多少秒", "当时回合剩余时间是多少"]],
-  ];
-  const resourceKind = resourceQuestions.find(([, questions]) => questions.includes(q))?.[0];
+  const resourceKind = RESOURCE_QUESTIONS.find(([, questions]) => questions.includes(q))?.[0];
   if (resourceKind) {
     const resource = context.resources[resourceKind];
     const name = { health: "血量", armor: "护甲", utility: "道具数量", ammo: "决策前最近弹匣记录", clock: "回合剩余时间" }[resourceKind];

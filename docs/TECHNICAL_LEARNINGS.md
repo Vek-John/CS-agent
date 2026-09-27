@@ -2604,3 +2604,11 @@ Synthetic 实际准备链证明一次假 Provider 调用进入 Director、冻结
 - 决策：分别检查护甲整数0–100和头盔boolean、各自缺失标记及现代snapshot一致性，未知明确表达，保留另一已知字段；仅0甲且无头盔显示“没甲”。不改其他chips、Parser、专业判断或问答权限，legacy有效字段保留。
 - 验证：12红→绿、4文件124tests，两端TypeScript/production build通过；真实StatusList SSR+生产status CSS的IAB小页显示五类组合，340px内容容器较长文案自然换行，其它值保持。tab与4323服务退出，日志/静态页.local-data/baseline-armor-display。非完整Host/native A5，无Demo/模型/用户库操作。
 - 下一行动：问答面板现有固定提示列出血量/护甲/道具数量/弹匣，但当前context可能只具备部分合法来源。下一项基于已存在context核实并调整可问提示，不扩大问题理解或制造新数值资格，避免用户按界面提示问完仍遭无来源拒答。
+
+
+## 2026-09-27：可问提示与当前可答来源同步
+
+- 问题：面板固定广告血量/护甲/道具数量/弹匣，而基础或部分诊断context未必具备这些数值。SSR先红，说明用户会被界面引导到无来源拒答。
+- 决策：提示helper仅从已构建context.resources/utilityKinds选取现有规范问法，词表与answer路由共享；Host传只读列表，Panel最多6条、无来源则不显示资源段。三通用问题/建议入口/提交live校验不变，未扩资源资格或用户输入理解。
+- 验证：实际baseline来源测试与每提示有items校验见任务板。root用真实Panel/CSS/问答处理器在IAB340px内容页输入“我当时多少血”，得到40 HP；切empty上下文时提示和旧回答隐藏，保留通用按钮，视觉正常。浏览器harness使用合成已验证context，不替代完整Host身份接线；源码已核实Host只从实时questionContext传prop。临时build首因相对import路径多一级失败，修正后成功，无安装；tab/4323server已退出。
+- 后继：这一组已覆盖可知事实、呈现选择、引用与追问提示，停止继续逐字段扩展。下一阶段用既有小smoke和必要唯一一次已授权Demo解析，合并验证当前默认讲解/合法追问的真实数据消费，只输出匿名计数，不重复模型/全场GUI/完整性审计。
