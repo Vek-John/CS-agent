@@ -8,6 +8,14 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：已知事实追问对齐七事实讲解，同时核对正文
+
+- 问题：生产Adapter/CoachingPackage/Narrator的小合成七事实包已含“C4 状态：携带中”，合法Session完成后追问却仅返回前六条。另一个红例证明旧三事实正文配较宽refs会让追问复述未呈现内容，引用存在不等于已经展示。
+- 决策：基础讲解（含FALLBACK）同时核对完整事实原文与引用，事实数量从6对齐到7；保留DEMO/DECISION/observed、唯一ID、决策时间、observable refs和单事实400字符门。诊断仍限原三条；Narrator七条/1600字符预算、模型/工具/历史语义均未变化。旧保存若只有概述而无完整事实句，不据其refs补齐内容。
+- 验证：两个原始红例修复；新增9项覆盖实际七事实答案与Panel SSR、旧宽引用、诊断三条、缺ref/残句/未来/重复ID/超长、第七条移除后的旧key失效。原baseline测试只有“已展示的局面”占位正文，已改为实际引用的事实句；没有放松来源断言。9文件255tests、两端TypeScript、Web及正式CARGO_NET_OFFLINE=true pnpm cs2d:build通过，diff检查通过。
+- 限制：真实生产函数贯通与Panel静态渲染，未运行新浏览器/原生桌面验收；合成时间不是测得Demo tick。未读正式Demo/用户库、未调用模型或网络Provider，不声称改善专业判断。root单owner集中审查，测试/构建已退出，无新增服务。
+- 下一有限目标 hurt-payload-presence：当前collector的player_hurt数值仍经ev_i32读取，而source2-demo的protobuf accessor会对缺payload给默认0；Adapter把reportedHealthAfter=0用于死亡否决。先以真实事件解码的小输入证实“缺值是否被当已报告0”，再决定仅hurt字段的存在性/类型门；不改ADR、全事件解析或重复真实Demo扫描。
+
 ## 2026-09-27：致盲来源有实际覆盖，事件数不是教学点数
 
 - 问题与方法：4份已有匿名结果均无blind/flash统计，无法由其判断新来源覆盖。先用有效极小Demo验证真实raw descriptor/wire与named回调、缺值/错型/无当前实体；同时区分无事件和仅有descriptor。随后root只读一次既有授权60.6MB样本，使用当前真实event_controller_owner和source2-demo，不构建Replay、帧列表、候选或模型。

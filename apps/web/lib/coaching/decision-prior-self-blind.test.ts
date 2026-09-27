@@ -2,6 +2,10 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TeachingDiagnosisPanel } from "../../components/playback/teaching-diagnosis-panel";
 import { expect, it, vi } from "vitest";
+import { createCoachingSession, reduceCoachingSession } from "@cs-coach/session";
+import { diagnoseTeachingCue } from "@cs-coach/coach-agent/client";
+import { CurrentCueQuestionsPanel } from "../../components/playback/current-cue-questions-panel";
+import { buildCurrentCueQuestionContext, updateCurrentCueQuestions, type CurrentCueQuestionInput } from "./current-cue-questions";
 import { buildCs2dAnalysisBundle, serializeCs2dAnalysisBundle, deserializeCs2dAnalysisBundle, assertDecisionSnapshot, buildDecisionSnapshot } from "@cs-coach/cs2d-analysis-adapter";
 import { buildCoachingPackage, buildOutcomePackage, deterministicNarrationBundle } from "@cs-coach/review-planner";
 import { fireReplay, self, shot } from "../../../../libs/cs2d-analysis-adapter/src/window-self-fire-fixtures";
@@ -128,4 +132,65 @@ it.each(["dead", "zero-health", "stale", "unknown-death-time", "death-before", "
  if(mode==="fatal-hurt") round={...round,hurtEvents:[{id:"fatal",victimSteamId:self,tick:1399,reportedHealthAfter:0}]};
  const snapshot=buildDecisionSnapshot({round,selectedPlayerId:self,decisionTick:1400,tickRate:64,snapshotId:"synthetic-source",rosterIds:f.replay.players.map(p=>p.steamId)});
  expect(snapshot.selfBlindEvents).toBeUndefined();
+});
+
+function questionFixture() {
+  const f = fixture(), plan = f.analysis.review_plan;
+  let session = reduceCoachingSession(plan, createCoachingSession(plan), { type: "START" });
+  session = reduceCoachingSession(plan, session, { type: "BEGIN_MANUAL_CUE_VISIT", cueId: f.cue.id, visitId: "seven-facts" });
+  session = reduceCoachingSession(plan, session, { type: "TICK", tick: f.cue.outcome_end_tick });
+  const input: CurrentCueQuestionInput = { plan, session, generation: 1, diagnosticsEnabled: false,
+    presentableNarration: deterministicNarrationBundle(f.coaching, f.outcome), busy: false, takenOver: true };
+  return { ...f, input };
+}
+
+it("answers all seven actually narrated facts, including C4, through the existing question action and Panel", () => {
+  const f = questionFixture(), before = structuredClone(f.input), facts = f.coaching.decisionContext.facts;
+  expect(facts).toHaveLength(7);
+  expect(facts[6].text).toContain("C4 状态：携带中");
+  expect(f.input.presentableNarration!.currentSituation.text).toContain(facts[6].text);
+  const context = buildCurrentCueQuestionContext(f.input)!;
+  const state = updateCurrentCueQuestions(undefined, context.key, context, { type: "ASK", question: "当时有哪些已知事实？" })!;
+  expect(state.turns[0].answer.items).toEqual(facts.map(fact => ({ text: fact.text, refs: [fact.id] })));
+  const html = renderToStaticMarkup(createElement(CurrentCueQuestionsPanel, { state, onDraft() {}, onAsk() {} }));
+  for (const fact of facts) expect(html).toContain(fact.text);
+  expect(f.input).toEqual(before);
+});
+
+it("does not expand old three-fact prose merely because its saved references include all seven", () => {
+  const f = questionFixture(), facts = f.coaching.decisionContext.facts;
+  f.input.presentableNarration!.currentSituation.text = facts.slice(0, 3).map(f => f.text).join(" ");
+  expect(buildCurrentCueQuestionContext(f.input)!.facts).toEqual(facts.slice(0, 3).map(f => ({ text: f.text, refs: [f.id] })));
+});
+
+it("keeps complete diagnosis questions on its three displayed facts even with seven-fact baseline narration", () => {
+  const f = questionFixture();
+  const output = diagnoseTeachingCue({ cueId: f.cue.id, candidateId: f.cue.candidate_id,
+    reflection: { cueId: f.cue.id, selectedGoal: "OTHER", response: "ANSWERED", source: "USER", limitations: [] },
+    decisionFacts: f.coaching.decisionContext.facts, playerActionFacts: [], outcomeFacts: [] });
+  f.input.diagnosticsEnabled = true;
+  f.input.cueCase = output.cueCase;
+  expect(buildCurrentCueQuestionContext(f.input)!.facts).toEqual(f.coaching.decisionContext.facts.slice(0, 3).map(f => ({ text: f.text, refs: [f.id] })));
+});
+
+it.each(["missing-ref", "partial-prose", "future", "duplicate-id", "long-fact"])("keeps the seventh fact unavailable for %s", mode => {
+  const f = questionFixture(), last = f.cue.facts.find(fact => fact.text.includes("C4 状态：携带中"))!;
+  const situation = f.input.presentableNarration!.currentSituation;
+  if (mode === "missing-ref") situation.refs = situation.refs.filter(ref => ref !== last.id);
+  if (mode === "partial-prose") situation.text = situation.text.replace(last.text, last.text.slice(0, -1));
+  if (mode === "future") last.available_at_tick = f.cue.decision_tick + 1;
+  if (mode === "duplicate-id") f.cue.facts.push({ ...last });
+  if (mode === "long-fact") { last.text = "有界文本".repeat(101); situation.text += last.text; }
+  expect(buildCurrentCueQuestionContext(f.input)!.facts.flatMap(f => f.refs)).not.toContain(last.id);
+});
+
+it("invalidates the old question source when the displayed seventh fact disappears", () => {
+  const f = questionFixture(), old = buildCurrentCueQuestionContext(f.input)!;
+  const state = updateCurrentCueQuestions(undefined, old.key, old, { type: "ASK", question: "当时有哪些已知事实？" })!;
+  const last = f.coaching.decisionContext.facts[6];
+  f.input.presentableNarration!.currentSituation.text = f.input.presentableNarration!.currentSituation.text.replace(last.text, "");
+  const next = buildCurrentCueQuestionContext(f.input)!;
+  expect(next.key).not.toBe(old.key);
+  expect(updateCurrentCueQuestions(state, old.key, next, { type: "ASK", question: "当时有哪些已知事实？" })).toBe(state);
+  expect(updateCurrentCueQuestions(state, next.key, next, { type: "ASK", question: "当时有哪些已知事实？" })!.turns[0].answer.items.flatMap(f => f.refs)).not.toContain(last.id);
 });

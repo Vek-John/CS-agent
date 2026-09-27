@@ -344,7 +344,7 @@ it("supports only the current trusted baseline surface and not sealed/foreign na
   cue.candidate_id = "candidate-fixture";
   input.presentableNarration = {
     cueId: cue.id, candidateId: cue.candidate_id, primaryFocusCode: "TEST",
-    currentSituation: { text: "已展示的局面", refs: [cue.facts[0].id] },
+    currentSituation: { text: cue.facts[0].text, refs: [cue.facts[0].id] },
     playerAction: { text: "动作", refs: [] }, coreIssue: { text: "不复制这个判断", refs: [] },
     betterPlay: { text: "不复制这条建议", refs: [] }, outcomeImpact: { text: "不复制结果", refs: [] },
   };

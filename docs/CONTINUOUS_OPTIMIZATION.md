@@ -12,6 +12,17 @@
 
 
 
+## 已交付：七事实讲解的已知事实追问（2026-09-27）
+
+- ID known-facts-seven-context，基线0f1b4db已push/clean；真实worktree为7f2b，既有执行者均RELEASE。root单独负责current-cue-questions.ts、现有blind链测试及文档，无新委派。
+- 目标/流程：实际小合成Replay→Adapter七事实包→本地Narrator→合法完成的Session→“当时有哪些已知事实”→包含已展示C4及原引用。A1先复现第七条遗漏；A2最小消费修复；A3七条、旧正文/多余引用、诊断三条、非法/未来事实、来源失效回归及两端TS/正式build后commit/push。
+- 边界：不扩模型/工具输入、不重新分析/改判，不改Narrator1600字符预算或每事实400字门；遵守emil/apple现有即时响应与可访问列表，布局/动画不变。旧保存正文未展示的事实不因refs存在被补入；完整诊断仍限其原三条显示面。
+- 风险/阶段：来源引用不等于正文展示、合成Session越过完成门、旧测试只挂refs；先生产fixture红例，单test60秒/有限20分钟。root拥有所有测试/build资源并清理；无正式Demo、用户库、模型、安装部署，无桌面依赖，同设施两败先简化。
+
+- 实证/交付：实际七事实包末条C4未进入答案、旧三事实正文带宽refs补出未显示内容，两个红例均修复。生产仅调整baseline正文+引用交集及7条上限，完整诊断三条保持；新增9项、9文件255tests通过。两端TS、Web与正式Viewer production build均通过；root审真实diff，无新增进程或外部资源，单owner完成，无新委派。
+- 验证为生产函数/合法Session/Panel SSR，未做新浏览器或native UI，合成时间不当真实Demo tick。旧概述文本没有完整事实句时保持不可复述，不重写历史。[证据](validation/KNOWN_FACTS_SEVEN_CONTEXT_RESULT.json)。
+- 下一有限目标 hurt-payload-presence：实际collector的player_hurt数值仍读ev_i32，source2-demo旧accessor缺payload可默认0；Adapter用reportedHealthAfter=0否决死亡后的本人事件。先小真实解码验证缺值/报告0的区别，有证据才最小接新版validated_value_type；只处理本人hurt来源，不扩ADR/全事件或重扫正式Demo。
+
 ## 已交付验证：真实致盲来源覆盖预检（2026-09-27）
 
 - ID self-blind-real-coverage-preflight，278bca1已push/clean，7f2b复用。root核实既有4份匿名摘要均无blind/flash指标；既有授权test_demo存在、60601900B。partial_revision_restore默认配置独占新coverage observer/runner及.local-data小smoke；root docs/正式输入决策/唯一正式执行与资源清理/审阅提交，agent不读正式文件。

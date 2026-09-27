@@ -123,7 +123,9 @@ export function buildCurrentCueQuestionContext(input: CurrentCueQuestionInput): 
     const n = input.presentableNarration;
     if (!n || n.cueId !== cue.id || n.candidateId !== cue.candidate_id) return;
     basisRefs = cue.assessment.supportingEvidenceRefs;
-    shownFactIds = new Set(n.currentSituation.refs);
+    // Saved narration can retain broader refs than its displayed prose.
+    shownFactIds = new Set(cue.facts.filter(f => n.currentSituation.refs.includes(f.id)
+      && n.currentSituation.text.includes(f.text)).map(f => f.id));
     limitations = [...observableSituation(cue).limitations, ...cue.assessment.limitations.map(playerFacingLimitation)].slice(0, 3);
     sourceRevision = n;
     limitationSource = "当前讲解已显示的限制";
@@ -138,7 +140,7 @@ export function buildCurrentCueQuestionContext(input: CurrentCueQuestionInput): 
   const facts = cue.facts.filter(f => shownFactIds.has(f.id) && idCounts.get(f.id) === 1
     && f.source === "DEMO" && f.availability === "DECISION" && f.observed_by_player
     && tick(f.available_at_tick) && f.available_at_tick <= cue.decision_tick
-    && cue.observable_fact_refs.includes(f.id) && boundedText(f.text)).slice(0, 6)
+    && cue.observable_fact_refs.includes(f.id) && boundedText(f.text)).slice(0, 7)
     .map(f => ({ text: f.text, refs: [f.id] }));
   const basis = facts.filter(f => f.refs.every(ref => basisRefs.includes(ref)));
   const shownLimitations = [...new Set(limitations.filter(Boolean).map(playerFacingLimitation))].slice(0, 4)

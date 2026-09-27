@@ -1,0 +1,35 @@
+{
+  "taskId": "known-facts-seven-context",
+  "baseline": "0f1b4db",
+  "input": "small synthetic Replay through production Adapter, packages, deterministic narration and Session reducer",
+  "red": {
+    "sevenNarratedFacts": 7,
+    "previousAnswerFacts": 6,
+    "omittedFact": "C4 状态：携带中。",
+    "legacyThreeFactProseAnswerPreviously": 6
+  },
+  "after": {
+    "sevenFactAnswer": 7,
+    "legacyThreeFactProseAnswer": 3,
+    "diagnosticDisplayedFacts": 3,
+    "newCases": 9,
+    "relatedFiles": 9,
+    "relatedTestsPassed": 255
+  },
+  "verification": [
+    "pnpm test: nine related coaching test files (255 passed)",
+    "pnpm typecheck",
+    "pnpm cs2d:typecheck",
+    "pnpm build",
+    "CARGO_NET_OFFLINE=true pnpm cs2d:build",
+    "git diff --check"
+  ],
+  "boundaries": [
+    "complete prose and source reference both required",
+    "DEMO/DECISION/observed, unique ID, observable refs, nonfuture and 400-character checks retained",
+    "Narrator seven-fact/1600-character budget unchanged",
+    "no new browser or native UI validation; Panel SSR only",
+    "no formal Demo, user database, model, installation or deployment"
+  ],
+  "next": "hurt-payload-presence"
+}
