@@ -8,6 +8,15 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：生成事实与实际显示必须分别验证
+
+- 问题：近期基础讲解与追问改动尚缺真实 Demo 合并消费证据；只检查 Narration 文本不能证明 Host 呈现。
+- 决策：在既有有界 probe 增加 questions 模式，跳过 Graph/Policy/ACK，实际消费 Adapter→Narration→三段 View→当前来源→提示→原问答，输出匿名计数与布尔。
+- 验证：唯一一次 60.6MB Demo 解析得到两 cue、5/5 提示有据；未知时钟没有提示。两 cue 分别有 2/3 条决策前本人开火来源且正文包含，但三段 View 文字字段均未包含。源码确认 chips 分支省略 currentSituation 正文。[证据](validation/REAL_NARRATION_QUESTION_CONSUMPTION.md)。
+- 检查：两个smoke、6文件158tests、probe专项及两端TypeScript/production build通过；执行者RELEASE，进程/timer退出。
+- 行动：下一步仅补已验证开火事实的基础状态呈现，不重跑 Demo、不直接展示可能含未知数值的整段正文、不改变动作资格或专业判断。probe 的 ESM/CJS 双 WeakMap 问题在合成 smoke 中通过单入口加载解决，产品不变。
+- 限制：单 Demo/玩家、harness 驱动 Session，不是浏览器或整场播放验收；没有模型、SQLite、GUI、部署或安装。
+
 ## 2026-09-27：真实工具选择不等于模型决策
 
 - 一次授权60.6MB Demo解析后，当前Adapter产生51候选/2cue：两者均保持REVIEW_UNCERTAINTY/INSUFFICIENT_EVIDENCE。第一段没有独立动作引用，合法能力0→FINISH；第二段有1条合法动作引用，唯一慢放能力→RULE。policyCalls与fetch均0。

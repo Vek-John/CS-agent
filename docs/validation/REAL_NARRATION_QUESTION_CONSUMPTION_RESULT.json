@@ -1,0 +1,83 @@
+{
+  "implementationBase": "f62894b",
+  "status": "PASSED",
+  "mode": "NARRATION_QUESTION_CONSUMPTION",
+  "source": "REAL_DEMO",
+  "demoBytes": 60601900,
+  "demoReads": 1,
+  "parsePasses": 1,
+  "parseMs": 7640,
+  "rounds": 9,
+  "candidates": 51,
+  "cues": 2,
+  "winrateStatus": "UNAVAILABLE",
+  "networkCalls": 0,
+  "graphRuntimeCreated": false,
+  "policyCalls": 0,
+  "viewerAcks": 0,
+  "sessionStatus": "WRAP_UP",
+  "advertisedQuestions": 5,
+  "groundedQuestions": 5,
+  "unanswerableQuestions": 0,
+  "rows": [
+    {
+      "ordinal": 1,
+      "assessment": "INSUFFICIENT_EVIDENCE",
+      "priorSelfFireSourceCount": 2,
+      "priorSelfFireInNarration": true,
+      "priorSelfFireInThreeStageText": false,
+      "clockKnown": false,
+      "clockInNarration": false,
+      "clockChipShown": false,
+      "healthDisplay": "KNOWN",
+      "advertisedQuestions": 2,
+      "groundedQuestions": 2,
+      "unanswerableQuestions": 0,
+      "questions": [
+        {
+          "kind": "health",
+          "itemCount": 1,
+          "refsValid": true
+        },
+        {
+          "kind": "utilityKinds",
+          "itemCount": 1,
+          "refsValid": true
+        }
+      ]
+    },
+    {
+      "ordinal": 2,
+      "assessment": "INSUFFICIENT_EVIDENCE",
+      "priorSelfFireSourceCount": 3,
+      "priorSelfFireInNarration": true,
+      "priorSelfFireInThreeStageText": false,
+      "clockKnown": true,
+      "clockInNarration": true,
+      "clockChipShown": true,
+      "healthDisplay": "KNOWN",
+      "advertisedQuestions": 3,
+      "groundedQuestions": 3,
+      "unanswerableQuestions": 0,
+      "questions": [
+        {
+          "kind": "health",
+          "itemCount": 1,
+          "refsValid": true
+        },
+        {
+          "kind": "clock",
+          "itemCount": 1,
+          "refsValid": true
+        },
+        {
+          "kind": "utilityKinds",
+          "itemCount": 1,
+          "refsValid": true
+        }
+      ]
+    }
+  ],
+  "totalMs": 7815,
+  "limitation": "Actual Adapter, Narration, ThreeStageView and grounded question functions; Session tick notifications are harness-driven. No Graph/Policy/Viewer ACK, browser rendering, model inference or professional judgment evaluation. No raw content crosses the child boundary."
+}

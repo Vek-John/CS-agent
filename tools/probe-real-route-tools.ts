@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildCs2dAnalysisBundle, type Cs2dReplay } from "../libs/cs2d-analysis-adapter/src/index";
-import { fireReplay, self } from "../libs/cs2d-analysis-adapter/src/window-self-fire-fixtures";
+import { fireReplay, self, shot } from "../libs/cs2d-analysis-adapter/src/window-self-fire-fixtures";
 import { assertValidReviewPlan, buildCoachingPackage, buildOutcomePackage, deterministicNarrationBundle } from "../libs/review-planner/src/index";
 import { createCoachingSession, reduceCoachingSession } from "../libs/session/src/index";
 import { createCoachAgentRuntime } from "../libs/coach-agent/src/runtime";
@@ -13,12 +14,22 @@ import type { CoachAgentResult } from "../libs/coach-agent/src/types";
 import type { TeachingToolAckEvent } from "../libs/contracts/src/index";
 import { buildInitialCoachingRouteState } from "../apps/web/lib/coaching/cs2d-route-integration";
 import { CoachAgentStage3HostAdapter, type Stage3HostAdapterInput } from "../apps/web/lib/coaching/coach-agent-stage3-host-adapter";
+import { decisionSelfFireText } from "../libs/cs2d-analysis-adapter/src/decision-self-fire";
+import { buildCoachingCueView, buildThreeStageCoachingView, playerStateAtOrBefore } from "../apps/web/lib/coaching/cs2d-coaching-view";
+// apps/web is CommonJS-scoped. Use one loader for page-local WeakMap provenance;
+// mixed tsx ESM/CJS imports would create two distinct opaque-source registries.
+const pageRequire = createRequire(import.meta.url);
+const { CurrentCueResourceCache } = pageRequire("../apps/web/lib/coaching/current-cue-resource-source.ts") as typeof import("../apps/web/lib/coaching/current-cue-resource-source");
+const { availableCurrentCueResourceQuestions, buildCurrentCueQuestionContext, answerGroundedCueQuestion } = pageRequire("../apps/web/lib/coaching/current-cue-questions.ts") as typeof import("../apps/web/lib/coaching/current-cue-questions");
+
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
+const questionsMode = args.includes("--questions");
+const requestArgs = args.filter(arg => arg !== "--questions" && arg !== "--child");
 if (!args.includes("--child")) {
   // Parent owns the hard deadline; a child JS timer cannot interrupt sync WASM.
-  assert(args.length === 1 && args[0] === "--smoke" || args.length === 2, "Usage: --smoke | <existing.dem> <player-name>");
+  assert(requestArgs.length === 1 && requestArgs[0] === "--smoke" || requestArgs.length === 2, "Usage: [--questions] --smoke | <existing.dem> <player-name>");
   const child = spawn(process.execPath, ["--max-old-space-size=3072", "--import", "tsx", fileURLToPath(import.meta.url), "--child", ...args], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
   let output = "", outputBytes = 0, diagnosticBytes = 0, failure: string | undefined;
   const stop = (reason: string) => { failure ??= reason; child.kill("SIGKILL"); };
@@ -53,10 +64,17 @@ if (!args.includes("--child")) {
   const started = performance.now();
   globalThis.fetch = async () => { networkCalls++; throw new Error("NETWORK_FORBIDDEN"); };
   try {
-    const [, path, playerName] = args;
+    const [path, playerName] = requestArgs;
     const synthetic = path === "--smoke";
     let replay: Cs2dReplay, selected: string, hash: string, demoBytes = 0, parseMs = 0;
-    if (synthetic) { replay = fireReplay("DEATH"); selected = self; hash = "a".repeat(64); }
+    if (synthetic) {
+      replay = fireReplay("DEATH", questionsMode ? [shot(1392), shot(1404)] : undefined); selected = self; hash = "a".repeat(64);
+      if (questionsMode) replay = { ...replay, rounds: replay.rounds.map(round => ({ ...round, frames: round.frames.map(frame => ({ ...frame,
+        clock: { source: "SOURCE2_GAMERULES" as const, sampledAtTick: frame.tick, serverTick: frame.tick, tickInterval: 1 / 64,
+          roundStartTimeSeconds: round.startTick / 64, roundDurationSeconds: 115, roundsPlayed: 0, freeze: false, warmup: false,
+          bombPlanted: false, roundWinStatus: 0, paused: false, totalPausedTicks: 0, pauseObserved: false, clockContinuous: true },
+      })) })) };
+    }
     else {
       assert(path && playerName, "INPUT_REQUIRED");
       const metadata = statSync(path); assert(metadata.isFile() && metadata.size > 0 && metadata.size <= 128 * 1024 * 1024, "INPUT_SIZE_LIMIT");
@@ -84,11 +102,16 @@ if (!args.includes("--child")) {
     assert(routeState.startable && routeState.routeFrozen, "ROUTE_NOT_STARTABLE");
     const identity = { plan, routeState, analysis: bundle, demoContentHash: hash, selectedPlayerId: selected, sessionId: "anonymous-session", runId: "anonymous-run" };
     let session = reduceCoachingSession(plan, createCoachingSession(plan, identity.sessionId, routeState), { type: "START" });
-    const runtime = createCoachAgentRuntime({ checkpoint: "memory" }); // No policy injection; actual default adapter.
-    const adapter = new CoachAgentStage3HostAdapter();
+    const runtime = questionsMode ? undefined : createCoachAgentRuntime({ checkpoint: "memory" }); // No policy injection; actual default adapter.
+    const adapter = questionsMode ? undefined : new CoachAgentStage3HostAdapter();
+    const resourceCache = questionsMode ? new CurrentCueResourceCache() : undefined;
+    const questionRows: { ordinal: number; assessment: string | null; priorSelfFireSourceCount: number; priorSelfFireInNarration: boolean;
+      priorSelfFireInThreeStageText: boolean; clockKnown: boolean; clockInNarration: boolean; clockChipShown: boolean;
+      healthDisplay: "KNOWN" | "UNKNOWN" | "ABSENT"; advertisedQuestions: number; groundedQuestions: number; unanswerableQuestions: number;
+      questions: { kind: string; itemCount: number; refsValid: boolean }[] }[] = [];
     let latest: CoachAgentResult | undefined, graphCursor = -1, mockAcks = 0;
     const rows = [];
-    stage = "DEFAULT_ROUTE";
+    stage = questionsMode ? "QUESTION_ROUTE" : "DEFAULT_ROUTE";
     for (let step = 0; step < plan.segments.length * 8 + 30 && session.phase !== "WRAP_UP"; step++) {
       const segment = plan.segments[session.current_segment_index]; assert(segment, "SEGMENT_MISSING");
       if (session.phase !== "PAUSED_FOR_COACHING") {
@@ -97,6 +120,51 @@ if (!args.includes("--child")) {
       }
       const cue = plan.cues.find(item => item.id === session.current_cue_id); assert(cue, "CUE_MISSING");
       assert(session.outcome_completion?.status === "COMPLETE" && session.outcome_completion.completedAtTick === cue.outcome_end_tick, "OUTCOME_NOT_COMPLETE");
+      if (questionsMode) {
+        assert(resourceCache, "QUESTION_CACHE_MISSING");
+        const material = set.materials.find(item => item.candidateId === cue.candidate_id); assert(material, "MATERIAL_MISSING");
+        const narration = narrationByCue[cue.id], coaching = buildCoachingPackage(cue, set, bundle.observation_evidence);
+        const cueView = buildCoachingCueView(cue, session.outcome_completion, narration);
+        const view = buildThreeStageCoachingView({ narration,
+          decisionState: playerStateAtOrBefore(bundle.match_timeline.player_state_tracks ?? [], selected, cue.decision_tick),
+          semantics: { ...material, ...cue }, decisionTick: cue.decision_tick, decisionFacts: cueView.decisionFacts,
+          outcomeFacts: cueView.outcomeFacts, outcomeImpact: bundle.outcome_impacts.find(item => item.cueId === cue.id) });
+        const healthChip = view.currentState.chips.find(chip => chip.kind === "health");
+        const resourceSource = resourceCache.read({ plan, cue, material, timeline: bundle.match_timeline, selectedPlayerId: selected });
+        const context = buildCurrentCueQuestionContext({ plan, session, generation: 1, diagnosticsEnabled: false, presentableNarration: narration,
+          busy: false, takenOver: false, resourceSource,
+          displayedHealthText: healthChip?.text, displayedUtilityText: view.currentState.chips.find(chip => chip.kind === "utility")?.text });
+        assert(context, "QUESTION_CONTEXT_UNAVAILABLE");
+        const hints = availableCurrentCueResourceQuestions(context); assert(hints.length <= 6, "QUESTION_COUNT_LIMIT");
+        const allowed = new Set(coaching.allowedRefs.decision);
+        const questions = hints.map(question => {
+          const answer = answerGroundedCueQuestion(context, question);
+          const kind = Object.entries(context.resources).find(([, value]) => value && answer.items.some(item => item.text === value.text && item.refs.join("\0") === value.refs.join("\0")))?.[0]
+            ?? (context.utilityKinds && answer.items.some(item => item.text === context.utilityKinds!.text && item.refs.join("\0") === context.utilityKinds!.refs.join("\0")) ? "utilityKinds" : "unmatched");
+          return { kind, itemCount: answer.items.length, refsValid: answer.items.length > 0 && answer.items.every(item => item.refs.length > 0 && item.refs.every(ref => allowed.has(ref))) };
+        });
+        if (synthetic) assert(questions.some(question => question.kind === "health" && question.refsValid) && questions.some(question => question.kind === "clock" && question.refsValid), "SMOKE_RESOURCES_MISSING");
+        const snapshot = material.decisionSnapshot;
+        const remaining = snapshot?.clock.value?.remainingSeconds;
+        const clockKnown = snapshot?.clock.boundary === "OBSERVABLE" && snapshot.clock.value?.phase === "LIVE" && typeof remaining === "number" && Number.isFinite(remaining) && remaining > 0;
+        const clockFacts = coaching.decisionContext.facts.filter(fact => snapshot?.clock.evidenceRefs.includes(fact.id));
+        // These are the actual three-stage output fields consumed by Host, not a renderer recreation.
+        const visibleText = [...view.currentState.chips.map(chip => chip.text), view.currentState.fallbackText ?? "", ...view.currentState.limitations,
+          view.problem.text, ...view.problem.consequences, view.improvement.text, ...view.improvement.reviewQuestions].join(" ");
+        questionRows.push({ ordinal: questionRows.length + 1, assessment: cue.assessment?.kind ?? null,
+          priorSelfFireSourceCount: snapshot?.selfFireEvents?.length ?? 0,
+          priorSelfFireInNarration: Boolean(snapshot?.selfFireEvents?.length && narration.currentSituation.text.includes(decisionSelfFireText())),
+          priorSelfFireInThreeStageText: Boolean(snapshot?.selfFireEvents?.length && visibleText.includes(decisionSelfFireText())),
+          clockKnown, clockInNarration: clockKnown && clockFacts.length > 0 && clockFacts.every(fact => narration.currentSituation.refs.includes(fact.id) && narration.currentSituation.text.includes(fact.text)),
+          clockChipShown: view.currentState.chips.some(chip => chip.kind === "clock"),
+          healthDisplay: healthChip ? healthChip.text === "血量未知" ? "UNKNOWN" : "KNOWN" : "ABSENT",
+          advertisedQuestions: hints.length, groundedQuestions: questions.filter(question => question.itemCount > 0 && question.refsValid).length,
+          unanswerableQuestions: questions.filter(question => question.itemCount === 0 || !question.refsValid).length, questions });
+        session = reduceCoachingSession(plan, session, { type: "CUE_PRESENTED", cueId: cue.id });
+        session = reduceCoachingSession(plan, session, { type: "ADVANCE_SEGMENT" });
+        continue;
+      }
+      assert(runtime && adapter, "TOOL_RUNTIME_MISSING");
       for (let index = graphCursor + 1; index < session.current_segment_index; index++) {
         const preceding = plan.segments[index];
         const mode = preceding.mode === "SKIP" ? preceding.reason_code === "FREEZE_TIME" ? "FREEZE" : "SKIP" : preceding.mode;
@@ -139,13 +207,27 @@ if (!args.includes("--child")) {
       session = reduceCoachingSession(plan, session, { type: "CUE_PRESENTED", cueId: cue.id });
       session = reduceCoachingSession(plan, session, { type: "ADVANCE_SEGMENT" });
     }
-    assert.equal(session.phase, "WRAP_UP", "ROUTE_DID_NOT_FINISH"); assert.equal(rows.length, plan.cues.length, "MISSING_CUE_RESULT"); assert.equal(networkCalls, 0, "NETWORK_CALLED");
+    assert.equal(session.phase, "WRAP_UP", "ROUTE_DID_NOT_FINISH"); assert.equal(questionsMode ? questionRows.length : rows.length, plan.cues.length, "MISSING_CUE_RESULT"); assert.equal(networkCalls, 0, "NETWORK_CALLED");
+    resourceCache?.read(undefined);
+    if (questionsMode) {
+      assert(questionRows.every(row => row.unanswerableQuestions === 0), "ADVERTISED_QUESTION_UNANSWERABLE");
+      console.log(JSON.stringify({ status: "PASSED", mode: "NARRATION_QUESTION_CONSUMPTION", source: synthetic ? "SYNTHETIC" : "REAL_DEMO",
+        demoBytes, demoReads: synthetic ? 0 : 1, parsePasses: synthetic ? 0 : 1, parseMs, rounds: replay.rounds.length,
+        candidates: set.candidates.length, cues: plan.cues.length, winrateStatus: bundle.win_probability_timeline.status, networkCalls,
+        graphRuntimeCreated: false, policyCalls: 0, viewerAcks: 0, sessionStatus: session.phase,
+        advertisedQuestions: questionRows.reduce((sum, row) => sum + row.advertisedQuestions, 0),
+        groundedQuestions: questionRows.reduce((sum, row) => sum + row.groundedQuestions, 0),
+        unanswerableQuestions: questionRows.reduce((sum, row) => sum + row.unanswerableQuestions, 0),
+        rows: questionRows, totalMs: Math.round(performance.now() - started),
+        limitation: "Actual Adapter, Narration, ThreeStageView and grounded question functions; Session tick notifications are harness-driven. No Graph/Policy/Viewer ACK, browser rendering, model inference or professional judgment evaluation. No raw content crosses the child boundary." }));
+    } else {
     console.log(JSON.stringify({ status: "PASSED", source: synthetic ? "SYNTHETIC" : "REAL_DEMO", demoBytes, demoReads: synthetic ? 0 : 1, parsePasses: synthetic ? 0 : 1, parseMs,
       rounds: replay.rounds.length, candidates: set.candidates.length, cues: plan.cues.length, winrateStatus: bundle.win_probability_timeline.status, networkCalls,
       defaultAdapter: "DETERMINISTIC", ruleSelections: rows.filter(row => row.source === "RULE").length,
       policyCalls: rows.reduce((sum, row) => sum + row.policyCalls, 0), finishCues: rows.filter(row => row.source === "FINISH").length,
       mockViewerAcks: mockAcks, rows, totalMs: Math.round(performance.now() - started),
       limitation: "Real Demo parsing and actual Adapter/default Runtime. Session ticks and successful Viewer ACKs are harness-driven, not rendering. Runtime source MODEL denotes the policy-adapter branch, not proof of a model request. No rationale retained by Runtime; no professional judgment quality evaluation." }));
+    }
   } catch (error) {
     const reason = error instanceof Error && /^[A-Z][A-Z0-9_]{1,100}$/.test(error.message) ? error.message : "PROBE_FAILED";
     console.log(JSON.stringify({ status: "FAILED", stage, reason, networkCalls })); process.exitCode = 1;

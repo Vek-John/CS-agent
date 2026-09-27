@@ -11,6 +11,17 @@
 
 
 
+
+## 已交付：真实讲解与追问消费合并验证（2026-09-27）
+
+- ID real-narration-question-consumption，基线f62894b clean，7f2b实际树；partial_revision_restore默认配置独占既有有界probe的可选questions模式/必要helper与匿名摘要，root docs/审查/最终checks/push。旧默认工具结果仅匿名摘要，无可复用完整Replay；不冒称旧数据已验证新消费。
+- A1合成smoke与匿名输出门；A2必要唯一一次已授权test_demo/原指定玩家8fps解析→真实Adapter/Narration/三段View/Session完成门/基础问答与提示，模式跳过Graph/Policy/Viewer ACK；A3核实事实有无进入正文、合法提示逐条有据、具体限制，相关tests/脚本TS/两端TS/build后push。默认旧probe模式保持。
+- 风险：原Demo60.6MB仅一次读取，parent120秒kill/child3GiB/input128MiB/stdout+stderr64KiB，raw归child、parser.free，正式小摘要先落盘。root不并发build；执行者清child/timer后RELEASE。5分钟smoke/15分钟有限交付，同设施两败简化；不再第二次正式parse，后修仅smoke。零模型/CS-Net/Jev/网络/DB/GUI/安装，不回传身份/tick/讲解原文/坐标，不强制可答或制造判断改善。
+
+- 交付：唯一一次正式parse，9回合51候选2cue，5/5提示有据、0不可答、Graph/Policy/ACK/fetch均0。两cue本人开火来源2/3条，Narration均包含但三段View字段均不呈现；未知时钟不提示，另一已知时钟正文/chip均有。单次parse7640ms/总7815ms，不作性能或判断质量提升结论。[匿名证据](validation/REAL_NARRATION_QUESTION_CONSUMPTION.md)。
+- smoke的ESM/CJS双WeakMap已通过单CJS入口修正，未改产品门；显式要求health/clock两提示避免空集通过。两smoke、专项TS、6文件158tests、两端TS/build通过，root集中读diff与输出，执行者RELEASE，所有进程/timer退出。无GUI/DB/模型/安装，Session由harness驱动，不冒称整场播放。
+- 下一有限目标 baseline-prior-fire-presentation：只补本轮实证缺失的已验证本人决策前开火可见呈现。先既有合成View复现，再在基础状态区呈现当前合法引用事实；不直接展开可能含未知数值的整段正文，不改变动作工具/专业判断或重新parse。A5独立等待原恢复条件。
+
 ## 已交付：追问提示与当前来源一致（2026-09-27）
 
 - ID question-availability-hints，基线76b0c8b clean，实际7f2b。partial_revision_restore默认配置独占questions helper/Panel/Host窄prop及tests，root独占docs/真实小页面验收/最终checks与push；其他owner均RELEASE。A1无来源/仅部分资源的实际context与固定提示对照；A2仅据已有resources/utilityKinds给规范问法，无来源不提示；A3每个提示经既有answer可答、来源变更、SSR/小浏览器/相关tests/两端TS/build。
