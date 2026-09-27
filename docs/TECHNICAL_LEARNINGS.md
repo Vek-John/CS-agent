@@ -8,6 +8,14 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：采样事实的历史重开需要经过真实持久链
+
+- 问题：JSON往返证明结构可读，但不能证明SQLite关闭重开、历史API和准备编排仍复用保存讲解。复用原库存恢复测试的真实生命周期，仅抽出测试helper，原6个库存断言全部保留；当前版本断言改为导出的版本常量。
+- 验证：4个新case分别保存FLAG_SET、FLAG_UNSET、明确null与无字段的合成1.12兼容记录。实际临时SQLite关闭重开→GET handler→HistoryRestoreController.open→artifact校验/恢复准备→真实View，三态文本与引用保留、旧记录无新说明；READY_TO_START且无NARRATION_UPDATE。
+- 成本与完整性：重开后analysis/narration生成及Viewer运输入口调用为0，artifacts与runtimeHead前后相同；非法phase通过真实artifact validator拒绝且不写库，不篡改候选hash。10项integration tests、Web TypeScript以及Viewer类型检查/两端production build通过。
+- 边界：测试的是恢复保存教学内容的控制面，不证明Viewer冷启动无需解析；合成1.12形状不是旧用户真实记录。没有生产代码修改、正式Demo读取、网络模型或GUI。mkdtemp独立库/文件finally关闭并删除，owner/控制器/准备器清理，执行者RELEASE。
+- 后继具体缺口：review-history api.detail仍直接fetch+responseJson而无有限等待；Host.openHistoryReview的统一catch把读取失败也说成身份/版本校验失败并提示重新分析。下一项history-detail-load-recovery先验证读取停滞/网络失败反馈，再只为detail读取增加独立大DTO预算与可重试文案，保留真正校验失败的既有保护，不扩大全局HTTP重构。
+
 ## 2026-09-27：可选来源字段要贯通所有运行时接收者
 
 - 问题：地面来源覆盖已验证，但仅在Parser或TS接口加字段不能保证当前事实可见，也不能保证持久包/Agent正确处理unknown。决定采用共享GroundSampleEvidence，明确TICK_START、本人、采样时间及FLAG_SET/FLAG_UNSET/null，旧absent不回填。

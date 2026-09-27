@@ -12,6 +12,16 @@
 
 
 
+## 已交付验证：采样地面事实历史重开（2026-09-27）
+
+- ID sampled-ground-history-restore，基线ea90609已push/clean，7f2b复用，前owner RELEASE；partial_revision_restore默认配置独占必要history integration tests/临时fixture，root独占docs/最终diff/checks/push。生产缺口先报告后定接口，不扩无关重构。
+- 目标：隔离SQLite关闭重开→实际history GET/RestoreController/recovery preparation→真实View，验证SET/UNSET/null和旧无字段1.12形状保持来源与显示，零再解析/分析/叙述生成。复用inventory-restore现有harness；旧固定1.11当前版本断言按真实意图修正，不能仅改数字算恢复通过。A1五分钟单case，A2四态及原inventory回归，A3相关tests/两端TS/build后push。
+- 20分钟有限任务、单case<60秒；已装依赖/合成Replay和header fixture仅进mkdtemp临时库，不读正式Demo、不调用Parser/模型/Jev/CS-Net/网络/GUI/部署。关注ABI/origin/冻结artifact身份；同设施两败简化。唯一owner finally关闭controller/orchestrator/SQLite后删自己临时目录，用户DB/Memory/密钥受保护，结束RELEASE。
+
+- 交付：2文件10tests（原inventory6+ground4）和两端TS/build通过；真实临时SQLite close/reopen、GET handler、Controller.open、recovery准备到View四态正确。生成/运输零调用，READY_TO_START且无叙述更新，artifacts/runtimeHead不变；非法phase由真实validator拒绝且未写库。root读实际helper及原断言迁移，生产无需修复。
+- 边界/清理：仅控制面教学恢复，不称Viewer冷启动零解析；legacy为明确合成1.12兼容shape。全部临时库/目录、控制器、准备器与test/build已清理，执行者RELEASE，无用户DB/Demo/模型/GUI操作，日志.local-data/sampled-ground-history-restore。
+- 下一独立目标 history-detail-load-recovery：真实源码api.detail无fetch/body等待上限，Host统一catch将读取失败误报身份/版本校验失败并引导“重新分析”。先小fake transport/实际反馈路径验证；仅detail读阶段独立保守大DTO预算及可重试反馈，不改变真正artifact校验、source20秒门或旧数据，也不重做已完成的source等待修复。
+
 ## 已交付：采样地面事实完整接线（2026-09-27）
 
 - ID sampled-ground-fact-contract，基线e1df6ad已push/clean，7f2b复用；partial_revision_restore默认配置先独占.local-data A1；主控确认字段流与接口后独占必要受控Parser新patch、registry/tests、contracts/runtime shape、Adapter和View窄接线。root独占docs/集成/浏览器/最终checks/push，其他owner RELEASE。
