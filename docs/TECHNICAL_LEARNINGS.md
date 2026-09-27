@@ -8,6 +8,16 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：普通片段段首恢复与 Controller 进度接管
+
+- 问题：只有教学点/起点/终点可恢复时，无cue回合会退回过早的位置。Graph观察进度本身不能代替已确认的历史head。
+- 决策：增加ORDINARY_SEGMENT，限定冻结plan无cue BRIEF/OBSERVE段及合法回合；只恢复段首，已消费前序cue必须完整、未来进度拒绝。Host每回合成功确认一次，经原artifact→exact head ACK链，失败/旧owner/切段/transport失效不报成功。旧三kind和v2 envelope读取保持，007独立迁移保存旧行/FK/索引，旧二进制不支持新kind。
+- 关键发现：只恢复Session/Graph仍不足。新Controller的本地lifecycle cursor为-1，会尝试补发旧教学段观察而degraded；新增仅接纳本Controller同token精确重连结果的adopt seam，同步identity/cursor并失效旧观察，不把旧cue伪标presented。Host在落位/握手完成后调用，再开放带看；失败时保持恢复门。第二轮独审补出Runtime可返回REJECTED/DEGRADED而不抛错；ordinary必须收到身份/边界/checkpoint匹配的RECOVERED才采纳cursor，存储降级不自动播放。
+- 验证：相关15文件221项、持久8文件113项；最终cursor接管改动专项3文件46项复验，握手拒绝/降级/错owner新增1项及相关3文件88项复验（与前述重叠，总唯一335项）。真实内存Graph从完成前cue到ordinary，fresh Controller reconnect后只启动下一cue；真实临时SQLite PUT/DAL→关闭重开→GET→HistoryRestoreController→Session落段首。持久链Graph state为合成写入，真实Graph重连由另一条生产测试覆盖，二者不混称同一进程重启测试。
+- 体验：localhost实际React Host/Session/默认Graph/Vue的小合成零cue路线7段走到复盘完成；Analysis1/Route1/Narration0/Agent8，外部/provider/console错误均0，临时tab32及64835服务退出。UI验证自动带看未退化，没有验证刷新后的Viewer冷恢复；此次Controller接管的证据为无桌面生产集成。沿既有emil/apple样式，无新增动画/材质。
+- 过程：窄测试早期的末尾索引、mock冻结plan与真实runtime不一致、TS测试union推断已修，首轮Web build因此失败，修后最终两端TS、Web/正式Viewer build均通过。没有用户库/正式Demo/模型调用/安装部署，native A5独立未运行。
+- 下一项：ordinary-recovery-cold-start，先把真实Graph SQLite saver与关闭重开/Controller续播组合为单条有界链，核验保存失败后的旧head、零再生成及首个后续事件；再决定是否扩展隔离浏览器冷恢复，不重复旧拒判或全场审计。
+
 ## 2026-09-27：普通播放进度与可恢复保存点目前并不相同
 
 - 实证：自然quiet合成路线0cue/7段，第2回合普通段index5中点，真实Controller/Graph已有6次OBSERVE和cursor5/有效checkpoint；生产Session builder拒绝将该PLAYING状态伪装成ROUTE_START、CUE_PAUSED或WRAP_UP。ROUTE_START不会绑定新Graph checkpoint，restore回INTRO/index0；这是当前三种稳定边界合同的限制，不是SQLite丢数据。

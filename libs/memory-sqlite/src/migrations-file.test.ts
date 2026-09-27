@@ -15,6 +15,8 @@ import {
   DESKTOP_RUNTIME_HEAD_RECOVERY_SQL,
   DESKTOP_REVIEW_ARTIFACT_CONTRACT_MIGRATION_ID,
   DESKTOP_REVIEW_ARTIFACT_CONTRACT_SQL,
+  DESKTOP_RUNTIME_HEAD_ORDINARY_MIGRATION_ID,
+  DESKTOP_RUNTIME_HEAD_ORDINARY_SQL,
   DESKTOP_MIGRATIONS,
   DESKTOP_REVIEW_HISTORY_MIGRATION_ID,
   DESKTOP_REVIEW_HISTORY_SQL,
@@ -56,6 +58,7 @@ describe("desktop migration checked-in SQL", () => {
       "006-review-artifact-contract.sql",
       DESKTOP_REVIEW_ARTIFACT_CONTRACT_SQL,
     ],
+    [DESKTOP_RUNTIME_HEAD_ORDINARY_MIGRATION_ID, "007-runtime-head-ordinary-segment.sql", DESKTOP_RUNTIME_HEAD_ORDINARY_SQL],
   ] as const)(
     "keeps %s identical to its checked-in SQL file",
     async (id, file, embedded) => {

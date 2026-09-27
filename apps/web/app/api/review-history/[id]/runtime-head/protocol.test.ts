@@ -37,3 +37,16 @@ it("preserves transaction conflict as HTTP 409", async () => {
   const response = await f.send({ expectedRecoveryArtifactId: "old-artifact" });
   expect(response.status).toBe(409); expect(await response.json()).toEqual({ code: "RUNTIME_HEAD_CONFLICT" });
 });
+it.each([
+  {},
+  { checkpointThreadId: "thread", checkpointId: "checkpoint" },
+  { checkpointThreadId: "thread", checkpointNamespace: "", checkpointId: "checkpoint", currentCueId: "cue" },
+  { checkpointThreadId: "thread", checkpointNamespace: "", checkpointId: "checkpoint", defaultRouteCursor: -1 },
+  { checkpointThreadId: "thread", checkpointNamespace: "", checkpointId: "checkpoint", defaultRouteCursor: 1.5 },
+])("rejects incomplete or cue-bound ordinary heads before loading artifacts: %j", async patch => {
+  const f = fixture();
+  const response = await f.send({ expectedRecoveryArtifactId: null, recoveryBoundary: "ORDINARY_SEGMENT", defaultRouteCursor: 1, ...patch });
+  expect(response.status).toBe(400);
+  expect(f.loadReview).not.toHaveBeenCalled();
+  expect(f.commitRuntimeHead).not.toHaveBeenCalled();
+});

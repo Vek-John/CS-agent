@@ -8,6 +8,7 @@ import { completeAndSaveSessionWrapUp } from "../coaching/session-wrap-up-comple
 import { sessionWrapUpPresentation, SessionWrapUpPanel } from "../coaching/session-wrap-up-presentation";
 import { HistoryPersistenceController } from "./history-persistence-controller";
 import { describe, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
 import * as analysisAdapter from "@cs-coach/cs2d-analysis-adapter";
 import { buildCs2dAnalysisBundle, type Cs2dReplay } from "@cs-coach/cs2d-analysis-adapter";
 import type { CommitRuntimeHeadInput, JsonValue, LoadedReview, ReviewArtifact } from "@cs-coach/review-library";
@@ -93,12 +94,12 @@ function json(value: unknown): JsonValue {
   return JSON.parse(JSON.stringify(value)) as JsonValue;
 }
 
-function fixture(): { loaded: LoadedReview; head: CommitRuntimeHeadInput } {
+function fixture(ordinary = false, contentHash = HASH): { loaded: LoadedReview; head: CommitRuntimeHeadInput } {
   const analysis = buildCs2dAnalysisBundle({
     replay: replay(),
     selectedSteamId: "player-a",
     demoId: "parser-demo-a",
-    demoContentHash: HASH,
+    demoContentHash: contentHash,
     demoContentHashLatencyMs: 1,
   });
   const narrationByCue = Object.fromEntries(analysis.review_plan.cues.map((cue) => {
@@ -109,18 +110,26 @@ function fixture(): { loaded: LoadedReview; head: CommitRuntimeHeadInput } {
   const readiness = Object.fromEntries(analysis.review_plan.cues.map((cue) => [cue.id, "READY" as const]));
   const route = buildInitialCoachingRouteState(analysis.review_plan, { narrationByCue, readiness });
   const identity = createRecoverySessionIdentity(() => "00000000-0000-4000-8000-000000000009");
-  const session = createCoachingSession(analysis.review_plan, identity.sessionId, route);
+  let session = createCoachingSession(analysis.review_plan, identity.sessionId, route);
+  if (ordinary) {
+    const index = analysis.review_plan.segments.findIndex(segment => (segment.mode === "BRIEF" || segment.mode === "OBSERVE") && segment.cue_ids.length === 0);
+    if (index < 0) throw new Error("Ordinary fixture requires a real compiled ordinary segment.");
+    const segment = analysis.review_plan.segments[index];
+    const previous = analysis.review_plan.segments.slice(0, index).flatMap(segment => segment.cue_ids);
+    session = { ...session, phase: "PLAYING", current_segment_index: index, current_tick: segment.start_tick,
+      current_cue_id: undefined, consumed_cue_ids: previous, presented_cue_ids: previous, revealed_cue_ids: previous };
+  }
   const recovery = buildSessionRecoveryRecord({
     identity,
-    demoContentHash: HASH,
+    demoContentHash: contentHash,
     selectedPlayerId: "player-a",
     plan: analysis.review_plan,
     routeState: route,
     session,
-    boundaryKind: "ROUTE_START",
+    boundaryKind: ordinary ? "ORDINARY_SEGMENT" : "ROUTE_START",
     narrationByCue,
     analysis,
-    agentCheckpointId: null,
+    agentCheckpointId: ordinary ? "checkpoint-ordinary" : null,
   });
   const createdAt = "2026-09-02T00:00:00.000Z";
   const artifacts: ReviewArtifact[] = [
@@ -144,7 +153,7 @@ function fixture(): { loaded: LoadedReview; head: CommitRuntimeHeadInput } {
     payload: json(payload),
   }));
   const loaded: LoadedReview = {
-    demo: { demoId: "managed-demo-a", contentHash: HASH, originalFilename: "match.dem", byteSize: 8, status: "READY", importedAt: createdAt, lastOpenedAt: createdAt },
+    demo: { demoId: "managed-demo-a", contentHash, originalFilename: "match.dem", byteSize: 8, status: "READY", importedAt: createdAt, lastOpenedAt: createdAt },
     review: { reviewId: "review-a", demoId: "managed-demo-a", originalFilename: "match.dem", selectedPlayerId: "player-a", selectedPlayerName: "A", title: "Review", status: "PREPARING", completedCueCount: 0, totalCueCount: 0, createdAt, lastOpenedAt: createdAt, demoStatus: "READY" },
     revisions: [{ reviewRevisionId: "revision-a", reviewId: "review-a", analysisVersion: analysis.metadata.adapter_version, graphVersion: "coach-agent-graph.v3", promptVersion: analysis.review_plan.generation_manifest.prompt_version, modelMetadata: {}, routeId: analysis.review_plan.id, routeHash: route.routeFingerprint, status: "PREPARING", artifactContractVersion: 2, createdAt }],
     artifacts,
@@ -160,13 +169,14 @@ function fixture(): { loaded: LoadedReview; head: CommitRuntimeHeadInput } {
       sessionId: identity.sessionId,
       runId: identity.runId,
       demoId: "managed-demo-a",
-      demoContentHash: HASH,
+      demoContentHash: contentHash,
       selectedPlayerId: "player-a",
       routeId: analysis.review_plan.id,
       routeHash: route.routeFingerprint,
-      recoveryBoundary: "ROUTE_START",
-      defaultRouteCursor: 0,
-      completedCueCount: 0,
+      recoveryBoundary: ordinary ? "ORDINARY_SEGMENT" : "ROUTE_START",
+      ...(ordinary ? { checkpointThreadId: "thread-ordinary", checkpointNamespace: "", checkpointId: "checkpoint-ordinary" } : {}),
+      defaultRouteCursor: recovery.boundary.segmentIndex,
+      completedCueCount: recovery.cueProgress.completedCueIds.length,
       totalCueCount: analysis.review_plan.cues.length,
       stableProgress: {},
     },
@@ -528,4 +538,99 @@ describe("single-pass artifact validation", () => {
       expect(deserialize).toHaveBeenCalledTimes(3);
     } finally { deserialize.mockRestore(); }
   });
+});
+
+describe("ordinary-segment artifact and HTTP validation", () => {
+  it("accepts a plan-derived ordinary record through the real RuntimeHead route validators", async () => {
+    const { loaded, head } = fixture(true);
+    expect(() => validateReadyRevisionArtifacts(loaded, head)).not.toThrow();
+    const { installDesktopReviewLibrary } = await import("@cs-coach/review-library/server");
+    const { PUT } = await import("../../app/api/review-history/[id]/runtime-head/route");
+    const { DESKTOP_APP_ORIGIN_HEADER } = await import("../desktop/request-origin");
+    const commitRuntimeHead = vi.fn().mockResolvedValue(head);
+    installDesktopReviewLibrary({ loadReview: vi.fn().mockResolvedValue(loaded), commitRuntimeHead } as never);
+    vi.stubEnv("DEPLOY_TARGET", "desktop");
+    try {
+      const origin = "http://127.0.0.1:43123";
+      const response = await PUT(new Request(`${origin}/api/review-history/review-a/runtime-head`, { method: "PUT",
+        headers: { "content-type": "application/json", [DESKTOP_APP_ORIGIN_HEADER]: origin }, body: JSON.stringify({ ...head, expectedRecoveryArtifactId: null }) }), { params: Promise.resolve({ id: "review-a" }) });
+      expect(response.status).toBe(200);
+      expect(commitRuntimeHead).toHaveBeenCalledWith(expect.objectContaining({ recoveryBoundary: "ORDINARY_SEGMENT", checkpointId: "checkpoint-ordinary", defaultRouteCursor: head.defaultRouteCursor }));
+    } finally { installDesktopReviewLibrary(undefined); vi.unstubAllEnvs(); }
+  });
+  it.each(["cue-head", "no-checkpoint", "wrong-id", "wrong-index", "wrong-mode", "cueful", "arbitrary-tick"])("rejects an invalid ordinary artifact/head: %s", mode => {
+    const { loaded, head } = fixture(true);
+    const record = loaded.artifacts.find(artifact => artifact.artifactType === "SESSION_RECOVERY")!.payload as Record<string, any>;
+    if (mode === "cue-head") (head as any).currentCueId = "forbidden";
+    if (mode === "no-checkpoint") { delete (head as any).checkpointId; delete (head as any).checkpointThreadId; delete (head as any).checkpointNamespace; }
+    if (mode === "wrong-id") record.boundary.segmentId = "another-segment";
+    if (mode === "wrong-index") record.boundary.segmentIndex += 1;
+    if (mode === "wrong-mode") record.frozenReviewPlan.segments[record.boundary.segmentIndex].mode = "DEEP";
+    if (mode === "cueful") record.frozenReviewPlan.segments[record.boundary.segmentIndex].cue_ids = ["invented-cue"];
+    if (mode === "arbitrary-tick") record.boundary.tick = 123;
+    expect(() => validateReadyRevisionArtifacts(loaded, head)).toThrow();
+  });
+});
+
+it("restores a real SQLite ordinary head through GET, HistoryRestoreController and Session without generation", async () => {
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { SqliteDatabaseOwner, SqliteCheckpointSaver } = await import("@cs-coach/memory-sqlite/server");
+  const { DesktopReviewLibrary, installDesktopReviewLibrary } = await import("@cs-coach/review-library/server");
+  const { GET } = await import("../../app/api/review-history/[id]/route");
+  const { PUT } = await import("../../app/api/review-history/[id]/runtime-head/route");
+  const { HistoryRestoreController } = await import("./history-restore-controller");
+  const { SessionRecoveryRecordSchema } = await import("@cs-coach/coach-agent/client");
+  const { restoreRecoveryArtifacts } = await import("../recovery/cs2d-session-recovery");
+  const { DESKTOP_APP_ORIGIN_HEADER } = await import("../desktop/request-origin");
+  const directory = await mkdtemp(join(tmpdir(), "ordinary-history-roundtrip-"));
+  let owner = new SqliteDatabaseOwner({ path: join(directory, "library.sqlite3") });
+  let library = new DesktopReviewLibrary({ owner, dataRoot: directory });
+  try {
+    await library.initialize();
+    const bytes = new Uint8Array([80, 66, 68, 69, 77, 83, 50, 0]);
+    const capability = library.issueImportCapability({ objectId: "synthetic", originalFilename: "synthetic.dem", expectedByteLength: bytes.length });
+    const imported = await library.importDemo({ authorization: capability.authorization, objectId: "synthetic", stream: (async function* () { yield bytes; })() });
+    await library.finalizeDemoImport({ authorization: imported.validationCapability!.authorization, demoId: imported.demo.demoId, valid: true, parserVersion: "synthetic" });
+    const f = fixture(true, imported.demo.contentHash);
+    const review = await library.createReview({ demoId: imported.demo.demoId, selectedPlayerId: "player-a", selectedPlayerName: "A", title: "Ordinary" });
+    const revision = await library.startRevision({ reviewId: review.reviewId, analysisVersion: "test", graphVersion: "test", promptVersion: "test", modelMetadata: {}, routeId: f.head.routeId, routeHash: f.head.routeHash });
+    for (const artifact of f.loaded.artifacts) await library.appendArtifact({ reviewRevisionId: revision.reviewRevisionId, artifactType: artifact.artifactType,
+      artifactKey: artifact.artifactKey, artifactRevision: artifact.artifactRevision, schemaVersion: artifact.schemaVersion, payload: artifact.payload!, idempotencyKey: artifact.idempotencyKey });
+    const head = { ...f.head, reviewId: review.reviewId, reviewRevisionId: revision.reviewRevisionId, demoId: imported.demo.demoId, expectedRecoveryArtifactId: null };
+    const record = SessionRecoveryRecordSchema.parse(f.loaded.artifacts.find(artifact => artifact.artifactType === "SESSION_RECOVERY")!.payload);
+    const segment = (record.frozenReviewPlan as unknown as ReviewPlan).segments[record.boundary.segmentIndex];
+    const saver = new SqliteCheckpointSaver({ owner });
+    await saver.put({ configurable: { thread_id: head.checkpointThreadId!, checkpoint_ns: "" } }, {
+      v: 4, id: head.checkpointId!, ts: "2026-09-27T00:00:00Z", channel_versions: {}, versions_seen: {}, channel_values: { agent: {
+        sessionId: head.sessionId, runId: head.runId, demoId: head.demoId, demoContentHash: head.demoContentHash, selectedPlayerId: head.selectedPlayerId,
+        routeId: head.routeId, routeHash: head.routeHash, routeCursor: head.defaultRouteCursor, activeSegmentId: segment.id, currentSegmentMode: segment.mode,
+        currentSessionPhase: "PLAYING", sessionStatus: "ACTIVE", runStatus: "CUE_COMPLETED", pendingToolCall: null, activeCueId: null,
+        activeCueSource: null, activeManualVisitId: null, completedCueIds: record.cueProgress.completedCueIds,
+      } },
+    }, { source: "input", step: 0, parents: {} }, {});
+    installDesktopReviewLibrary(library); vi.stubEnv("DEPLOY_TARGET", "desktop");
+    const origin = "http://127.0.0.1:43123", headers = { "content-type": "application/json", [DESKTOP_APP_ORIGIN_HEADER]: origin };
+    const saved = await PUT(new Request(`${origin}/api/review-history/${review.reviewId}/runtime-head`, { method: "PUT", headers, body: JSON.stringify(head) }), { params: Promise.resolve({ id: review.reviewId }) });
+    expect(saved.status).toBe(200);
+    await owner.close();
+    owner = new SqliteDatabaseOwner({ path: join(directory, "library.sqlite3") });
+    library = new DesktopReviewLibrary({ owner, dataRoot: directory }); await library.initialize(); installDesktopReviewLibrary(library);
+    const response = await GET(new Request(`${origin}/api/review-history/${review.reviewId}`, { headers }), { params: Promise.resolve({ id: review.reviewId }) });
+    expect(response.status).toBe(200);
+    const detail = await response.json() as ReviewHistoryDetail;
+    const requestViewerSource = vi.fn(), loadManagedDemo = vi.fn();
+    const controller = new HistoryRestoreController({ loadDetail: async () => detail, requestViewerSource, loadManagedDemo });
+    const control = await controller.open(review.reviewId);
+    expect(control.missingArtifacts).toEqual([]);
+    expect(control.detail.revision?.status).toBe("READY");
+    const restoredRecord = SessionRecoveryRecordSchema.parse(control.recoverySnapshot);
+    expect(restoredRecord.agentCheckpointId).toBe(head.checkpointId);
+    const restored = restoreRecoveryArtifacts(restoredRecord);
+    expect(restored.session).toMatchObject({ phase: "PLAYING", current_tick: segment.start_tick, current_segment_index: head.defaultRouteCursor });
+    expect(restored.session.current_cue_id).toBeUndefined();
+    expect(requestViewerSource).not.toHaveBeenCalled(); expect(loadManagedDemo).not.toHaveBeenCalled();
+    controller.cancel();
+  } finally { installDesktopReviewLibrary(undefined); vi.unstubAllEnvs(); await owner.close(); await rm(directory, { recursive: true, force: true }); }
 });

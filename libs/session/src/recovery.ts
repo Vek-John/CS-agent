@@ -16,7 +16,7 @@ import {
 /** The only stable points a browser session is allowed to persist. */
 /** v2 adds presentedCueIds; v1 snapshots are deliberately incompatible. */
 export const SESSION_RECOVERY_SNAPSHOT_VERSION = "session-recovery-session.v2" as const;
-export type SessionRecoveryBoundaryKind = "ROUTE_START" | "CUE_PAUSED" | "WRAP_UP";
+export type SessionRecoveryBoundaryKind = "ROUTE_START" | "CUE_PAUSED" | "WRAP_UP" | "ORDINARY_SEGMENT";
 
 export type SessionRecoveryBoundary =
   | { readonly kind: "ROUTE_START"; readonly segmentIndex: 0 }
@@ -26,7 +26,8 @@ export type SessionRecoveryBoundary =
       readonly segmentIndex: number;
       readonly cueId: string;
     }
-  | { readonly kind: "WRAP_UP"; readonly segmentIndex: number };
+  | { readonly kind: "WRAP_UP"; readonly segmentIndex: number }
+  | { readonly kind: "ORDINARY_SEGMENT"; readonly segmentId: string; readonly segmentIndex: number };
 
 /**
  * This is deliberately a session-owned snapshot, not a browser/Host DTO.
@@ -182,6 +183,22 @@ function validateStateLists(plan: ReviewPlan, state: CoachingSessionState): void
   }
 }
 
+function assertOrdinaryProgress(plan: ReviewPlan, boundary: { segmentId: string; segmentIndex: number },
+  consumed: readonly string[], revealed: readonly string[], presented: readonly string[]): void {
+  const segment = plan.segments[boundary.segmentIndex];
+  if (!Number.isInteger(boundary.segmentIndex) || boundary.segmentIndex < 0 || !segment || segment.id !== boundary.segmentId ||
+    !["BRIEF", "OBSERVE"].includes(segment.mode) || segment.cue_ids.length !== 0 ||
+    !Number.isInteger(segment.round_number) || segment.round_number <= 0 || segment.round_number > plan.available_until_round ||
+    !Number.isSafeInteger(segment.start_tick) || !Number.isSafeInteger(segment.end_tick) || segment.start_tick < 0 || segment.end_tick <= segment.start_tick) {
+    throw new Error("Ordinary recovery requires a valid cue-free playing segment.");
+  }
+  const earlier = new Set(plan.cues.filter(cue => expectedSegmentIndex(plan, cue.id) < boundary.segmentIndex).map(cue => cue.id));
+  if (consumed.length !== earlier.size || consumed.some(id => !earlier.has(id)) ||
+    revealed.some(id => !earlier.has(id)) || presented.some(id => !earlier.has(id))) {
+    throw new Error("Ordinary recovery cannot skip unconsumed cues or claim future progress.");
+  }
+}
+
 function stateAtDefaultRouteCursor(state: CoachingSessionState): CoachingSessionState {
   if (!state.manual_cue_visit) return state;
   const cursor: DefaultRouteCursor = state.default_route_cursor;
@@ -208,6 +225,16 @@ function boundaryForState(
   const routeFingerprint = routeFingerprintForState(plan, state);
   if (!routeFingerprint) throw new Error("Recovery route fingerprint is missing.");
 
+  if (kind === "ORDINARY_SEGMENT") {
+    const segment = plan.segments[state.current_segment_index];
+    if (state.phase !== "PLAYING" || state.current_cue_id || state.manual_cue_visit ||
+      !segment || !Number.isSafeInteger(state.current_tick) || state.current_tick < segment.start_tick || state.current_tick >= segment.end_tick) {
+      throw new Error("Ordinary recovery requires current default-route playback inside its segment.");
+    }
+    const boundary = { kind, segmentId: segment.id, segmentIndex: state.current_segment_index } as const;
+    assertOrdinaryProgress(plan, boundary, state.consumed_cue_ids, state.revealed_cue_ids, state.presented_cue_ids);
+    return boundary;
+  }
   if (kind === "ROUTE_START") {
     const first = plan.segments[0];
     if (state.phase !== "INTRO" || state.current_segment_index !== 0 || state.current_cue_id || state.consumed_cue_ids.length || state.revealed_cue_ids.length ||
@@ -252,9 +279,11 @@ function assertSnapshot(snapshot: SessionRecoverySnapshot): void {
     throw new Error("Recovery snapshot route fingerprint does not match the frozen plan.");
   }
   const boundary = snapshot.boundary;
-  if (!isRecord(boundary) || !["ROUTE_START", "CUE_PAUSED", "WRAP_UP"].includes(String(boundary.kind))) {
+  if (!isRecord(boundary) || !["ROUTE_START", "CUE_PAUSED", "WRAP_UP", "ORDINARY_SEGMENT"].includes(String(boundary.kind))) {
     throw new Error("Recovery snapshot boundary kind is not supported.");
   }
+  if (boundary.kind === "ORDINARY_SEGMENT") assertOrdinaryProgress(snapshot.frozenPlan, boundary,
+    snapshot.consumedCueIds, snapshot.revealedCueIds, snapshot.presentedCueIds);
   if (boundary.kind === "CUE_PAUSED") {
     const cue = snapshot.frozenPlan.cues.find((candidate) => candidate.id === boundary.cueId);
     if (!cue || cue.segment_id !== boundary.segmentId || expectedSegmentIndex(snapshot.frozenPlan, cue.id) !== boundary.segmentIndex) {
@@ -278,9 +307,10 @@ export function captureSessionRecovery(
   kind: SessionRecoveryBoundaryKind,
   routeState?: Pick<CoachingRouteState, "readiness">,
 ): SessionRecoverySnapshot {
-  if (!["ROUTE_START", "CUE_PAUSED", "WRAP_UP"].includes(kind)) throw new Error("Unsupported recovery boundary.");
+  if (!["ROUTE_START", "CUE_PAUSED", "WRAP_UP", "ORDINARY_SEGMENT"].includes(kind)) throw new Error("Unsupported recovery boundary.");
   // An unfinished manual visit is transient. Only its saved default cursor
   // may be captured, and only when that cursor is itself a legal boundary.
+  if (kind === "ORDINARY_SEGMENT" && state.manual_cue_visit) throw new Error("Ordinary recovery excludes manual playback.");
   const stableState = stateAtDefaultRouteCursor(state);
   const boundary = boundaryForState(plan, stableState, kind);
   const snapshot: SessionRecoverySnapshot = {
@@ -333,6 +363,12 @@ export function rehydrateSessionRecovery(
       presented_cue_ids: [...snapshot.presentedCueIds],
       expanded_segment_ids: [...snapshot.expandedSegmentIds],
     });
+  }
+  if (boundary.kind === "ORDINARY_SEGMENT") {
+    return synchronizeDefaultRouteCursor({ ...base, current_segment_index: boundary.segmentIndex,
+      current_cue_id: undefined, current_tick: plan.segments[boundary.segmentIndex].start_tick, phase: "PLAYING",
+      consumed_cue_ids: [...snapshot.consumedCueIds], revealed_cue_ids: [...snapshot.revealedCueIds],
+      presented_cue_ids: [...snapshot.presentedCueIds], expanded_segment_ids: [...snapshot.expandedSegmentIds] });
   }
   if (boundary.kind === "WRAP_UP") {
     const last = plan.segments.at(-1);

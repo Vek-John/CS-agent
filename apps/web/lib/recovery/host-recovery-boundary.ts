@@ -75,3 +75,13 @@ export async function dispatchHostRecoveryBoundary(input: {
   }
   input.accept(result);
 }
+
+/** A degraded store result cannot prove that the recovery handshake succeeded. */
+export function hasConfirmedRecoveryHandshake(result: SessionRecoveryResult, expected: SessionRecoveryRecord): boolean {
+  const record = result.record;
+  return result.status === "RECOVERED" && result.recoveryId === expected.recoveryId && !!record && result.effects.length === 0
+    && record.recoveryId === expected.recoveryId && record.sessionId === expected.sessionId && record.runId === expected.runId
+    && record.demoContentHash === expected.demoContentHash && record.selectedPlayerId === expected.selectedPlayerId
+    && record.routeId === expected.routeId && record.routeHash === expected.routeHash && record.agentCheckpointId === expected.agentCheckpointId
+    && Object.entries(expected.boundary).every(([key, value]) => (record.boundary as Record<string, unknown>)[key] === value);
+}

@@ -1,3 +1,4 @@
+import { hasConfirmedRecoveryHandshake } from "./host-recovery-boundary";
 import { afterEach, expect, it, vi } from "vitest";
 import { SessionRecoveryRecordSchema, type SessionRecoveryRecord, type SessionRecoveryResult, type CoachAgentEvent, type CoachAgentResult } from "@cs-coach/coach-agent/client";
 import { createSessionRecoveryRuntime } from "./session-recovery-runtime";
@@ -310,4 +311,61 @@ it("releases the default notify=true serial tail only after the actual START_CUE
   await vi.advanceTimersByTimeAsync(1);expect(await second).toBe(true);
   expect(dispatch).toHaveBeenCalledTimes(2);expect(f.failure).not.toHaveBeenCalled();expect(fetcher).toHaveBeenCalledOnce();
   expect(f.accept).not.toHaveBeenCalled();expect(vi.getTimerCount()).toBe(0);controller.dispose();
+});
+
+it("mirrors ordinary checkpoint metadata and confirms only after artifact then head", async () => {
+  const head = deferred<Response>();
+  const f = await fixture(vi.fn(async (url: string) => url.endsWith("/runtime-head") ? head.promise : Response.json({ saved: true })));
+  const ordinary = { ...f.a, frozenReviewPlan: { ...f.a.frozenReviewPlan,
+    segments: [{ id: "segment-1", mode: "BRIEF", round_number: 1, start_tick: 0, end_tick: 100, cue_ids: [] }], cues: [] },
+    boundary: { kind: "ORDINARY_SEGMENT", boundaryId: "ordinary-1", segmentId: "segment-1", segmentIndex: 0, sessionPhase: "PLAYING" },
+  } as SessionRecoveryRecord;
+  await f.runtime.dispatch({ type: "SESSION_STARTED", eventId: "ordinary-start", record: ordinary });
+  f.live.record = ordinary;
+  Object.assign(f.result.state, { activeSegmentId: "segment-1", currentSegmentMode: "BRIEF", currentSessionPhase: "PLAYING", routeCursor: 0,
+    sessionStatus: "ACTIVE", runStatus: "CUE_COMPLETED", pendingToolCall: null, activeCueSource: "DEFAULT", activeManualVisitId: null });
+  f.input.stable = () => ({ ...ordinary, agentCheckpointId: f.result.checkpoint.checkpointId });
+  const pending = mirrorAgentCheckpoint(f.input);
+  await vi.waitFor(() => expect(f.fetcher).toHaveBeenCalledTimes(2));
+  expect(f.accept).not.toHaveBeenCalled();
+  expect(f.checkpoint.mock.calls[0][0]).toMatchObject({ activeSegmentId: "segment-1", currentSegmentMode: "BRIEF", runStatus: "CUE_COMPLETED", pendingToolCall: null });
+  const payload = JSON.parse(f.fetcher.mock.calls[1][1]?.body as string);
+  expect(payload).toMatchObject({ recoveryBoundary: "ORDINARY_SEGMENT", checkpointId: "new-checkpoint" });
+  expect(payload.currentCueId).toBeUndefined();
+  head.resolve(Response.json({ recoveryArtifactId: "confirmed-artifact" })); await pending;
+  expect(f.accept).toHaveBeenCalledOnce(); expect(f.failure).not.toHaveBeenCalled();
+});
+
+it.each(["segment", "transport"])("does not publish an ordinary head when %s changes during artifact persistence", async change => {
+  const artifact = deferred<Response>();
+  const f = await fixture(vi.fn(async () => artifact.promise));
+  const ordinary = { ...f.a, frozenReviewPlan: { ...f.a.frozenReviewPlan,
+    segments: [{ id: "segment-1", mode: "OBSERVE", round_number: 1, start_tick: 0, end_tick: 100, cue_ids: [] }], cues: [] },
+    boundary: { kind: "ORDINARY_SEGMENT", boundaryId: "ordinary-1", segmentId: "segment-1", segmentIndex: 0, sessionPhase: "PLAYING" },
+  } as SessionRecoveryRecord;
+  await f.runtime.dispatch({ type: "SESSION_STARTED", eventId: "ordinary-start", record: ordinary });
+  f.live.record = ordinary;
+  let moved = false;
+  f.input.stable = () => ({ ...ordinary, agentCheckpointId: f.result.checkpoint.checkpointId,
+    boundary: { ...ordinary.boundary, boundaryId: moved ? "next-segment" : "ordinary-1" } });
+  const pending = mirrorAgentCheckpoint(f.input);
+  await vi.waitFor(() => expect(f.fetcher).toHaveBeenCalledOnce());
+  if (change === "segment") moved = true; else f.live.transportEpoch = 9;
+  artifact.resolve(Response.json({ saved: true })); await pending;
+  expect(f.fetcher).toHaveBeenCalledOnce(); expect(f.accept).not.toHaveBeenCalled(); expect(f.failure).not.toHaveBeenCalled();
+});
+
+
+it("requires a successful matching handshake before automatic ordinary playback", () => {
+  const expected = record("handshake", 1000);
+  const boundary = expected.boundary;
+  if (boundary.kind !== "CUE_PAUSED") throw Error("EXPECTED_CUE_FIXTURE");
+  const success = { schemaVersion: "session-recovery-runtime.v1", status: "RECOVERED", recoveryId: expected.recoveryId,
+    record: expected, effects: [], reason: null } as SessionRecoveryResult;
+  expect(hasConfirmedRecoveryHandshake(success, expected)).toBe(true);
+  for (const status of ["REJECTED", "DEGRADED", "READY", "REBUILDING"] as const)
+    expect(hasConfirmedRecoveryHandshake({ ...success, status }, expected)).toBe(false);
+  for (const mutation of [{ recoveryId: "other" }, { record: null }, { record: { ...expected, agentCheckpointId: "later" } },
+    { record: { ...expected, boundary: { ...boundary, segmentIndex: 1 } } }, { record: { ...expected, runId: "other-run" } }])
+    expect(hasConfirmedRecoveryHandshake({ ...success, ...mutation }, expected)).toBe(false);
 });

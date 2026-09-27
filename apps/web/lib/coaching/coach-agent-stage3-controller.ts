@@ -170,6 +170,8 @@ export class CoachAgentStage3Controller {
   private readonly lifecyclePromises = new Map<string, Promise<CoachAgentResult | undefined>>();
   private timeoutHandle: unknown;
   private timeoutEpoch = 0;
+  private reconnectSequence = 0;
+  private ordinaryReconnect?: { event: Extract<CoachAgentEvent, { type: "RECONNECT_REPLAY" }>; result: CoachAgentResult; token: number };
   private token = 0;
   private resumeSequence = 0;
   private state: Stage3ControllerState = { status: "IDLE" };
@@ -979,8 +981,34 @@ export class CoachAgentStage3Controller {
   /** Recovery uses the same serialized dispatch/result seam as live cues. */
   reconnect(event: Extract<CoachAgentEvent, { type: "RECONNECT_REPLAY" }>, validateResult?: (result: CoachAgentResult) => void): Promise<CoachAgentResult> {
     this.bridgeLost();
+    this.ordinaryReconnect = undefined;
+    const sequence = ++this.reconnectSequence, token = this.token;
     // Recovery acceptance must precede optional checkpoint mirroring; unlike a mirror error, rejection is authoritative.
-    return this.dispatchSerial(event, { validateResult });
+    return this.dispatchSerial(event, { validateResult }).then(result => {
+      if (sequence === this.reconnectSequence && token === this.token && event.boundary?.kind === "ORDINARY_SEGMENT") {
+        this.ordinaryReconnect = { event, result, token };
+      }
+      return result;
+    });
+  }
+
+  /** Called only after the Host's matching recovery handshake has finished. */
+  adoptRecoveredOrdinary(event: Extract<CoachAgentEvent, { type: "RECONNECT_REPLAY" }>, result: CoachAgentResult): boolean {
+    const receipt = this.ordinaryReconnect, boundary = event.boundary, state = result.state;
+    if (!receipt || receipt.event !== event || receipt.result !== result || receipt.token !== this.token ||
+      boundary.kind !== "ORDINARY_SEGMENT" || result.restored !== "MATCHED" || result.status !== "COMPLETED" ||
+      !Object.entries(event.identity).every(([key, value]) => result.identity[key as keyof typeof result.identity] === value) ||
+      state.activeSegmentId !== boundary.segmentId || state.routeCursor !== boundary.segmentIndex ||
+      state.currentSessionPhase !== "PLAYING" || (state.currentSegmentMode !== "BRIEF" && state.currentSegmentMode !== "OBSERVE") ||
+      state.sessionStatus !== "ACTIVE" || state.runStatus !== "CUE_COMPLETED" || state.pendingToolCall !== null ||
+      state.activeCueSource === "MANUAL" || state.activeManualVisitId !== null || result.effects.length !== 0) return false;
+    this.ordinaryReconnect = undefined;
+    this.token++; // Old queued observers must not republish progress after adoption.
+    this.startedCueIds.clear();
+    this.completionAttempts.clear();
+    this.presentedBaselines.clear();
+    this.adapter.adoptRecoveredLifecycle(event.identity, boundary.segmentIndex);
+    return true;
   }
 
   /** Adopt the already-reconciled paused cue without dispatching START_CUE again. */
@@ -1005,6 +1033,8 @@ export class CoachAgentStage3Controller {
   }
 
   reset(): void {
+    this.ordinaryReconnect = undefined;
+    this.reconnectSequence++;
     this.cancelPlayback();
     this.token += 1;
     this.clearTimeout();

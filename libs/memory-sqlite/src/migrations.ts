@@ -13,6 +13,9 @@ export const DESKTOP_RUNTIME_HEAD_RECOVERY_MIGRATION_ID =
 export const DESKTOP_REVIEW_ARTIFACT_CONTRACT_MIGRATION_ID =
   "desktop-review-artifact-contract-006" as const;
 
+export const DESKTOP_RUNTIME_HEAD_ORDINARY_MIGRATION_ID =
+  "desktop-runtime-head-ordinary-007" as const;
+
 export const DESKTOP_MEMORY_SQL = String.raw`
 CREATE TABLE app_users (user_id TEXT PRIMARY KEY,memory_enabled INTEGER NOT NULL DEFAULT 0 CHECK(memory_enabled IN (0,1)),consent TEXT NOT NULL DEFAULT 'UNKNOWN' CHECK(consent IN ('GRANTED','REVOKED','UNKNOWN')),consent_version INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL,memory_deleted_at TEXT) STRICT;
 CREATE TABLE memory_records (user_id TEXT NOT NULL REFERENCES app_users(user_id) ON DELETE CASCADE,memory_id TEXT NOT NULL,logical_key TEXT NOT NULL,kind TEXT NOT NULL,status TEXT NOT NULL,active INTEGER NOT NULL CHECK(active IN (0,1)),revision INTEGER NOT NULL,updated_at TEXT NOT NULL,record_json TEXT NOT NULL,PRIMARY KEY(user_id,memory_id),UNIQUE(user_id,logical_key)) STRICT;
@@ -74,6 +77,13 @@ ALTER TABLE review_revisions
 ADD COLUMN artifact_contract_version INTEGER NOT NULL DEFAULT 1
 CHECK(artifact_contract_version IN (1,2));`;
 
+export const DESKTOP_RUNTIME_HEAD_ORDINARY_SQL = String.raw`
+CREATE TABLE review_runtime_heads_ordinary (review_id TEXT PRIMARY KEY REFERENCES reviews(review_id) ON DELETE CASCADE,review_revision_id TEXT NOT NULL REFERENCES review_revisions(review_revision_id) ON DELETE CASCADE,session_id TEXT NOT NULL,run_id TEXT NOT NULL,demo_id TEXT NOT NULL,demo_content_hash TEXT NOT NULL CHECK(length(demo_content_hash)=64 AND demo_content_hash NOT GLOB '*[^0-9a-f]*'),selected_player_id TEXT NOT NULL,route_id TEXT NOT NULL,route_hash TEXT NOT NULL,recovery_boundary TEXT NOT NULL CHECK(recovery_boundary IN ('ROUTE_START','CUE_PAUSED','WRAP_UP','ORDINARY_SEGMENT')),checkpoint_thread_id TEXT,checkpoint_namespace TEXT,checkpoint_id TEXT,current_cue_id TEXT,default_route_cursor INTEGER NOT NULL CHECK(default_route_cursor>=0),completed_cue_count INTEGER NOT NULL CHECK(completed_cue_count>=0),total_cue_count INTEGER NOT NULL CHECK(total_cue_count>=0),last_playback_tick INTEGER CHECK(last_playback_tick IS NULL OR last_playback_tick>=0),stable_progress_json TEXT NOT NULL CHECK(json_valid(stable_progress_json)),updated_at TEXT NOT NULL,recovery_artifact_id TEXT REFERENCES review_artifacts(artifact_id) ON DELETE CASCADE,recovery_artifact_key TEXT,recovery_artifact_revision INTEGER CHECK(recovery_artifact_revision IS NULL OR recovery_artifact_revision>=1),CHECK(((checkpoint_thread_id IS NULL AND checkpoint_namespace IS NULL AND checkpoint_id IS NULL) OR (checkpoint_thread_id IS NOT NULL AND checkpoint_namespace IS NOT NULL AND checkpoint_id IS NOT NULL)) AND (recovery_boundary='ROUTE_START' OR checkpoint_id IS NOT NULL)),CHECK(recovery_boundary!='ORDINARY_SEGMENT' OR current_cue_id IS NULL)) STRICT;
+INSERT INTO review_runtime_heads_ordinary(review_id,review_revision_id,session_id,run_id,demo_id,demo_content_hash,selected_player_id,route_id,route_hash,recovery_boundary,checkpoint_thread_id,checkpoint_namespace,checkpoint_id,current_cue_id,default_route_cursor,completed_cue_count,total_cue_count,last_playback_tick,stable_progress_json,updated_at,recovery_artifact_id,recovery_artifact_key,recovery_artifact_revision) SELECT review_id,review_revision_id,session_id,run_id,demo_id,demo_content_hash,selected_player_id,route_id,route_hash,recovery_boundary,checkpoint_thread_id,checkpoint_namespace,checkpoint_id,current_cue_id,default_route_cursor,completed_cue_count,total_cue_count,last_playback_tick,stable_progress_json,updated_at,recovery_artifact_id,recovery_artifact_key,recovery_artifact_revision FROM review_runtime_heads;
+DROP TABLE review_runtime_heads;
+ALTER TABLE review_runtime_heads_ordinary RENAME TO review_runtime_heads;
+CREATE UNIQUE INDEX review_runtime_heads_recovery_artifact_idx ON review_runtime_heads(recovery_artifact_id) WHERE recovery_artifact_id IS NOT NULL;`;
+
 export interface DesktopMigration {
   id: string;
   sql: string;
@@ -115,6 +125,11 @@ export const DESKTOP_MIGRATIONS: readonly DesktopMigration[] = [
     id: DESKTOP_REVIEW_ARTIFACT_CONTRACT_MIGRATION_ID,
     sql: DESKTOP_REVIEW_ARTIFACT_CONTRACT_SQL,
     checksum: checksum(DESKTOP_REVIEW_ARTIFACT_CONTRACT_SQL),
+  },
+  {
+    id: DESKTOP_RUNTIME_HEAD_ORDINARY_MIGRATION_ID,
+    sql: DESKTOP_RUNTIME_HEAD_ORDINARY_SQL,
+    checksum: checksum(DESKTOP_RUNTIME_HEAD_ORDINARY_SQL),
   },
 ];
 

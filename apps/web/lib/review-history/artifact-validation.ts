@@ -116,6 +116,13 @@ function interaction(value: unknown, schemaVersion: string, cueIds: ReadonlySet<
 
 function recoveryMatchesHead(record: SessionRecoveryRecord, head: CommitRuntimeHeadInput): boolean {
   const frozenPlan = record.frozenReviewPlan as { readonly cues?: readonly unknown[] };
+  if (record.boundary.kind === "ORDINARY_SEGMENT") {
+    const boundary = record.boundary;
+    const segment = record.frozenReviewPlan.segments[boundary.segmentIndex] as Record<string, unknown> | undefined;
+    if (head.currentCueId != null || !head.checkpointId || !head.checkpointThreadId || head.checkpointNamespace === undefined ||
+      !segment || segment.id !== boundary.segmentId || (segment.mode !== "BRIEF" && segment.mode !== "OBSERVE") ||
+      !Array.isArray(segment.cue_ids) || segment.cue_ids.length !== 0 || boundary.sessionPhase !== "PLAYING") return false;
+  }
   return record.sessionId === head.sessionId &&
     record.runId === head.runId &&
     record.demoContentHash === head.demoContentHash &&

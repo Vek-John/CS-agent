@@ -757,6 +757,14 @@ export class CoachAgentStage3HostAdapter {
   get lifecycleQueueCursor(): number { return this.store.queuedCursor; }
   get lifecycleDegraded(): boolean { return this.store.lifecycleDegraded; }
   reserveLifecycleCursor(cursor: number): void { this.store.queuedCursor = Math.max(this.store.queuedCursor, cursor); }
+  /** Exact reconnect owns a fresh local lifecycle cursor, without presenting a cue. */
+  adoptRecoveredLifecycle(identity: CoachAgentIdentity, cursor: number): void {
+    this.reset();
+    this.store.activeIdentityKey = identityKey(identity);
+    this.activeIdentityKey = this.store.activeIdentityKey;
+    this.markLifecycleSynced(cursor);
+  }
+
   markLifecycleSynced(cursor: number): void {
     this.store.lastSyncedCursor = Math.max(this.store.lastSyncedCursor, cursor);
     this.store.queuedCursor = Math.max(this.store.queuedCursor, this.store.lastSyncedCursor);

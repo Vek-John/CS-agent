@@ -60,6 +60,12 @@ export interface RecoverySessionIdentity {
 }
 
 export interface RecoveryAgentCheckpointMeta {
+  readonly activeSegmentId?: string | null;
+  readonly currentSegmentMode?: string | null;
+  readonly runStatus?: string;
+  readonly pendingToolCall?: unknown;
+  readonly activeCueSource?: "DEFAULT" | "MANUAL" | null;
+  readonly activeManualVisitId?: string | null;
   readonly checkpointId: string | null;
   readonly activeCueId: string | null;
   readonly currentSessionPhase: string;
@@ -215,6 +221,12 @@ export function checkpointForRecoveryBoundary(
   boundary: SessionRecoveryRecord["boundary"],
 ): string | null {
   if (!meta?.checkpointId || boundary.kind === "ROUTE_START") return null;
+  if (boundary.kind === "ORDINARY_SEGMENT") {
+    return meta.activeSegmentId === boundary.segmentId && meta.routeCursor === boundary.segmentIndex &&
+      meta.currentSessionPhase === "PLAYING" && (meta.currentSegmentMode === "BRIEF" || meta.currentSegmentMode === "OBSERVE") &&
+      meta.sessionStatus === "ACTIVE" && meta.runStatus === "CUE_COMPLETED" && meta.pendingToolCall === null &&
+      (meta.activeCueSource === null || meta.activeCueSource === "DEFAULT") && meta.activeManualVisitId === null ? meta.checkpointId : null;
+  }
   if (boundary.kind === "CUE_PAUSED") {
     return meta.activeCueId === boundary.cueId &&
       meta.currentSessionPhase === "PAUSED_FOR_COACHING" &&
@@ -274,7 +286,9 @@ export function createRecoverySessionIdentity(
 }
 
 function boundaryId(recoveryId: string, boundary: SessionRecoverySnapshot["boundary"]): string {
-  const suffix = boundary.kind === "CUE_PAUSED"
+  const suffix = boundary.kind === "ORDINARY_SEGMENT"
+    ? `${boundary.kind}-${boundary.segmentIndex}-${boundary.segmentId}`
+    : boundary.kind === "CUE_PAUSED"
     ? `${boundary.kind}-${boundary.segmentIndex}-${boundary.cueId}`
     : `${boundary.kind}-${boundary.segmentIndex}`;
   return idPart(`${recoveryId}-${suffix}`);
@@ -287,6 +301,7 @@ export function projectRecoveryBoundary(
   if (boundary.kind === "ROUTE_START") {
     return { kind: "ROUTE_START", boundaryId: boundaryId(recoveryId, boundary), segmentIndex: 0 };
   }
+  if (boundary.kind === "ORDINARY_SEGMENT") return { ...boundary, boundaryId: boundaryId(recoveryId, boundary), sessionPhase: "PLAYING" };
   if (boundary.kind === "WRAP_UP") {
     return { kind: "WRAP_UP", boundaryId: boundaryId(recoveryId, boundary), segmentIndex: boundary.segmentIndex };
   }
@@ -307,7 +322,11 @@ function cueWindow(
   session: CoachingSessionState,
 ): readonly string[] {
   if (session.phase === "WRAP_UP" || session.phase === "COMPLETED") return [];
-  const activeIndex = session.current_cue_id ? routeState.cueOrder.indexOf(session.current_cue_id) : 0;
+  const ordinary = session.phase === "PLAYING" && !session.current_cue_id &&
+    plan.segments[session.current_segment_index]?.cue_ids.length === 0;
+  const activeIndex = session.current_cue_id ? routeState.cueOrder.indexOf(session.current_cue_id)
+    : ordinary ? routeState.cueOrder.findIndex(id => plan.segments.findIndex(segment => segment.cue_ids.includes(id)) >= session.current_segment_index) : 0;
+  if (ordinary && activeIndex < 0) return [];
   return routeState.cueOrder.slice(Math.max(0, activeIndex), Math.max(0, activeIndex) + 3)
     .filter((cueId) => plan.cues.some((cue) => cue.id === cueId));
 }
@@ -430,6 +449,8 @@ export function restoreRecoveryArtifacts(record: SessionRecoveryRecord): {
     frozenPlan: plan,
     boundary: record.boundary.kind === "ROUTE_START"
       ? { kind: "ROUTE_START", segmentIndex: 0 }
+      : record.boundary.kind === "ORDINARY_SEGMENT"
+        ? { kind: "ORDINARY_SEGMENT", segmentId: record.boundary.segmentId, segmentIndex: record.boundary.segmentIndex }
       : record.boundary.kind === "WRAP_UP"
         ? { kind: "WRAP_UP", segmentIndex: record.boundary.segmentIndex }
         : {
@@ -607,6 +628,7 @@ export function buildCheckpointedRecoveryRecord(
   checkpoint: RecoveryAgentCheckpointMeta | undefined,
 ): SessionRecoveryRecord | undefined {
   const draft = buildSessionRecoveryRecord({ ...input, agentCheckpointId: null });
+  if (draft.boundary.kind === "ORDINARY_SEGMENT" && checkpoint?.currentSegmentMode !== input.plan.segments[draft.boundary.segmentIndex]?.mode) return undefined;
   const checkpointId = checkpointForRecoveryBoundary(checkpoint, draft.boundary);
   if (draft.boundary.kind === "ROUTE_START") return draft;
   return checkpointId ? buildSessionRecoveryRecord({ ...input, agentCheckpointId: checkpointId }) : undefined;

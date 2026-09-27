@@ -70,18 +70,24 @@ export async function mirrorAgentCheckpoint(input: AgentMirrorInput): Promise<vo
   const { owner, current } = captureOwner(input);
   if (!current()) return;
   const checkpoint: RecoveryAgentCheckpointMeta = { checkpointId: result.checkpoint.checkpointId, activeCueId: result.state.activeCueId,
-    currentSessionPhase: result.state.currentSessionPhase, routeCursor: result.state.routeCursor, sessionStatus: result.state.sessionStatus };
+    currentSessionPhase: result.state.currentSessionPhase, routeCursor: result.state.routeCursor, sessionStatus: result.state.sessionStatus,
+    activeSegmentId: result.state.activeSegmentId, currentSegmentMode: result.state.currentSegmentMode,
+    runStatus: result.state.runStatus, pendingToolCall: result.state.pendingToolCall,
+    activeCueSource: result.state.activeCueSource, activeManualVisitId: result.state.activeManualVisitId };
   input.checkpoint(checkpoint); // Observed Graph checkpoint, not a durable-library acknowledgement.
   const { runtime, record, history } = owner;
   if (!runtime || !record) return;
   const stable = input.stable(checkpoint);
   if (!stable || stable.agentCheckpointId !== checkpoint.checkpointId || !recordMatches(stable, event.identity, record.recoveryId)) return;
+  const stillAtOrdinaryBoundary = () => stable.boundary.kind !== "ORDINARY_SEGMENT"
+    || (input.read().transportEpoch === owner.transportEpoch
+      && input.stable(checkpoint)?.boundary.boundaryId === stable.boundary.boundaryId);
   let pendingRetry: RuntimeHeadRetry | undefined;
   try {
     const persisted = await runtime.dispatch({ type: "STABLE_BOUNDARY_REACHED", eventId: input.eventId(), recoveryId: record.recoveryId,
       boundary: stable.boundary, cueProgress: stable.cueProgress, routeReadiness: stable.routeReadiness, narrationArtifacts: stable.narrationArtifacts,
       agentCheckpointId: result.checkpoint.checkpointId, updatedAt: Date.now() });
-    if (!current()) return;
+    if (!current() || !stillAtOrdinaryBoundary()) return;
     const durable = persisted.record;
     if ((persisted.status !== "READY" && persisted.status !== "DEGRADED") || persisted.recoveryId !== record.recoveryId
       || !recordMatches(durable ?? undefined, event.identity, record.recoveryId) || !durable
@@ -89,10 +95,10 @@ export async function mirrorAgentCheckpoint(input: AgentMirrorInput): Promise<vo
       input.failure(); return;
     }
     // A matching DEGRADED memory record can still become durable in the library.
-    if (history && (durable.boundary.kind === "CUE_PAUSED" || durable.boundary.kind === "WRAP_UP")) {
+    if (history && (durable.boundary.kind !== "ROUTE_START")) {
       const recoveryArtifactKey = `${durable.boundary.boundaryId}:${durable.agentCheckpointId}`;
       await history.artifact("SESSION_RECOVERY", recoveryArtifactKey, durable, "session-recovery-record.v2");
-      if (!current()) return;
+      if (!current() || !stillAtOrdinaryBoundary()) return;
       if (history.reviewId && !history.revisionId) { input.failure(); return; }
       if (history.reviewId && history.revisionId) {
         await history.stableHead({ recoveryArtifactKey,
@@ -130,7 +136,7 @@ export async function mirrorAgentCheckpoint(input: AgentMirrorInput): Promise<vo
             return inFlight;
           } };
         });
-        if (!current()) return;
+        if (!current() || !stillAtOrdinaryBoundary()) return;
       }
     }
     input.accept(persisted);

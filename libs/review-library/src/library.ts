@@ -629,6 +629,31 @@ function recoveryArtifactMatchesHead(
   if (input.recoveryBoundary === "CUE_PAUSED") {
     return typeof input.currentCueId === "string" && boundary.cueId === input.currentCueId;
   }
+  if (input.recoveryBoundary === "ORDINARY_SEGMENT") {
+    const segments = frozenPlan.segments;
+    if (!Array.isArray(segments) || !Number.isSafeInteger(boundary.segmentIndex) || (boundary.segmentIndex as number) < 0 ||
+      Object.keys(boundary).sort().join(",") !== "boundaryId,kind,segmentId,segmentIndex,sessionPhase" ||
+      typeof boundary.boundaryId !== "string" || !boundary.boundaryId.trim() || boundary.sessionPhase !== "PLAYING") return false;
+    if (!Array.isArray(record.toolLedger) || record.toolLedger.some(entry => objectValue(entry)?.status !== "RESUMED")) return false;
+    const segment = objectValue(segments[boundary.segmentIndex as number]);
+    if (!segment || segment.id !== boundary.segmentId || (segment.mode !== "BRIEF" && segment.mode !== "OBSERVE") ||
+      !Array.isArray(segment.cue_ids) || segment.cue_ids.length !== 0 ||
+      segments.filter(item => objectValue(item)?.id === segment.id).length !== 1 ||
+      !Number.isSafeInteger(segment.start_tick) || (segment.start_tick as number) < 0 || !Number.isSafeInteger(segment.end_tick) || (segment.end_tick as number) <= (segment.start_tick as number) ||
+      !Number.isSafeInteger(segment.round_number) || (segment.round_number as number) < 1 || typeof frozenPlan.available_until_round !== "number" || (segment.round_number as number) > frozenPlan.available_until_round ||
+      cues.some(cue => objectValue(cue)?.segment_id === segment.id)) return false;
+    const priorCueIds = new Set<string>();
+    for (const raw of segments.slice(0, boundary.segmentIndex as number)) {
+      const ids = objectValue(raw)?.cue_ids;
+      if (!Array.isArray(ids) || ids.some(id => typeof id !== "string")) return false;
+      for (const id of ids) priorCueIds.add(id as string);
+    }
+    for (const field of ["completedCueIds", "consumedCueIds", "presentedCueIds", "revealedCueIds"]) {
+      const ids = cueProgress?.[field];
+      if (!Array.isArray(ids) || new Set(ids).size !== ids.length || ids.some(id => typeof id !== "string" || !priorCueIds.has(id)) ||
+        ((field === "completedCueIds" || field === "consumedCueIds") && ids.length !== priorCueIds.size)) return false;
+    }
+  }
   return input.currentCueId === undefined || input.currentCueId === null;
 }
 
@@ -1629,6 +1654,7 @@ export class DesktopReviewLibrary {
       input.checkpointId,
     ];
     const checkpointCount = checkpoint.filter((value) => value !== undefined).length;
+    let checkpointAgent: Record<string, unknown> | undefined;
     if (
       (checkpointCount !== 0 && checkpointCount !== 3) ||
       (input.recoveryBoundary !== "ROUTE_START" && checkpointCount !== 3)
@@ -1659,6 +1685,13 @@ export class DesktopReviewLibrary {
           agent.routeHash !== input.routeHash
         )
           throw new ReviewLibraryError("RUNTIME_HEAD_IDENTITY_MISMATCH");
+        if (input.recoveryBoundary === "ORDINARY_SEGMENT" && (
+          input.currentCueId != null || agent.routeCursor !== input.defaultRouteCursor ||
+          agent.currentSessionPhase !== "PLAYING" || agent.sessionStatus !== "ACTIVE" || agent.runStatus !== "CUE_COMPLETED" ||
+          (agent.currentSegmentMode !== "BRIEF" && agent.currentSegmentMode !== "OBSERVE") ||
+          agent.pendingToolCall !== null || agent.activeCueSource === "MANUAL" || agent.activeManualVisitId !== null
+        )) throw new ReviewLibraryError("RUNTIME_HEAD_IDENTITY_MISMATCH");
+        checkpointAgent = agent;
       } catch (error) {
         if (error instanceof ReviewLibraryError) throw error;
         throw new ReviewLibraryError("RUNTIME_HEAD_IDENTITY_MISMATCH");
@@ -1749,6 +1782,25 @@ export class DesktopReviewLibrary {
       );
       if (!reviewPlanRow)
         throw new ReviewLibraryError("REVISION_ARTIFACTS_INCOMPLETE");
+      if (input.recoveryBoundary === "ORDINARY_SEGMENT") {
+        const record = objectValue(recoveryPayload)!;
+        const boundary = objectValue(record.boundary as JsonValue)!;
+        const frozenPlan = objectValue(record.frozenReviewPlan as JsonValue)!;
+        const savedPlan = objectValue(JSON.parse(reviewPlanRow.json_payload) as JsonValue);
+        const frozenSegments = frozenPlan.segments as JsonValue[];
+        const savedSegments = savedPlan?.segments;
+        if (!Array.isArray(savedSegments) || savedPlan?.id !== input.routeId ||
+          !isDeepStrictEqual(savedSegments[input.defaultRouteCursor], frozenSegments[input.defaultRouteCursor]) ||
+          checkpointAgent?.activeSegmentId !== boundary.segmentId ||
+          checkpointAgent?.currentSegmentMode !== objectValue(frozenSegments[input.defaultRouteCursor])?.mode
+        ) throw new ReviewLibraryError("RUNTIME_HEAD_IDENTITY_MISMATCH");
+        const progress = objectValue(record.cueProgress as JsonValue)!;
+        const completed = checkpointAgent?.completedCueIds;
+        const recordedCompleted = progress.completedCueIds;
+        if (!Array.isArray(completed) || !Array.isArray(recordedCompleted) ||
+          completed.length !== recordedCompleted.length || new Set(completed).size !== completed.length ||
+          completed.some(id => typeof id !== "string" || !recordedCompleted.includes(id))) throw new ReviewLibraryError("RUNTIME_HEAD_IDENTITY_MISMATCH");
+      }
       const narrationRequirement = requiredNarrationCueIds(
         JSON.parse(reviewPlanRow.json_payload) as JsonValue,
         recoveryPayload,

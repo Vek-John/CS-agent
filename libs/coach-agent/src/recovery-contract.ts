@@ -251,6 +251,30 @@ export const SessionRecoveryRecordSchema = z
   })
   .strict()
   .superRefine((record, context) => {
+    if (record.boundary.kind === "ORDINARY_SEGMENT") {
+      const boundary = record.boundary;
+      const segment = record.frozenReviewPlan.segments[boundary.segmentIndex] as Record<string, unknown> | undefined;
+      const valid = segment && segment.id === boundary.segmentId && (segment.mode === "BRIEF" || segment.mode === "OBSERVE") &&
+        Array.isArray(segment.cue_ids) && segment.cue_ids.length === 0 && Number.isInteger(segment.round_number) &&
+        Number(segment.round_number) > 0 && Number(segment.round_number) <= record.frozenReviewPlan.available_until_round &&
+        Number.isSafeInteger(segment.start_tick) && Number.isSafeInteger(segment.end_tick) && Number(segment.start_tick) >= 0 && Number(segment.end_tick) > Number(segment.start_tick);
+      const earlier = new Set<string>();
+      let shapeValid = true;
+      for (const raw of record.frozenReviewPlan.cues) {
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) { shapeValid = false; break; }
+        const cue = raw as Record<string, unknown>;
+        const index = record.frozenReviewPlan.segments.findIndex(rawSegment => !!rawSegment && typeof rawSegment === "object" &&
+          Array.isArray((rawSegment as Record<string, unknown>).cue_ids) && ((rawSegment as Record<string, unknown>).cue_ids as unknown[]).includes(cue.id));
+        if (typeof cue.id !== "string" || index < 0) { shapeValid = false; break; }
+        if (index < boundary.segmentIndex) earlier.add(cue.id);
+      }
+      const progress = record.cueProgress;
+      if (!valid || !shapeValid || progress.consumedCueIds.length !== earlier.size || progress.completedCueIds.length !== earlier.size ||
+        [progress.consumedCueIds, progress.completedCueIds, progress.presentedCueIds, progress.revealedCueIds].some(ids => new Set(ids).size !== ids.length || ids.some(id => !earlier.has(id))) ||
+        record.toolLedger.some(entry => entry.status !== "RESUMED")) {
+        context.addIssue({ code: "custom", path: ["boundary"], message: "Ordinary recovery requires a cue-free frozen segment and complete prior-only cue progress without pending tools." });
+      }
+    }
     if (record.updatedAt < record.createdAt) {
       context.addIssue({ code: "custom", path: ["updatedAt"], message: "updatedAt must not precede createdAt." });
     }

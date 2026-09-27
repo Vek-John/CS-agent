@@ -97,7 +97,7 @@ export interface ReviewArtifact {
   readonly payload?: JsonValue;
 }
 
-export type RecoveryBoundary = "ROUTE_START" | "CUE_PAUSED" | "WRAP_UP";
+export type RecoveryBoundary = "ROUTE_START" | "CUE_PAUSED" | "WRAP_UP" | "ORDINARY_SEGMENT";
 export interface ReviewRuntimeHead {
   readonly reviewId: string;
   readonly reviewRevisionId: string;

@@ -13,7 +13,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
 import {
   SqliteCheckpointSaver,
   SqliteDatabaseOwner,
@@ -104,7 +105,7 @@ async function appendCriticalArtifacts(
     readonly selectedPlayerId: string;
     readonly routeId: string;
     readonly routeHash: string;
-    readonly recoveryBoundary: "ROUTE_START" | "CUE_PAUSED" | "WRAP_UP";
+    readonly recoveryBoundary: "ROUTE_START" | "CUE_PAUSED" | "WRAP_UP" | "ORDINARY_SEGMENT";
     readonly checkpointId?: string;
     readonly currentCueId?: string;
     readonly defaultRouteCursor: number;
@@ -132,13 +133,19 @@ async function appendCriticalArtifacts(
     idempotencyKey: `candidate-set-${suffix}`,
   });
   const cues = Array.from({ length: head.totalCueCount }, (_, index) => ({ id: `cue-${index}` }));
+  const ordinary = head.recoveryBoundary === "ORDINARY_SEGMENT";
+  const segments = ordinary ? [
+    { id: "segment-cue", mode: "DEEP", cue_ids: cues.map(cue => cue.id), round_number: 1, start_tick: 0, end_tick: 100 },
+    { id: "segment-ordinary", mode: "BRIEF", cue_ids: [], round_number: 1, start_tick: 100, end_tick: 200 },
+  ] : undefined;
+  const frozenPlan = { id: head.routeId, cues, ...(segments ? { segments, available_until_round: 1 } : {}) };
   await library.appendArtifact({
     reviewRevisionId,
     artifactType: "REVIEW_PLAN",
     artifactKey: "route",
     artifactRevision: 1,
     schemaVersion: "review-plan.v1",
-    payload: { id: head.routeId, cues, route: suffix },
+    payload: { ...frozenPlan, route: suffix },
     idempotencyKey: `review-plan-${suffix}`,
   });
   await library.appendArtifact({
@@ -155,16 +162,19 @@ async function appendCriticalArtifacts(
       routeId: head.routeId,
       routeHash: head.routeHash,
       agentCheckpointId: head.checkpointId ?? null,
-      frozenReviewPlan: { id: head.routeId, cues },
+      frozenReviewPlan: frozenPlan,
       boundary: {
         kind: head.recoveryBoundary,
         segmentIndex: head.defaultRouteCursor,
+        ...(ordinary ? { boundaryId: head.recoveryArtifactKey, segmentId: "segment-ordinary", sessionPhase: "PLAYING" } : {}),
         ...(head.currentCueId ? { cueId: head.currentCueId } : {}),
       },
       cueProgress: {
         completedCueIds: Array.from({ length: head.completedCueCount }, (_, index) => `cue-${index}`),
+        ...(ordinary ? { consumedCueIds: cues.map(cue => cue.id), presentedCueIds: cues.map(cue => cue.id), revealedCueIds: cues.map(cue => cue.id) } : {}),
       },
       routeReadiness: {},
+      ...(ordinary ? { toolLedger: [] } : {}),
       narrationArtifacts: [],
       suffix,
     },
@@ -1645,6 +1655,89 @@ describe("runtime head compare-and-swap", () => {
         await expect(h.library.commitRuntimeHead({ ...h.input, expectedRecoveryArtifactId: first.recoveryArtifactId, ...change })).rejects.toMatchObject({ code: "RUNTIME_HEAD_CONFLICT" });
       }
       expect((await h.library.loadReview(h.input.reviewId)).runtimeHead).toEqual(first);
+    } finally { await h.owner.close(); }
+  });
+});
+
+describe("ordinary-segment durable runtime heads", () => {
+  async function setup() {
+    const h = await harness();
+    const imported = await importValue(h.library, demoBytes(), "ordinary-demo");
+    const review = await h.library.createReview({ demoId: imported.demo.demoId, selectedPlayerId: "player-a", selectedPlayerName: "A", title: "Ordinary recovery" });
+    const revision = await h.library.startRevision({ reviewId: review.reviewId, analysisVersion: "a", graphVersion: "g", promptVersion: "p", modelMetadata: {}, routeId: "route-a", routeHash: "route-hash" });
+    const input: CommitRuntimeHeadInput = { reviewId: review.reviewId, reviewRevisionId: revision.reviewRevisionId, recoveryArtifactKey: "ordinary-1", recoveryArtifactRevision: 1,
+      sessionId: "session-ordinary", runId: "run-ordinary", demoId: imported.demo.demoId, demoContentHash: imported.demo.contentHash,
+      selectedPlayerId: "player-a", routeId: "route-a", routeHash: "route-hash", recoveryBoundary: "ORDINARY_SEGMENT",
+      checkpointThreadId: "thread-ordinary", checkpointNamespace: "", checkpointId: "checkpoint-exact", defaultRouteCursor: 1,
+      completedCueCount: 1, totalCueCount: 1, stableProgress: { completedCueIds: ["cue-0"] } };
+    const agent = { sessionId: input.sessionId, runId: input.runId, demoId: input.demoId, demoContentHash: input.demoContentHash,
+      selectedPlayerId: input.selectedPlayerId, routeId: input.routeId, routeHash: input.routeHash, routeCursor: 1,
+      activeSegmentId: "segment-ordinary", activeCueId: "cue-0", currentSegmentMode: "BRIEF", currentSessionPhase: "PLAYING",
+      sessionStatus: "ACTIVE", runStatus: "CUE_COMPLETED", pendingToolCall: null, activeCueSource: "DEFAULT", activeManualVisitId: null, completedCueIds: ["cue-0"] };
+    const saver = new SqliteCheckpointSaver({ owner: h.owner });
+    const save = async (id = input.checkpointId!, extra = {}) => saver.put({ configurable: { thread_id: input.checkpointThreadId!, checkpoint_ns: "" } },
+      { v: 4, id, ts: "2026-09-27T00:00:00Z", channel_values: { agent: { ...agent, ...extra } }, channel_versions: {}, versions_seen: {} }, { source: "input", step: 0, parents: {} }, {});
+    await save();
+    await appendCriticalArtifacts(h.library, revision.reviewRevisionId, "ordinary", input);
+    return { ...h, input, save };
+  }
+  it("commits an exact ordinary checkpoint and retains it after closing and reopening SQLite", async () => {
+    const h = await setup();
+    let reopened: SqliteDatabaseOwner | undefined;
+    try {
+      // A newer checkpoint cannot substitute for the explicitly requested one.
+      await h.save("checkpoint-newer", { routeCursor: 2, activeSegmentId: "later" });
+      const head = await h.library.commitRuntimeHead(h.input);
+      expect(head).toMatchObject({ recoveryBoundary: "ORDINARY_SEGMENT", checkpointId: "checkpoint-exact", defaultRouteCursor: 1, completedCueCount: 1 });
+      expect(head.currentCueId).toBeUndefined();
+      await h.owner.close();
+      reopened = new SqliteDatabaseOwner({ path: join(h.root, "cs-agent.sqlite3") });
+      const library = new DesktopReviewLibrary({ owner: reopened, dataRoot: h.root });
+      await library.initialize();
+      expect((await library.loadReview(h.input.reviewId)).runtimeHead).toEqual(head);
+      installDesktopReviewLibrary(library);
+      vi.stubEnv("DEPLOY_TARGET", "desktop");
+      const { GET } = await import("../../../apps/web/app/api/review-history/[id]/route");
+      const { DESKTOP_APP_ORIGIN_HEADER } = await import("../../../apps/web/lib/desktop/request-origin");
+      const origin = "http://127.0.0.1:43123";
+      const response = await GET(new Request(`${origin}/api/review-history/${h.input.reviewId}`, { headers: { [DESKTOP_APP_ORIGIN_HEADER]: origin } }), { params: Promise.resolve({ id: h.input.reviewId }) });
+      expect(response.status).toBe(200);
+      const detail = await response.json();
+      expect(detail.runtimeHead).toEqual(head);
+      expect(detail.artifacts.find((item: { kind: string }) => item.kind === "SESSION_RECOVERY").payload.boundary).toMatchObject({ kind: "ORDINARY_SEGMENT", segmentId: "segment-ordinary", segmentIndex: 1, sessionPhase: "PLAYING" });
+      await expect(library.commitRuntimeHead(h.input)).resolves.toEqual(head);
+    } finally { installDesktopReviewLibrary(undefined); vi.unstubAllEnvs(); await (reopened ?? h.owner).close(); }
+  });
+  it.each(["missing-checkpoint", "wrong-cursor", "wrong-segment", "manual", "pending", "wrong-mode", "wrong-phase", "completed", "wrong-progress", "cue-id", "missing-exact"])("rejects invalid ordinary checkpoint ownership: %s", async mode => {
+    const h = await setup();
+    try {
+      let input = { ...h.input };
+      if (mode === "missing-checkpoint") { delete input.checkpointId; delete input.checkpointNamespace; delete input.checkpointThreadId; }
+      if (mode === "cue-id") input.currentCueId = "cue-0";
+      if (mode === "missing-exact") input.checkpointId = "not-stored";
+      const patches: Record<string, Record<string, unknown>> = {
+        "wrong-cursor": { routeCursor: 0 }, "wrong-segment": { activeSegmentId: "segment-cue" }, manual: { activeCueSource: "MANUAL", activeManualVisitId: "visit" },
+        pending: { pendingToolCall: { callId: "pending" } }, "wrong-mode": { currentSegmentMode: "DEEP" }, "wrong-phase": { currentSessionPhase: "PAUSED_FOR_COACHING" },
+        completed: { sessionStatus: "COMPLETED", runStatus: "COMPLETED" }, "wrong-progress": { completedCueIds: [] },
+      };
+      if (patches[mode]) await h.save(input.checkpointId!, patches[mode]);
+      await expect(h.library.commitRuntimeHead(input)).rejects.toMatchObject({ code: "RUNTIME_HEAD_IDENTITY_MISMATCH" });
+      expect((await h.library.loadReview(input.reviewId)).runtimeHead).toBeUndefined();
+    } finally { await h.owner.close(); }
+  });
+  it.each(["cue-segment", "wrong-id", "future-progress", "wrong-frozen-segment", "arbitrary-tick", "pending-ledger"])("rejects invalid frozen ordinary recovery: %s", async mode => {
+    const h = await setup();
+    try {
+      const row = h.owner.db.prepare("SELECT artifact_id,json_payload FROM review_artifacts WHERE artifact_type='SESSION_RECOVERY'").get() as { artifact_id: string; json_payload: string };
+      const record = JSON.parse(row.json_payload);
+      if (mode === "cue-segment") record.frozenReviewPlan.segments[1].cue_ids = ["cue-0"];
+      if (mode === "wrong-id") record.boundary.segmentId = "other";
+      if (mode === "future-progress") record.cueProgress.consumedCueIds = ["future-cue"];
+      if (mode === "wrong-frozen-segment") record.frozenReviewPlan.segments[1].start_tick = 101;
+      if (mode === "arbitrary-tick") record.boundary.tick = 123;
+      if (mode === "pending-ledger") record.toolLedger = [{ status: "POSTED" }];
+      h.owner.db.prepare("UPDATE review_artifacts SET json_payload=? WHERE artifact_id=?").run(JSON.stringify(record), row.artifact_id);
+      await expect(h.library.commitRuntimeHead(h.input)).rejects.toMatchObject({ code: "RUNTIME_HEAD_IDENTITY_MISMATCH" });
     } finally { await h.owner.close(); }
   });
 });

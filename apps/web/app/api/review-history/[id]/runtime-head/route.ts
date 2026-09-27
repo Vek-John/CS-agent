@@ -8,7 +8,8 @@ export async function PUT(request: Request, context: Context) {
   const reviewId = boundedId((await context.params).id); const body = await boundedJson(request, 128_000);
   const revisionId = boundedText(body?.reviewRevisionId); const sessionId = boundedText(body?.sessionId); const runId = boundedText(body?.runId); const demoId = boundedText(body?.demoId); const hash = boundedText(body?.demoContentHash, 64); const player = boundedText(body?.selectedPlayerId); const routeId = boundedText(body?.routeId); const routeHash = boundedText(body?.routeHash); const boundary = body?.recoveryBoundary;
   const recoveryArtifactKey = boundedText(body?.recoveryArtifactKey, 240);
-  if (!body || !reviewId || !revisionId || !sessionId || !runId || !demoId || !hash || !player || !routeId || !routeHash || !recoveryArtifactKey || (boundary !== "ROUTE_START" && boundary !== "CUE_PAUSED" && boundary !== "WRAP_UP")) return noStoreJson({ code: "INVALID_REQUEST" }, 400);
+  if (!body || !reviewId || !revisionId || !sessionId || !runId || !demoId || !hash || !player || !routeId || !routeHash || !recoveryArtifactKey || (boundary !== "ROUTE_START" && boundary !== "CUE_PAUSED" && boundary !== "WRAP_UP" && boundary !== "ORDINARY_SEGMENT")) return noStoreJson({ code: "INVALID_REQUEST" }, 400);
+  if (boundary === "ORDINARY_SEGMENT" && (body.currentCueId != null || !Number.isSafeInteger(body.defaultRouteCursor) || (body.defaultRouteCursor as number) < 0)) return noStoreJson({ code: "INVALID_REQUEST" }, 400);
   const expectedRecoveryArtifactId = body.expectedRecoveryArtifactId === null ? null : boundedText(body.expectedRecoveryArtifactId, 240);
   if (expectedRecoveryArtifactId === undefined) return noStoreJson({ code: "INVALID_REQUEST" }, 400);
   const checkpointNamespace = typeof body.checkpointNamespace === "string" && body.checkpointNamespace.length <= 160 && !body.checkpointNamespace.includes("\0") ? body.checkpointNamespace : undefined;

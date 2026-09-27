@@ -1,5 +1,7 @@
 "use client";
 
+import { OrdinarySegmentRecoveryPolicy } from "../../lib/recovery/ordinary-segment-policy";
+
 import { analysisFailureFeedback } from "../../lib/coaching/analysis-failure-feedback";
 import { historyOpenFailureFeedback } from "../../lib/review-history/history-open-feedback";
 import { attachHistoryViewerSource } from "../../lib/review-history/attach-history-viewer-source";
@@ -9,7 +11,7 @@ import { hasConfirmedTerminalRecovery, mirrorAgentCheckpoint, type TerminalRecov
 import { focusRecoveryDemoPicker, isRecoveryDemoImportActive } from "../../lib/recovery/recovery-demo-picker";
 
 import { dispatchDiscardableLandingTimeout, HostRecoveryDiscard, recoveryDiscardFailureResult, hostRecoveryStatusDetail } from "../../lib/recovery/host-recovery-discard";
-import { captureRecoveryBoundaryOwner, dispatchHostRecoveryBoundary, recoveryBoundaryFailureResult } from "../../lib/recovery/host-recovery-boundary";
+import { captureRecoveryBoundaryOwner, dispatchHostRecoveryBoundary, recoveryBoundaryFailureResult, hasConfirmedRecoveryHandshake } from "../../lib/recovery/host-recovery-boundary";
 
 import {
   useCallback,
@@ -481,6 +483,8 @@ export function Cs2dPlaybackHost({
     setRecoveryResult(result);
   }, []);
 
+  const ordinaryRecoveryPolicyRef = useRef(new OrdinarySegmentRecoveryPolicy());
+
   const currentStableRecoveryRecord = useCallback((checkpoint: RecoveryAgentCheckpointMeta | undefined): SessionRecoveryRecord | undefined => {
     const current = recoveryRecordRef.current;
     const identity = recoveryIdentityRef.current;
@@ -493,7 +497,8 @@ export function Cs2dPlaybackHost({
       ? "CUE_PAUSED" as const
       : (activeSession.phase === "WRAP_UP" || activeSession.phase === "COMPLETED")
         ? "WRAP_UP" as const
-        : undefined;
+        : ordinaryRecoveryPolicyRef.current.eligible(activePlan, activeSession, current.recoveryId)
+          ? "ORDINARY_SEGMENT" as const : undefined;
     if (!boundaryKind) return undefined;
     const baseInput = {
       identity,
@@ -547,6 +552,9 @@ export function Cs2dPlaybackHost({
       checkpoint: checkpoint => { setCheckpointRetry(undefined); latestAgentCheckpointRef.current = checkpoint; },
       stable: currentStableRecoveryRecord, accept: result => {
         acceptRecoveryResult(result);
+        if (result.record?.boundary.kind === "ORDINARY_SEGMENT") {
+          ordinaryRecoveryPolicyRef.current.confirm(result.record.frozenReviewPlan as ReviewPlan, result.record.boundary.segmentIndex, result.record.recoveryId);
+        }
         if (result.record?.boundary.kind === "WRAP_UP" && result.record.agentCheckpointId) {
           setTerminalRecoveryAck({ recoveryId: result.record.recoveryId, checkpointId: result.record.agentCheckpointId });
         }
@@ -1374,6 +1382,7 @@ export function Cs2dPlaybackHost({
     try {
       let currentRecord = recoveryRecordRef.current ?? landing.record;
       let restoredSession = landing.staged.session;
+      let ordinaryReconnect: { event: ReturnType<typeof buildReconnectReplayEvent>; result: CoachAgentResult } | undefined;
       if (!shouldReconnectRecoveryAgent(currentRecord) && !isPreAgentRouteStartRecovery(currentRecord)) {
         recoveryHandshakeReadyRef.current = false;
         setSession(landing.staged.session);
@@ -1398,6 +1407,7 @@ export function Cs2dPlaybackHost({
         });
         if (!isCurrent()) return;
         if (agent.status === "DORMANT" || agent.restored !== "MATCHED") throw new Error("Agent checkpoint 与恢复记录不匹配。");
+        if (currentRecord.boundary.kind === "ORDINARY_SEGMENT") ordinaryReconnect = { event: reconnect, result: agent };
         const recoveredCase = restoredSession.current_cue_id ? agent.state.cueCases[restoredSession.current_cue_id] : undefined;
         const recoveredThread = recoveredCase ? agent.state.learningThreads.find((thread) => thread.evidenceCueIds.includes(recoveredCase.cueId)) : undefined;
         restoredSession = restoreCheckpointTeachingCase(landing.staged.plan, restoredSession, recoveredCase, recoveredThread);
@@ -1407,6 +1417,9 @@ export function Cs2dPlaybackHost({
           currentSessionPhase: agent.state.currentSessionPhase,
           routeCursor: agent.state.routeCursor,
           sessionStatus: agent.state.sessionStatus,
+          activeSegmentId: agent.state.activeSegmentId, currentSegmentMode: agent.state.currentSegmentMode,
+          runStatus: agent.state.runStatus, pendingToolCall: agent.state.pendingToolCall,
+          activeCueSource: agent.state.activeCueSource, activeManualVisitId: agent.state.activeManualVisitId,
         };
         const reconciled = reconciledRecoveryLedger(currentRecord);
         if (reconciled) {
@@ -1444,9 +1457,18 @@ export function Cs2dPlaybackHost({
         recoveryId: currentRecord.recoveryId,
       });
       if (!isCurrent()) return;
+      if (currentRecord.boundary.kind === "ORDINARY_SEGMENT" && !hasConfirmedRecoveryHandshake(completed, currentRecord)) {
+        throw new Error("普通片段恢复尚未确认，请重新恢复。");
+      }
+      if (ordinaryReconnect && !stage3ControllerRef.current?.adoptRecoveredOrdinary(ordinaryReconnect.event, ordinaryReconnect.result)) {
+        throw new Error("普通片段进度未能同步，请重新恢复。");
+      }
       acceptRecoveryResult(completed);
       recoveryModeRef.current = false;
       recoveryHandshakeReadyRef.current = true;
+      if (landing.record.boundary.kind === "ORDINARY_SEGMENT") {
+        ordinaryRecoveryPolicyRef.current.confirm(landing.staged.plan, landing.record.boundary.segmentIndex, landing.record.recoveryId);
+      }
       if (landing.record.boundary.kind === "CUE_PAUSED") {
         stage3ControllerRef.current?.adoptRecoveredCue(
           landing.record.boundary.cueId,
@@ -1460,7 +1482,9 @@ export function Cs2dPlaybackHost({
         : restoredSession);
       setReviewPreparationStatus({
         phase: "READY",
-        detail: historyPlaybackOnlyRef.current
+        detail: landing.record.boundary.kind === "ORDINARY_SEGMENT"
+          ? "已恢复到普通片段起点，继续带看这场比赛。"
+          : historyPlaybackOnlyRef.current
           ? "已恢复到最近教学点，当前使用已保存的讲解。"
           : "已恢复到最近教学点，后续讲解在后台继续准备。",
       });
@@ -2187,7 +2211,7 @@ export function Cs2dPlaybackHost({
   const transitionKey = session ? guidedTransitionKey(session) : "idle";
   useEffect(() => {
     const activePlan = planRef.current;
-    if (!activePlan || !session || !playback || (userTookOverRef.current && !session.manual_cue_visit)) return;
+    if (recoveryModeRef.current || !activePlan || !session || !playback || (userTookOverRef.current && !session.manual_cue_visit)) return;
     const directive = guidedPlaybackDirective(activePlan, session, replay?.tickRate);
     if (!transportRef.current.claimTransition(`${session.id}:${transitionKey}`, Boolean(directive.automaticAction))) return;
     const seek = directive.commands.find((command): command is Extract<PlaybackCommand, { type: "seekCanonicalTick" }> => command.type === "seekCanonicalTick");
@@ -2842,7 +2866,8 @@ export function Cs2dPlaybackHost({
       return;
     }
     const stable = currentStableRecoveryRecord(latestAgentCheckpointRef.current);
-    if (!stable) return;
+    // Ordinary saves belong to the Graph mirror, including its durable head ACK.
+    if (!stable || stable.boundary.kind === "ORDINARY_SEGMENT") return;
     const key = JSON.stringify([
       stable.boundary,
       stable.cueProgress,
@@ -3099,7 +3124,7 @@ export function Cs2dPlaybackHost({
   }, [nearestManualCue, nearestManualReadiness, notifyTransport]);
 
   useEffect(() => {
-    if (historyPlaybackOnlyRef.current || !stage3Mode || !stage3IdentityContext || !activePlan || !session || !segment || userTookOverRef.current) return;
+    if (recoveryModeRef.current || historyPlaybackOnlyRef.current || !stage3Mode || !stage3IdentityContext || !activePlan || !session || !segment || userTookOverRef.current) return;
     // Teaching segments are entered through START_CUE. All deterministic
     // ordinary/skip/freeze segments get an observer event instead; no Policy
     // call is attached to this lifecycle path.

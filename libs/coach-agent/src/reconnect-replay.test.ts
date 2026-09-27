@@ -59,7 +59,7 @@ function checkpointId(result: { checkpoint: { checkpointId: string | null } }): 
   return result.checkpoint.checkpointId;
 }
 
-function observeSegment(eventId: string, segmentId: string, segmentIndex: number): CoachAgentEvent {
+function observeSegment(eventId: string, segmentId: string, segmentIndex: number): Extract<CoachAgentEvent, { type: "OBSERVE_SEGMENT" }> {
   return {
     version: COACH_AGENT_EVENT_VERSION,
     type: "OBSERVE_SEGMENT",
@@ -330,4 +330,22 @@ describe("Coach Agent replay reconnect", () => {
     expect(runningWrapUp.status).toBe("DORMANT");
     expect(runningWrapUp.state.fallbackReasons).toContain("RECOVERY_BOUNDARY_MISMATCH");
   });
+});
+
+it("reconnects an ordinary checkpoint retaining the previous completed cue identity", async () => {
+  const runtime = createCoachAgentRuntime({ checkpoint: "memory" });
+  const cue = await runtime.dispatch(startCueEvent({ capabilities: [], routeSegmentIndex: 0 }));
+  expect(cue.state.runStatus).toBe("CUE_COMPLETED");
+  const ordinary = await runtime.dispatch(observeSegment("ordinary-after-cue", "ordinary-segment", 1));
+  expect(ordinary.state.activeCueId).toBe(cue.state.activeCueId);
+  expect(ordinary.state.activeCueId).not.toBeNull();
+  const boundary = { kind: "ORDINARY_SEGMENT", boundaryId: "ordinary-boundary", segmentId: "ordinary-segment", segmentIndex: 1, sessionPhase: "PLAYING" };
+  const recovered = await runtime.dispatch(reconnectWithCheckpoint(checkpointId(ordinary), { status: "NONE" }, { boundary }));
+  expect(recovered.restored).toBe("MATCHED"); expect(recovered.state.pendingToolCall).toBeNull();
+  expect(recovered.state.routeCursor).toBe(1); expect(recovered.effects).toEqual([]);
+  const skipped = await runtime.dispatch({ ...observeSegment("skip-after-ordinary", "skip-segment", 2), mode: "SKIP", currentSessionPhase: "SKIPPING" });
+  const wrongMode = await runtime.dispatch(reconnectWithCheckpoint(checkpointId(skipped), { status: "NONE" }, {
+    eventId: "reconnect-skip-as-ordinary", boundary: { ...boundary, segmentId: "skip-segment", segmentIndex: 2 },
+  }));
+  expect(wrongMode.restored).toBe("DORMANT_RECOVERY_MISMATCH");
 });

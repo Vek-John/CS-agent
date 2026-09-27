@@ -749,6 +749,10 @@ export const RecoveryBoundarySchema = z.discriminatedUnion("kind", [
     outcomeGateStatus: z.literal("COMPLETE"),
   }).strict(),
   z.object({
+    kind: z.literal("ORDINARY_SEGMENT"), boundaryId: Id, segmentId: Id,
+    segmentIndex: z.number().int().nonnegative().max(511), sessionPhase: z.literal("PLAYING"),
+  }).strict(),
+  z.object({
     kind: z.literal("WRAP_UP"),
     boundaryId: Id,
     segmentIndex: z.number().int().nonnegative().max(512),

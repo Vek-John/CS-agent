@@ -319,6 +319,12 @@ function recoveryVersionsMatch(state: CoachAgentState, event: ReconnectReplayEve
 
 function recoveryBoundaryMatches(state: CoachAgentState, boundary: ReconnectReplayEvent["boundary"]): boolean {
   if (boundary.kind === "ROUTE_START") return state.routeCursor === boundary.segmentIndex;
+  if (boundary.kind === "ORDINARY_SEGMENT") {
+    return state.activeSegmentId === boundary.segmentId && state.routeCursor === boundary.segmentIndex &&
+      state.currentSessionPhase === "PLAYING" && (state.currentSegmentMode === "BRIEF" || state.currentSegmentMode === "OBSERVE") &&
+      state.sessionStatus === "ACTIVE" && state.runStatus === "CUE_COMPLETED" && state.pendingToolCall === null &&
+      state.activeCueSource !== "MANUAL" && state.activeManualVisitId === null;
+  }
   if (boundary.kind === "CUE_PAUSED") {
     return state.activeSegmentId === boundary.segmentId &&
       state.routeCursor === boundary.segmentIndex &&

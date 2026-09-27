@@ -12,6 +12,17 @@
 
 
 
+## 已交付：普通片段段首恢复（2026-09-27）
+
+- ID ordinary-segment-recovery；基线508bcb8已push，复用7f2b。目标：普通回合进度可保存并从冻结段首继续，减少无cue区间退回路线起点；只无cue BRIEF/OBSERVE、每回合成功确认最多一次，无任意tick。
+- 流程/验收：A1生产Session capture/rehydrate与精确Graph重连；A2 SQLite007旧库/新库、artifact→exact head ACK→重开；A3 Host限频、迟到/手动/工具/接管拒绝、handshake后播放；A4相关测试/两端TS/Web与正式Viewer build，小合成体验验证，commit push。旧三kind读取不改，旧二进制不支持新kind的限制明确记录。
+- 所有权：partial_revision_restore核心Session/Graph/schema/recovery转换和tests；prior_fire_boundary_review SQLite migration007及对应desktop SQL、DAL/API/artifact校验和tests；root Host/mirror/频率策略、docs/ARCH/最终集成。代理均继承默认模型/推理，恢复跨层一致性需要独立实现及最终审查；共享worktree严格按文件独占。
+- 风险/阶段：Graph可保留前activeCueId，不能误拒普通段；无head ACK不报持久成功，禁止latest替代；落位前不自动播放。先内存小链约10分钟、SQLite及Host分阶段、单test60秒，总阶段20–30分钟后检查；root单browser/controller可选小合成新origin，每阶段90秒，自有tab/server退出清理。同设施两败简化工具。不读取用户DB/Demo/密钥，不模型/安装部署，native A5独立等待。
+
+- 交付证据：Session/Graph普通段精确恢复，007旧库保留与DAL/artifact/API约束；真实SQLite关闭重开→GET→Controller→Session落位已通过。独审发现Controller cursor未采纳，已补同token/exact receipt接管，前cue完成后fresh Controller只发下一cue，无旧事件/伪presented；两owner RELEASE，核心与持久窄审的cursor接管及握手ACK两处must-fix均已修；ordinary只在匹配RECOVERED后放行。
+- 验证：相关15文件221项、持久8文件113项，最终Controller接管专项3文件46项、握手门3文件88项复验（重叠不重复计数，唯一335项）；小IAB7段完整至复盘完成，Analysis1/Route1/Narration0/Agent8/provider0/console空。UI未做刷新后Viewer恢复，持久链Graph state合成写入、内存Graph真重连分开记录。tab32/64835服务已关闭；最终两端TS/Web及正式Viewer build通过，按授权提交功能分支。[证据](validation/ORDINARY_SEGMENT_RECOVERY_RESULT.json)。
+- 下一有限目标 ordinary-recovery-cold-start：现有Graph真重连与SQLite重开证据分离；用现成SQLite saver把两者连成一条关闭重开后fresh Controller续播链，核验不重放旧cue、零再生成、失败保持旧head。先无桌面小链，有实际缺口才改产品；不读用户库/正式Demo，不唤醒native A5。
+
 ## 已交付预检：普通片段恢复成本（2026-09-27）
 
 - ID ordinary-progress-recovery-preflight，基线4ae17e2已push/clean，7f2b复用，owners RELEASE。partial_revision_restore默认配置独占新ordinary-progress-preflight.test.ts和本地证据；所有产品只读。root源链/最小方案判断、docs/checks/提交；不先加持久kind或修改用户库。

@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "ordinary-segment-recovery-result.v1",
+  "baseline": "508bcb8",
+  "branch": "codex/jev-decision-assessment",
+  "boundary": "ORDINARY_SEGMENT",
+  "resume": "frozen segment start",
+  "eligible": "cue-free BRIEF/OBSERVE, valid round, default PLAYING",
+  "frequency": "one confirmed ordinary save per round/recovery",
+  "exactCheckpointAndArtifactHeadAck": true,
+  "migration": "007 preserves legacy heads/FKs/indexes; 001-006 SQL unchanged",
+  "tests": {
+    "integration": {
+      "files": 15,
+      "passed": 221
+    },
+    "persistence": {
+      "files": 8,
+      "passed": 113
+    },
+    "finalCursorFix": {
+      "files": 3,
+      "passed": 46,
+      "overlap": "included in integration count; rerun after final token invalidation"
+    },
+    "finalHandshakeFix": {
+      "files": 3,
+      "passed": 88,
+      "newCase": 1,
+      "overlap": "other cases included above"
+    },
+    "uniqueTotal": 335
+  },
+  "browser": {
+    "kind": "synthetic React Host + Vue + memory Graph regression; not cold restore",
+    "tab": 32,
+    "port": 64835,
+    "closed": true,
+    "analysis": 1,
+    "route": 1,
+    "narration": 0,
+    "agent": 8,
+    "segments": 7,
+    "cues": 0,
+    "provider": 0,
+    "external": 0,
+    "console": [],
+    "completed": true,
+    "screenshot": ".local-data/ordinary-segment-recovery/completed.png"
+  },
+  "limitations": [
+    "No actual Demo parse/model or native A5",
+    "SQLite reopen test stores synthetic Graph state; actual Graph reconnect separately uses memory",
+    "No browser cold restore validation",
+    "Older binaries cannot read the new boundary/migration"
+  ],
+  "next": "ordinary-recovery-cold-start",
+  "handshake": "Only matching RECOVERED opens ordinary playback; REJECTED/DEGRADED remain gated",
+  "checks": {
+    "pnpm typecheck": "passed",
+    "pnpm cs2d:typecheck": "passed",
+    "pnpm build": "passed",
+    "CARGO_NET_OFFLINE=true pnpm cs2d:build": "passed",
+    "git diff --check": "passed"
+  },
+  "review": "Independent reviews found lifecycle adoption and handshake ACK issues; both fixed and covered"
+}
