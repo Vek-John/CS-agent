@@ -31,9 +31,15 @@ describe("saved Review generation gate", () => {
     expect(managedReplayGate).toBeGreaterThan(replayReadyBranch);
     expect(managedReplayGate).toBeLessThan(replayRefAssignment);
     expect(replayRefAssignment).toBeLessThan(playerSelectedBranch);
-    expect(hostSource.slice(playerSelectedBranch, playerSelectedBranch + 1_600)).toMatch(
-      /const currentReplay = replayRef\.current;[\s\S]*currentReplay\?\.sourceKind === "MANAGED_LIBRARY"/u,
-    );
+    const selectionBranch = hostSource.slice(playerSelectedBranch, hostSource.indexOf('payload.type === "ANALYSIS_PROGRESS"', playerSelectedBranch));
+    expect(selectionBranch).toMatch(/const currentReplay = replayRef\.current;[\s\S]*selectPlayerHistory\(\{ history: selectionHistory, replay: currentReplay, player: payload/u);
+    expect(selectionBranch).toContain("recoveryPending: recoveryModeRef.current");
+    expect(selectionBranch).toContain('useExistingReview: Boolean(historyActiveReviewId && historyRestoreModeRef.current !== "SELECT_PLAYER")');
+    expect(selectionBranch).toContain("isCurrent: isCurrentSelection");
+    const selectionSource = readFileSync(new URL("./player-selection-history.ts", import.meta.url), "utf8");
+    const managedAdmission = selectionSource.indexOf('replay?.sourceKind !== "MANAGED_LIBRARY"');
+    expect(managedAdmission).toBeGreaterThan(0);
+    expect(managedAdmission).toBeLessThan(selectionSource.indexOf("history.createForPlayer("));
     expect(hostSource).toMatch(/const openEpoch = \+\+historyOpenEpochRef\.current/u);
     const adoptedDispatch = hostSource.indexOf('type: "SESSION_STARTED"');
     const adoptedEpochCheck = hostSource.indexOf("assertCurrentOpen();", adoptedDispatch);

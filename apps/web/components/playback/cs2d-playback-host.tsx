@@ -1,5 +1,6 @@
 "use client";
 
+import { analysisFailureFeedback } from "../../lib/coaching/analysis-failure-feedback";
 import { historyOpenFailureFeedback } from "../../lib/review-history/history-open-feedback";
 import { attachHistoryViewerSource } from "../../lib/review-history/attach-history-viewer-source";
 
@@ -1789,7 +1790,7 @@ export function Cs2dPlaybackHost({
         if (!analysisEventMatchesSelectedPlayer(selectedPlayerIdRef.current, payload.selectedPlayerId)) return;
         invalidateGeneration();
         invalidateGuidedSeek();
-        setAnalysisError("比赛分析暂时未能完成，请重新选择比赛或玩家。");
+        setAnalysisError(analysisFailureFeedback(payload.message));
         setAnalysisProgress(undefined);
         setBundle(undefined);
         setPlan(undefined);
@@ -3209,7 +3210,7 @@ export function Cs2dPlaybackHost({
     },
     {
       title: "编排整场路线",
-      detail: reviewPreparationStatus?.detail
+      detail: analysisError ? "本次分析已停止，完整教学复盘尚未就绪。" : reviewPreparationStatus?.detail
         ?? (analysisProgressText || (selected ? "正在构建完整覆盖与讲解节点" : "选择玩家后开始")),
       state: analysisError || reviewPreparationStatus?.phase === "ERROR"
         ? "error"
@@ -3299,7 +3300,7 @@ export function Cs2dPlaybackHost({
             <div>
               <p className="cs2d-coach-kicker"><Sparkles aria-hidden="true" />私教会话</p>
               {selected ? <p className="cs2d-coach-focus" title={selected.displayName}>正在复盘：{selected.displayName}</p> : null}
-              <h2>{teachingPlayback?.paused ? "演示已暂停" : transportPaused && session && (!userTookOver || session.manual_cue_visit) ? "已暂停带看" : userTookOver ? "自由查看" : session ? phaseText[session.phase] : selected ? (routeState && !routeState.routeFrozen ? "等待教学路线冻结" : `正在分析 ${selected.displayName}`) : replay ? "先在地图内选择玩家" : "等待 Demo"}</h2>
+              <h2>{analysisError ? "分析未完成" : teachingPlayback?.paused ? "演示已暂停" : transportPaused && session && (!userTookOver || session.manual_cue_visit) ? "已暂停带看" : userTookOver ? "自由查看" : session ? phaseText[session.phase] : selected ? (routeState && !routeState.routeFrozen ? "等待教学路线冻结" : `正在分析 ${selected.displayName}`) : replay ? "先在地图内选择玩家" : "等待 Demo"}</h2>
             </div>
             <span
               className="cs2d-coach-badge"

@@ -12,6 +12,16 @@
 
 
 
+## 已交付：分析容量失败的准确反馈（2026-09-27）
+
+- ID analysis-capacity-feedback，基线ffb8a0c已push/clean，实际7f2b复用，前owner RELEASE。partial_revision_restore沿用默认配置（熟悉Host/恢复），独占窄feedback/helper/tests；adapter或上游patch先由root定接口。root独占docs/最终review/checks/push。
+- 目标/流程：实际serializer确定性容量失败→Viewer ANALYSIS_FAILED→Host，不再建议同一数据原样重选；保留完整时间线与所有上限/保存代际，未知错误保持原反馈。A1五分钟小fixture触发真实容量门与Host反馈，A2确认最小分类接口后改反馈，A3相关generation/history回归/TS/两端production build后push。
+- 风险：任意错误文本匹配会误分类、上游patch放大范围、fixture越过冻结门造成假复现。优先复用现有message精确已知值；必要16MiB字符串一次，不生成大Replay/重跑性能。总约15分钟/单测试<60秒，沿既有emil/apple/Next状态反馈，不改布局/动画。零正式Demo/用户库/模型/Jev/GUI/安装/部署；owner清理进程与自己的临时数据后RELEASE，同设施两败简化。
+
+- A1/A2：真实16MiB serializer→当前Viewer catch→严格bridge→Host红绿，实际513候选门仍拒绝。Host精确3条容量message说明同数据重试无益，未知/相似/非string保留通用反馈；无Adapter/协议/patch修改。失败标题/setup同步停止，使用“尚未就绪”而非假定内部没生成plan。
+- A3：新增15+generation2+player-selection14合计31tests最终通过，其他55相关case通过；旧generation静态门位置断言因先前helper提取过期，root核实后仅修接线测试，实际选择14项覆盖原本地/恢复不创建。两端TS/production build及diff检查通过；root读diff/输出，owner RELEASE，全部测试/构建退出；没有Demo/模型/用户库/GUI/安装。详细限制见[验证](validation/ANALYSIS_CAPACITY_FEEDBACK.md)。
+- 下一有限目标 analysis-failure-retry-entry：实际Viewer选人即锁定，失败catch不解锁，而未知失败建议重选。先有限真实选择函数/已有命令小验证本地与managed恢复入口，确有不可达提示才修；不自动重试、不重parse正式Demo，不把此问题扩成全Host生命周期审计。
+
 ## 已交付验证：采样地面元数据的历史详情成本（2026-09-27）
 
 - ID ground-detail-cost-smoke，基线2ef2901已push/clean，7f2b复用；已核实原owner RELEASE。partial_revision_restore沿用默认模型/推理（熟悉真实恢复harness），独占有界measurement probe及test-only fixture必要遥测；root独占docs/最终diff/checks/push。无生产修改预授权，发现瓶颈先定接口。

@@ -946,6 +946,8 @@ Cs2dAnalysisBundle
 
 Adapter 输入是固定 commit 的结构化 Replay 端口，输出不包含 frames、grenadePaths、raw Replay 或二进制 Demo。序列化和反序列化都重新执行顶层白名单、ReviewPlan、ObservableState、版本 pin、selected-player 绑定与 future-boundary 校验。旧 `replay-bundle.v1` 只供 `/legacy` 和 Python 回归测试，不进入当前 cs2d 会话。
 
+当前 Viewer 的 ANALYSIS_FAILED.message 保留既有桥接结构。Host 对固定 Adapter 的三条精确容量错误（16 MiB AnalysisBundle、两种 512 候选上限信息）显示当前版本容量限制，并说明原样重试不能解决；不把任意包含关键词的文本当容量错误，也不直接显示原始错误。未知或未来变更的信息沿用通用失败反馈。此分类仅影响提示，不改变拒绝上限、完整覆盖、Revision 失败保存或事件归属；失败后标题和准备步骤明确停止，不继续显示正在分析/构建。
+
 ### 7.1.2 WinProbabilityTimelineV1 与 OutcomeImpact
 
 `WinProbabilityTimelineV1` 是来自固定 cs-net win-rate head 的整场分析信号。它覆盖所有正式回合和播放头之后的时间，和唯一整场时间轴共用 canonical tick 横坐标；Host 不按当前 tick、cue 或决策/结果边界裁剪它。曲线可以显示回合边界、50% 中线、死亡/明显摆动和双方独立的 `PISTOL`、`ECO`、`FORCE`、`FULL`、`UNKNOWN` 经济分类，但不冒充 `ObservableState`，也不改变决策侧未来信息边界。换边时由当前选手在 Replay 中的回合状态派生“你方胜率”。

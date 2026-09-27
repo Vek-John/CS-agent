@@ -8,6 +8,15 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：容量失败不应建议原样重试
+
+- 问题：生产serializer的16MiB容量错误经真实Viewer catch/严格bridge进入Host，原样给出重选提示；同一失败下h2仍“正在分析”，setup步骤仍“正在构建”。小合法bundle加允许metadata字符串触达实际门，红例已复现，不需要大Replay或真实Demo。
+- 决策：Host仅精确匹配当前3条容量原文（16MiB及两种512候选门），显示当前版本处理容量限制、原样重试无益和已有其他比赛/历史入口。未知/相似文本/非字符串回原通用反馈，不暴露原始错误；Adapter/协议/上游patch不改，完整时间线和所有上限保持。
+- 表达：错误标题与setup停止态一致，说明“完整教学复盘尚未就绪”；容量可能发生在plan已经生成后的序列化，不能断言内部从未生成路线。纯文本沿既有emil/apple状态反馈和本地Next客户端边界，不新增动画/透明度或界面入口。
+- 验证：新15例真实生产serializer→受控Viewer函数→bridge→Host，以及513候选生成门、精确分类、旧玩家反馈/保存过滤、标题/setup表达式。最终新例+generation+player-selection3文件31项通过，其他相关55项已通过，两端TypeScript/production build及diff检查通过。一次旧generation静态断言查已搬移的内联sourceKind门失败；改验Host到selectPlayerHistory接线，并以14项实际选择测试确认本地/恢复不create，未放宽生产门。
+- 限制：[验收记录](validation/ANALYSIS_CAPACITY_FEEDBACK.md)。这是源分支/表达式执行和边界stub，不是完整Vue/React挂载或GUI；受控Viewer缺席的环境对应case会skip，本轮实际存在并执行。没有真实Demo/模型/用户库/安装。root集中读实际diff和输出，执行者RELEASE，所有进程结束。
+- 后继：Viewer选中后hostSelectionLocked即为true，失败catch未解除，通用提示却仍建议重选玩家。下一项analysis-failure-retry-entry只核实已有入口能否让用户从普通失败恢复，分清本地与managed历史路径，确认缺口才动最小入口或反馈，不增加自动重分析。
+
 ## 2026-09-27：先测采样来源增量，不凭字段数量优化
 
 - 问题：每条地面来源重复保存身份、采样阶段和时间，尚无实际历史详情增量证据。实际collectStates只保留选中玩家，不能把原始10玩家帧数直接当历史轨迹数量。
