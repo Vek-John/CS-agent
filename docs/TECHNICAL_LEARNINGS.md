@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：基础状态区保留已验证的开火发生事实
+
+- 问题：真实消费已证明两段 Narration 包含决策前本人开火，但状态 chips 分支省略正文，用户看不到这项上下文。
+- 决策：View 新增局部 priorSelfFire 投影，Host 在资源标签后显示一段静态发生说明。绑定当前 cue/叙述、本人存活新鲜采样、1–3条合法来源事件及当前允许/已叙述的 canonical 状态事实引用；不展开可能含未知数值的整段正文，不借此授予窗口动作或专业判断资格。
+- 验证：25新增/5文件124tests通过，probe合成smoke的新可见字段为true，health/clock仍2/2有据；两端TS/build与probe专项TS均退出0。既有合成 Adapter→Narrator→View 红例转绿。root 实际 View+StatusList SSR 小页在 IAB 核实正常场景显示一条说明，无事件/无当前引用两场景隐藏，340px内容无挤压；Host同一原生段落已接线。harness首用错误tickRate字段导致正确拒绝，改用生产相同timeline.tick_rate后通过，产品门未放松。
+- 限制：本次仅小合成场景和组件展示，不重读正式Demo、不调用模型、不冒称完整Host或native A5；静态段落不增加动画/透明度要求。root已关闭临时tab/loopback服务。
+
 ## 2026-09-27：生成事实与实际显示必须分别验证
 
 - 问题：近期基础讲解与追问改动尚缺真实 Demo 合并消费证据；只检查 Narration 文本不能证明 Host 呈现。

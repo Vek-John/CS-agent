@@ -12,6 +12,19 @@
 
 
 
+## 已交付：基础路线本人开火事实可见呈现（2026-09-27）
+
+- ID baseline-prior-fire-presentation，最新基线3103a9a已push/clean，复用7f2b，前owner RELEASE。partial_revision_restore默认配置（窄呈现接线）独占小probe/窄tests；A1主控确认后仅View/相关test/Host必要行，root独占docs/最终diff/浏览器与checks/push。
+- 目标：完成处理播放后暂停教学，资源chips保留，同时看到当前cue已验证和已引用的决策前本人开火事实。A1五分钟既有小fixture复现并确认门；A2最小View+Host接线；A3过去本人可见、无事件/未来/错人/陈旧/无引用/旧记录不新造事实，真实组件小验证及相关tests/两端TS/build。20分钟有限任务，先报告方案再实施共享接口。
+- 沿已读emil/apple/Next边界，禁止直接泛显可能含未知数值的整段正文；不把决策前开火用作窗口动作资格，不改assessment/Parser/contracts/资源问答授权。零模型/网络/正式Demo/DB/安装，合成输入<60秒，不依赖native A5；同设施两败简化，root唯一browser owner，执行者结束清进程RELEASE，功能分支push为交付终点。
+
+- A1已用真实Adapter/Narrator→View小fixture复现红例：1条合法开火、正文包含、有chips却无可见说明。A2批准View局部可选cue/tickRate及priorSelfFire{text,refs}，Host原生段落；仍匹配当前cue/存活新鲜state/来源时序/完整事实和当前叙述引用。额外授权原probe传新参数并汇总新字段，仅smoke，旧正式结果不改。
+
+- 交付：25新增/5文件124tests通过，questions仅合成smoke的priorSelfFireInThreeStageText由false到true，原health/clock仍2/2有据；两端TS/build和probe专项TS全部退出0。root读真实View/Host/probe/tests diff，无动作或评估契约变化，执行者RELEASE。
+- root IAB实际View+StatusList SSR及Host同一原生段落小页验证：正常显示一句、无shot/无当前引用不显示，340px内容正常；harness最初误读replay.tickRate，改生产同值timeline.tick_rate后通过，产品门未动。tab/4323服务/test/build均已退出，日志.local-data/baseline-prior-fire-presentation；未重parse正式Demo、未挂载完整Host/native A5、无模型/DB/安装。
+
+- 后继候选已核实源码：Adapter的normalizePlayerState仍把velocity固定列为missing；当前parser grep到的on_ground只是掉落武器owner判断，不是玩家落地事实。下一有限目标 own-motion-source-feasibility：核实一手实体属性/事件采样是否能提供本人移动状态，先源码与小离线夹具，不从8Hz位置差猜开火时移动、不作命中/急停教学结论、不再解析Demo。只有来源与消费收益成立才另立最小实现；否则记录明确缺失条件。
+
 ## 已交付：真实讲解与追问消费合并验证（2026-09-27）
 
 - ID real-narration-question-consumption，基线f62894b clean，7f2b实际树；partial_revision_restore默认配置独占既有有界probe的可选questions模式/必要helper与匿名摘要，root docs/审查/最终checks/push。旧默认工具结果仅匿名摘要，无可复用完整Replay；不冒称旧数据已验证新消费。

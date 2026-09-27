@@ -2226,6 +2226,8 @@ export function Cs2dPlaybackHost({
         semantics: { ...candidateMaterial, ...cue },
         decisionState: decisionPlayerState,
         decisionTick: cue?.decision_tick,
+        tickRate: bundle?.match_timeline.tick_rate,
+        cue,
         decisionFacts: coachingView.decisionFacts,
         callout: candidateMaterial?.callout,
         outcomeFacts: coachingView.outcomeFacts,
@@ -3393,6 +3395,7 @@ export function Cs2dPlaybackHost({
                   {threeStageCoaching.currentState.chips.length > 0 ? (
                     <CoachingStatusList chips={threeStageCoaching.currentState.chips} catalog={gameAssetCatalog} />
                   ) : <p>{threeStageCoaching.currentState.fallbackText}</p>}
+                  {threeStageCoaching.currentState.priorSelfFire ? <p>{threeStageCoaching.currentState.priorSelfFire.text}</p> : null}
                   {threeStageCoaching.currentState.limitations.map((limitation) => <p key={limitation}>{limitation}</p>)}
                 </section>
                 <section className="cs2d-coaching-band cs2d-coaching-band--problem">

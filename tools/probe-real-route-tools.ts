@@ -125,7 +125,7 @@ if (!args.includes("--child")) {
         const material = set.materials.find(item => item.candidateId === cue.candidate_id); assert(material, "MATERIAL_MISSING");
         const narration = narrationByCue[cue.id], coaching = buildCoachingPackage(cue, set, bundle.observation_evidence);
         const cueView = buildCoachingCueView(cue, session.outcome_completion, narration);
-        const view = buildThreeStageCoachingView({ narration,
+        const view = buildThreeStageCoachingView({ narration, cue, tickRate: bundle.match_timeline.tick_rate,
           decisionState: playerStateAtOrBefore(bundle.match_timeline.player_state_tracks ?? [], selected, cue.decision_tick),
           semantics: { ...material, ...cue }, decisionTick: cue.decision_tick, decisionFacts: cueView.decisionFacts,
           outcomeFacts: cueView.outcomeFacts, outcomeImpact: bundle.outcome_impacts.find(item => item.cueId === cue.id) });
@@ -149,7 +149,7 @@ if (!args.includes("--child")) {
         const clockKnown = snapshot?.clock.boundary === "OBSERVABLE" && snapshot.clock.value?.phase === "LIVE" && typeof remaining === "number" && Number.isFinite(remaining) && remaining > 0;
         const clockFacts = coaching.decisionContext.facts.filter(fact => snapshot?.clock.evidenceRefs.includes(fact.id));
         // These are the actual three-stage output fields consumed by Host, not a renderer recreation.
-        const visibleText = [...view.currentState.chips.map(chip => chip.text), view.currentState.fallbackText ?? "", ...view.currentState.limitations,
+        const visibleText = [...view.currentState.chips.map(chip => chip.text), view.currentState.fallbackText ?? "", view.currentState.priorSelfFire?.text ?? "", ...view.currentState.limitations,
           view.problem.text, ...view.problem.consequences, view.improvement.text, ...view.improvement.reviewQuestions].join(" ");
         questionRows.push({ ordinal: questionRows.length + 1, assessment: cue.assessment?.kind ?? null,
           priorSelfFireSourceCount: snapshot?.selfFireEvents?.length ?? 0,
