@@ -1,0 +1,120 @@
+{
+  "baseline": "a0be7cf",
+  "scenario": "synthetic-default-host-full-session",
+  "runtime": {
+    "transportRequests": 14,
+    "reflectionAttempts": 2,
+    "injectedFailures": 1,
+    "dispatches": 13,
+    "events": {
+      "OBSERVE_SEGMENT": 9,
+      "START_CUE": 2,
+      "SUBMIT_REFLECTION": 1,
+      "COMPLETE_SESSION": 1
+    },
+    "externalFetches": 0,
+    "completions": [
+      {
+        "runStatus": "COMPLETED",
+        "sessionStatus": "COMPLETED",
+        "routeCursor": 11,
+        "completedCueCount": 2,
+        "graphCaseCount": 1,
+        "summaryCompletedCueCount": 1,
+        "summaryThemeCount": 1,
+        "checkpointBackend": "MEMORY"
+      }
+    ],
+    "reflections": [
+      {
+        "response": "ANSWERED",
+        "caseStatus": "AWAITING_CONFIRMATION",
+        "verdict": "INCONCLUSIVE",
+        "diagnostic": "UNVERIFIABLE",
+        "evidenceRefCount": 5,
+        "learningThreadCount": 1
+      }
+    ]
+  },
+  "browser": {
+    "mounted": true,
+    "childReady": true,
+    "stageReady": 1,
+    "replayReady": 1,
+    "selected": 1,
+    "analysisReady": 1,
+    "prepareRoute": 1,
+    "prepareNarration": 2,
+    "agentRequests": 14,
+    "forbiddenFetches": 0,
+    "providerFetches": 0,
+    "playbackReports": 815,
+    "playing": false,
+    "tick": 3000,
+    "acks": 0,
+    "errors": [],
+    "syntheticIdentity": true,
+    "parser": false,
+    "model": false,
+    "diagnostics": true
+  },
+  "wrapUp": {
+    "mounted": true,
+    "childReady": true,
+    "stageReady": 1,
+    "replayReady": 1,
+    "selected": 1,
+    "analysisReady": 1,
+    "prepareRoute": 1,
+    "prepareNarration": 2,
+    "agentRequests": 14,
+    "forbiddenFetches": 0,
+    "providerFetches": 0,
+    "playbackReports": 807,
+    "playing": false,
+    "tick": 3000,
+    "acks": 0,
+    "errors": [],
+    "syntheticIdentity": true,
+    "parser": false,
+    "model": false,
+    "diagnostics": true
+  },
+  "completedReview": {
+    "mounted": true,
+    "childReady": true,
+    "stageReady": 1,
+    "replayReady": 1,
+    "selected": 1,
+    "analysisReady": 1,
+    "prepareRoute": 1,
+    "prepareNarration": 2,
+    "agentRequests": 14,
+    "forbiddenFetches": 0,
+    "providerFetches": 0,
+    "playbackReports": 812,
+    "playing": false,
+    "tick": 1336,
+    "acks": 0,
+    "errors": [],
+    "syntheticIdentity": true,
+    "parser": false,
+    "model": false,
+    "diagnostics": true
+  },
+  "visibleChecks": {
+    "summaryInsufficientRepeatedEvidence": true,
+    "reviewTargets": 2,
+    "completeClicked": true,
+    "completedHeading": true,
+    "reviewFirstCuePaused": true,
+    "returnFromReviewCompleted": true
+  },
+  "limits": [
+    "186 synthetic frames; no Demo parser/file-picker coverage",
+    "Local deterministic preparation/diagnosis/summary; no model",
+    "Memory Graph; no desktop persistence or reload proof",
+    "Graph theme is filtered by stricter presentable-evidence projection",
+    "Local/Graph diagnoses gate revised support; not aggregated as repeated errors"
+  ]
+}

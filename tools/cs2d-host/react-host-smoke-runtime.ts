@@ -1,7 +1,7 @@
 import { createCoachAgentRuntime } from "../../libs/coach-agent/src/index";
 import { parseRemoteCoachAgentDispatchEnvelope, parseRemoteCoachAgentDispatchResponse } from "../../libs/coach-agent/src/remote-dispatch-client";
 const runtimes = new Map<string, ReturnType<typeof createCoachAgentRuntime>>();
-export const metrics = { transportRequests: 0, reflectionAttempts: 0, injectedFailures: 0, dispatches: 0, events: {} as Record<string, number>, externalFetches: 0, reflections: [] as Array<{ response: string; caseStatus: string | null; verdict: string | null; diagnostic: string | null; evidenceRefCount: number; learningThreadCount: number }> };
+export const metrics = { transportRequests: 0, reflectionAttempts: 0, injectedFailures: 0, dispatches: 0, events: {} as Record<string, number>, externalFetches: 0, completions: [] as Array<{ runStatus: string; sessionStatus: string; routeCursor: number; completedCueCount: number; graphCaseCount: number; summaryCompletedCueCount: number; summaryThemeCount: number; checkpointBackend: string }>, reflections: [] as Array<{ response: string; caseStatus: string | null; verdict: string | null; diagnostic: string | null; evidenceRefCount: number; learningThreadCount: number }> };
 globalThis.fetch = async () => { metrics.externalFetches++; throw Error("SMOKE_EXTERNAL_NETWORK_FORBIDDEN"); };
 export async function dispatch(value: unknown) {
   const envelope = parseRemoteCoachAgentDispatchEnvelope(value);
@@ -18,6 +18,15 @@ export async function dispatch(value: unknown) {
       evidenceRefCount: cueCase?.verdict?.evidenceRefs.length ?? 0,
       learningThreadCount: result.state.learningThreads.filter(thread => thread.evidenceCueIds.includes(cueId)).length });
     metrics.reflections = metrics.reflections.slice(-8);
+  }
+  if (envelope.event.type === "COMPLETE_SESSION") {
+    metrics.completions.push({ runStatus: result.state.runStatus, sessionStatus: result.state.sessionStatus,
+      routeCursor: result.state.routeCursor, completedCueCount: result.state.completedCueIds.length,
+      graphCaseCount: Object.keys(result.state.cueCases).length,
+      summaryCompletedCueCount: result.state.sessionSummaryInput?.completedCues.length ?? 0,
+      summaryThemeCount: result.state.sessionSummaryInput?.themes.length ?? 0,
+      checkpointBackend: result.checkpoint.backend });
+    metrics.completions = metrics.completions.slice(-4);
   }
   return result;
 }

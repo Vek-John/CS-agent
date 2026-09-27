@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：整场完成需要分别验证播放、Graph和总结
+
+- 问题与决策：首点/继续通过不能代替收尾。本轮复用已验证的小场景走实际Host完整流程，当前总结默认本地closed projection，无需增加HTTP/provider。保留本地与Graph两类病例输入，但其用途是约束修订支持，不把INCONCLUSIVE拼成错误习惯。
+- 观察：最终Viewer合成3000/paused，Graph COMPLETED/cursor11/已完成cue2/普通段9。Graph原始summary主题1经Host可呈现门归零，UI诚实提示无足够重复证据。用户完成后回看首片段1336暂停、退出回到终点，未重复准备或完成请求。[证据](validation/GUIDED_DEFAULT_SESSION_WRAP_UP.md)。
+- 验证：3文件16tests、专项TS/独立build、两端TS/production build通过；单controller页面/服务清理。生产无需修复，仅增加有界计数和真实completion seam测试。
+- 限制与行动：186帧合成数据不是Parser/真实文件选择/大Demo或桌面恢复证明。下一项先核实真实DemoAnalyzer入口、Worker与资产，再在已授权小Demo范围做一次有界真实入口验收，不继续扩大合成故障矩阵。
+
 ## 2026-09-27：回退反馈既要保留，也要绑定当前教学点
 
 - 实证：只在合法SUBMIT_REFLECTION进入Runtime前返回一次503。真实Host能用本地诊断保留USER输入并继续，第二cue也可正常Graph提交；但完整结果Panel没有显示既有错误，而全局字符串错误随后串到第二cue反思页。

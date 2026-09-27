@@ -84,7 +84,7 @@ it.each(['ANSWERED','SKIPPED'])('uses the actual Host diagnosis synchronization 
  }finally{controller?.dispose();globalThis.fetch=previousFetch;}
 });
 
-it('rejects one validated reflection before Runtime, retains the local diagnosis, and advances to a successful second Graph diagnosis without preparation again',async()=>{
+it('completes the real two-cue session and bounded wrap-up after local then Graph diagnosis without preparing again',async()=>{
  const previousFetch=globalThis.fetch;let controller;
  try {
   const {createSmokeTransport,metrics}=await import('./react-host-smoke-runtime.ts');
@@ -114,14 +114,38 @@ it('rejects one validated reflection before Runtime, retains the local diagnosis
     await expect(dispatch(event)).rejects.toThrow('agent dispatch HTTP 503');expect(metrics.dispatches).toBe(dispatched);
     const output=runTeachingDiagnosis(context,reflection);expect(output.cueCase.reflection).toMatchObject(reflection);expect(output.cueCase.verdict.type).toBe('INCONCLUSIVE');
     session=reduceCoachingSession(plan,session,{type:'RECORD_TEACHING_CASE',cueCase:output.cueCase,learningThread:output.learningThread});
-    session=reduceCoachingSession(plan,session,{type:'CONFIRM_TEACHING_CASE',cueId:cue.id});
-    session=reduceCoachingSession(plan,session,{type:'CUE_PRESENTED',cueId:cue.id});
-    session=reduceCoachingSession(plan,session,{type:'ADVANCE_SEGMENT'});expect(session.consumed_cue_ids).toEqual([cue.id]);
    }else{
     expect(cue.id).not.toBe(firstCueId);const result=await dispatch(event);
     expect(result.state.cueCases[firstCueId]).toBeUndefined();expect(result.state.cueCases[cue.id].status).toBe('AWAITING_CONFIRMATION');expect(result.state.cueCases[cue.id].reflection).toMatchObject(reflection);expect(result.state.routeCursor).toBe(session.current_segment_index);
+    session=reduceCoachingSession(plan,session,{type:'RECORD_TEACHING_CASE',cueCase:result.state.cueCases[cue.id],learningThread:result.state.learningThreads.find(thread=>thread.evidenceCueIds.includes(cue.id))});
    }
+   session=reduceCoachingSession(plan,session,{type:'CONFIRM_TEACHING_CASE',cueId:cue.id});
+   session=reduceCoachingSession(plan,session,{type:'CUE_PRESENTED',cueId:cue.id});
+   session=reduceCoachingSession(plan,session,{type:'ADVANCE_SEGMENT'});expect(session.consumed_cue_ids).toHaveLength(ordinal+1);
   }
+  for(let i=0;i<plan.segments.length*3&&session.phase!=='WRAP_UP';i++){
+   const segment=plan.segments[session.current_segment_index];expect(segment.cue_ids).toHaveLength(0);
+   const mode=segment.mode==='SKIP'?(segment.reason_code==='FREEZE_TIME'?'FREEZE':'SKIP'):segment.mode==='BRIEF'?'BRIEF':'OBSERVE';
+   controller.observeSegment(identity,segment.id,session.current_segment_index,mode,session.phase==='SKIPPING'?'SKIPPING':'PLAYING');
+   session=reduceCoachingSession(plan,session,session.phase==='SKIPPING'?{type:'SKIP_SEGMENT'}:{type:'TICK',tick:segment.end_tick});
+  }
+  expect(session.phase).toBe('WRAP_UP');expect(session.presented_cue_ids).toHaveLength(2);expect(session.consumed_cue_ids).toHaveLength(2);
+  const {completeStage3SessionWrapUp}=await import('../../apps/web/lib/coaching/session-wrap-up-completion.ts');
+  const {buildStage3WrapUpInput}=await import('../../apps/web/lib/coaching/coach-agent-stage3-wrap-up.ts');
+  let claimed=false,request,result,terminal;const cases=Object.values(session.cue_cases);
+  const onResult=vi.fn(value=>{result=value;});
+  const completion={controller,identity,isCurrent:()=>session.phase==='WRAP_UP'||session.phase==='COMPLETED',persistence:undefined,claim:()=>{if(claimed)return false;claimed=true;return true;},onStart:vi.fn(),onRequest:value=>{request=value;},onResult,onSaveError:()=>{throw Error('SQLITE_NOT_EXPECTED');},buildInput:value=>{
+   terminal=value;expect(value.state.sessionSummaryInput).not.toBeNull();expect(value.state.cueCases[firstCueId]).toBeUndefined();expect(Object.keys(value.state.cueCases)).toHaveLength(1);
+   expect(cases).toHaveLength(2);expect(cases.some(c=>c.cueId===firstCueId)).toBe(true);
+   return buildStage3WrapUpInput(plan,value.state.sessionSummaryInput,narrations,bundle.candidate_set,[...Object.values(value.state.cueCases),...cases]);
+  }};
+  await completeStage3SessionWrapUp(completion);
+  expect(terminal.state.runStatus).toBe('COMPLETED');expect(terminal.state.routeCursor).toBe(plan.segments.length);expect(terminal.state.completedCueIds).toHaveLength(2);expect(terminal.state.observedSegmentIds).toEqual(plan.segments.filter(segment=>segment.cue_ids.length===0).map(segment=>segment.id));
+  expect(request.themes).toHaveLength(0);expect(result.manifest.reason).toBe('NO_REPEATED_THEME');expect(result.bundle.themes).toHaveLength(0);expect(onResult).toHaveBeenCalledTimes(1);
+  session=reduceCoachingSession(plan,session,{type:'COMPLETE_SESSION'});expect(session.phase).toBe('COMPLETED');
+  await completeStage3SessionWrapUp(completion);expect(onResult).toHaveBeenCalledTimes(1);
+  expect(metrics.events.COMPLETE_SESSION).toBe(1);expect(metrics.completions.at(-1)).toMatchObject({runStatus:'COMPLETED',sessionStatus:'COMPLETED',routeCursor:plan.segments.length,completedCueCount:2,graphCaseCount:1,checkpointBackend:'MEMORY'});
+  console.log(JSON.stringify({session:'COMPLETED',completedCues:2,hostCases:cases.length,localFallbackCases:1,graphCases:Object.keys(terminal.state.cueCases).length,summaryThemes:result.bundle.themes.length,summaryReason:result.manifest.reason,routeSegments:plan.segments.length,preparationCounts}));
   expect(metrics.injectedFailures-before.injectedFailures).toBe(1);expect(metrics.reflectionAttempts-before.reflectionAttempts).toBe(2);expect(preparationCounts).toEqual({route:1,narration:2});expect(post).not.toHaveBeenCalled();expect(blockedFetch).not.toHaveBeenCalled();
  }finally{controller?.dispose();globalThis.fetch=previousFetch;}
 });

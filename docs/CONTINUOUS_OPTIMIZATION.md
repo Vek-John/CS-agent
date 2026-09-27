@@ -12,6 +12,17 @@
 
 
 
+## 已交付验证：真实Host默认带看收尾（2026-09-27）
+
+- ID guided-default-session-wrap-up，a0be7cf clean/push，7f2b顺序复用；partial_revision_restore默认配置独占既有harness必要工具接线/小tests，root独占docs/真实UI与服务生命周期/最终checks/push。生产缺口先实证、再确认范围。
+- 流程：默认诊断小场景两cue（首点单次503→本地结果，次点Graph结果）→显式继续→末段→WRAP_UP终结暂停→受限总结与完成入口。A1五分钟核实completeStage3SessionWrapUp/requestSessionWrapUp provider与持久化边界；A2必要限定HTTP/本地provider接线和匿名摘要；A3root一次新origin实操、相关tests/专项TS/两端TS/build。
+- 风险：不能把Graph完成当播放器暂停，不能遗漏本地教学或假报保存；186帧留child、内存Graph/新origin、无真实Demo/Parser/模型/用户DB/Memory/.env。20分钟有限任务、build<60秒，同设施两败简化，不重做无收益故障矩阵；owner不启browser/server，root单controller清自建资源，结束RELEASE，不安装部署。
+
+- A1核实无需wrap-up HTTP：默认requestSessionWrapUp本地closed projection，兼容provider路径未调用。仅工具匿名completion摘要与既有小test扩展，没有产品改动。[验收](validation/GUIDED_DEFAULT_SESSION_WRAP_UP.md)。
+- 实际IAB全程：末段合成3000暂停，Graph COMPLETE_SESSION1/run与session COMPLETED/cursor11/已完成cue2，普通段OBSERVE9。Graph原始summary主题1经合法可呈现门过滤后无主题，UI诚实不归纳习惯；完成按钮进入“复盘完成”，回看第1cue暂停1336并返回终点，准备1/2与完成请求1均未重复。
+- 3文件16tests、专项TS/语法/独立build和两端TS/build通过；test确证Host案例2/Graph案例1共同传入总结门，不能说本地诊断被写进Graph或两个未知被聚为错误。root实际diff/UI/日志核实，agent RELEASE，tab20/55098已清理，零Parser/模型/用户库/部署。
+- 下一有限目标 real-demo-host-entry-preflight：整场控制已用合成输入通过，真实DemoAnalyzer文件入口/Parser Worker到Host仍是明确边界。先5分钟核实真实入口/资产与单次既有授权test_demo的资源预算/隔离，不再复制合成选择入口；小挂载通过才推进有界真实解析，保持bulk归child/Worker、摘要返回。无模型/用户库改动，不把旧native A5扩大成等待。
+
 ## 已交付：诊断故障反馈保留与教学点隔离（2026-09-27）
 
 - ID guided-diagnosis-transport-fallback，8907c0d clean/push，7f2b顺序复用；partial_revision_restore默认配置独占既有react-host-smoke故障模式/必要小tests，root docs/真实UI单controller与最终checks/push。生产变更先证实、报告、再定范围。
