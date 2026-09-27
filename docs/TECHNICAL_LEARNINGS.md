@@ -8,6 +8,14 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：地面标志覆盖成立，但采样阶段存在实际差异
+
+- 问题：上轮只能证明字段/容器语义，未证明当前授权Demo是否有地面来源。复用实际verified_controller_pawn，严格读取flags与辅助ground handle；本人playing-side样本与明确存活分列，bulk留native child。
+- 证据：唯一60.6MB read/parse、无Replay构建；每phase4778明确存活样本，4569 FLAG_SET、209 FLAG_UNSET，字段类型均有效且辅助关系一致。7050同owner/index/serial可比对中8对地面位跨start/end改变，均alive；两阶段汇总一致不能推出每个样本一致。[完整匿名记录](validation/SAMPLED_GROUND_COVERAGE.md)。
+- 决策：具备进一步设计可选采样事实的来源基础；先与现有tick-start frame对齐并记录phase，未知/错型/冲突不默认false。位未设不直接称空中，更不能推射击瞬时移动/急停/命中或专业错误；不接CS-Net。当前实体中的持续值不等于该属性本tick刚更新。
+- 验证：13严格投影smoke断言、2实际pawn身份Rust tests、两端TypeScript/production build均通过。首编译路径/宏问题在读取前解决，未误跑旧binary，正式仅一次；root审查source/计数并修正文档中198对缺失的解释（至少一侧，含双方），未重parse。执行者RELEASE，例程/binary/进程/timer已清理。
+- 限制/后继：单个目标、单Demo、全部playing-side阶段而非仅live，346ms不作SLA；没有产品字段或教学呈现改变。下一项sampled-ground-fact-contract先明确最小契约及可见消费价值，保持旧记录不重算，不以数据覆盖代替教学质量评估。
+
 ## 2026-09-27：移动来源先区分网络缺失、字段身份与采样阶段
 
 - 问题：当前 Adapter 在 `normalizePlayerState` 固定将 velocity 标为缺失；仅知道本人发生开火，仍不能说射击时是否移动。`PlayerStateSample.velocity` 虽已有可选契约，当前没有真实教学消费者。CS-Net投影固定填充速度及XYZ为0，替换前另需核对训练特征和单位，不能据新字段直接宣称模型改善。

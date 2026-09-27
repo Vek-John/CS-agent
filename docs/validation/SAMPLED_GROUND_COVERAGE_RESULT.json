@@ -1,0 +1,82 @@
+{
+  "implementationBase": "6b129e7",
+  "demoBytes": 60601900,
+  "demoReads": 1,
+  "parses": 1,
+  "phasePairs": {
+    "aliveFlagProjectionChanged": 8,
+    "flagProjectionChanged": 8,
+    "flagsValueChanged": 16,
+    "groundValueChanged": 8,
+    "missingOnePhase": 198,
+    "sameVerifiedPawn": 7050
+  },
+  "schemaVersion": "sampled-ground-coverage.v1",
+  "scope": "selected-controller-only",
+  "strideTicks": 8,
+  "targetAmbiguous": false,
+  "targetFound": true,
+  "tickEnd": {
+    "aliveFlags": {
+      "FLAG_SET": 4569,
+      "FLAG_UNSET": 209
+    },
+    "aliveGroundHandle": {
+      "BOUND_CURRENT": 4569,
+      "INVALID_SENTINEL": 209
+    },
+    "aliveRelation": {
+      "AGREEMENT": 4778
+    },
+    "flags": {
+      "FLAG_SET": 6842,
+      "FLAG_UNSET": 209
+    },
+    "groundHandle": {
+      "BOUND_CURRENT": 6842,
+      "INVALID_SENTINEL": 209
+    },
+    "relation": {
+      "AGREEMENT": 7051
+    },
+    "samples": {
+      "aliveEligible": 4778,
+      "eligibleVerifiedPawn": 7051,
+      "invalidPawnBinding": 197,
+      "scheduled": 7248
+    }
+  },
+  "tickInterval": 0.015625,
+  "tickStart": {
+    "aliveFlags": {
+      "FLAG_SET": 4569,
+      "FLAG_UNSET": 209
+    },
+    "aliveGroundHandle": {
+      "BOUND_CURRENT": 4569,
+      "INVALID_SENTINEL": 209
+    },
+    "aliveRelation": {
+      "AGREEMENT": 4778
+    },
+    "flags": {
+      "FLAG_SET": 6841,
+      "FLAG_UNSET": 209
+    },
+    "groundHandle": {
+      "BOUND_CURRENT": 6841,
+      "INVALID_SENTINEL": 209
+    },
+    "relation": {
+      "AGREEMENT": 7050
+    },
+    "samples": {
+      "aliveEligible": 4778,
+      "eligibleVerifiedPawn": 7050,
+      "invalidPawnBinding": 197,
+      "scheduled": 7248
+    }
+  },
+  "elapsedMs": 346,
+  "outputBytes": 1173
+}

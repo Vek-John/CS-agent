@@ -12,6 +12,18 @@
 
 
 
+## 已交付学习：采样地面标志真实覆盖（2026-09-27）
+
+- ID sampled-ground-coverage，基线6b129e7已push/clean，7f2b复用；partial_revision_restore默认配置独占.local-data探针/小tests及临时native example，root独占docs/最终diff与checks/push。前owner RELEASE，无并行产品写入。
+- A1严格类型/缺失与bit/handle冲突小smoke、复用当前verified pawn；A2编译退出0后唯一一次既有授权test_demo/原指定povergo的native只读解析，同pass明确start/end采样，输出匿名计数；A3覆盖、冲突、phase差异与下一结论，相关tests/两端TS/build后push。没有本人scope必须如实写全玩家，不冒称本人。
+- 5分钟A1/20分钟有限任务；离线缓存编译不安装，防旧binary误跑，parent120秒kill/input128MiB/output64KiB，bulk留child不建完整Replay，root不并发build。正式小摘要先落盘，不第二parse；同设施两败简化。native owner负责例程/进程清理并RELEASE，保留用户数据。禁止生产Parser/vendor/patch/schema修改、GUI/模型/Jev/DB/发布；FLAG_UNSET不称AIRBORNE，属性存在不称当前tick更新或射击瞬间状态。
+
+- A1方案：实际props.rs verified_controller_pawn，按8fps等价stride在同pass采start/end；严格flags/handle类型与缺失，明确存活另计。phase比较需同pawn代际，重绑/失效不可比；辅助handle仅一致性信号，不赋予airborne语义。正式前小投影断言与编译成功，主控不并发build。
+
+- 交付：唯一native read/parse，60,601,900B、346ms observer；本人每phase4778明确存活样本，4569 FLAG_SET/209 FLAG_UNSET，严格字段覆盖全且辅助关系一致。7050同pawn对中8次bit0变化均alive，完整flags16次变化；198次至少一侧缺失含双方缺失，不误记为属性变化。[匿名证据与限制](validation/SAMPLED_GROUND_COVERAGE.md)。不构建Replay、不外推live回合/所有Demo/射击瞬间。
+- 首两次编译失败均在正式读取前（相对patch路径/proto宏），简化既有入口后新binary退出0才smoke/正式；13投影断言、2当前实体身份Rust tests、两端TS/build通过，root读实际probe/source/输出。执行者RELEASE，临时example/自建binary/parent timer/test/build均已清理退出；无产品/模型/用户数据修改。
+- 下一有限目标 sampled-ground-fact-contract：明确与现有tick-start帧对齐、当前本人来源、unknown及旧保存兼容，再验证小fixture是否能改善状态呈现/当前追问；不混用end值，不自动生成airborne/急停/判错，不新增CS-Net特征，不重parse本样本。A5独立待恢复。
+
 ## 已交付学习：本人移动状态来源可行性（2026-09-27）
 
 - ID own-motion-source-feasibility，基线9f6535c已push/clean，复用7f2b；partial_revision_restore默认配置独占.local-data小调查/单smoke，root独占docs/最终集成与push。使用research技能追溯一手源码，支持带看可知事实，不是凭速度判错。
