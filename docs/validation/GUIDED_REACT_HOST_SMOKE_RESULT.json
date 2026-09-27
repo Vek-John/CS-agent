@@ -1,0 +1,52 @@
+{
+  "baseline": "7bf5b77",
+  "scenario": "synthetic-real-react-host-first-cue",
+  "browser": "Codex IAB",
+  "automaticStart": true,
+  "manualPlayClicks": 0,
+  "browserSummary": {
+    "mounted": true,
+    "childReady": true,
+    "stageReady": 1,
+    "replayReady": 1,
+    "selected": 1,
+    "analysisReady": 1,
+    "prepareRoute": 1,
+    "prepareNarration": 2,
+    "agentRequests": 4,
+    "forbiddenFetches": 0,
+    "providerFetches": 0,
+    "playbackReports": 714,
+    "playing": false,
+    "tick": 1400,
+    "acks": 1,
+    "errors": [],
+    "syntheticIdentity": true,
+    "parser": false,
+    "model": false,
+    "diagnostics": false
+  },
+  "runtimeSummary": {
+    "dispatches": 4,
+    "events": {
+      "OBSERVE_SEGMENT": 2,
+      "START_CUE": 1,
+      "RESUME_TOOL": 1
+    },
+    "externalFetches": 0
+  },
+  "visibleResult": {
+    "teachingCard": true,
+    "toolComplete": true,
+    "returnedToSyntheticDecision": true,
+    "continueEnabled": true,
+    "questionPanel": true
+  },
+  "limitations": [
+    "No real Demo parsing or file picker",
+    "Synthetic selection replaces DemoAnalyzer",
+    "Deterministic providers, teachingDiagnostics=off",
+    "In-memory Graph, no desktop persistence or reload recovery",
+    "Small fixture is not performance evidence"
+  ]
+}

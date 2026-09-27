@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.typecheck.json",
+  "compilerOptions": {
+    "incremental": false,
+    "jsx": "react-jsx",
+    "paths": {
+      "react": ["../../apps/web/node_modules/@types/react/index.d.ts"],
+      "react/*": ["../../apps/web/node_modules/@types/react/*"],
+      "react-dom/*": ["../../apps/web/node_modules/@types/react-dom/*"]
+    }
+  },
+  "include": [
+    "./react-host-smoke-parent.tsx",
+    "./react-host-smoke-runtime.ts",
+    "./react-host-smoke-selection.ts",
+    "./viewer-two-cue-fixture.ts",
+    "../../apps/web/next-env.d.ts"
+  ]
+}

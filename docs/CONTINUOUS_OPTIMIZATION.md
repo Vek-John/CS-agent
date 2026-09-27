@@ -12,6 +12,16 @@
 
 
 
+## 已交付验证：真实React Host准备入口（2026-09-27）
+
+- ID guided-react-host-smoke，基线7bf5b77已push/clean，7f2b复用，原owner RELEASE。partial_revision_restore默认配置独占tools新harness/必要fixture，生产改动须root确认；root docs/接口/最终review/checks及IAB tab13/server生命周期。用独立临时loopback origin隔离浏览器状态，不复用用户应用origin。
+- 目标：当前真实Cs2dPlaybackHost挂载→实际Viewer握手/AnalysisBundle→准备→可开始→首cue结果门与讲解。A1五分钟查BOOT/Stage3 HTTP与存储边界，再定最小真实Runtime或明确测试adapter；A2复用viewerUrl/parentOrigin/reviewPreparationDependencies与原样式、真实小Viewer，不从SSR静态冒充交互；A3root点击/截图/调用摘要、相关tests/专项TS/两端TS/build后push。
+- 风险：Vite/React/Next依赖、自动读库或外部模型请求、iframe早到事件。禁止默认.env服务/用户SQLite/Memory/密钥/正式Demo/外部Provider；需要本地HTTP时限定路由/真实内存Runtime结果，不编造成功。186帧小输入仅页面持有，首build<60秒/准备约20分钟，同设施两败简化。沿既有emil/apple/Next，执行者不启browser/server；root关闭自建tab/server，owner清test/build后RELEASE，无安装部署。
+
+- 最终真实Host自动准备/开始：Stage挂载1、Analysis/route各1、Narration2，首cue真实ACK1，回合成1400暂停，讲解/提问/继续均可见可用。内存Graph OBSERVE2/START1/RESUME1、外部及provider请求0。中间手动启动还验证了继续至第二cue；不拿它替代最终自动开始证据。[验收](validation/GUIDED_REACT_HOST_SMOKE.md)。
+- 两个初版工具差异已纠正：Viewer名单不是DemoAnalyzer选人；选人前挂Stage使首次state被REPLAY_READY清掉。简化为明确合成选人+选人后首次挂真实Stage，不手造state、不改产品。最终2文件3行为tests、专项TS/语法/独立build及两端TS/build通过。root实际diff/UI核验，执行者RELEASE，tab13–15与对应服务均关闭。
+- 下一有限目标 guided-react-host-default-teaching：当前入口/时钟/Graph基础模式已证实，默认diagnostics模式仍未验证；先核实真实诊断依赖与可用的本地内容路径，在独立origin验证首点诊断/回退、工具完成和追问有据性。沿当前7f2b最新交付基线，root先定接口、再按模板派发有限tools所有权；不重parse、不降低引用门、不把关闭诊断的结果冒充默认体验。
+
 ## 已交付验证：双教学点的真实Viewer播放（2026-09-27）
 
 - ID guided-two-cue-viewer-playback，基线39fdf23已push/clean，7f2b复用，前owner RELEASE。partial_revision_restore默认配置独占既有viewer-action-smoke的双cue模式/必要fixture；root独占docs、IAB tab12及loopback server从启动到清理、最终review/checks/push。IAB已实际打开，旧native A5不唤醒。

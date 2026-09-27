@@ -8,6 +8,13 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：真实 Host 小场景必须保持选人和舞台的生命周期
+
+- 问题：旧双cue验证使用控制driver；本轮挂完整React Host后，测试页把Viewer名单当作选人，又把Stage提前挂载，导致无分析或准备后无新播放状态。实际DemoAnalyzer负责选人，并在选人后挂Stage，Host在REPLAY_READY时清除旧playback，自动播放须等新状态。
+- 决策：只修测试工具，使用明确合成选人入口和选人后首次挂Stage；准备、Session、生产CSS、默认Graph、工具时钟/ACK均实际运行。不模拟PLAYBACK_STATE或注入成功，不制造产品修复。provider确定性隔离、内存Runtime、全新origin保护用户库。
+- 验证：最终选人后无需手动播放，首cue工具完成后返回合成1400暂停，讲解/问题/继续开放；route1/narration2、Graph OBSERVE2/START1/RESUME1，外网0。2文件3行为tests、专项TS/独立build及两端TS/production build通过，root实际浏览器验收与截图，进程/页面关闭。[证据](validation/GUIDED_REACT_HOST_SMOKE.md)。
+- 限制与行动：没有Parser/真实选人页/默认诊断/模型/重开恢复/native验收。先以已核实生命周期验证默认诊断教学模式的真实消费与回退，不能将基础模式视为完整默认体验或专业判断提升。
+
 ## 2026-09-27：真实播放完成要等回报，夹具尾帧也必须覆盖目标
 
 - 交付：旧viewer-action-smoke新增--two-cue模式，实际Adapter自然双cue、Session/HostAdapter/呈现门接真实ViewerStage自然时钟和ACK；受控driver选合法Replay能力，没有Graph Runtime或完整React Host。旧single模式保留，Replay由各页面本地生成，不跨工具传bulk。
