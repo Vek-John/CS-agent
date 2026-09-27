@@ -12,6 +12,18 @@
 
 
 
+## 已交付验证：默认反思诊断的 HTTP 重启恢复
+
+- ID default-diagnosis-http-resume；基线647fc8b已push/clean，7f2b复用，前owners RELEASE。先核实原default-action-replay-consumption建议：REAL_ROUTE_DEFAULT_POLICY/REAL_ACTION_REPLAY已有真实动作→用途→能力证据，默认诊断又有意关闭基础慢放，故不重复或强行开放工具。
+- 实际缺口：上一HTTP验证调用synchronizeDiagnosis但没有SUBMIT_REFLECTION，也未保存默认用户诊断；原修订诊断恢复证据仅同进程MemorySaver。目标在既有HTTP runner加--diagnosis：真实结果门→USER反思/Graph诊断→按Host顺序持久诊断产物→合法CUE_PAUSED head→服务正常退出→新PID/GET/精确MATCHED→Session恢复诊断且可继续消费。
+- 验收：原文/诊断/尝试预算保留，恢复仅RECONNECT、零反思重交/生成/工具；存储客户端不开库、不替换Graph；只一个ANSWERED场景，默认ordinary不改，不扩大故障或修订矩阵。产品缺口必须先复现，不能把工具构造错误当产品bug。无真实Demo/模型/GUI/用户库/安装发布。
+- 所有权：partial_revision_restore默认继承配置独占现有tools/desktop-http-recovery三文件与必要独有test；root独占docs、单controller实际HTTP/检查/交付，原prepared current生产代码未变化可复用。重点风险为诊断artifact/head顺序与恢复投影分离；沿原ready20s/request10s/overall120s和finally close→清temp，5分钟方案/15分钟实现，两次同设施失败先简化。相关tests/TS/production build后同分支commit push。
+
+- 结果：工具新增--diagnosis，生产与默认ordinary路径未改。实际PID53541保存288字ANSWERED反思/诊断/规则/线程/CUE_PAUSED head后正常退出，PID53542重新GET/exact MATCHED；独立artifact与Graph case/thread完全一致，恢复Session保留原文和reflection1/diagnostic1/disagreement0预算，状态仍AWAITING_CONFIRMATION/UNVERIFIABLE/INCONCLUSIVE。恢复仅RECONNECT，Narration0/工具0，实际问答10项含7条完整限制，artifact/head不变。
+- 首次工具误判：seed53414成功后resume失败；root与独审均从生产问答源码确认“适用限制”合法refs=[]，原all-items-nonempty断言错误。改为建议正文/过滤后原refs与限制分开核对、加固定阶段码，最终实跑通过；没有放宽产品引用门或冒称产品bug。
+- 验收：93相关回归、main/工具TS、syntax、Web production build通过；当前生产代码未变，沿用上一轮隔离prepared，不重复ordinary/Viewer/真实Demo路径。partial_revision_restore默认配置独占工具，prior_fire_boundary_review默认配置只读诊断来源窄审，root实读diff/结果并关闭审查项；owners RELEASE，所有自有运行已退出，temp清理。[结果](validation/DEFAULT_DIAGNOSIS_HTTP_RESUME_RESULT.json)。边界仍合成输入/正常sidecar重启，非GUI/Parser/断电或专业质量改善。
+- 下一有限目标 diagnosis-submit-pending-feedback：源码发现submitTeachingReflection和disagreeTeachingDiagnosis都先await USER_INTERACTION保存，随后才设置diagnosticBusyCueId；disagreement的请求epoch也在保存后捕获。先用可控延迟持久化复现点击后反馈与换cue/迟到所有权，明确有影响才最小修复；不得扩大成整Host审计或重开原UI A5。
+
 ## 已交付验证：真实 sidecar HTTP 跨重启恢复
 
 - ID desktop-http-checkpoint-resume；基线 e8f34c0 已 push/clean，7f2b 复用，旧代理 RELEASE。预检发现现有 prepared 资源为9月24日，需用当前源码重建 runtime/desktop standalone，既有固定 Node 和已构建 Viewer 只作本地输入，不安装/下载/部署。

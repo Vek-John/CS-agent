@@ -1,0 +1,122 @@
+{
+  "ok": true,
+  "diagnosis": true,
+  "probeOnly": false,
+  "runs": [
+    {
+      "phase": "seed",
+      "pid": 53541,
+      "exitCode": 0,
+      "signal": null
+    },
+    {
+      "phase": "resume",
+      "pid": 53542,
+      "exitCode": 0,
+      "signal": null
+    }
+  ],
+  "seed": {
+    "mode": "DIAGNOSIS",
+    "boundary": "CUE_PAUSED",
+    "backend": "SQLITE",
+    "recoverableAfterRefresh": true,
+    "graphEvents": [
+      "OBSERVE_SEGMENT",
+      "OBSERVE_SEGMENT",
+      "START_CUE",
+      "SUBMIT_REFLECTION"
+    ],
+    "artifactOrder": [
+      "ANALYSIS_BUNDLE",
+      "CANDIDATE_SET",
+      "REVIEW_PLAN",
+      "NARRATION_BUNDLE",
+      "NARRATION_BUNDLE",
+      "USER_INTERACTION",
+      "CUE_CASE",
+      "DIAGNOSTIC_RESULT",
+      "TRANSFER_RULE",
+      "LEARNING_THREAD",
+      "SESSION_RECOVERY"
+    ],
+    "response": "ANSWERED",
+    "reflectionCharacters": 288,
+    "reflectionSource": "USER",
+    "caseStatus": "AWAITING_CONFIRMATION",
+    "diagnosticStatus": "UNVERIFIABLE",
+    "verdict": "INCONCLUSIVE",
+    "attemptBudget": {
+      "reflection": 1,
+      "diagnostic": 1,
+      "disagreement": 0,
+      "alternateDiagnostic": 0
+    },
+    "generatedAnalysis": 1,
+    "generatedNarration": 2,
+    "toolEffects": 0
+  },
+  "resume": {
+    "mode": "DIAGNOSIS",
+    "restored": "MATCHED",
+    "backend": "SQLITE",
+    "recoverableAfterRefresh": true,
+    "graphEvents": [
+      "RECONNECT_REPLAY"
+    ],
+    "caseStatus": "AWAITING_CONFIRMATION",
+    "diagnosticStatus": "UNVERIFIABLE",
+    "verdict": "INCONCLUSIVE",
+    "reflectionCharacters": 288,
+    "fullUserReflectionPreserved": true,
+    "savedCaseAndCheckpointEqual": true,
+    "savedThreadAndCheckpointEqual": true,
+    "attemptBudget": {
+      "reflection": 1,
+      "diagnostic": 1,
+      "disagreement": 0,
+      "alternateDiagnostic": 0
+    },
+    "questionItemCount": 10,
+    "questionCoreRefCount": 3,
+    "questionLimitationCount": 7,
+    "routeValidations": 1,
+    "narrationRequests": 0,
+    "viewerCalls": 0,
+    "toolEffects": 0,
+    "artifactsAndHeadUnchanged": true,
+    "staleCookieRejected": true
+  },
+  "unauthenticatedRejected": true,
+  "uncontrolledClientFetches": 0,
+  "limitations": [
+    "Prepared production sidecar/Next HTTP; no Tauri GUI.",
+    "Synthetic Replay and header-only import finalized as synthetic-no-parser, never parsed Demo evidence.",
+    "Provider NONE; default runtime Memory feature remains consent-gated.",
+    "Client fixture advances synthetic Session ticks; no Viewer rendering.",
+    "Graceful restricted sidecar restart only; no Tauri/Viewer rendering, crash or power-loss test.",
+    "Production sources unchanged; reused isolated prepared runtime built from the same production source in the preceding task.",
+    "uncontrolledClientFetches counts parent/client only, not measured sidecar network egress.",
+    "Seed generation counts are fixture construction; no quality-improvement or latency conclusion."
+  ],
+  "schemaVersion": "default-diagnosis-http-resume-result.v1",
+  "baseline": "647fc8b",
+  "productChanged": false,
+  "checks": {
+    "relatedTests": 93,
+    "mainTypecheck": "passed",
+    "toolTypecheck": "passed",
+    "scriptSyntax": "passed",
+    "webProductionBuild": "passed",
+    "actualTwoStartHttpDiagnosis": "passed"
+  },
+  "initialRun": {
+    "seedPid": 53414,
+    "seedExitCode": 0,
+    "failureStage": "RESUME_HTTP",
+    "failureCode": "VALIDATION_FAILED",
+    "cause": "Harness incorrectly required nonempty refs on limitation items; production intentionally renders those with empty refs. Fixed harness assertions, not product."
+  },
+  "cleanup": "Final seed/resume admin shutdown and close exit0; parent finally removed temporary data/cache/log/client bundle. Failed run also uses finally kill/close cleanup. No GUI or user data.",
+  "next": "diagnosis-submit-pending-feedback"
+}

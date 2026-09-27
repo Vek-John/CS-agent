@@ -8,6 +8,16 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：默认诊断在真实 HTTP 重启后保持用户输入与不确定性
+
+- 选题纠偏：原default-action-replay-consumption建议与REAL_ROUTE_DEFAULT_POLICY/REAL_ACTION_REPLAY已有证据重叠；默认diagnostics明确关闭基础慢放，不能据此新增工具或重跑Jev。真正未覆盖的是用户已提交诊断的HTTP持久恢复：上一ordinary脚本只有零工具START，旧修订恢复则只同进程MemorySaver。
+- 决策：既有HTTP runner加可选--diagnosis，只一个ANSWERED/CUE_PAUSED案例。USER_INTERACTION先存、真实Host事件builder/Graph诊断，然后case/result/rule/thread和recovery artifact/head；新进程只拿reviewId，重新HTTP读取，并通过assertRecoveryTeachingProgress/精确reconnect/restoreCheckpointTeachingCase/adoptRecoveredCue。client不装私有library/SQLite，也不替换生产handler。
+- 实证：最终seed53541→resume53542均正常exit0，288字USER原文、case/thread与预算保留；恢复仅RECONNECT，Narration0/工具0，保存物不变。问答消费为10项、核心3refs、7条限制，诊断保持UNVERIFIABLE/INCONCLUSIVE而非声称专业质量提高；原文/令牌不进入日志结果。无cookie及旧cookie仍拒绝。
+- 工具教训：首次seed53414成功后恢复验证失败；工具要求所有问答项refs非空，与生产适用限制refs=[]的合同冲突。独审与root源码确认后仅改工具：建议when/do/unless与保存规则一致、refs按已显示facts过滤、限制完整保留空refs。补固定阶段code避免在失败日志打印正文/密钥。最终两次启动实证通过，未修改产品门。
+- 检查/清理：93相关tests、main/专项TS、syntax及Web production build通过；生产源码未变，复用上一轮已构建的隔离prepared，不重跑普通段/Viewer/真实Demo。root集中读diff和实际JSON，代理已RELEASE，自有sidecar正常退出/失败路径finally回收，临时DB/data/cache/log/client bundle清理，无用户库或GUI操作。
+- 复跑：`node tools/desktop-http-recovery.mjs --prepared-root=<当前源码prepared绝对目录> --diagnosis --output=<新JSON路径>`；正常服务重启不等于Tauri、Parser、Viewer或断电恢复。父client fetch计数不外推sidecar出站测量，固定fixture生成次数不是性能数据。
+- 下一项：diagnosis-submit-pending-feedback。当前Host两条提交回调在USER_INTERACTION保存之后才设置busy，异议请求epoch也在其后；先延迟保存小复现点击反馈/换cue迟到行为，再决定是否有必要修复。与当前已完成恢复验证分开，不重开相同拒判或恢复矩阵。
+
 ## 2026-09-27：受限 sidecar 真实 HTTP 重启后续接教学
 
 - 问题：独立Node直接handler验证没有覆盖桌面鉴权、Next traced bundle、运行时资料库注册与HTTP初始化。原prepared为9月24日，不能用于当前实现验收；用当前runtime/desktop webpack构建，复用既有固定Node24.19.0和license，在忽略目录生成独立prepared资源，未覆盖旧资源/安装应用，也无下载。
