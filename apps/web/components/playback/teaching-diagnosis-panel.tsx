@@ -201,7 +201,7 @@ export function TeachingDiagnosisPanel({
         {error ? <p className={styles.error} role="alert">{error}</p> : null}
         <div className={styles.actions}>
           <button type="button" className={styles.primary} disabled={busy || (!selectedGoal && !text.trim())} onClick={() => void onSubmit(makeReflection(cue.id, selectedGoal, text))}>{busy ? "正在检查…" : "检查这个条件"}</button>
-          <button type="button" className={styles.secondary} disabled={busy} onClick={() => void onSkip()}>跳过，直接看分析</button>
+          <button type="button" className={styles.secondary} onClick={() => void onSkip()}>跳过，直接看分析</button>
         </div>
       </section>
     );
@@ -268,12 +268,12 @@ export function TeachingDiagnosisPanel({
         <div className={styles.disagreementBox}>
           <span>补充一条信息（只会再检查一次）</span>
           <div className={styles.quickGrid}>
-            {DISAGREEMENT_OPTIONS.map((option) => <button key={option} type="button" className={disagreement === option ? styles.quickSelected : styles.quick} onClick={() => setDisagreement(option)}>{option}</button>)}
+            {DISAGREEMENT_OPTIONS.map((option) => <button key={option} type="button" className={disagreement === option ? styles.quickSelected : styles.quick} disabled={busy} onClick={() => setDisagreement(option)}>{option}</button>)}
           </div>
           <label className={styles.label} htmlFor={`${cue.id}-disagreement`}>其他补充</label>
-          <textarea id={`${cue.id}-disagreement`} value={disagreement} maxLength={500} onChange={(event) => setDisagreement(event.target.value)} rows={2} placeholder="只写会改变判断的那条信息" />
+          <textarea id={`${cue.id}-disagreement`} value={disagreement} disabled={busy} maxLength={500} onChange={(event) => setDisagreement(event.target.value)} rows={2} placeholder="只写会改变判断的那条信息" />
           <div className={styles.actions}>
-            <button type="button" className={styles.primary} disabled={busy || (!disagreement.trim() && !disagreementGoal)} onClick={() => void onDisagree(makeReflection(cue.id, disagreementGoal, disagreement))}>用这条信息再检查一次</button>
+            <button type="button" className={styles.primary} disabled={busy || (!disagreement.trim() && !disagreementGoal)} onClick={() => void onDisagree(makeReflection(cue.id, disagreementGoal, disagreement))}>{busy ? "正在重新检查…" : "用这条信息再检查一次"}</button>
             <button type="button" className={styles.secondary} disabled={busy} onClick={() => setDisagreeing(false)}>先不补充</button>
           </div>
         </div>

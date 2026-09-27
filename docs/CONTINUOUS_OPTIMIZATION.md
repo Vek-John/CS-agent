@@ -12,6 +12,17 @@
 
 
 
+## 已交付：提交诊断立即反馈与迟到身份保护
+
+- ID diagnosis-submit-pending-feedback；基线079340d已push/clean，7f2b复用，前owners RELEASE。目标反思/异议提交立刻显示busy并同步拒绝重复提交，持久化前绑定cue/generation/epoch；保存完成、失败或提前返回只释放自己的占用，换cue/接管后的迟到结果不诊断新cue或清新busy。
+- A1用可控延迟USER_INTERACTION复现真实回调；A2必要最小Host/helper接线，保留skip抢占、已有本地失败回退及artifact-before-head；A3成功/失败/重复/换cue/迟到交错回归；A4现有Panel/共享入口最小交互证据、相关tests/TS/production build后commit push。界面即时状态不增动效、保持localhost及reduced motion/transparency。
+- partial_revision_restore默认继承配置独占Host及必要窄helper/new tests，root docs/单browser控制器/集成与真实diff；先5分钟方案和red、15分钟阶段检查。不大重构/新领域状态机/改schema/模型/真实Demo/用户库/安装发布。读emil-design-eng/apple-design及Next use-client；root已公告技能使用。延迟transport留可控小测试，UI若用独立面板明确不是完整桌面验收；只清本轮进程/页面，同设施两败简化。
+
+- 红→绿：提取当前Host两实际回调并注入可控依赖，真实HistoryPersistenceController延迟append；原busy=[]/连续点击写2次，修后首await前busy/仅写1次。新增TeachingSubmissionRequest只包本页请求所有权，复用旧epoch/history gate；异议context/previousReflection/预算前捕获，四产物await后、functional setter、错误及实际mirror均拒迟到。取消mirror明确拒绝，不报COMMITTED；当前保存失败仍诊断、禁head。
+- UI：反思即时“正在检查…”且跳过保持可点；异议“正在重新检查…”并禁用待提交草稿/快捷项。root IAB tab36生产Panel+helper+真实HistoryController受控append：pending→放行、pending→换cue→晚完成、失败→退出busy/本地诊断、pending→skip→晚完成不覆盖均实测。最终3写/2执行，skip无诊断；console0。仅组件/shared入口，非完整Host/SQLite桌面，截图和摘要在.local-data/diagnosis-submit-ui；补产品同款全局box-sizing后保存最终截图，无产品布局修改。
+- 验证：45提交/面板相关+19跳过/保存回归=64项、TypeScript、最终Web production build通过。prior_fire_boundary_review继承默认只读归属审查无must-fix；root读最终diff/结果并补实际UI两处收口，所有owner RELEASE。tab与全部顺序启动的3个小服务已关，无真实Demo/模型/用户库/安装发布。[证据](validation/DIAGNOSIS_SUBMIT_PENDING_FEEDBACK.json)。
+- 下一有限目标 teaching-artifact-save-retry-preflight：既有明确重试只覆盖已保存Recovery artifact后的head，以及总结保存；五类教学产物保存失败仍只有提示。先核原USER输入/诊断快照能否通过既有幂等key在当前owner内显式补存、且不重诊断/不自动重试/不越CAS资格；只做一条真实临时库的小失败→补存验证，有安全可达方案再实现入口，不泛化保存队列。
+
 ## 已交付验证：默认反思诊断的 HTTP 重启恢复
 
 - ID default-diagnosis-http-resume；基线647fc8b已push/clean，7f2b复用，前owners RELEASE。先核实原default-action-replay-consumption建议：REAL_ROUTE_DEFAULT_POLICY/REAL_ACTION_REPLAY已有真实动作→用途→能力证据，默认诊断又有意关闭基础慢放，故不重复或强行开放工具。

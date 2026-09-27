@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "diagnosis-submit-pending-feedback.v1",
+  "baseline": "079340d",
+  "productChanged": true,
+  "red": {
+    "source": "extracted current Host callbacks with injected controlled dependencies and real HistoryPersistenceController",
+    "cases": [
+      "submitTeachingReflection",
+      "disagreeTeachingDiagnosis"
+    ],
+    "before": {
+      "busyCalls": [],
+      "writes": 2
+    },
+    "after": {
+      "busyCalls": [
+        [
+          "cue"
+        ]
+      ],
+      "writes": 1
+    }
+  },
+  "checks": {
+    "submissionAndPanelTests": 45,
+    "skipAndSaveRegressionTests": 19,
+    "typecheck": "passed",
+    "webProductionBuild": "passed"
+  },
+  "ui": {
+    "scope": "Production TeachingDiagnosisPanel + TeachingSubmissionRequest + HistoryPersistenceController, controlled in-memory append; not mounted full Host/desktop",
+    "browserTab": 36,
+    "reflectionPending": {
+      "writes": 1,
+      "executions": 0,
+      "busy": "cue-1",
+      "skipEnabled": true
+    },
+    "skipAfterLateSuccess": {
+      "cueId": "cue-1",
+      "busy": null,
+      "writes": 1,
+      "executions": 0,
+      "durable": null
+    },
+    "saveFailure": {
+      "cueId": "cue-2",
+      "busy": null,
+      "writes": 3,
+      "executions": 2,
+      "durable": false
+    },
+    "completed": {
+      "cueId": "cue-2",
+      "busy": null,
+      "writes": 3,
+      "executions": 2,
+      "durable": true
+    },
+    "disagreementPending": "submit label updated; five quick choices and textarea disabled",
+    "consoleErrors": 0,
+    "proof": ".local-data/diagnosis-submit-ui/delivered-pending.png"
+  },
+  "cleanup": "Created tab closed; all three sequential local UI servers stopped; no user DB/Demo/model calls",
+  "limitations": [
+    "No full Host/browser/SQLite end-to-end persistence test in this change.",
+    "Accepted server writes are not rolled back by client cancellation.",
+    "No new motion or material styles; existing reduced motion/transparency rules retained."
+  ],
+  "next": "teaching-artifact-save-retry-preflight"
+}

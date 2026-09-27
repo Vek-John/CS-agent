@@ -8,6 +8,22 @@
 >
 > 最后更新：2026-09-27
 
+## 2026-09-27：诊断提交的反馈必须先于持久化等待
+
+- 实证：反思和异议都先等待USER_INTERACTION才设busy，异议还在其后才捕获context/epoch。对当前Host源码回调提取执行、注入受控依赖并使用真实HistoryPersistenceController，延迟append下两个回调均busy=[]且双击写2次（2红）；不是单独重写一份业务逻辑作测试。
+- 决策：共享TeachingSubmissionRequest同步claim/dedupe/pending，覆盖互动保存和原诊断主体；有效owner才能发错误/继续，finally只释放自身。Host在保存前捕获cue/generation/epoch/history ownership与上下文；异议先校验当前cue和预算。四个产物await及真正mirror调用点再检查，不因创建闭包时有效就接受迟到。旧请求停止不回滚已被服务器接受的写入，也不把取消视为成功保存；interactionDurable=false保持本地诊断但不推进head。
+
+| Before | After | Why |
+| --- | --- | --- |
+| 点击后等保存才忙碌，双击可写两次 | 首await前显示忙态并同步去重 | 用户立即知道提交已接受 |
+| 异议等待仍能改草稿 | “正在重新检查…”并暂禁输入/快捷项 | 保持屏幕草稿与提交内容一致 |
+| 忙态前移会挡住原来的跳过出口 | 反思待处理时仍可“跳过，直接看分析” | 保留显式抢占，保存等待不挡住基础带看 |
+| 旧保存的catch/finally可能影响新请求 | cue/epoch/history owner门及只释放自身 | 迟到响应不能污染新教学点 |
+
+- 交互：沿emil-design-eng/apple-design即时反馈，未新增布局、动画或透明材质，保留现有reduced规则。root在IAB真实点击生产Panel+helper/HistoryController的隔离小界面，反思pending1写0执行、放行后执行1；换cue后旧保存不执行，保存失败busy释放且durable=false；最终skip抢占后旧保存执行仍0，下一cue反思+异议成功合计3写2执行。异议输入忙态不可编辑，console0。初版harness缺产品全局border-box导致输入溢出，补齐同款全局规则后留最终图，不算产品布局bug。
+- 检查/清理：新helper16+Panel3与既有24共45项，补原skip/save19项总64，main TS及最终production build通过；独审无未闭合问题。tab36关闭，3个先后启动小UI server均退出；无真实Demo/SQLite用户库/模型/安装部署。架构6.8同步请求归属契约。
+- 限制：回调测试是实际源码提取+受控依赖，UI是生产组件/shared入口，不声称完整Host挂载或真实桌面网络落盘。证据见DIAGNOSIS_SUBMIT_PENDING_FEEDBACK.json；下一项只研究教学artifact失败的安全显式补存，既有head重试不覆盖该层，不自动重诊断或重发。
+
 ## 2026-09-27：默认诊断在真实 HTTP 重启后保持用户输入与不确定性
 
 - 选题纠偏：原default-action-replay-consumption建议与REAL_ROUTE_DEFAULT_POLICY/REAL_ACTION_REPLAY已有证据重叠；默认diagnostics明确关闭基础慢放，不能据此新增工具或重跑Jev。真正未覆盖的是用户已提交诊断的HTTP持久恢复：上一ordinary脚本只有零工具START，旧修订恢复则只同进程MemorySaver。

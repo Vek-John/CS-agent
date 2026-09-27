@@ -1,5 +1,7 @@
 "use client";
 
+import { TeachingSubmissionRequest } from "../../lib/coaching/teaching-submission-request";
+
 import { OrdinarySegmentRecoveryPolicy } from "../../lib/recovery/ordinary-segment-policy";
 
 import { analysisFailureFeedback } from "../../lib/coaching/analysis-failure-feedback";
@@ -414,6 +416,7 @@ export function Cs2dPlaybackHost({
   const liveSessionRef = useRef<CoachingSessionState | undefined>(undefined);
   const liveCueRef = useRef<ReviewPlan["cues"][number] | undefined>(undefined);
   const diagnosisRequestEpochRef = useRef(0);
+  const teachingSubmissionRequestRef = useRef(new TeachingSubmissionRequest());
   const guidedSeekEpochRef = useRef(0);
   const guidedSeekGateRef = useRef<GuidedSeekGate | undefined>(undefined);
   const [userTookOver, setUserTookOver] = useState(false);
@@ -2396,15 +2399,16 @@ export function Cs2dPlaybackHost({
     });
   }, []);
 
-  const applyTeachingDiagnosis = useCallback(async (output: ReturnType<typeof runTeachingDiagnosis>): Promise<boolean> => {
+  const applyTeachingDiagnosis = useCallback(async (output: ReturnType<typeof runTeachingDiagnosis>, request?: { isCurrent: () => boolean; history: HistoryPersistenceController | null | undefined }): Promise<boolean> => {
+    if (request && !request.isCurrent()) return false;
     const nextCase = output.cueCase;
-    setTeachingCases((current) => ({ ...current, [nextCase.cueId]: nextCase }));
-    setTeachingThreads((current) => [
+    setTeachingCases((current) => request && !request.isCurrent() ? current : ({ ...current, [nextCase.cueId]: nextCase }));
+    setTeachingThreads((current) => request && !request.isCurrent() ? current : [
       ...current.filter((thread) => thread.threadId !== output.learningThread.threadId),
       output.learningThread,
     ].slice(-16));
     const active = planRef.current;
-    setSession((current) => active && current
+    setSession((current) => active && current && (!request || request.isCurrent())
       ? reduceCoachingSession(active, current, {
           type: "RECORD_TEACHING_CASE",
           cueCase: nextCase,
@@ -2413,22 +2417,25 @@ export function Cs2dPlaybackHost({
       : current);
     const caseRevision = (nextCase.verdict?.revision ?? 0) + 1;
     const threadRevision = output.learningThread.evidenceCueIds.length * 4 + caseRevision;
-    const history = historyPersistenceControllerRef.current;
+    const history = request ? request.history : historyPersistenceControllerRef.current;
     if (!history) return true;
     try {
       // A diagnostic checkpoint may become the next RuntimeHead only after
       // every user-facing projection it represents is durable.
       await history.artifact("CUE_CASE", nextCase.cueId, nextCase, "cue-case.v1", caseRevision);
+      if (request && !request.isCurrent()) return false;
       if (nextCase.diagnosticResult) {
         await history.artifact("DIAGNOSTIC_RESULT", nextCase.diagnosticResult.resultId, nextCase.diagnosticResult, "diagnostic-result.v1");
       }
+      if (request && !request.isCurrent()) return false;
       if (nextCase.transferRule) {
         await history.artifact("TRANSFER_RULE", nextCase.transferRule.ruleId, nextCase.transferRule, "transfer-rule.v1", caseRevision);
       }
+      if (request && !request.isCurrent()) return false;
       await history.artifact("LEARNING_THREAD", output.learningThread.threadId, output.learningThread, "learning-thread.v1", threadRevision);
-      return true;
+      return !request || request.isCurrent();
     } catch {
-      setHistoryError("教学诊断产物未能完整保存；上一个恢复点仍然有效。");
+      if (!request || request.isCurrent()) setHistoryError("教学诊断产物未能完整保存；上一个恢复点仍然有效。");
       return false;
     }
   }, []);
@@ -2474,124 +2481,118 @@ export function Cs2dPlaybackHost({
   }, [teachingStage3Input]);
 
   const submitTeachingReflection = useCallback(async (reflection: UserReflection) => {
-    // Claim intent before saving: a later skip must invalidate this submission, even on the same cue.
     const requestGeneration = generationRef.current;
-    if (!isTeachingDiagnosisRequestLive(reflection.cueId, requestGeneration, diagnosisRequestEpochRef.current)) return;
-    const requestEpoch = ++diagnosisRequestEpochRef.current;
-    const requestIsLive = () => isTeachingDiagnosisRequestLive(reflection.cueId, requestGeneration, requestEpoch);
-    if (!requestIsLive()) return;
-    let interactionDurable = true;
-    const history = historyPersistenceControllerRef.current;
-    if (history) {
-      try {
-        await history.artifact(
-          "USER_INTERACTION",
-          reflection.reflectionId ?? `reflection-${reflection.cueId}`,
-          { kind: "REFLECTION", reflection },
-          "user-reflection.v1",
-        );
-      } catch {
-        interactionDurable = false;
-        setHistoryError("用户反思未能保存；上一个恢复点仍然有效。");
-      }
-    }
-    if (!requestIsLive()) return;
+    const currentCue = liveCueRef.current ?? cue;
+    if (!currentCue || reflection.cueId !== currentCue.id ||
+      !isTeachingDiagnosisRequestLive(reflection.cueId, requestGeneration, diagnosisRequestEpochRef.current)) return;
     const context = diagnosisContext();
-    if (!context) {
-      const currentCue = liveCueRef.current ?? cue;
-      setDiagnosticError({ cueId: reflection.cueId, message: "当前讲解状态已变化，已保留基础讲解；你仍可以继续回放。" });
-      // If the cue changed between the click and this callback, do not attach
-      // the old reflection to the new cue. Otherwise keep the user's input in
-      // a Baseline case so a missing context never becomes a silent no-op.
-      if (!currentCue || currentCue.id !== reflection.cueId) return;
-      const fallback = {
-        ...baselineCueCase(currentCue, "教学上下文暂不可用；使用 Baseline 讲解。"),
-        reflection,
-      };
-      setTeachingCases((current) => ({ ...current, [currentCue.id]: fallback }));
-      void historyPersistenceControllerRef.current?.artifact(
-        "CUE_CASE",
-        currentCue.id,
-        fallback,
-        "cue-case.v1",
-      ).catch(() => setHistoryError("基础教学记录保存失败。"));
-      const active = planRef.current ?? activePlan;
-      setSession((current) => active && current
-        ? reduceCoachingSession(active, current, { type: "RECORD_TEACHING_CASE", cueCase: fallback, reflection })
-        : current);
-      return;
-    }
-    if (!requestIsLive()) return;
-    setDiagnosticBusyCueId(reflection.cueId);
-    setDiagnosticError(undefined);
-    try {
-      if (!requestIsLive()) return;
-      const input = buildTeachingDiagnosisInput(context, reflection);
-      let output: ReturnType<typeof runTeachingDiagnosis> | undefined;
-      let agentResult: { readonly event: CoachAgentEvent; readonly result: CoachAgentResult } | undefined;
-      // The graph is the preferred path.  A local deterministic implementation
-      // is retained as the bounded fallback when the remote Agent is absent.
-      if (stage3IdentityContext && routeState && replay?.demoContentHash) {
-        try {
-          await synchronizeTeachingDiagnosis(context);
-          if (!requestIsLive()) return;
-          const identity = buildStage3Identity(stage3IdentityContext);
-          const event = SubmitReflectionEventSchema.parse(buildTeachingDiagnosisSubmissionEvent(
-            context,
+    if (context && context.cue.id !== currentCue.id) return;
+    const history = historyPersistenceControllerRef.current;
+    const historyGeneration = history?.ownershipGeneration;
+    const ownsHistory = () => historyPersistenceControllerRef.current === history && history?.ownershipGeneration === historyGeneration;
+    await teachingSubmissionRequestRef.current.run({
+      claim: () => {
+        const requestEpoch = ++diagnosisRequestEpochRef.current;
+        return { isCurrent: () => ownsHistory() && isTeachingDiagnosisRequestLive(reflection.cueId, requestGeneration, requestEpoch),
+          release: () => { if (diagnosisRequestEpochRef.current === requestEpoch) setDiagnosticBusyCueId(undefined); } };
+      },
+      pending: () => { setDiagnosticBusyCueId(reflection.cueId); setDiagnosticError(undefined); },
+      persistInteraction: async () => { await history?.artifact("USER_INTERACTION", reflection.reflectionId ?? `reflection-${reflection.cueId}`,
+        { kind: "REFLECTION", reflection }, "user-reflection.v1"); },
+      interactionFailed: () => setHistoryError("用户反思未能保存；上一个恢复点仍然有效。"),
+      execute: async (interactionDurable, requestIsLive) => {
+        if (!context) {
+          setDiagnosticError({ cueId: reflection.cueId, message: "当前讲解状态已变化，已保留基础讲解；你仍可以继续回放。" });
+          // If the cue changed between the click and this callback, do not attach
+          // the old reflection to the new cue. Otherwise keep the user's input in
+          // a Baseline case so a missing context never becomes a silent no-op.
+          if (!currentCue || currentCue.id !== reflection.cueId) return;
+          const fallback = {
+            ...baselineCueCase(currentCue, "教学上下文暂不可用；使用 Baseline 讲解。"),
             reflection,
-            {
-              eventType: "SUBMIT_REFLECTION",
-              eventId: `diagnosis-reflection-${reflection.cueId}-${crypto.randomUUID()}`,
-              identity,
-            },
-          ));
-          if (!requestIsLive()) return;
-          const result = await dispatchCoachAgentEvent(event);
-          if (!requestIsLive()) return;
-          agentResult = { event, result };
-          const graphCase = result.state.cueCases?.[reflection.cueId];
-          const graphThread = result.state.learningThreads?.find((thread) => thread.evidenceCueIds.includes(reflection.cueId));
-          if (graphCase && graphThread) output = { cueCase: graphCase, learningThread: graphThread };
-        } catch (error) {
-          if (requestIsLive()) setDiagnosticError({ cueId: reflection.cueId, message: "智能讲解暂不可用，已根据现有证据继续检查。" });
+          };
+          setTeachingCases((current) => requestIsLive() ? ({ ...current, [currentCue.id]: fallback }) : current);
+          void history?.artifact(
+            "CUE_CASE",
+            currentCue.id,
+            fallback,
+            "cue-case.v1",
+          ).catch(() => { if (requestIsLive()) setHistoryError("基础教学记录保存失败。"); });
+          const active = planRef.current ?? activePlan;
+          setSession((current) => active && current && requestIsLive()
+            ? reduceCoachingSession(active, current, { type: "RECORD_TEACHING_CASE", cueCase: fallback, reflection })
+            : current);
+          return;
         }
-      }
-      if (!requestIsLive()) return;
-      if (!output) output = runTeachingDiagnosis(context, reflection);
-      if (!requestIsLive()) return;
-      const durability = await persistTeachingBeforeRuntimeHead({
-        interactionDurable,
-        persistDiagnosis: () => applyTeachingDiagnosis(output),
-        ...(agentResult && requestIsLive()
-          ? { mirror: () => mirrorAgentResult(agentResult.event, agentResult.result) }
-          : {}),
-      });
-      if (durability === "MIRROR_FAILED") {
-        setHistoryError("诊断已完成，但新的恢复点未能提交；上一个恢复点仍然有效。");
-      }
-    } catch (error) {
-      if (!requestIsLive()) return;
-      setDiagnosticError({ cueId: context.cue.id, message: "这次思路检查暂时未完成，已保留基础讲解。" });
-      // Keep the submitted USER reflection attached to the fallback case so a
-      // provider/schema failure cannot silently erase what the player said.
-      const fallback = {
-        ...baselineCueCase(context.cue, "教学诊断失败；基础讲解仍可继续。"),
-        reflection,
-      };
-      setTeachingCases((current) => ({ ...current, [context.cue.id]: fallback }));
-      void historyPersistenceControllerRef.current?.artifact(
-        "CUE_CASE",
-        context.cue.id,
-        fallback,
-        "cue-case.v1",
-      ).catch(() => setHistoryError("基础教学记录保存失败。"));
-      const active = planRef.current ?? activePlan;
-      setSession((current) => active && current
-        ? reduceCoachingSession(active, current, { type: "RECORD_TEACHING_CASE", cueCase: fallback, reflection })
-        : current);
-    } finally {
-      if (diagnosisRequestEpochRef.current === requestEpoch) setDiagnosticBusyCueId(undefined);
-    }
+        if (!requestIsLive()) return;
+        try {
+          if (!requestIsLive()) return;
+          const input = buildTeachingDiagnosisInput(context, reflection);
+          let output: ReturnType<typeof runTeachingDiagnosis> | undefined;
+          let agentResult: { readonly event: CoachAgentEvent; readonly result: CoachAgentResult } | undefined;
+          // The graph is the preferred path.  A local deterministic implementation
+          // is retained as the bounded fallback when the remote Agent is absent.
+          if (stage3IdentityContext && routeState && replay?.demoContentHash) {
+            try {
+              await synchronizeTeachingDiagnosis(context);
+              if (!requestIsLive()) return;
+              const identity = buildStage3Identity(stage3IdentityContext);
+              const event = SubmitReflectionEventSchema.parse(buildTeachingDiagnosisSubmissionEvent(
+                context,
+                reflection,
+                {
+                  eventType: "SUBMIT_REFLECTION",
+                  eventId: `diagnosis-reflection-${reflection.cueId}-${crypto.randomUUID()}`,
+                  identity,
+                },
+              ));
+              if (!requestIsLive()) return;
+              const result = await dispatchCoachAgentEvent(event);
+              if (!requestIsLive()) return;
+              agentResult = { event, result };
+              const graphCase = result.state.cueCases?.[reflection.cueId];
+              const graphThread = result.state.learningThreads?.find((thread) => thread.evidenceCueIds.includes(reflection.cueId));
+              if (graphCase && graphThread) output = { cueCase: graphCase, learningThread: graphThread };
+            } catch (error) {
+              if (requestIsLive()) setDiagnosticError({ cueId: reflection.cueId, message: "智能讲解暂不可用，已根据现有证据继续检查。" });
+            }
+          }
+          if (!requestIsLive()) return;
+          if (!output) output = runTeachingDiagnosis(context, reflection);
+          if (!requestIsLive()) return;
+          const durability = await persistTeachingBeforeRuntimeHead({
+            interactionDurable,
+            persistDiagnosis: () => applyTeachingDiagnosis(output, { isCurrent: requestIsLive, history }),
+            ...(agentResult && requestIsLive()
+              ? { mirror: async () => { if (!requestIsLive()) throw new Error("STALE_DIAGNOSIS_REQUEST"); await mirrorAgentResult(agentResult.event, agentResult.result); } }
+              : {}),
+          });
+          if (durability === "MIRROR_FAILED" && requestIsLive()) {
+            setHistoryError("诊断已完成，但新的恢复点未能提交；上一个恢复点仍然有效。");
+          }
+        } catch (error) {
+          if (!requestIsLive()) return;
+          setDiagnosticError({ cueId: context.cue.id, message: "这次思路检查暂时未完成，已保留基础讲解。" });
+          // Keep the submitted USER reflection attached to the fallback case so a
+          // provider/schema failure cannot silently erase what the player said.
+          const fallback = {
+            ...baselineCueCase(context.cue, "教学诊断失败；基础讲解仍可继续。"),
+            reflection,
+          };
+          setTeachingCases((current) => requestIsLive() ? ({ ...current, [context.cue.id]: fallback }) : current);
+          void history?.artifact(
+            "CUE_CASE",
+            context.cue.id,
+            fallback,
+            "cue-case.v1",
+          ).catch(() => { if (requestIsLive()) setHistoryError("基础教学记录保存失败。"); });
+          const active = planRef.current ?? activePlan;
+          setSession((current) => active && current && requestIsLive()
+            ? reduceCoachingSession(active, current, { type: "RECORD_TEACHING_CASE", cueCase: fallback, reflection })
+            : current);
+        }
+      },
+    });
   }, [activePlan, applyTeachingDiagnosis, buildStage3Identity, cue, diagnosisContext, isTeachingDiagnosisRequestLive, mirrorAgentResult, replay?.demoContentHash, routeState, stage3IdentityContext, synchronizeTeachingDiagnosis]);
 
   const skipTeachingReflection = useCallback(async () => {
@@ -2716,88 +2717,85 @@ export function Cs2dPlaybackHost({
   }, [activePlan, cue, session?.manual_cue_visit, transition]);
 
   const disagreeTeachingDiagnosis = useCallback(async (reflection: UserReflection) => {
-    let interactionDurable = true;
-    const history = historyPersistenceControllerRef.current;
-    if (history) {
-      try {
-        await history.artifact(
-          "USER_INTERACTION",
-          reflection.reflectionId ?? `disagreement-${reflection.cueId}`,
-          { kind: "DISAGREEMENT", reflection },
-          "user-reflection.v1",
-        );
-      } catch {
-        interactionDurable = false;
-        setHistoryError("用户异议未能保存；上一个恢复点仍然有效。");
-      }
-    }
-    const context = diagnosisContext();
-    const currentCue = liveCueRef.current ?? cue;
-    if (!context || !currentCue) return;
-    const previousCase = teachingCasesRef.current[currentCue.id];
-    if (!previousCase?.reflection || previousCase.attemptBudget.disagreement >= 1) return;
-    const requestEpoch = ++diagnosisRequestEpochRef.current;
     const requestGeneration = generationRef.current;
-    const requestCueId = currentCue.id;
-    const requestIsLive = () => isTeachingDiagnosisRequestLive(requestCueId, requestGeneration, requestEpoch);
-    if (!requestIsLive()) return;
-    setDiagnosticBusyCueId(currentCue.id);
-    setDiagnosticError(undefined);
-    try {
-      let output: ReturnType<typeof runTeachingDiagnosis> | undefined;
-      let agentResult: { readonly event: CoachAgentEvent; readonly result: CoachAgentResult } | undefined;
-      if (stage3IdentityContext && routeState && replay?.demoContentHash) {
+    const currentCue = liveCueRef.current ?? cue;
+    if (!currentCue || reflection.cueId !== currentCue.id ||
+      !isTeachingDiagnosisRequestLive(reflection.cueId, requestGeneration, diagnosisRequestEpochRef.current)) return;
+    const context = diagnosisContext();
+    const previousCase = teachingCasesRef.current[currentCue.id];
+    if (!context || context.cue.id !== currentCue.id || !previousCase?.reflection || previousCase.attemptBudget.disagreement >= 1) return;
+    const previousReflection = previousCase.reflection;
+    const previousThread = teachingThreadsRef.current.find((thread) => thread.evidenceCueIds.includes(currentCue.id));
+    const history = historyPersistenceControllerRef.current;
+    const historyGeneration = history?.ownershipGeneration;
+    const ownsHistory = () => historyPersistenceControllerRef.current === history && history?.ownershipGeneration === historyGeneration;
+    await teachingSubmissionRequestRef.current.run({
+      claim: () => {
+        const requestEpoch = ++diagnosisRequestEpochRef.current;
+        return { isCurrent: () => ownsHistory() && isTeachingDiagnosisRequestLive(reflection.cueId, requestGeneration, requestEpoch),
+          release: () => { if (diagnosisRequestEpochRef.current === requestEpoch) setDiagnosticBusyCueId(undefined); } };
+      },
+      pending: () => { setDiagnosticBusyCueId(reflection.cueId); setDiagnosticError(undefined); },
+      persistInteraction: async () => { await history?.artifact("USER_INTERACTION", reflection.reflectionId ?? `disagreement-${reflection.cueId}`,
+        { kind: "DISAGREEMENT", reflection }, "user-reflection.v1"); },
+      interactionFailed: () => setHistoryError("用户异议未能保存；上一个恢复点仍然有效。"),
+      execute: async (interactionDurable, requestIsLive) => {
+        const requestCueId = currentCue.id;
         try {
-          const identity = buildStage3Identity(stage3IdentityContext);
-          const input = buildTeachingDiagnosisInput(context, previousCase.reflection);
-          const event = SubmitDisagreementEventSchema.parse(buildTeachingDiagnosisSubmissionEvent(
-            context,
-            reflection,
-            {
-              eventType: "SUBMIT_DISAGREEMENT",
-              eventId: `diagnosis-disagreement-${currentCue.id}-${crypto.randomUUID()}`,
-              identity,
-            },
-          ));
+          let output: ReturnType<typeof runTeachingDiagnosis> | undefined;
+          let agentResult: { readonly event: CoachAgentEvent; readonly result: CoachAgentResult } | undefined;
+          if (stage3IdentityContext && routeState && replay?.demoContentHash) {
+            try {
+              const identity = buildStage3Identity(stage3IdentityContext);
+              const input = buildTeachingDiagnosisInput(context, previousReflection);
+              const event = SubmitDisagreementEventSchema.parse(buildTeachingDiagnosisSubmissionEvent(
+                context,
+                reflection,
+                {
+                  eventType: "SUBMIT_DISAGREEMENT",
+                  eventId: `diagnosis-disagreement-${currentCue.id}-${crypto.randomUUID()}`,
+                  identity,
+                },
+              ));
+              if (!requestIsLive()) return;
+              const result = await dispatchCoachAgentEvent(event);
+              if (!requestIsLive()) return;
+              agentResult = { event, result };
+              const graphCase = result.state.cueCases?.[currentCue.id];
+              const graphThread = result.state.learningThreads?.find((thread) => thread.evidenceCueIds.includes(currentCue.id));
+              if (graphCase && graphThread) output = { cueCase: graphCase, learningThread: graphThread };
+            } catch {
+              if (requestIsLive()) setDiagnosticError({ cueId: requestCueId, message: "智能讲解暂时未能重新检查，已根据本地证据继续。" });
+            }
+          }
           if (!requestIsLive()) return;
-          const result = await dispatchCoachAgentEvent(event);
+          if (!output) {
+            const input = buildTeachingDiagnosisInput(context, previousReflection);
+            const priorThread = previousThread
+              ?? runTeachingDiagnosis(context, previousReflection).learningThread;
+            output = reviseTeachingDiagnosis({
+              previous: { cueCase: previousCase, learningThread: priorThread },
+              input,
+              disagreement: reflection,
+            });
+          }
           if (!requestIsLive()) return;
-          agentResult = { event, result };
-          const graphCase = result.state.cueCases?.[currentCue.id];
-          const graphThread = result.state.learningThreads?.find((thread) => thread.evidenceCueIds.includes(currentCue.id));
-          if (graphCase && graphThread) output = { cueCase: graphCase, learningThread: graphThread };
-        } catch {
-          if (requestIsLive()) setDiagnosticError({ cueId: requestCueId, message: "智能讲解暂时未能重新检查，已根据本地证据继续。" });
+          const durability = await persistTeachingBeforeRuntimeHead({
+            interactionDurable,
+            persistDiagnosis: () => applyTeachingDiagnosis(output, { isCurrent: requestIsLive, history }),
+            ...(agentResult && requestIsLive()
+              ? { mirror: async () => { if (!requestIsLive()) throw new Error("STALE_DIAGNOSIS_REQUEST"); await mirrorAgentResult(agentResult.event, agentResult.result); } }
+              : {}),
+          });
+          if (durability === "MIRROR_FAILED" && requestIsLive()) {
+            setHistoryError("补充诊断已完成，但新的恢复点未能提交；上一个恢复点仍然有效。");
+          }
+        } catch (error) {
+          if (!requestIsLive()) return;
+          setDiagnosticError({ cueId: requestCueId, message: "补充信息暂时未能应用，当前结论会保留不确定性。" });
         }
-      }
-      if (!requestIsLive()) return;
-      if (!output) {
-        const input = buildTeachingDiagnosisInput(context, previousCase.reflection);
-        const priorThread = teachingThreadsRef.current.find((thread) => thread.evidenceCueIds.includes(currentCue.id))
-          ?? runTeachingDiagnosis(context, previousCase.reflection).learningThread;
-        output = reviseTeachingDiagnosis({
-          previous: { cueCase: previousCase, learningThread: priorThread },
-          input,
-          disagreement: reflection,
-        });
-      }
-      if (!requestIsLive()) return;
-      const durability = await persistTeachingBeforeRuntimeHead({
-        interactionDurable,
-        persistDiagnosis: () => applyTeachingDiagnosis(output),
-        ...(agentResult && requestIsLive()
-          ? { mirror: () => mirrorAgentResult(agentResult.event, agentResult.result) }
-          : {}),
-      });
-      if (durability === "MIRROR_FAILED") {
-        setHistoryError("补充诊断已完成，但新的恢复点未能提交；上一个恢复点仍然有效。");
-      }
-    } catch (error) {
-      if (!requestIsLive()) return;
-      setDiagnosticError({ cueId: requestCueId, message: "补充信息暂时未能应用，当前结论会保留不确定性。" });
-    } finally {
-      if (diagnosisRequestEpochRef.current === requestEpoch) setDiagnosticBusyCueId(undefined);
-    }
+      },
+    });
   }, [applyTeachingDiagnosis, cue, diagnosisContext, isTeachingDiagnosisRequestLive, mirrorAgentResult, replay?.demoContentHash, routeState, stage3IdentityContext]);
 
   stage3IdentityRef.current = stage3IdentityContext;
